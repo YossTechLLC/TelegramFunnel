@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Insert the token from your payment provider.
 # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
-PAYMENT_PROVIDER_TOKEN = "PAYMENT_PROVIDER_TOKEN"
+PAYMENT_PROVIDER_TOKEN = "1877036958:TEST:ce5259b22362fee371e40b36a44941a30f6a668a"
 
 
 async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -133,7 +133,7 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
 def main() -> None:
     """Starts the bot and sets up handlers."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token("TOKEN").build()
+    application = Application.builder().token("7840817495:AAFHnDBauWmAPGy_X1F4-JU0CaAv8C7a0VQ").build()
 
     # Start command to display usage instructions
     application.add_handler(CommandHandler("start", start_callback))
