@@ -45,7 +45,7 @@ async def script1_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Script1's /start command: Greets user & sets up ForceReply."""
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}! (EchoBot)",
+        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /help /start_color /start_payment /shipping /noshipping",
         reply_markup=ForceReply(selective=True),
     )
 
