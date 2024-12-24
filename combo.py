@@ -45,7 +45,7 @@ async def script1_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Script1's /start command: Greets user & sets up ForceReply."""
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /help /start_color /start_payment /shipping /noshipping",
+        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /help /start_crypto /start_payment /shipping /noshipping",
         reply_markup=ForceReply(selective=True),
     )
 
@@ -59,12 +59,12 @@ async def script1_echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 # ------------------------------------------------------------------------------
 # 2. Script 2 Functionality (Color Picker WebApp)
-#    Renamed /start -> /start_color to avoid conflict
+#    Renamed /start -> /start_crypto to avoid conflict
 # ------------------------------------------------------------------------------
-async def script2_start_color(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def script2_start_crypto(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Script2's command to open the color picker WebApp.
-    (Originally /start, now /start_color to avoid collision)
+    (Originally /start, now /start_crypto to avoid collision)
     """
     await update.message.reply_text(
         "Please press the button below to choose a color via the WebApp.",
@@ -183,8 +183,8 @@ def main() -> None:
     )
 
     # --- Script 2 handlers (Color Picker) ---
-    # Re-labeled /start -> /start_color
-    application.add_handler(CommandHandler("start_color", script2_start_color))
+    # Re-labeled /start -> /start_crypto
+    application.add_handler(CommandHandler("start_crypto", script2_start_crypto))
     application.add_handler(
         MessageHandler(filters.StatusUpdate.WEB_APP_DATA, script2_web_app_data)
     )
