@@ -70,9 +70,9 @@ async def script2_start_color(update: Update, context: ContextTypes.DEFAULT_TYPE
         "Please press the button below to choose a color via the WebApp.",
         reply_markup=ReplyKeyboardMarkup.from_button(
             KeyboardButton(
-                text="Open the color picker!",
+                text="Open the NowPayments Gateway!",
                 # You can change this URL to any valid WebApp
-                web_app=WebAppInfo(url="https://nowpayments.io/payment?iid=6066212911"),
+                web_app=WebAppInfo(url="https://nowpayments.io/payment/?iid=6200386335"),
             )
         ),
     )
