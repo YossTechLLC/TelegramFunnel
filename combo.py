@@ -1,6 +1,8 @@
 #!/usr/bin/env python
+import os
 import logging
 import json
+from google.cloud import secretmanager
 
 from telegram import (
     Update,
@@ -25,7 +27,21 @@ from telegram.ext import (
 # ------------------------------------------------------------------------------
 # 0. Global Setup
 # ------------------------------------------------------------------------------
-TOKEN = "7840817495:AAFHnDBauWmAPGy_X1F4-JU0CaAv8C7a0VQ"
+
+def get_secret():
+    """
+    Fetches the secret from Google Cloud Secret Manager.
+    :return: The secret value as a string.
+    """
+    client = secretmanager.SecretManagerServiceClient()
+    # Default the secret name if the environment variable is not set
+    secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME", "projects/249635196005/secrets/GCPNowPayXXX-bot-token")
+    name = f"{secret_name}/versions/latest"
+    response = client.access_secret_version(request={"name": name})
+    return response.payload.data.decode("UTF-8")
+
+# Fetch the TOKEN securely
+TOKEN = get_secret()
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
