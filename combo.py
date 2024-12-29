@@ -3,6 +3,7 @@ import os
 import logging
 import json
 from google.cloud import secretmanager
+import asyncio
 
 from telegram import (
     Update,
@@ -28,14 +29,17 @@ from telegram.ext import (
 # 0. Global Setup
 # ------------------------------------------------------------------------------
 
-def fetch_telegram_token():
+import os
+from google.cloud.aio.secretmanager import SecretManagerServiceAsyncClient
+
+async def fetch_telegram_token():
     """
-    Fetches the Telegram bot TOKEN from Google Cloud Secret Manager.
+    Asynchronously fetches the Telegram bot TOKEN from Google Cloud Secret Manager.
     :return: The secret value as a string.
     """
     try:
-        # Initialize Secret Manager client
-        client = secretmanager.SecretManagerServiceClient()
+        # Initialize Secret Manager async client
+        client = SecretManagerServiceAsyncClient()
         
         # Fetch the secret name from environment variables
         secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
@@ -45,10 +49,10 @@ def fetch_telegram_token():
         # Construct the full secret version path
         secret_path = f"{secret_name}"
 
-        # Access the secret
-        response = client.access_secret_version(request={"name": secret_path})
+        # Access the secret asynchronously
+        response = await client.access_secret_version(request={"name": secret_path})
         token = response.payload.data.decode("UTF-8")
-        return TOKEN
+        return token
     except Exception as e:
         print(f"Error fetching the Telegram bot TOKEN: {e}")
         return None
@@ -197,8 +201,12 @@ async def script3_successful_payment_callback(update: Update, context: ContextTy
 # 4. Combined Main
 # ------------------------------------------------------------------------------
 def main() -> None:
-    # GET TOKEN
-    TOKEN = fetch_telegram_token()
+    # Fetch and print the Telegram bot TOKEN
+    TOKEN = await fetch_telegram_token()
+    if token:
+        print(f"Telegram Bot TOKEN: {token}")
+    else:
+        print("Failed to retrieve the Telegram Bot TOKEN.")
     
     """Single entry point that merges all three scripts into one bot."""
     # Create one Application for everything
