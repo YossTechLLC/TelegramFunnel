@@ -29,29 +29,23 @@ from telegram.ext import (
 # 0. Global Setup
 # ------------------------------------------------------------------------------
 
-import os
-from google.cloud.aio.secretmanager import SecretManagerServiceAsyncClient
-
-def fetch_telegram_token():
+async def fetch_telegram_token():
     """
-    Fetches the Telegram bot TOKEN from Google Cloud Secret Manager.
+    Asynchronously fetches the Telegram bot TOKEN from Google Cloud Secret Manager.
     :return: The secret value as a string.
     """
     try:
-        # Initialize Secret Manager client
-        client = secretmanager.SecretManagerServiceClient()
+        # Define the synchronous client access
+        def access_secret():
+            client = secretmanager.SecretManagerServiceClient()
+            secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
+            if not secret_name:
+                raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
+            response = client.access_secret_version(request={"name": secret_name})
+            return response.payload.data.decode("UTF-8")
         
-        # Fetch the secret name from environment variables
-        secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
-        if not secret_name:
-            raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
-
-        # Construct the full secret version path
-        secret_path = f"{secret_name}"
-
-        # Access the secret
-        response = client.access_secret_version(request={"name": secret_path})
-        token = response.payload.data.decode("UTF-8")
+        # Use asyncio.to_thread to run the synchronous code asynchronously
+        token = await asyncio.to_thread(access_secret)
         return token
     except Exception as e:
         print(f"Error fetching the Telegram bot TOKEN: {e}")
