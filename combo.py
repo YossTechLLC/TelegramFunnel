@@ -48,7 +48,7 @@ def fetch_telegram_token():
         # Access the secret
         response = client.access_secret_version(request={"name": secret_path})
         token = response.payload.data.decode("UTF-8")
-        return token
+        return TOKEN
     except Exception as e:
         print(f"Error fetching the Telegram bot TOKEN: {e}")
         return None
@@ -198,7 +198,7 @@ async def script3_successful_payment_callback(update: Update, context: ContextTy
 # ------------------------------------------------------------------------------
 def main() -> None:
     # GET TOKEN
-    token = fetch_telegram_token()
+    TOKEN = fetch_telegram_token()
     
     """Single entry point that merges all three scripts into one bot."""
     # Create one Application for everything
