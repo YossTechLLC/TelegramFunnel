@@ -4,7 +4,7 @@ import re
 # Database connection details
 DB_HOST = "1-17626c63-6acf-4d44-bc6b-cf70365b4ce2.us-central1.sql.goog"
 DB_PORT = "5432"
-DB_NAME = "telegram_funnel_db"  # Replace with your database name
+DB_NAME = "Telegram_Funnel_DB"  # Replace with your database name
 DB_USER = "postgres"  # Replace with your username
 DB_PASSWORD = "HerpDerp666ass$"  # Replace with your password
 SSL_CERT = "/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/client-cert.pem"
