@@ -38,7 +38,7 @@ async def fetch_telegram_token():
     :return: The secret value as a string.
     """
     try:
-        # Run synchronous client in an async context
+        # Define the synchronous client access
         def access_secret():
             client = secretmanager.SecretManagerServiceClient()
             secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
@@ -47,7 +47,7 @@ async def fetch_telegram_token():
             response = client.access_secret_version(request={"name": secret_name})
             return response.payload.data.decode("UTF-8")
         
-        # Use asyncio.to_thread to run the blocking call in an async manner
+        # Use asyncio.to_thread to run the synchronous code asynchronously
         token = await asyncio.to_thread(access_secret)
         return token
     except Exception as e:
