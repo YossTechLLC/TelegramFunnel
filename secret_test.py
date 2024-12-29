@@ -16,7 +16,7 @@ def fetch_telegram_token():
             raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
 
         # Construct the full secret version path
-        secret_path = f"{secret_name}/versions/latest"
+        secret_path = f"{secret_name}"
 
         # Access the secret
         response = client.access_secret_version(request={"name": secret_path})
