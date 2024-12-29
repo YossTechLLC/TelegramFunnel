@@ -28,20 +28,30 @@ from telegram.ext import (
 # 0. Global Setup
 # ------------------------------------------------------------------------------
 
-def get_secret():
+def fetch_telegram_token():
     """
-    Fetches the secret from Google Cloud Secret Manager.
+    Fetches the Telegram bot TOKEN from Google Cloud Secret Manager.
     :return: The secret value as a string.
     """
-    client = secretmanager.SecretManagerServiceClient()
-    # Default the secret name if the environment variable is not set
-    secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME", "projects/249635196005/secrets/GCPNowPayXXX-bot-token")
-    name = f"{secret_name}/versions/latest"
-    response = client.access_secret_version(request={"name": name})
-    return response.payload.data.decode("UTF-8")
+    try:
+        # Initialize Secret Manager client
+        client = secretmanager.SecretManagerServiceClient()
+        
+        # Fetch the secret name from environment variables
+        secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
+        if not secret_name:
+            raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
 
-# Fetch the TOKEN securely
-TOKEN = get_secret()
+        # Construct the full secret version path
+        secret_path = f"{secret_name}"
+
+        # Access the secret
+        response = client.access_secret_version(request={"name": secret_path})
+        token = response.payload.data.decode("UTF-8")
+        return token
+    except Exception as e:
+        print(f"Error fetching the Telegram bot TOKEN: {e}")
+        return None
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -187,6 +197,9 @@ async def script3_successful_payment_callback(update: Update, context: ContextTy
 # 4. Combined Main
 # ------------------------------------------------------------------------------
 def main() -> None:
+    # GET TOKEN
+    token = fetch_telegram_token()
+    
     """Single entry point that merges all three scripts into one bot."""
     # Create one Application for everything
     application = Application.builder().token(TOKEN).build()
