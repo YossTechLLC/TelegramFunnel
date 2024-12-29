@@ -2,7 +2,7 @@ import psycopg2
 import re
 
 # Database connection details
-DB_HOST = "35.192.213.209"
+DB_HOST = "1-17626c63-6acf-4d44-bc6b-cf70365b4ce2.us-central1.sql.goog"
 DB_PORT = "5432"
 DB_NAME = "telegram_funnel_db"  # Replace with your database name
 DB_USER = "postgres"  # Replace with your username
