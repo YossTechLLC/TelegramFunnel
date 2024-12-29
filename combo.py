@@ -38,20 +38,17 @@ async def fetch_telegram_token():
     :return: The secret value as a string.
     """
     try:
-        # Initialize Secret Manager async client
-        client = SecretManagerServiceAsyncClient()
+        # Run synchronous client in an async context
+        def access_secret():
+            client = secretmanager.SecretManagerServiceClient()
+            secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
+            if not secret_name:
+                raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
+            response = client.access_secret_version(request={"name": secret_name})
+            return response.payload.data.decode("UTF-8")
         
-        # Fetch the secret name from environment variables
-        secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
-        if not secret_name:
-            raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
-
-        # Construct the full secret version path
-        secret_path = f"{secret_name}"
-
-        # Access the secret asynchronously
-        response = await client.access_secret_version(request={"name": secret_path})
-        token = response.payload.data.decode("UTF-8")
+        # Use asyncio.to_thread to run the blocking call in an async manner
+        token = await asyncio.to_thread(access_secret)
         return token
     except Exception as e:
         print(f"Error fetching the Telegram bot TOKEN: {e}")
