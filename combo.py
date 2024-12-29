@@ -201,12 +201,8 @@ async def script3_successful_payment_callback(update: Update, context: ContextTy
 # 4. Combined Main
 # ------------------------------------------------------------------------------
 def main() -> None:
-    # Fetch and print the Telegram bot TOKEN
-    TOKEN = await fetch_telegram_token()
-    if token:
-        print(f"Telegram Bot TOKEN: {token}")
-    else:
-        print("Failed to retrieve the Telegram Bot TOKEN.")
+    # GET TELEGRAM TOKEN
+    TOKEN = fetch_telegram_token()
     
     """Single entry point that merges all three scripts into one bot."""
     # Create one Application for everything
