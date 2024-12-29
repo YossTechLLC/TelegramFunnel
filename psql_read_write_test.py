@@ -7,6 +7,10 @@ DB_PORT = "5432"
 DB_NAME = "telegram_funnel_db"  # Replace with your database name
 DB_USER = "postgres"  # Replace with your username
 DB_PASSWORD = "HerpDerp666ass$"  # Replace with your password
+SSL_CERT = sslcert="/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/client-cert.pem"
+SSL_KEY = sslkey="/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/client-key.pem"
+SSL_ROOT_CERT = sslrootcert="/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/server-ca.pem"
+SSL_MODE = "verify-full"
 
 # Validation functions
 def validate_public_channel_chat_id(value):
@@ -47,7 +51,11 @@ def connect_to_db():
             port=DB_PORT,
             database=DB_NAME,
             user=DB_USER,
-            password=DB_PASSWORD
+            password=DB_PASSWORD,
+            sslmode=SSL_MODE,
+            sscert=SSL_CERT,
+            sslkey=SSL_KEY,
+            sslrootcert=SSL_ROOT_CERT,
         )
         return connection
     except psycopg2.Error as e:
