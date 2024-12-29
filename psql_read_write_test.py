@@ -7,9 +7,9 @@ DB_PORT = "5432"
 DB_NAME = "telegram_funnel_db"  # Replace with your database name
 DB_USER = "postgres"  # Replace with your username
 DB_PASSWORD = "HerpDerp666ass$"  # Replace with your password
-SSL_CERT = sslcert="/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/client-cert.pem"
-SSL_KEY = sslkey="/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/client-key.pem"
-SSL_ROOT_CERT = sslrootcert="/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/server-ca.pem"
+SSL_CERT = "/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/client-cert.pem"
+SSL_KEY = "/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/client-key.pem"
+SSL_ROOT_CERT = "/home/yosstechllc/telegram-bot1/TelegramFunnel/CERTS/server-ca.pem"
 SSL_MODE = "verify-full"
 
 # Validation functions
@@ -53,7 +53,7 @@ def connect_to_db():
             user=DB_USER,
             password=DB_PASSWORD,
             sslmode=SSL_MODE,
-            sscert=SSL_CERT,
+            sslcert=SSL_CERT,
             sslkey=SSL_KEY,
             sslrootcert=SSL_ROOT_CERT,
         )
@@ -66,6 +66,7 @@ def insert_data(
     public_channel_chat_id, private_channel_chat_id, customer_chat_id,
     customer_subscription_time, client_wallet_address, host_wallet_address, np_payment_id
 ):
+    connection = None
     try:
         # Validate inputs
         public_channel_chat_id = validate_public_channel_chat_id(public_channel_chat_id)
@@ -105,6 +106,7 @@ def insert_data(
             connection.close()
 
 def read_data():
+    connection = None
     try:
         connection = connect_to_db()
         cursor = connection.cursor()
