@@ -2,7 +2,7 @@ import psycopg2
 
 # Database connection details
 DB_HOST = "35.192.213.209"  # Replace with your PostgreSQL IP address
-DB_NAME = "postgres"        # Replace with your database name
+DB_NAME = "client_table"        # Replace with your database name
 DB_USER = "postgres"        # Replace with your database user
 DB_PASSWORD = "Chigdabeast123$"  # Replace with your PostgreSQL password
 
