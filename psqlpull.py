@@ -1,10 +1,9 @@
 import psycopg2
-from tkinter import ttk, messagebox
 
 # === PostgreSQL Connection Details ===
 DB_HOST = '34.58.246.248'
 DB_PORT = 5432
-DB_NAME = 'client_table  '
+DB_NAME = 'client_table'
 DB_USER = 'postgres'
 DB_PASSWORD = 'Chigdabeast123$'
 
