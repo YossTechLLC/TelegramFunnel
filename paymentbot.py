@@ -133,7 +133,7 @@ async def successful_payment_callback(update: Update, context: ContextTypes.DEFA
 def main() -> None:
     """Starts the bot and sets up handlers."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token("7840817495:AAFHnDBauWmAPGy_X1F4-JU0CaAv8C7a0VQ").build()
+    application = Application.builder().token("TOKEN").build()
 
     # Start command to display usage instructions
     application.add_handler(CommandHandler("start", start_callback))
