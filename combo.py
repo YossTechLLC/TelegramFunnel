@@ -61,7 +61,7 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-PAYMENT_PROVIDER_TOKEN = "1877036958:TEST:ce5259b22362fee371e40b36a44941a30f6a668a"
+PAYMENT_PROVIDER_TOKEN = "2051251535:TEST:OTk5MDA4ODgxLTAwNQ"
 
 # ------------------------------------------------------------------------------
 # 1. Script 1 Functionality (Basic Echo Bot)
