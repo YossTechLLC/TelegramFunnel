@@ -26,3 +26,5 @@ async def start_with_shipping_callback(update: Update, context: ContextTypes.DEF
         need_shipping_address=False,
         is_flexible=False
     )
+
+print(f"Prices: {[{'label': p.label, 'amount': p.amount} for p in prices]}")
