@@ -26,36 +26,23 @@ def fetch_data():
         conn.close()
         return colnames, rows
     except Exception as e:
-        messagebox.showerror("Database Error", str(e))
+        print("❌ Database Error:", e)
         return [], []
 
-def build_gui():
+def display_in_terminal():
     colnames, rows = fetch_data()
+    if not rows:
+        print("No data found.")
+        return
 
-    root = tk.Tk()
-    root.title("Telegram Payment Config Viewer")
-    root.geometry("1200x600")
+    # Print headers
+    print("\n" + " | ".join(colnames))
+    print("-" * 120)
 
-    frame = ttk.Frame(root)
-    frame.pack(fill="both", expand=True)
-
-    tree = ttk.Treeview(frame, columns=colnames, show="headings")
-    for col in colnames:
-        tree.heading(col, text=col)
-        tree.column(col, width=150, anchor="w")
-
+    # Print each row
     for row in rows:
-        tree.insert("", "end", values=row)
-
-    vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-    hsb = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
-    tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-
-    vsb.pack(side="right", fill="y")
-    hsb.pack(side="bottom", fill="x")
-    tree.pack(side="left", fill="both", expand=True)
-
-    root.mainloop()
+        print(" | ".join(str(cell) for cell in row))
 
 if __name__ == "__main__":
-    build_gui()
+    display_in_terminal()
+
