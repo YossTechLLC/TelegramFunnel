@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Insert the token from your payment provider.
 # In order to get a provider_token see https://core.telegram.org/bots/payments#getting-a-token
-PAYMENT_PROVIDER_TOKEN = "1877036958:TEST:ce5259b22362fee371e40b36a44941a30f6a668a"
+PAYMENT_PROVIDER_TOKEN = "2051251535:TEST:OTk5MDA4ODgxLTAwNQ"
 
 
 async def start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
