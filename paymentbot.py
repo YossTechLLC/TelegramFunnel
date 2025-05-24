@@ -85,7 +85,7 @@ async def start_without_shipping_callback(
     # Price in dollars
     price = 1
     # Convert price to cents from dollars.
-    prices = [LabeledPrice("Test", price * 100)]
+    prices = [LabeledPrice("Test", int(price * 100))]
 
     # optionally pass need_name=True, need_phone_number=True,
     # need_email=True, need_shipping_address=True, is_flexible=True
