@@ -1,4 +1,5 @@
-from telegram import LabeledPrice
+from telegram import LabeledPrice, Update
+from telegram.ext import ContextTypes
 
 async def start_with_shipping_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
