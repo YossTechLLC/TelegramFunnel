@@ -199,7 +199,7 @@ async def script3_successful_payment_callback(update: Update, context: ContextTy
 # ------------------------------------------------------------------------------
 def main() -> None:
     # GET TELEGRAM TOKEN
-    TOKEN = fetch_telegram_token()
+    TOKEN = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
     
     """Single entry point that merges all three scripts into one bot."""
     # Create one Application for everything
