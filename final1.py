@@ -34,7 +34,7 @@ DB_USER = 'postgres'
 DB_PASSWORD = 'Chigdabeast123$'
 
 # Conversation states for /database
-ID_INPUT, NAME_INPUT = range(2)
+ID_INPUT, NAME_INPUT, AGE_INPUT = range(3)
 
 # ------------------------------------------------------------------------------
 # Global Setup
@@ -203,15 +203,27 @@ async def receive_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.message.text
-    user_id = context.user_data["id"]
+    context.user_data["name"] = name
+    await update.message.reply_text("Now enter the age (integer):")
+    return AGE_INPUT
+
+async def receive_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        age = int(update.message.text)
+        user_id = context.user_data["id"]
+        name = context.user_data["name"]
+
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("INSERT INTO test_table (id, name) VALUES (%s, %s)", (user_id, name))
+        cur.execute("INSERT INTO test_table (id, name, age) VALUES (%s, %s, %s)", (user_id, name, age))
         conn.commit()
         cur.close()
         conn.close()
-        await update.message.reply_text(f"✅ Saved to database: ID={user_id}, Name={name}")
+
+        await update.message.reply_text(f"✅ Saved to database: ID={user_id}, Name={name}, Age={age}")
+    except ValueError:
+        await update.message.reply_text("Invalid age. Please enter a valid integer:")
+        return AGE_INPUT
     except Exception as e:
         await update.message.reply_text(f"❌ Error inserting into database: {e}")
     context.user_data.pop("_conversation", None)
@@ -243,6 +255,7 @@ def main():
         states={
             ID_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_id)],
             NAME_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name)],
+            AGE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_age)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
