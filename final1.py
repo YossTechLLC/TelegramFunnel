@@ -60,8 +60,6 @@ def fetch_telegram_token():
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-# Fetch Telegram Token
-TOKEN = fetch_telegram_token()
 
 def fetch_payment_provider_token():
     """
@@ -91,8 +89,6 @@ def fetch_payment_provider_token():
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-# Fetch Payment Provider Token
-PAYMENT_PROVIDER_TOKEN = fetch_payment_provider_token()
 
 # ------------------------------------------------------------------------------
 # 1. Script 1 Functionality (Basic Echo Bot)
