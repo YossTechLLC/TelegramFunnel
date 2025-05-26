@@ -207,7 +207,7 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("INSERT INTO users (id, name) VALUES (%s, %s)", (user_id, name))
+        cur.execute("INSERT INTO test_table (id, name) VALUES (%s, %s)", (user_id, name))
         conn.commit()
         cur.close()
         conn.close()
