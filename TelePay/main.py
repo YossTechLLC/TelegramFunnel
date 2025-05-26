@@ -1,6 +1,6 @@
 # main.py
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ShippingQueryHandler, PreCheckoutQueryHandler, ConversationHandler
-from config import fetch_telegram_token, fetch_payment_provider_token
+from fetch import fetch_telegram_token, fetch_payment_provider_token
 from echo import script1_start, script1_help, script1_echo
 from webapp import script2_start_crypto, script2_web_app_data, update_invoice_url, dynamic_invoice_url
 from payment import (
