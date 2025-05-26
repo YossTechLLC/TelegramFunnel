@@ -25,6 +25,7 @@ from telegram.ext import (
     PreCheckoutQueryHandler,
     ConversationHandler,
 )
+# ------------------------------------------------------------------------------
 
 # === PostgreSQL Connection Details ===
 DB_HOST = '34.58.246.248'
@@ -35,8 +36,8 @@ DB_PASSWORD = 'Chigdabeast123$'
 
 # Conversation states for /database
 ID_INPUT, NAME_INPUT, AGE_INPUT = range(3)
-
 # ------------------------------------------------------------------------------
+
 # Global Setup
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -44,8 +45,9 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-
 # ------------------------------------------------------------------------------
+
+# Fetch TOKENs
 def fetch_telegram_token():
     try:
         client = secretmanager.SecretManagerServiceClient()
@@ -71,10 +73,9 @@ def fetch_payment_provider_token():
     except Exception as e:
         print(f"Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
         return None
-
 # ------------------------------------------------------------------------------
-# PostgreSQL Connection
 
+# PostgreSQL Connection
 def get_db_connection():
     return psycopg2.connect(
         dbname=DB_NAME,
@@ -83,8 +84,8 @@ def get_db_connection():
         host=DB_HOST,
         port=DB_PORT
     )
-
 # ------------------------------------------------------------------------------
+
 # Script 1: Echo Bot
 async def script1_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -101,8 +102,8 @@ async def script1_echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("_conversation") == "database":
         return
     await update.message.reply_text(update.message.text)
-
 # ------------------------------------------------------------------------------
+
 # Script 2: WebApp
 async def script2_start_crypto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -124,8 +125,8 @@ async def script2_web_app_data(update: Update, context: ContextTypes.DEFAULT_TYP
         ),
         reply_markup=ReplyKeyboardRemove(),
     )
-
 # ------------------------------------------------------------------------------
+
 # Script 3: Payments
 async def script3_start_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
@@ -183,8 +184,8 @@ async def script3_precheckout_callback(update: Update, context: ContextTypes.DEF
 
 async def script3_successful_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Thank you for your payment.")
-
 # ------------------------------------------------------------------------------
+
 # Script 4: /database Conversation
 async def start_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["_conversation"] = "database"
@@ -233,10 +234,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("_conversation", None)
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
+# ------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------
 # Main Entry
-# ------------------------------------------------------------------------------
 def main():
     telegram_token = fetch_telegram_token()
     payment_provider_token = fetch_payment_provider_token()
@@ -282,3 +282,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+# ------------------------------------------------------------------------------
