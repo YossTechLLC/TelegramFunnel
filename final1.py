@@ -229,6 +229,10 @@ async def script3_successful_payment_callback(update: Update, context: ContextTy
 # 4. Combined Main
 # ------------------------------------------------------------------------------
 def main() -> None:
+    # Fetch Payment Provider Token
+    PAYMENT_PROVIDER_TOKEN = fetch_payment_provider_token()
+    # Fetch Telegram Token
+    TOKEN = fetch_telegram_token()
 
     """Single entry point that merges all three scripts into one bot."""
     # Create one Application for everything
