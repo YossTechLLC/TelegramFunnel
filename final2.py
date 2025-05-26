@@ -159,7 +159,7 @@ async def script1_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Script1's /start command: Greets user & sets up ForceReply."""
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /help /start_crypto /start_payment /shipping /noshipping",
+        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /help /start_crypto /start_payment /shipping /noshipping /psql_entry",
         reply_markup=ForceReply(selective=True),
     )
 
@@ -328,7 +328,7 @@ def main() -> None:
     fallbacks=[CommandHandler("cancel", cancel)],
     )
 
-    application.add_handler(conv_handler)
+    application.add_handler(CommandHandler("psql_entry", conv_handler))
 
     # Start the bot, combining everything
     application.run_polling(allowed_updates=Update.ALL_TYPES)
