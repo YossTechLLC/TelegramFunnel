@@ -331,7 +331,7 @@ def main():
     application.add_handler(PreCheckoutQueryHandler(script3_precheckout_callback))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, script3_successful_payment_callback))
 
-    newpayment_handler = ConversationHandler(
+        newpayment_handler = ConversationHandler(
         entry_points=[CommandHandler("newpayment", start_newpayment)],
         states={
             NEWPAYMENT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_price_amount)],
@@ -364,7 +364,7 @@ def main():
                 global dynamic_invoice_url
                 dynamic_invoice_url = updated_url
 
-    application.post_init(update_invoice_url)
+    application.post_init(callback=update_invoice_url)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
