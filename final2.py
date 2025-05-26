@@ -37,6 +37,9 @@ DB_NAME = 'client_table'
 DB_USER = 'postgres'
 DB_PASSWORD = 'Chigdabeast123$'
 
+# DATABASE
+ID_INPUT, NAME_INPUT = range(2)
+
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
