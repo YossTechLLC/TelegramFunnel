@@ -364,7 +364,7 @@ def main():
                 global dynamic_invoice_url
                 dynamic_invoice_url = updated_url
 
-    application.post_init(callback=update_invoice_url)
+    application.post_init(update_invoice_url)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
