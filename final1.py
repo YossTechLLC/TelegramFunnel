@@ -97,6 +97,9 @@ async def script1_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Help! (EchoBot)")
 
 async def script1_echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Prevent echoing during an active conversation
+    if context.user_data.get("_conversation") == "database":
+        return
     await update.message.reply_text(update.message.text)
 
 # ------------------------------------------------------------------------------
@@ -184,6 +187,7 @@ async def script3_successful_payment_callback(update: Update, context: ContextTy
 # ------------------------------------------------------------------------------
 # Script 4: /database Conversation
 async def start_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["_conversation"] = "database"
     await update.message.reply_text("Please enter the ID (integer):")
     return ID_INPUT
 
@@ -210,9 +214,11 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Saved to database: ID={user_id}, Name={name}")
     except Exception as e:
         await update.message.reply_text(f"❌ Error inserting into database: {e}")
+    context.user_data.pop("_conversation", None)
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("_conversation", None)
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
 
@@ -231,7 +237,18 @@ def main():
     application = Application.builder().token(telegram_token).build()
     application.bot_data["PAYMENT_PROVIDER_TOKEN"] = payment_provider_token
 
-    # Echo bot
+    # Database feature
+    database_handler = ConversationHandler(
+        entry_points=[CommandHandler("database", start_database)],
+        states={
+            ID_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_id)],
+            NAME_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    application.add_handler(database_handler)
+
+    # Echo bot (last to avoid overriding input during conversation)
     application.add_handler(CommandHandler("start", script1_start))
     application.add_handler(CommandHandler("help", script1_help))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, script1_echo))
@@ -247,17 +264,6 @@ def main():
     application.add_handler(ShippingQueryHandler(script3_shipping_callback))
     application.add_handler(PreCheckoutQueryHandler(script3_precheckout_callback))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, script3_successful_payment_callback))
-
-    # Database feature
-    database_handler = ConversationHandler(
-        entry_points=[CommandHandler("database", start_database)],
-        states={
-            ID_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_id)],
-            NAME_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
-    application.add_handler(database_handler)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
