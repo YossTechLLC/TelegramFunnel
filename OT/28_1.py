@@ -216,7 +216,7 @@ def main():
     # WebApp
     application.add_handler(CommandHandler("start_np_gateway", start_np_gateway))
 
-    app = Application.builder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
+    app = Application.builder().token(telegram_token).build()
 
     app.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
 
