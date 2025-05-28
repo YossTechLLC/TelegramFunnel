@@ -4,12 +4,14 @@ import logging
 import json
 import psycopg2
 from google.cloud import secretmanager
+import httpx
 
 from telegram import (
     Update,
     ForceReply,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     WebAppInfo,
 )
 from telegram.ext import (
@@ -36,23 +38,44 @@ INVOICE_PAYLOAD = {
     "cancel_url": CALLBACK_URL
 }
 
-def build_curl_command() -> str:
-    """return the curl string exactly as requested."""
-    json_body = json.dumps(INVOICE_PAYLOAD, separators=(",", ":"))
-    return (
-        "curl -X POST 'https://api.nowpayments.io/v1/invoice' "
-        f"-H 'x-api-key: {NOWPAYMENTS_API_KEY}' "
-        "-H 'Content-Type: application/json' "
-        f"-d '{json_body}'"
+
+
+async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """creates invoice & shows ‘pay now’ web-app button."""
+    headers = {"x-api-key": NOWPAYMENTS_API_KEY, "Content-Type": "application/json"}
+
+    # call nowpayments
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(NOWPAYMENTS_API_KEY, headers=headers, json=INVOICE_PAYLOAD)
+
+    if resp.status_code != 200:
+        await update.message.reply_text(
+            f"nowpayments error ❌\nstatus {resp.status_code}\n{resp.text}"
+        )
+        return
+
+    invoice_url = resp.json().get("invoice_url")
+    if not invoice_url:
+        await update.message.reply_text("❌ invoice_url missing in response.")
+        return
+
+    # build a single-button reply keyboard that opens in-app
+    pay_button = KeyboardButton(
+        text="🔗 pay $100 via crypto",
+        web_app=WebAppInfo(url=invoice_url),
+    )
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[pay_button]],
+        resize_keyboard=True,
+        one_time_keyboard=True,   # hides keyboard after tap
     )
 
-async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """prints the curl command to stdout and optionally acknowledges the user."""
-    curl_cmd = build_curl_command()
-    print(curl_cmd)                       # appears in terminal / cloud logs
-    await update.message.reply_text(      # lets the user know it fired
-        "invoice curl command has been logged on the server."
+    await update.message.reply_text(
+        "tap the button below to pay without leaving telegram.",
+        reply_markup=keyboard,
     )
+
+    logging.log.info("invoice %s sent to %s", invoice_url, update.effective_user.id)
 
 # === PostgreSQL Connection Details ===
 DB_HOST = '34.58.246.248'
