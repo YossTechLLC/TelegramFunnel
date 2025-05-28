@@ -46,7 +46,7 @@ def build_curl_command() -> str:
         f"-d '{json_body}'"
     )
 
-async def start_np_gateway(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """prints the curl command to stdout and optionally acknowledges the user."""
     curl_cmd = build_curl_command()
     print(curl_cmd)                       # appears in terminal / cloud logs
@@ -117,7 +117,7 @@ def get_db_connection():
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database",
+        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database /start_np_gateway_new",
         reply_markup=ForceReply(selective=True),
     )
 # ------------------------------------------------------------------------------
@@ -218,7 +218,7 @@ def main():
 
     app = Application.builder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
 
-    app.add_handler(CommandHandler("start_np_gateway", start_np_gateway))
+    app.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
 
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
