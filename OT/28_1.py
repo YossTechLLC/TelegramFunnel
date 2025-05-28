@@ -58,6 +58,7 @@ async def start_np_gateway_new(
         data = resp.json()
         invoice_url = data.get("invoice_url", "<no url>")
         await update.message.reply_text(
+            "something silly",
             reply_markup=ReplyKeyboardMarkup.from_button(
             KeyboardButton(
                 text="Start NP Gateway NEW",
