@@ -24,14 +24,14 @@ from telegram.ext import (
 # ------------------------------------------------------------------------------
 
 # NowPayment Static INFO
-NOWPAYMENTS_API_KEY = "WHY9KS4-DCZ45QZ-P6PZWA5-BV87D9J"
+
 CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
 INVOICE_PAYLOAD = {
-    "price_amount": 100.0,
+    "price_amount": 20.0,
     "price_currency": "USD",
     "order_id": "MP1TLZ8JAL9U-123456789",
-    "order_description": "TEST123",
+    "order_description": "5-28-25",
     "ipn_callback_url": CALLBACK_URL,
     "success_url": CALLBACK_URL,
     "cancel_url": CALLBACK_URL
@@ -39,37 +39,7 @@ INVOICE_PAYLOAD = {
 
 
 
-async def start_np_gateway_new(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    headers = {
-        "x-api-key": NOWPAYMENTS_API_KEY,
-        "Content-Type": "application/json",
-    }
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.nowpayments.io/v1/invoice",
-            headers=headers,
-            json=INVOICE_PAYLOAD,
-        )
-
-    if resp.status_code == 200:
-        data = resp.json()
-        invoice_url = data.get("invoice_url", "<no url>")
-        await update.message.reply_text(
-            "something silly",
-            reply_markup=ReplyKeyboardMarkup.from_button(
-            KeyboardButton(
-                text="Start NP Gateway NEW",
-                web_app=WebAppInfo(url=invoice_url),
-            )
-        ),
-    )
-    else:
-        await update.message.reply_text(
-            f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}"
-        )
 
 
 # === PostgreSQL Connection Details ===
@@ -119,6 +89,7 @@ def fetch_payment_provider_token():
         print(f"Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
         return None
 # ------------------------------------------------------------------------------
+NOWPAYMENTS_API_KEY = fetch_payment_provider_token()
 
 # PostgreSQL Connection
 def get_db_connection():
@@ -201,6 +172,40 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("_conversation", None)
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
+# ------------------------------------------------------------------------------
+
+# Script 4: New NowPayments Gateway Link
+async def start_np_gateway_new(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    headers = {
+        "x-api-key": NOWPAYMENTS_API_KEY,
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.nowpayments.io/v1/invoice",
+            headers=headers,
+            json=INVOICE_PAYLOAD,
+        )
+
+    if resp.status_code == 200:
+        data = resp.json()
+        invoice_url = data.get("invoice_url", "<no url>")
+        await update.message.reply_text(
+            "Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
+            reply_markup=ReplyKeyboardMarkup.from_button(
+            KeyboardButton(
+                text="Open Payment Gateway",
+                web_app=WebAppInfo(url=invoice_url),
+            )
+        ),
+    )
+    else:
+        await update.message.reply_text(
+            f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}"
+        )
 # ------------------------------------------------------------------------------
 
 # Main Entry
