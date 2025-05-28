@@ -11,7 +11,6 @@ from telegram import (
     ForceReply,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
     WebAppInfo,
 )
 from telegram.ext import (
@@ -40,42 +39,37 @@ INVOICE_PAYLOAD = {
 
 
 
-async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """creates invoice & shows ‘pay now’ web-app button."""
-    headers = {"x-api-key": NOWPAYMENTS_API_KEY, "Content-Type": "application/json"}
+async def start_np_gateway_new(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    headers = {
+        "x-api-key": NOWPAYMENTS_API_KEY,
+        "Content-Type": "application/json",
+    }
 
-    # call nowpayments
     async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(NOWPAYMENTS_API_KEY, headers=headers, json=INVOICE_PAYLOAD)
-
-    if resp.status_code != 200:
-        await update.message.reply_text(
-            f"nowpayments error ❌\nstatus {resp.status_code}\n{resp.text}"
+        resp = await client.post(
+            "https://api.nowpayments.io/v1/invoice",
+            headers=headers,
+            json=INVOICE_PAYLOAD,
         )
-        return
 
-    invoice_url = resp.json().get("invoice_url")
-    if not invoice_url:
-        await update.message.reply_text("❌ invoice_url missing in response.")
-        return
-
-    # build a single-button reply keyboard that opens in-app
-    pay_button = KeyboardButton(
-        text="🔗 pay $100 via crypto",
-        web_app=WebAppInfo(url=invoice_url),
+    if resp.status_code == 200:
+        data = resp.json()
+        invoice_url = data.get("invoice_url", "<no url>")
+        await update.message.reply_text(
+            reply_markup=ReplyKeyboardMarkup.from_button(
+            KeyboardButton(
+                text="Start NP Gateway NEW",
+                web_app=WebAppInfo(url=invoice_url),
+            )
+        ),
     )
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[pay_button]],
-        resize_keyboard=True,
-        one_time_keyboard=True,   # hides keyboard after tap
-    )
+    else:
+        await update.message.reply_text(
+            f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}"
+        )
 
-    await update.message.reply_text(
-        "tap the button below to pay without leaving telegram.",
-        reply_markup=keyboard,
-    )
-
-    logging.log.info("invoice %s sent to %s", invoice_url, update.effective_user.id)
 
 # === PostgreSQL Connection Details ===
 DB_HOST = '34.58.246.248'
