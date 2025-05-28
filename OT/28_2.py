@@ -28,10 +28,10 @@ NOWPAYMENTS_API_KEY = "WHY9KS4-DCZ45QZ-P6PZWA5-BV87D9J"
 CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
 INVOICE_PAYLOAD = {
-    "price_amount": 100.0,
+    "price_amount": 20.0,
     "price_currency": "USD",
     "order_id": "MP1TLZ8JAL9U-123456789",
-    "order_description": "TEST123",
+    "order_description": "5-28-25",
     "ipn_callback_url": CALLBACK_URL,
     "success_url": CALLBACK_URL,
     "cancel_url": CALLBACK_URL
@@ -58,12 +58,19 @@ async def start_np_gateway_new(
         data = resp.json()
         invoice_url = data.get("invoice_url", "<no url>")
         await update.message.reply_text(
-            f"invoice created ✅ — pay here:\n{invoice_url}"
-        )
+            "Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
+            reply_markup=ReplyKeyboardMarkup.from_button(
+            KeyboardButton(
+                text="Open Payment Gateway",
+                web_app=WebAppInfo(url=invoice_url),
+            )
+        ),
+    )
     else:
         await update.message.reply_text(
             f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}"
         )
+
 
 # === PostgreSQL Connection Details ===
 DB_HOST = '34.58.246.248'
