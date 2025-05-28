@@ -196,7 +196,6 @@ def main():
         raise RuntimeError("Bot cannot start: PAYMENT_PROVIDER_SECRET_NAME is missing or invalid.")
 
     application = Application.builder().token(telegram_token).build()
-    application.bot_data["PAYMENT_PROVIDER_TOKEN"] = payment_provider_token
 
     # Database feature
     database_handler = ConversationHandler(
@@ -216,10 +215,7 @@ def main():
     # WebApp
     application.add_handler(CommandHandler("start_np_gateway", start_np_gateway))
 
-    app = Application.builder().token(telegram_token).build()
-
-    app.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
-
+    application.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
