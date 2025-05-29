@@ -148,7 +148,7 @@ def get_db_connection():
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_html(
-        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database /start_np_gateway_new",
+        rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database /start_np_gateway_new /announce",
         reply_markup=ForceReply(selective=True),
     )
 # ------------------------------------------------------------------------------
