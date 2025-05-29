@@ -43,14 +43,13 @@ async def post_welcome_message_to_channel():
     text = (
         "Hi OD Ricky! (EchoBot) - here are the commands you can use right now /start /start_np_gateway /database /start_np_gateway_new"
     )
-    keyboard = [
-        [InlineKeyboardButton("Start", callback_data="/start")],
-        [InlineKeyboardButton("Gateway", callback_data="/start_np_gateway_new")],
-        [InlineKeyboardButton("Database", callback_data="/database")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Start", url="https://t.me/PayGatePrime_bot?start=start")],
+        [InlineKeyboardButton("Gateway", url="https://t.me/PayGatePrime_bot?start=start_np_gateway_new")],
+        [InlineKeyboardButton("Database", url="https://t.me/PayGatePrime_bot?start=database")],
+    ])
 
-    await bot.send_message(chat_id=channel_id, text=text, reply_markup=reply_markup)
+    await bot.send_message(chat_id=channel_id, text=text, reply_markup=keyboard)
 async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await post_welcome_message_to_channel()
 
