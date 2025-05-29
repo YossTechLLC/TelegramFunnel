@@ -44,9 +44,9 @@ async def post_welcome_message_to_channel():
         "Hi OD Ricky! (EchoBot) - here are the commands you can use right now /start /start_np_gateway /database /start_np_gateway_new"
     )
     keyboard = [
-        [InlineKeyboardButton("Start", callback_data="start")],
-        [InlineKeyboardButton("Gateway", callback_data="gateway")],
-        [InlineKeyboardButton("Database", callback_data="database")],
+        [InlineKeyboardButton("Start", callback_data="/start")],
+        [InlineKeyboardButton("Gateway", callback_data="/start_np_gateway_new")],
+        [InlineKeyboardButton("Database", callback_data="/database")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
