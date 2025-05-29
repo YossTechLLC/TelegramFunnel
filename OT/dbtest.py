@@ -17,13 +17,15 @@ DB_PASSWORD = 'Chigdabeast123$'
 # === Telegram Bot Token and Chat ID ===
 BOT_TOKEN = '8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU'
 CHAT_ID = '-1002398681722'  # Channel ID
+BOT_USERNAME = 'PayGatePrime_bot'
 
 # === Send a message to Telegram ===
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': CHAT_ID,
-        'text': text
+        'text': text,
+        'parse_mode': 'Markdown'
     }
     try:
         response = requests.post(url, json=payload)
@@ -58,11 +60,11 @@ def fetch_all_ids():
         id_list = [row[0] for row in rows]
         print("All IDs in test_table:", id_list)
 
-        # Send each hash to Telegram with a decode link
+        # Send each hash to Telegram with a bot start link
         for id_val in id_list:
             hash_val = encode_id(id_val)
-            url = f"https://yourdomain.com/decode?hash={hash_val}"
-            send_telegram_message(f"Hash: {hash_val}\n🔗 [Decode Link]({url})")
+            url = f"https://t.me/{BOT_USERNAME}?start={hash_val}"
+            send_telegram_message(f"Hash: `{hash_val}`\n🔗 [Decode Link]({url})")
 
         cursor.close()
         connection.close()
@@ -70,15 +72,15 @@ def fetch_all_ids():
     except Exception as e:
         print(f"❌ Error fetching IDs: {e}")
 
-# === Flask route to handle decoding hash ===
-@app.route('/decode', methods=['GET'])
-def handle_decode():
-    hash_val = request.args.get('hash')
+# === Flask route to handle decoding from /start parameter ===
+@app.route('/decode_start', methods=['GET'])
+def handle_decode_start():
+    hash_val = request.args.get('start')
     if not hash_val:
-        return "Missing 'hash' parameter", 400
+        return "Missing 'start' parameter", 400
     try:
         original_id = decode_hash(hash_val)
-        send_telegram_message(f"🔓 Decoded ID: {original_id}")
+        send_telegram_message(f"🔓 Decoded ID from /start param: {original_id}")
         return f"Decoded ID: {original_id}", 200
     except Exception as e:
         return f"Error decoding hash: {e}", 500
