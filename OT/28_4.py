@@ -42,7 +42,12 @@ async def post_welcome_message_to_channel(update: Update):
     user_id = str(update.effective_user.id)
     chat = update.effective_chat
     chat_id = str(chat.id)
-    chat_title = chat.title if chat.type != "private" else "Private Chat"
+    chat_title = chat.title or "Private Chat"
+    chat_type = chat.type
+
+    if chat_type == "private":
+        # when executed from a private chat, log the lack of a channel
+        chat_title = "Private Chat (No Channel Context)"
 
     payload = f"{user_id}-{chat_id}"
     encoded_payload = quote(payload)
@@ -180,6 +185,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database /start_np_gateway_new /announce",
         reply_markup=ForceReply(selective=True),
     )
+
 # ------------------------------------------------------------------------------
 
 # Script 2: WebApp
