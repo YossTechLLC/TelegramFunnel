@@ -68,7 +68,7 @@ INVOICE_PAYLOAD = {
 
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     headers = {
-        "np-api-key": fetch_payment_provider_token(),
+        "x-api-key": fetch_payment_provider_token(),
         "Content-Type": "application/json",
     }
 
