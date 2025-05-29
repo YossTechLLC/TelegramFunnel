@@ -39,11 +39,7 @@ async def post_welcome_message_to_channel():
     channel_id = "-1002398681722"  # or actual chat_id for private channels
 
     text = (
-        "Hi OD Ricky! (EchoBot) - here are the commands you can use right now:\n"
-        "/start\n"
-        "/start_np_gateway\n"
-        "/database\n"
-        "/start_np_gateway_new"
+        "Hi OD Ricky! (EchoBot) - here are the commands you can use right now /start /start_np_gateway /database /start_np_gateway_new"
     )
 
     await bot.send_message(chat_id=channel_id, text=text)
