@@ -149,6 +149,15 @@ def get_db_connection():
 # Script 1: Echo Bot
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    args = context.args[0] if context.args else None
+
+    if args == "start_np_gateway_new":
+        await start_np_gateway_new(update, context)
+        return
+    elif args == "database":
+        await start_database(update, context)
+        return
+
     await update.message.reply_html(
         rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database /start_np_gateway_new /announce",
         reply_markup=ForceReply(selective=True),
