@@ -40,14 +40,17 @@ logging.basicConfig(
 async def post_welcome_message_to_channel(update: Update):
     bot = Bot(token=fetch_telegram_token())
     user_id = str(update.effective_user.id)
-    chat_id = str(update.effective_chat.id)
+    chat = update.effective_chat
+    chat_id = str(chat.id)
+    chat_title = chat.title if chat.type != "private" else "Private Chat"
 
     payload = f"{user_id}-{chat_id}"
     encoded_payload = quote(payload)
 
-    text = ("Hi OD Ricky! (EchoBot) - here are the commands you can use right now:\n"
-        f"Your Telegram user ID: {user_id}\n"
-        f"Current channel ID: {chat_id}"
+    text = (
+        f"Hi OD Ricky! (EchoBot) - here are the commands you can use right now:\n"
+        f"🪪 The ID of {chat_title} is: {chat_id}\n"
+        f"Your Telegram user ID: {user_id}"
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -57,6 +60,7 @@ async def post_welcome_message_to_channel(update: Update):
     ])
 
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
+
 async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await post_welcome_message_to_channel(update)
 
@@ -158,12 +162,19 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     args = context.args[0] if context.args else None
 
-    if args == "start_np_gateway_new":
-        await start_np_gateway_new(update, context)
-        return
-    elif args == "database":
-        await start_database(update, context)
-        return
+    if args and '-' in args:
+        try:
+            chat_part, channel_part, cmd = args.split('-', 2)
+            await update.message.reply_text(f"🔍 Parsed user_id: {chat_part}, channel_id: {channel_part}")
+
+            if cmd == "start_np_gateway_new":
+                await start_np_gateway_new(update, context)
+                return
+            elif cmd == "database":
+                await start_database(update, context)
+                return
+        except Exception as e:
+            await update.message.reply_text(f"❌ could not parse command: {e}")
 
     await update.message.reply_html(
         rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database /start_np_gateway_new /announce",
