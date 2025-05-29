@@ -6,6 +6,10 @@ from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 import asyncio
+import nest_asyncio
+
+# Patch the event loop to allow nested use
+nest_asyncio.apply()
 
 # === Flask App for handling decode requests ===
 app = Flask(__name__)
@@ -86,11 +90,11 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await update.message.reply_text("Welcome to PayGatePrime Bot. Use /start <hash> to decode.")
 
-# === Run Telegram Bot ===
-async def run_telegram_bot():
+# === Telegram Bot App Setup ===
+def create_telegram_app():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_command_handler))
-    await app.run_polling()
+    return app
 
 # === Flask route to handle decoding from /start parameter ===
 @app.route('/decode_start', methods=['GET'])
@@ -107,6 +111,7 @@ def handle_decode_start():
 
 if __name__ == "__main__":
     fetch_all_ids()
-    asyncio.run(run_telegram_bot())
-    # To run Flask app in parallel, you might need to separate this or run using gunicorn or similar
-    # app.run(host='0.0.0.0', port=5000)
+    telegram_app = create_telegram_app()
+    loop = asyncio.get_event_loop()
+    loop.create_task(telegram_app.run_polling())
+    app.run(host='0.0.0.0', port=5000)
