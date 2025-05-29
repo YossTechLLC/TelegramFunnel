@@ -40,14 +40,14 @@ logging.basicConfig(
 async def post_welcome_message_to_channel(update: Update):
     bot = Bot(token=fetch_telegram_token())
     user_id = str(update.effective_user.id)
-    channel_id = str(update.effective_chat.id)
+    chat_id = str(update.effective_chat.id)
 
-    payload = f"{user_id}-{channel_id}"
+    payload = f"{user_id}-{chat_id}"
     encoded_payload = quote(payload)
 
     text = ("Hi OD Ricky! (EchoBot) - here are the commands you can use right now:\n"
         f"Your Telegram user ID: {user_id}\n"
-        f"Current channel ID: {channel_id}"
+        f"Current channel ID: {chat_id}"
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -56,7 +56,7 @@ async def post_welcome_message_to_channel(update: Update):
         [InlineKeyboardButton("Database", url=f"https://t.me/PayGatePrime_bot?start={encoded_payload}-database")],
     ])
 
-    await bot.send_message(chat_id=channel_id, text=text, reply_markup=keyboard)
+    await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
 async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await post_welcome_message_to_channel(update)
 
