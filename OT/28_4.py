@@ -45,7 +45,10 @@ async def post_welcome_message_to_channel(update: Update):
     payload = f"{user_id}-{channel_id}"
     encoded_payload = quote(payload)
 
-    text = "Hi OD Ricky! (EchoBot) - here are the commands you can use right now:"
+    text = ("Hi OD Ricky! (EchoBot) - here are the commands you can use right now:\n"
+        f"Your Telegram user ID: {user_id}\n"
+        f"Current channel ID: {channel_id}"
+    )
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Start", url=f"https://t.me/PayGatePrime_bot?start={encoded_payload}-start")],
