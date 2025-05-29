@@ -45,8 +45,8 @@ async def post_welcome_message_to_channel():
     )
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("Start", url="https://t.me/PayGatePrime_bot?start=start")],
-        [InlineKeyboardButton("Gateway", url="https://t.me/PayGatePrime_bot?start=start_np_gateway_new")],
-        [InlineKeyboardButton("Database", url="https://t.me/PayGatePrime_bot?start=database")],
+        [InlineKeyboardButton("Gateway", url="https://t.me/PayGatePrime_bot?start_np_gateway_new=start_np_gateway_new")],
+        [InlineKeyboardButton("Database", url="https://t.me/PayGatePrime_bot?database=database")],
     ])
 
     await bot.send_message(chat_id=channel_id, text=text, reply_markup=keyboard)
@@ -54,7 +54,6 @@ async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await post_welcome_message_to_channel()
 
 # NowPayment Static INFO
-NOWPAYMENTS_API_KEY = "WHY9KS4-DCZ45QZ-P6PZWA5-BV87D9J"
 CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
 INVOICE_PAYLOAD = {
@@ -69,7 +68,7 @@ INVOICE_PAYLOAD = {
 
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     headers = {
-        "x-api-key": fetch_payment_provider_token(),
+        "np-api-key": fetch_payment_provider_token(),
         "Content-Type": "application/json",
     }
 
