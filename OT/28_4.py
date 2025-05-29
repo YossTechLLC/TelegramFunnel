@@ -46,15 +46,15 @@ async def post_welcome_message_to_channel(update: Update):
     chat_type = chat.type
 
     if chat_type == "private":
-        # when executed from a private chat, log the lack of a channel
         chat_title = "Private Chat (No Channel Context)"
 
     payload = f"{user_id}-{chat_id}"
-    encoded_payload = quote(payload)
+    encoded_payload = quote(f"{user_id}-{chat_id}")
 
     text = (
         f"Hi OD Ricky! (EchoBot) - here are the commands you can use right now:\n"
-        f"🪪 The ID of {chat_title} is: {chat_id}\n"
+        f"🪪 Chat Type: {chat_type}\n"
+        f"🪪 The ID of {chat_title} is: {chat.id}\n"
         f"Your Telegram user ID: {user_id}"
     )
 
@@ -64,7 +64,7 @@ async def post_welcome_message_to_channel(update: Update):
         [InlineKeyboardButton("Database", url=f"https://t.me/PayGatePrime_bot?start={encoded_payload}-database")],
     ])
 
-    await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard)
+    await bot.send_message(chat_id=chat.id, text=text, reply_markup=keyboard)
 
 async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await post_welcome_message_to_channel(update)
@@ -185,6 +185,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rf"Hi {user.mention_html()}! (EchoBot) - here are the commands you are use right now /start /start_np_gateway /database /start_np_gateway_new /announce",
         reply_markup=ForceReply(selective=True),
     )
+
 
 # ------------------------------------------------------------------------------
 
