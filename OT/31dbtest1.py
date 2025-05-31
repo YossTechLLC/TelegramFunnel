@@ -1,15 +1,20 @@
 import psycopg2
 
-# database credentials
+# === postgresql connection details ===
 DB_HOST = '34.58.246.248'
 DB_PORT = 5432
 DB_NAME = 'client_table'
 DB_USER = 'postgres'
 DB_PASSWORD = 'Chigdabeast123$'
 
+# === global variables ===
+tele_open_list = []
+tele_closed_list = []
+
 def fetch_tele_channel_data():
+    global tele_open_list, tele_closed_list
     try:
-        # connect to database
+        # connect to db
         conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
@@ -19,27 +24,24 @@ def fetch_tele_channel_data():
         )
         cursor = conn.cursor()
 
-        # execute query
         cursor.execute("SELECT tele_open, tele_closed FROM tele_channel")
         rows = cursor.fetchall()
 
-        # separate into two arrays
+        # store to global arrays
         tele_open_list = [row[0] for row in rows]
         tele_closed_list = [row[1] for row in rows]
 
-        print("tele_open array:", tele_open_list)
-        print("tele_closed array:", tele_closed_list)
-
-        # cleanup
         cursor.close()
         conn.close()
 
-        return tele_open_list, tele_closed_list
-
     except Exception as e:
         print(f"❌ error fetching data: {e}")
-        return [], []
+        tele_open_list = []
+        tele_closed_list = []
 
-# run the function
-if __name__ == "__main__":
-    fetch_tele_channel_data()
+# run fetch once at startup to populate globals
+fetch_tele_channel_data()
+
+# example usage
+print("tele_open_list:", tele_open_list)
+print("tele_closed_list:", tele_closed_list)
