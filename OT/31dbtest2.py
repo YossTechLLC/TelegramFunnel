@@ -92,11 +92,11 @@ def fetch_all_ids():
             password=DB_PASSWORD
         )
         cursor = connection.cursor()
-        cursor.execute("SELECT id FROM test_table")
+        cursor.execute("SELECT tele_open FROM tele_channel")
         rows = cursor.fetchall()
 
         id_list = [row[0] for row in rows]
-        print("All IDs in test_table:", id_list)
+        print("All IDs in tele_open:", id_list)
 
         for id_val in id_list:
             hash_val = encode_id(id_val)
