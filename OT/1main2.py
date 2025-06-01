@@ -354,19 +354,19 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ------------------------------------------------------------------------------
 
 # NowPayment Static INFO
-CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
-INVOICE_PAYLOAD = {
-    "price_amount": global_sub_value,
-    "price_currency": "USD",
-    "order_id": "MP1TLZ8JAL9U-123456789",
-    "order_description": "5-28-25",
-    "ipn_callback_url": CALLBACK_URL,
-    "success_url": CALLBACK_URL,
-    "cancel_url": CALLBACK_URL
-}
 
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
+    INVOICE_PAYLOAD = {
+        "price_amount": global_sub_value,
+        "price_currency": "USD",
+        "order_id": f"PGP-{update.effective_user.id}",
+        "order_description": "5-28-25",
+        "ipn_callback_url": CALLBACK_URL,
+        "success_url": CALLBACK_URL,
+        "cancel_url": CALLBACK_URL
+    }
     headers = {
         "x-api-key": fetch_payment_provider_token(),
         "Content-Type": "application/json",
