@@ -194,7 +194,7 @@ async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
 INVOICE_PAYLOAD = {
-    "price_amount": global_sub_value,
+    "price_amount": float(global_sub_value),
     "price_currency": "USD",
     "order_id": "MP1TLZ8JAL9U-123456789",
     "order_description": "5-28-25",
@@ -317,7 +317,10 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hash_part, _, sub_part = token.partition("_")
         cid  = decode_hash(hash_part)
         sub  = sub_part if sub_part else "n/a"
-        global_sub_value = sub
+        try:
+            global_sub_value = float(sub)
+        except ValueError:
+            global_sub_value = 0
         await update.message.reply_text(
             f"🔓 Decoded ID: <code>{cid}</code>\n"
             f"👤 User ID: <code>{update.effective_user.id}</code>\n"
