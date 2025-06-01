@@ -38,8 +38,11 @@ def fetch_tele_open_list() -> None:
     global tele_open_list
     try:
         conn = psycopg2.connect(
-            host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
-            user=DB_USER, password=DB_PASSWORD
+            host=DB_HOST,
+            port=DB_PORT,
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD
         )
         with conn, conn.cursor() as cur:
             cur.execute("SELECT tele_open FROM tele_channel")
@@ -69,7 +72,7 @@ def send_telegram_message(chat_id: int, text: str) -> None:
             # schedule deletion after 3600 s
             delete_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
             asyncio.get_event_loop().call_later(
-                3600,
+                15,
                 lambda: requests.post(
                     delete_url,
                     json={"chat_id": chat_id, "message_id": message_id}
@@ -89,15 +92,15 @@ def decode_hash(hash_str: str) -> int:
 def broadcast_hash_links() -> None:
     """
     iterate over tele_open_list once; each channel gets *exactly one* message
-    containing its own hash & deep-link.
+    containing its own hash & hash_link.
     """
     if not tele_open_list:
         fetch_tele_open_list()
 
     for chat_id in tele_open_list:
         hash_val = encode_id(chat_id)                          # hash matches the same id
-        deep_link = f"https://t.me/{BOT_USERNAME}?start={hash_val}"
-        text = f"Hash: `{hash_val}`\n🔗 [Decode Link]({deep_link})"
+        hash_link = f"https://t.me/{BOT_USERNAME}?start={hash_val}"
+        text = f"Hash: `{hash_val}`\n🔗 [Decode Link]({hash_link})"
         send_telegram_message(chat_id, text)
 
 # ───────────────────────────  bot handler  ───────────────────────────────────
