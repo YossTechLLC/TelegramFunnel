@@ -59,6 +59,7 @@ BOT_USERNAME = "PayGatePrime_bot"
 
 # Global Sub Value
 global_sub_value = 5.0
+global_cid_value = 1.0
 
 # ── globals ─────────────────────────────────────────────────────────────────
 tele_open_list: list[int] = []
@@ -243,6 +244,7 @@ def get_db_connection():
 # Script 1: Echo Bot
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global global_sub_value
+    global global_cid_value
     user = update.effective_user
     args = context.args[0] if context.args else None
 
@@ -274,6 +276,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         token = context.args[0]
         hash_part, _, sub_part = token.partition("_")
         cid  = decode_hash(hash_part)
+        global_cid_value = cid
         sub  = sub_part if sub_part else "n/a"
         try:
             local_sub_value = sub
@@ -361,7 +364,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
     INVOICE_PAYLOAD = {
         "price_amount": global_sub_value,
         "price_currency": "USD",
-        "order_id": f"PGP-{update.effective_user.id}",
+        "order_id": f"PGP-{update.effective_user.id}+{global_cid_value}",
         "order_description": "5-28-25",
         "ipn_callback_url": CALLBACK_URL,
         "success_url": CALLBACK_URL,
