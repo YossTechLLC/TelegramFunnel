@@ -242,6 +242,7 @@ def get_db_connection():
 
 # Script 1: Echo Bot
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global global_sub_value
     user = update.effective_user
     args = context.args[0] if context.args else None
 
@@ -275,14 +276,14 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cid  = decode_hash(hash_part)
         sub  = sub_part if sub_part else "n/a"
         try:
-            global global_sub_value
-            global_sub_value = sub
+            local_sub_value = sub
         except ValueError:
-            global_sub_value = 15
+            local_sub_value = 15
+        global_sub_value = local_sub_value
         await update.message.reply_text(
             f"🔓 Decoded ID: <code>{cid}</code>\n"
             f"👤 User ID: <code>{update.effective_user.id}</code>\n"
-            f"📦 sub value: <code>{escape(sub)}</code> - <code>{global_sub_value}</code>",
+            f"📦 sub value: <code>{escape(sub)}</code> - <code>{local_sub_value}</code>",
             parse_mode="HTML",
         )
     except Exception as e:
@@ -356,7 +357,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
 INVOICE_PAYLOAD = {
-    "price_amount": float(global_sub_value),
+    "price_amount": global_sub_value,
     "price_currency": "USD",
     "order_id": "MP1TLZ8JAL9U-123456789",
     "order_description": "5-28-25",
