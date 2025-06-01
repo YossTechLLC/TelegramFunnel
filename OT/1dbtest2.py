@@ -57,7 +57,7 @@ def send_message(chat_id: int, html_text: str) -> None:
         # auto-delete after 15 s
         del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
         asyncio.get_event_loop().call_later(
-            15,
+            60,
             lambda: requests.post(
                 del_url,
                 json={"chat_id": chat_id, "message_id": msg_id},
