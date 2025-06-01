@@ -190,49 +190,6 @@ async def post_welcome_message_to_channel(update: Update):
 async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await post_welcome_message_to_channel(update)
 
-# NowPayment Static INFO
-CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
-
-INVOICE_PAYLOAD = {
-    "price_amount": global_sub_value,
-    "price_currency": "USD",
-    "order_id": "MP1TLZ8JAL9U-123456789",
-    "order_description": "5-28-25",
-    "ipn_callback_url": CALLBACK_URL,
-    "success_url": CALLBACK_URL,
-    "cancel_url": CALLBACK_URL
-}
-
-async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    headers = {
-        "x-api-key": fetch_payment_provider_token(),
-        "Content-Type": "application/json",
-    }
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            "https://api.nowpayments.io/v1/invoice",
-            headers=headers,
-            json=INVOICE_PAYLOAD,
-        )
-
-    if resp.status_code == 200:
-        data = resp.json()
-        invoice_url = data.get("invoice_url", "<no url>")
-        await update.message.reply_text(
-            "Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
-            reply_markup=ReplyKeyboardMarkup.from_button(
-            KeyboardButton(
-                text="Open Payment Gateway",
-                web_app=WebAppInfo(url=invoice_url),
-            )
-        ),
-    )
-    else:
-        await update.message.reply_text(
-            f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}"
-        )
-
 # === PostgreSQL Connection Details ===
 DB_HOST = '34.58.246.248'
 DB_PORT = 5432
@@ -392,6 +349,50 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("_conversation", None)
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
+# ------------------------------------------------------------------------------
+
+# NowPayment Static INFO
+CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
+
+INVOICE_PAYLOAD = {
+    "price_amount": float(global_sub_value),
+    "price_currency": "USD",
+    "order_id": "MP1TLZ8JAL9U-123456789",
+    "order_description": "5-28-25",
+    "ipn_callback_url": CALLBACK_URL,
+    "success_url": CALLBACK_URL,
+    "cancel_url": CALLBACK_URL
+}
+
+async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    headers = {
+        "x-api-key": fetch_payment_provider_token(),
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://api.nowpayments.io/v1/invoice",
+            headers=headers,
+            json=INVOICE_PAYLOAD,
+        )
+
+    if resp.status_code == 200:
+        data = resp.json()
+        invoice_url = data.get("invoice_url", "<no url>")
+        await update.message.reply_text(
+            "Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
+            reply_markup=ReplyKeyboardMarkup.from_button(
+            KeyboardButton(
+                text="Open Payment Gateway",
+                web_app=WebAppInfo(url=invoice_url),
+            )
+        ),
+    )
+    else:
+        await update.message.reply_text(
+            f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}"
+        )
 # ------------------------------------------------------------------------------
 
 # Main Entry
