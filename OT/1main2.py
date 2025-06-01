@@ -58,7 +58,7 @@ BOT_TOKEN = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
 BOT_USERNAME = "PayGatePrime_bot"
 
 # Global Sub Value
-global_sub_value = list[int] = []
+global_sub_value = []
 
 # ── globals ─────────────────────────────────────────────────────────────────
 tele_open_list: list[int] = []
@@ -275,6 +275,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cid  = decode_hash(hash_part)
         sub  = sub_part if sub_part else "n/a"
         try:
+            global global_sub_value
             global_sub_value = float(sub)
         except ValueError:
             global_sub_value = 0
