@@ -364,7 +364,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
     INVOICE_PAYLOAD = {
         "price_amount": global_sub_value,
         "price_currency": "USD",
-        "order_id": f"PGP-{update.effective_user.id}+{global_cid_value}",
+        "order_id": f"PGP-{update.effective_user.id}&{global_cid_value}",
         "order_description": "5-28-25",
         "ipn_callback_url": CALLBACK_URL,
         "success_url": CALLBACK_URL,
