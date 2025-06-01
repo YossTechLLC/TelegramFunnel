@@ -1,64 +1,49 @@
 #!/usr/bin/env python
-import psycopg2
-import requests
-import base64
-import asyncio
+import psycopg2, requests, base64, asyncio
 from html import escape
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 import nest_asyncio
 
-# ──────────────────────────  event-loop patch  ───────────────────────────────
 nest_asyncio.apply()
-
-# ──────────────────────────────  flask app  ──────────────────────────────────
 app = Flask(__name__)
 
-# ───────────────────────────  postgres cfg  ──────────────────────────────────
-DB_HOST = "34.58.246.248"
-DB_PORT = 5432
-DB_NAME = "client_table"
-DB_USER = "postgres"
-DB_PASSWORD = "Chigdabeast123$"
+# ── config ──────────────────────────────────────────────────────────────────
+DB_HOST, DB_PORT, DB_NAME = "34.58.246.248", 5432, "client_table"
+DB_USER, DB_PASSWORD     = "postgres", "Chigdabeast123$"
+BOT_TOKEN                = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
+BOT_USERNAME             = "PayGatePrime_bot"
 
-# ─────────────────────  telegram credentials  ────────────────────────────────
-BOT_TOKEN    = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
-BOT_USERNAME = "PayGatePrime_bot"
+# ── globals ─────────────────────────────────────────────────────────────────
+tele_open_list: list[int]                         = []
+tele_info_map: dict[int, dict[str, int | None]]  = {}
 
-# ───────────────────────────  in-memory maps  ────────────────────────────────
-tele_open_list: list[int]                     = []
-tele_info_map: dict[int, dict[str, int | None]] = {}
-
-# ─────────────────────────────  utils  ───────────────────────────────────────
+# ── helper lambdas ──────────────────────────────────────────────────────────
 encode_id = lambda i: base64.urlsafe_b64encode(str(i).encode()).decode()
 decode_hash = lambda s: int(base64.urlsafe_b64decode(s.encode()).decode())
 
-# ───────────────────────  database fetch  ────────────────────────────────────
+# ── db fetch ────────────────────────────────────────────────────────────────
 def fetch_tele_open_list() -> None:
     tele_open_list.clear()
     tele_info_map.clear()
     try:
-        conn = psycopg2.connect(
-            host=DB_HOST, port=DB_PORT,
-            dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD
-        )
-        with conn, conn.cursor() as cur:
-            cur.execute(
-                "SELECT tele_open, sub_1, sub_2, sub_3 FROM tele_channel"
-            )
+        with psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+            user=DB_USER, password=DB_PASSWORD
+        ) as conn, conn.cursor() as cur:
+            cur.execute("SELECT tele_open, sub_1, sub_2, sub_3 FROM tele_channel")
             for tele_open, s1, s2, s3 in cur.fetchall():
                 tele_open_list.append(tele_open)
                 tele_info_map[tele_open] = {"sub_1": s1, "sub_2": s2, "sub_3": s3}
-    except Exception as exc:
-        print(f"❌ DB load error: {exc}")
+    except Exception as e:
+        print("db error:", e)
 
-# ─────────────────────  telegram send helper  ────────────────────────────────
-def send_telegram_message(chat_id: int, html_text: str) -> None:
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+# ── telegram send ───────────────────────────────────────────────────────────
+def send_message(chat_id: int, html_text: str) -> None:
     try:
         r = requests.post(
-            url,
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
             json={
                 "chat_id": chat_id,
                 "text": html_text,
@@ -69,6 +54,7 @@ def send_telegram_message(chat_id: int, html_text: str) -> None:
         )
         r.raise_for_status()
         msg_id = r.json()["result"]["message_id"]
+        # auto-delete after 15 s
         del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
         asyncio.get_event_loop().call_later(
             15,
@@ -78,88 +64,78 @@ def send_telegram_message(chat_id: int, html_text: str) -> None:
                 timeout=5,
             ),
         )
-    except Exception as exc:
-        print(f"❌ send error to {chat_id}: {exc}")
+    except Exception as e:
+        print(f"❌ send error to {chat_id}: {e}")
 
-# ───────────────────  broadcast links per sub_x  ─────────────────────────────
+# ── broadcast ───────────────────────────────────────────────────────────────
 def broadcast_hash_links() -> None:
     if not tele_open_list:
         fetch_tele_open_list()
 
     for chat_id in tele_open_list:
-        subs = tele_info_map.get(chat_id, {})
+        subs      = tele_info_map.get(chat_id, {})
         base_hash = encode_id(chat_id)
 
-        lines = ["<b>decode links:</b>"]  # header
-        for sub_key in ("sub_1", "sub_2", "sub_3"):
-            sub_val = subs.get(sub_key)
-            if sub_val is None:
+        lines = ["<b>decode links:</b>"]
+        for key in ("sub_1", "sub_2", "sub_3"):
+            val = subs.get(key)
+            if val is None:
                 continue
-            # token embeds hash + subval
-            start_token = f"{base_hash}_{sub_val}"
-            link = f"https://t.me/{BOT_USERNAME}?start={start_token}"
-            # HTML bullet + escaped values
+            token = f"{base_hash}_{val}"
+            url   = f"https://t.me/{BOT_USERNAME}?start={token}"
             lines.append(
-                f"&#8226; {escape(sub_key)} <b>{sub_val}</b> → "
-                f'<a href="{escape(link)}">link</a>'
+                f"• {escape(key)} <b>{val}</b> → <a href=\"{escape(url)}\">link</a>"
             )
 
-        send_telegram_message(chat_id, "<br>".join(lines))
+        send_message(chat_id, "\n".join(lines))   # newline, no <br>
 
-# ────────────────────────  /start handler  ───────────────────────────────────
-async def start_command_handler(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
+# ── /start handler ──────────────────────────────────────────────────────────
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
-            "welcome to paygateprime bot. use /start &lt;hash_sub&gt; to decode.",
-            parse_mode="HTML",
+            "welcome – use /start &lt;hash_sub&gt; to decode.", parse_mode="HTML"
         )
         return
-
     try:
         token = context.args[0]
         hash_part, _, sub_part = token.partition("_")
-        decoded_id = decode_hash(hash_part)
-        sub_val = sub_part if sub_part else "n/a"
-
+        cid  = decode_hash(hash_part)
+        sub  = sub_part if sub_part else "n/a"
         await update.message.reply_text(
-            f"🔓 Decoded ID: <code>{decoded_id}</code>\n"
+            f"🔓 Decoded ID: <code>{cid}</code>\n"
             f"👤 User ID: <code>{update.effective_user.id}</code>\n"
-            f"📦 sub value: <code>{escape(sub_val)}</code>",
+            f"📦 sub value: <code>{escape(sub)}</code>",
             parse_mode="HTML",
         )
-    except Exception as exc:
-        await update.message.reply_text(f"❌ decode error: {exc}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ decode error: {e}")
 
 def make_bot() -> Application:
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start_command_handler))
-    return app
+    bot = Application.builder().token(BOT_TOKEN).build()
+    bot.add_handler(CommandHandler("start", start_cmd))
+    return bot
 
-# ────────────────  flask endpoint (optional)  ───────────────────────────────
-@app.route("/decode_start", methods=["GET"])
+# ── flask endpoint (optional) ───────────────────────────────────────────────
+@app.route("/decode_start")
 def decode_start():
-    param  = request.args.get("start")
-    user   = request.args.get("user_id", "unknown")
-
-    if not param:
+    token = request.args.get("start")
+    user  = request.args.get("user_id", "unknown")
+    if not token:
         return "missing start", 400
     try:
-        hash_part, _, sub_part = param.partition("_")
-        cid = decode_hash(hash_part)
-        sub_txt = sub_part if sub_part else "n/a"
-        send_telegram_message(
+        h, _, sub = token.partition("_")
+        cid = decode_hash(h)
+        send_message(
             cid,
-            f"🔓 decoded ID: <code>{cid}</code><br>"
-            f"👤 user: {escape(user)}<br>"
-            f"📦 sub value: <code>{escape(sub_txt)}</code>",
+            f"🔓 decoded ID: <code>{cid}</code>\n"
+            f"👤 user: <code>{escape(user)}</code>\n"
+            f"📦 sub value: <code>{escape(sub or 'n/a')}</code>",
         )
         return "ok", 200
-    except Exception as exc:
-        return f"err {exc}", 500
+    except Exception as e:
+        return f"err {e}", 500
 
-# ─────────────────────────────  main  ───────────────────────────────────────
+# ── main ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     fetch_tele_open_list()
     broadcast_hash_links()
