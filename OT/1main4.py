@@ -150,25 +150,17 @@ def decode_start():
     GET  /decode_start?start=<hash_sub>&user_id=<tg>
          → decodes <hash_sub> and posts a human-readable message
 
-    POST /decode_start           (NowPayments webhook)
-         headers: X-Nowpayments-Sig
-         body:    JSON
-         → verifies signature, checks payment_status == finished,
-           creates one-time invite link, DMs the payer
+    POST /decode_start   (NowPayments webhook)
+         body: JSON
+         → always creates a one-time invite link and DMs the payer
     """
 
-    # ── branch 1: NowPayments webhook (signed POST) ────────────────────────
-    sig_hdr = request.headers.get("x-nowpayments-sig")
-    if request.method == "POST" and sig_hdr:
-        if not verify_sig(request.data, sig_hdr):
-            return "bad signature", 403
-
+    # ── branch 1: NowPayments webhook (unsigned POST) ──────────────────────
+    if request.method == "POST":
         data = request.get_json(silent=True) or {}
-        if data.get("payment_status") != "finished":
-            return "ignored", 200
 
         try:
-            user_id = int(data["order_id"].split("::", 1)[0])
+            user_id = int(data.get("order_id", "0").split("::", 1)[0])
         except Exception:
             return "bad order_id", 400
 
@@ -190,10 +182,10 @@ def decode_start():
 
         return "ok", 200
 
-    # ── branch 2: simple decoder (GET or POST-form) ────────────────────────
+    # ── branch 2: simple decoder (GET or form-POST) ────────────────────────
     token = (
-        request.args.get("start")           # usual GET query param
-        or request.form.get("start")        # in case someone POSTs form-encoded
+        request.args.get("start") or           # GET query param
+        request.form.get("start")              # form-POST param
     )
     user  = request.args.get("user_id", "unknown")
 
