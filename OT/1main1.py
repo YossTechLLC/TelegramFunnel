@@ -194,7 +194,7 @@ async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
 INVOICE_PAYLOAD = {
-    "price_amount": sub_part,
+    "price_amount": global_sub_value,
     "price_currency": "USD",
     "order_id": "MP1TLZ8JAL9U-123456789",
     "order_description": "5-28-25",
