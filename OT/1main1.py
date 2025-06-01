@@ -57,6 +57,9 @@ DB_PASSWORD = "Chigdabeast123$"
 BOT_TOKEN = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
 BOT_USERNAME = "PayGatePrime_bot"
 
+# Global Sub Value
+global_sub_value = None
+
 # ── globals ─────────────────────────────────────────────────────────────────
 tele_open_list: list[int] = []
 tele_info_map: dict[int, dict[str, int | None]] = {}
@@ -152,9 +155,7 @@ def decode_start():
     except Exception as e:
         return f"err {e}", 500
 
-
 ####################################################### BUNLDE ###############
-
 
 # Channel BOT ATTEMPT
 async def post_welcome_message_to_channel(update: Update):
@@ -193,7 +194,7 @@ async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
 
 INVOICE_PAYLOAD = {
-    "price_amount": 20.0,
+    "price_amount": sub_part,
     "price_currency": "USD",
     "order_id": "MP1TLZ8JAL9U-123456789",
     "order_description": "5-28-25",
@@ -316,6 +317,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hash_part, _, sub_part = token.partition("_")
         cid  = decode_hash(hash_part)
         sub  = sub_part if sub_part else "n/a"
+        global_sub_value = sub
         await update.message.reply_text(
             f"🔓 Decoded ID: <code>{cid}</code>\n"
             f"👤 User ID: <code>{update.effective_user.id}</code>\n"
