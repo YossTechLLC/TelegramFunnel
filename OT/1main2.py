@@ -439,9 +439,6 @@ def main():
 if __name__ == "__main__":
     fetch_tele_open_list()
     broadcast_hash_links()
-    main()
-    bot_app = make_bot()
-    loop = asyncio.get_event_loop()
-    loop.create_task(bot_app.run_polling())
+    app = main()
     app.run(host="0.0.0.0", port=5000)
 # ------------------------------------------------------------------------------
