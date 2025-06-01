@@ -58,7 +58,7 @@ BOT_TOKEN = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
 BOT_USERNAME = "PayGatePrime_bot"
 
 # Global Sub Value
-global_sub_value = []
+global_sub_value = 0
 
 # ── globals ─────────────────────────────────────────────────────────────────
 tele_open_list: list[int] = []
