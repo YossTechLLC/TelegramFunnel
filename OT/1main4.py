@@ -60,7 +60,7 @@ DB_PASSWORD = "Chigdabeast123$"
 BOT_TOKEN = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
 BOT_USERNAME = "PayGatePrime_bot"
 NOW_WEBHOOK_KEY = "erwUOFI+HmEbEbT5YTqfU83nOU4IBuqL"
-CHANNEL_ID = -1002409379260
+CHANNEL_ID = -1002470187705
 
 # Global Sub Value
 global_sub_value = 5.0
@@ -157,12 +157,7 @@ def decode_start():
 
     # ── branch 1: NowPayments webhook (unsigned POST) ──────────────────────
     if request.method == "POST":
-        data = request.get_json(silent=True) or {}
-
-        try:
-            user_id = int(data.get("order_id", "0").split("::", 1)[0])
-        except Exception:
-            return "bad order_id", 400
+        user_id = 7163367091
 
         try:
             invite = bot_obj.create_chat_invite_link(
