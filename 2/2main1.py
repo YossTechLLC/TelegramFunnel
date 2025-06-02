@@ -224,7 +224,7 @@ def broadcast_hash_links() -> None:
     if not tele_open_list:
         fetch_tele_open_list()
     for chat_id in tele_open_list:
-        subs      = tele_info_open_map.get(chat_id, {})
+        subs = tele_info_open_map.get(chat_id, {})
         base_hash = encode_id(chat_id)
         lines = ["<b>decode links:</b>"]
         for key in ("sub_1", "sub_2", "sub_3"):
@@ -363,11 +363,10 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
     CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
     # CANCEL_URL = "https://flask-hook-test-291176869049.us-central1.run.app/decode_start"
     global global_sub_value
-    sub_value = float(global_sub_value)
     user_id = update.effective_user.id
     c_channel_id = fetch_closed_channel_id()
     INVOICE_PAYLOAD = {
-        "price_amount": sub_value,
+        "price_amount": global_sub_value,
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "5-28-25",
@@ -393,7 +392,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         data = resp.json()
         invoice_url = data.get("invoice_url", "<no url>")
         await update.message.reply_text(
-            f"{c_channel_id} - {user_id} - {global_sub_value:.2f} - Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
+            f"{c_channel_id} - {user_id} - {global_sub_value} - Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
             reply_markup=ReplyKeyboardMarkup.from_button(
             KeyboardButton(
                 text="Open Payment Gateway",
