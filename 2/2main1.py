@@ -361,6 +361,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # NowPayment NEW PAYMENTS PORTAL
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
+    CANCEL_URL = "https://flask-hook-test-291176869049.us-central1.run.app/decode_start"
     user_id = update.effective_user.id
     c_channel_id = fetch_closed_channel_id()
     INVOICE_PAYLOAD = {
@@ -370,7 +371,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         "order_description": "5-28-25",
         "ipn_callback_url": CALLBACK_URL,
         "success_url": CALLBACK_URL,
-        "cancel_url": CALLBACK_URL
+        "cancel_url": CANCEL_URL
     }
     headers = {
         "x-api-key": fetch_payment_provider_token(),
