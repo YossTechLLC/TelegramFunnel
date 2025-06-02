@@ -155,7 +155,7 @@ def fetch_closed_channel_id():
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT tele_closed FROM tele_channel WHERE tele_open = %s", (global_open_channel_id,))
+        cur.execute("SELECT tele_closed FROM tele_channel WHERE tele_open::bigint = %s", (global_open_channel_id,))
         result = cur.fetchone()
         if result:
             global_closed_channel_id = result[0]
