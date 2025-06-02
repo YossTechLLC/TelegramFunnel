@@ -366,15 +366,15 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     c_channel_id = fetch_closed_channel_id()
     INVOICE_PAYLOAD = {
-        "price_amount": 55,
+        "price_amount": global_sub_value,
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "5-28-25",
         "ipn_callback_url": CALLBACK_URL,
         "success_url": CALLBACK_URL,
         "cancel_url": CALLBACK_URL,
-        "is_fixed_rate": True,
-        "is_fee_paid_by_user": False
+        "is_fixed_rate": "false",
+        "is_fee_paid_by_user": "false"
     }
     headers = {
         "x-api-key": fetch_payment_provider_token(),
