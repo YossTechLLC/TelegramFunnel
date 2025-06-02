@@ -363,10 +363,11 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
     CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
     # CANCEL_URL = "https://flask-hook-test-291176869049.us-central1.run.app/decode_start"
     global global_sub_value
+    sub_value = float(global_sub_value)
     user_id = update.effective_user.id
     c_channel_id = fetch_closed_channel_id()
     INVOICE_PAYLOAD = {
-        "price_amount": f"{float(global_sub_value):.2f}",
+        "price_amount": sub_value,
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "5-28-25",
