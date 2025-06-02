@@ -373,9 +373,9 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         "ipn_callback_url": CALLBACK_URL,
         "success_url": CALLBACK_URL,
         "cancel_url": CALLBACK_URL,
-        "is_fixed_rate": "false",
-        "is_fee_paid_by_user": "false"
-    }
+        "is_fixed_rate": False,
+        "is_fee_paid_by_user": False
+            }
     headers = {
         "x-api-key": fetch_payment_provider_token(),
         "Content-Type": "application/json",
