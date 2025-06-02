@@ -1,2 +1,2 @@
-Flask==2.3.3
-python-telegram-bot==20.6
+functions-framework==3.*
+python-telegram-bot[socks]>=21.0
