@@ -405,7 +405,6 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # Main Entry
 def main():
-    application = Application.builder().token(telegram_token).build()
     telegram_token = fetch_telegram_token()
     payment_provider_token = fetch_payment_provider_token()
 
@@ -413,7 +412,9 @@ def main():
         raise RuntimeError("Bot cannot start: TELEGRAM_BOT_SECRET_NAME is missing or invalid.")
     if not payment_provider_token:
         raise RuntimeError("Bot cannot start: PAYMENT_PROVIDER_SECRET_NAME is missing or invalid.")
-
+    
+    application = Application.builder().token(telegram_token).build()
+    
     # Database feature
     database_handler = ConversationHandler(
         entry_points=[CommandHandler("database", start_database)],
