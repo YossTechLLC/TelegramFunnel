@@ -377,7 +377,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         "is_fee_paid_by_user": True
     }
     headers = {
-        "x-api-key": fetch_payment_provider_token(),
+        "x-api-key": "WHY9KS4-DCZ45QZ-P6PZWA5-BV87D9J",
         "Content-Type": "application/json",
     }
 
