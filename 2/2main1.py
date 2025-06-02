@@ -111,30 +111,6 @@ def fetch_now_webhook_key():
         return None
 # ------------------------------------------------------------------------------
 
-# === PostgreSQL Connection Details ===
-DB_HOST = '34.58.246.248'
-DB_PORT = 5432
-DB_NAME = 'client_table'
-DB_USER = 'postgres'
-DB_PASSWORD = 'Chigdabeast123$'
-
-# ── config ──────────────────────────────────────────────────────────────────
-BOT_TOKEN = fetch_telegram_token()
-BOT_USERNAME = "PayGatePrime_bot"
-NOW_WEBHOOK_KEY = fetch_now_webhook_key()
-CHANNEL_ID = -1002470187705 ### CLOSED CHANNEL ID
-
-# PostgreSQL Connection
-def get_db_connection():
-    return psycopg2.connect(
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
-    )
-# ------------------------------------------------------------------------------
-
 # ── db fetch OPEN ───────────────────────────────────────────────────────────
 def fetch_tele_open_list() -> None:
     tele_open_list.clear()
@@ -191,6 +167,29 @@ def fetch_closed_channel_id():
         print(f"❌ Error fetching tele_closed: {e}")
 
     return global_closed_channel_id
+
+# === PostgreSQL Connection Details ===
+DB_HOST = '34.58.246.248'
+DB_PORT = 5432
+DB_NAME = 'client_table'
+DB_USER = 'postgres'
+DB_PASSWORD = 'Chigdabeast123$'
+
+# PostgreSQL Connection
+def get_db_connection():
+    return psycopg2.connect(
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT
+    )
+# ------------------------------------------------------------------------------
+
+# ── config ──────────────────────────────────────────────────────────────────
+BOT_TOKEN = fetch_telegram_token()
+BOT_USERNAME = "PayGatePrime_bot"
+NOW_WEBHOOK_KEY = fetch_now_webhook_key()
 
 # ── telegram send ───────────────────────────────────────────────────────────
 def send_message(chat_id: int, html_text: str) -> None:
@@ -414,7 +413,7 @@ def main():
         raise RuntimeError("Bot cannot start: PAYMENT_PROVIDER_SECRET_NAME is missing or invalid.")
     
     application = Application.builder().token(telegram_token).build()
-    
+
     # Database feature
     database_handler = ConversationHandler(
         entry_points=[CommandHandler("database", start_database)],
