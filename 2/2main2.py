@@ -294,6 +294,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         hash_part, _, sub_part = token.partition("_")
         open_channel_id  = decode_hash(hash_part)
         global_open_channel_id = open_channel_id
+        sub = sub_part.replace("d", ".")
         sub  = sub_part if sub_part else "n/a"
         try:
             local_sub_value = sub
