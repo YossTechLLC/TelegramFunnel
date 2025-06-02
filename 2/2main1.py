@@ -366,7 +366,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     c_channel_id = fetch_closed_channel_id()
     INVOICE_PAYLOAD = {
-        "price_amount": "7.75",
+        "price_amount": str(global_sub_value),
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "5-28-25",
