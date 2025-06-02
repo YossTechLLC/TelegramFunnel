@@ -301,7 +301,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"🔓 Decoded ID: <code>{open_channel_id}</code>\n"
             f"👤 User ID: <code>{update.effective_user.id}</code>\n"
-            f"📦 sub value: <code>{escape(sub)}</code> - <code>{local_sub_value}</code>",
+            f"📦 sub value: <code>{local_sub_value}</code>",
             parse_mode="HTML",
         )
     except Exception as e:
