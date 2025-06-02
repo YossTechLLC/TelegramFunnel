@@ -362,7 +362,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     CALLBACK_URL = "https://us-central1-rikky-telebot1.cloudfunctions.net/simplecallback"
     user_id = update.effective_user.id
-    c_channel_id = global_closed_channel_id
+    c_channel_id = fetch_closed_channel_id()
     INVOICE_PAYLOAD = {
         "price_amount": global_sub_value,
         "price_currency": "USD",
