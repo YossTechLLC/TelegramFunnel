@@ -393,7 +393,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         data = resp.json()
         invoice_url = data.get("invoice_url", "<no url>")
         await update.message.reply_text(
-            f"{closed_channel_id} - {update.effective_user.id} - {global_sub_value} - test invite - f"https://us-central1-telepay-459221.cloudfunctions.net/success_inv?user_id={update.effective_user.id}&closed_channel_id={closed_channel_id}" Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
+            f"{closed_channel_id} - {update.effective_user.id} - {global_sub_value} - test invite - https://us-central1-telepay-459221.cloudfunctions.net/success_inv?user_id={update.effective_user.id}&closed_channel_id={closed_channel_id} Please click on the 'Open Payment Gateway' button you see at the bottom of the screen to inniate the payment process - You have a 20 minute window within which you can submit the payment, if the payment isn't submitted withint that timeframe you will need to request the payment gateway again - thank you!",
             reply_markup=ReplyKeyboardMarkup.from_button(
             KeyboardButton(
                 text="Open Payment Gateway",
