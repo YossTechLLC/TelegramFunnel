@@ -73,7 +73,7 @@ tele_info_closed_map: dict[int, dict[str, int | None]] = {}
     SUB1_TIME_INPUT,
     SUB2_TIME_INPUT,
     SUB3_TIME_INPUT,
-) = range(5)
+) = range(8)
 # ------------------------------------------------------------------------------
 
 # ── helper lambdas ──────────────────────────────────────────────────────────
