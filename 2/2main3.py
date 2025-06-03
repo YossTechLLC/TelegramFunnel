@@ -371,7 +371,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "5-28-25",
-        "ipn_callback_url": CALLBACK_URL,
+        "ipn_callback_url": f"https://us-central1-telepay-459221.cloudfunctions.net/success_inv?user_id={update.effective_user.id}&closed_channel_id={closed_channel_id}",
         "success_url": f"https://us-central1-telepay-459221.cloudfunctions.net/success_inv?user_id={update.effective_user.id}&closed_channel_id={closed_channel_id}",
         "cancel_url": CALLBACK_URL,
         "is_fixed_rate": False,
