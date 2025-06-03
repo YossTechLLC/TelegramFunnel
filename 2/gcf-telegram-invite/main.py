@@ -8,8 +8,8 @@ bot = Bot(BOT_TOKEN)
 @http
 def send_invite(request):
     try:
-        uid = int(request.args.get("user_id"))
-        cid = int(request.args.get("closed_channel_id"))
+        uid = int(request.args.get("uid"))
+        cid = int(request.args.get("cid"))
         if uid is None or cid is None:
             raise ValueError("Missing required query parameters.")
     except Exception as e:
