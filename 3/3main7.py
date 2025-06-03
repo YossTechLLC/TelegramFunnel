@@ -37,7 +37,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ConversationHandler,
-    CallbackQueryHandler,
 )
 
 # Global Setup
@@ -46,12 +45,10 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-# ------------------------------------------------------------------------------
 
 # Flask Setup Start
 nest_asyncio.apply()
 app = Flask(__name__)
-# ------------------------------------------------------------------------------
 
 # Global Sub Value
 global_sub_value = 5.0
@@ -75,7 +72,6 @@ tele_info_closed_map: dict[int, dict[str, int | None]] = {}
     SUB2_TIME_INPUT,
     SUB3_TIME_INPUT,
 ) = range(8)
-# ------------------------------------------------------------------------------
 
 # ── helper lambdas ──────────────────────────────────────────────────────────
 encode_id = lambda i: base64.urlsafe_b64encode(str(i).encode()).decode()
@@ -124,10 +120,8 @@ def fetch_now_webhook_key():
 
 # ── db fetch OPEN ───────────────────────────────────────────────────────────
 def fetch_tele_open_list() -> None:
-
     tele_open_list.clear()
     tele_info_open_map.clear()
-
     try:
         with psycopg2.connect(
             host=DB_HOST,
@@ -136,22 +130,17 @@ def fetch_tele_open_list() -> None:
             user=DB_USER,
             password=DB_PASSWORD,
         ) as conn, conn.cursor() as cur:
-
             cur.execute("SELECT tele_open, sub_1, sub_1_time, sub_2, sub_2_time, sub_3, sub_3_time FROM tele_channel")
-
-            for (
-                tele_open,
-                s1, s1_time,
-                s2, s2_time,
-                s3, s3_time,
-            ) in cur.fetchall():
+            for (tele_open, s1, s1_time, s2, s2_time, s3, s3_time,) in cur.fetchall():
                 tele_open_list.append(tele_open)
                 tele_info_open_map[tele_open] = {
-                    "sub_1": s1,       "sub_1_time": s1_time,
-                    "sub_2": s2,       "sub_2_time": s2_time,
-                    "sub_3": s3,       "sub_3_time": s3_time,
+                    "sub_1": s1,
+                    "sub_1_time": s1_time,
+                    "sub_2": s2,
+                    "sub_2_time": s2_time,
+                    "sub_3": s3,
+                    "sub_3_time": s3_time,
                 }
-
     except Exception as e:
         print("db tele_open error:", e)
 
@@ -192,6 +181,7 @@ def fetch_closed_channel_id():
         print(f"❌ Error fetching tele_closed: {e}")
 
     return global_closed_channel_id
+# ------------------------------------------------------------------------------
 
 # === PostgreSQL Connection Details ===
 DB_HOST = '34.58.246.248'
@@ -199,6 +189,7 @@ DB_PORT = 5432
 DB_NAME = 'client_table'
 DB_USER = 'postgres'
 DB_PASSWORD = 'Chigdabeast123$'
+# ------------------------------------------------------------------------------
 
 # PostgreSQL Connection
 def get_db_connection():
@@ -215,6 +206,7 @@ def get_db_connection():
 BOT_TOKEN = fetch_telegram_token()
 BOT_USERNAME = "PayGatePrime_bot"
 NOW_WEBHOOK_KEY = fetch_now_webhook_key()
+# ------------------------------------------------------------------------------
 
 # ── telegram send ───────────────────────────────────────────────────────────
 def send_message(chat_id: int, html_text: str) -> None:
@@ -248,11 +240,9 @@ def send_message(chat_id: int, html_text: str) -> None:
 def broadcast_hash_links() -> None:
     if not tele_open_list:
         fetch_tele_open_list()
-
     for chat_id in tele_open_list:
         data = tele_info_open_map.get(chat_id, {})
         base_hash = encode_id(chat_id)
-
         buttons = []
         for idx in (1, 2, 3):
             price = data.get(f"sub_{idx}")
@@ -263,12 +253,9 @@ def broadcast_hash_links() -> None:
             token    = f"{base_hash}_{safe_sub}"
             url      = f"https://t.me/{BOT_USERNAME}?start={token}"
             buttons.append({"text": f"${price} for {days} days", "url": url})
-
         if not buttons:
             continue
-
         reply_markup = {"inline_keyboard": [buttons]}
-
         try:
             resp = requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -281,7 +268,6 @@ def broadcast_hash_links() -> None:
                 timeout=10,
             )
             resp.raise_for_status()
-
             msg_id = resp.json()["result"]["message_id"]
             del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
             asyncio.get_event_loop().call_later(
@@ -294,12 +280,10 @@ def broadcast_hash_links() -> None:
             )
         except Exception as e:
             logging.error("send error to %s: %s", chat_id, e)
-# ------------------------------------------------------------------------------
 
 def decode_start():
     token = (request.args.get("start") or request.form.get("start"))
     user = request.args.get("tele_open_id", "unknown")
-
     if not token:
         return "missing start", 400
     try:
@@ -315,31 +299,23 @@ def decode_start():
         return "ok", 200
     except Exception as e:
         return f"err {e}", 500
-####################################################### BUNLDE ###############
-
-async def button_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "CMD_START":
-        await start_bot(update, context)
-    elif query.data == "CMD_DATABASE":
-        await start_database(update, context)
-    elif query.data == "CMD_GATEWAY":
-        await start_np_gateway_new(update, context)
+# ------------------------------------------------------------------------------
 
 # Script: Echo Bot
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global global_sub_value, global_open_channel_id
-    user = update.effective_user
-    args = context.args[0] if context.args else None
 
-    # --- existing parsing for deep-link tokens (unchanged) ------------------
+    chat_id = update.effective_chat.id
+    user    = update.effective_user
+    args    = context.args[0] if context.args else None
+
+    # deep-link     ----------------------------------------------------------
     if args and '-' in args:
         try:
             chat_part, channel_part, cmd = args.split('-', 2)
-            await update.message.reply_text(
-                f"🔍 Parsed tele_open_id: {chat_part}, channel_id: {channel_part}"
+            await context.bot.send_message(
+                chat_id,
+                f"🔍 Parsed tele_open_id: {chat_part}, channel_id: {channel_part}",
             )
             if cmd == "start_np_gateway_new":
                 await start_np_gateway_new(update, context)
@@ -348,9 +324,8 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await start_database(update, context)
                 return
         except Exception as e:
-            await update.message.reply_text(f"❌ could not parse command: {e}")
-
-    # --- new button menu ----------------------------------------------------
+            await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
+    # menu buttons  ----------------------------------------------------------
     keyboard = InlineKeyboardMarkup(
         [
             [
@@ -360,36 +335,36 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ]
     )
-
-    await update.message.reply_html(
+    await context.bot.send_message(
+        chat_id,
         rf"Hi {user.mention_html()}! 👋",
+        parse_mode="HTML",
         reply_markup=keyboard,
     )
-
-    # if no deep-link token, stop here (handler for buttons will take over)
+    # if invoked by plain /start with no token, stop here
     if not context.args:
         return
-
-    # --- continue with old token-decode logic -------------------------------
+    # decode token   ---------------------------------------------------------
     try:
         token = context.args[0]
         hash_part, _, sub_part = token.partition("_")
         open_channel_id = decode_hash(hash_part)
         global_open_channel_id = open_channel_id
-        sub = sub_part.replace("d", ".") if sub_part else "n/a"
+        sub_raw = sub_part.replace("d", ".") if sub_part else "n/a"
         try:
-            local_sub_value = float(sub)
+            local_sub_value = float(sub_raw)
         except ValueError:
             local_sub_value = 15.0
         global_sub_value = local_sub_value
-        await update.message.reply_text(
+        await context.bot.send_message(
+            chat_id,
             f"🔓 Decoded ID: <code>{open_channel_id}</code>\n"
-            f"👤 User ID: <code>{update.effective_user.id}</code>\n"
+            f"👤 User ID: <code>{user.id}</code>\n"
             f"📦 sub value: <code>{local_sub_value}</code>",
             parse_mode="HTML",
         )
     except Exception as e:
-        await update.message.reply_text(f"❌ decode error: {e}")
+        await context.bot.send_message(chat_id, f"❌ decode error: {e}")
 # ------------------------------------------------------------------------------
 
 # ─── helpers ────────────────────────────────────────────────────────────────
@@ -410,12 +385,16 @@ def _valid_sub(text: str) -> bool:
 
 def _valid_time(text: str) -> bool:
     return text.isdigit() and 1 <= int(text) <= 999
-# ------------------------------------------------------------------------------
 
 # ─── /database conversation handlers ───────────────────────────────────────
 async def start_database(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.clear()
-    await update.message.reply_text("Enter *tele_open* (≤14 chars integer):", parse_mode="Markdown")
+    chat_id = update.effective_chat.id
+    await ctx.bot.send_message(
+        chat_id,
+        "Enter *tele_open* (≤14 chars integer):",
+        parse_mode="Markdown",
+    )
     return TELE_OPEN_INPUT
 
 async def receive_tele_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -461,15 +440,13 @@ receive_sub1_time  = _time_handler("sub_1_time",  SUB2_INPUT,      "Enter *sub_2
 receive_sub2       = _sub_handler ("sub_2",       SUB2_TIME_INPUT, "Enter *sub_2_time* (1-999):")
 receive_sub2_time  = _time_handler("sub_2_time",  SUB3_INPUT,      "Enter *sub_3* (0-9999.99):")
 receive_sub3       = _sub_handler ("sub_3",       SUB3_TIME_INPUT, "Enter *sub_3_time* (1-999):")
-
+# ------------------------------------------------------------------------------
 
 async def receive_sub3_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _valid_time(update.message.text):
         await update.message.reply_text("❌ Invalid time. Try sub_3_time again:")
         return SUB3_TIME_INPUT
-
     ctx.user_data["sub_3_time"] = int(update.message.text)
-
     vals = (
         ctx.user_data["tele_open"],
         ctx.user_data["tele_closed"],
@@ -480,7 +457,6 @@ async def receive_sub3_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["sub_3"],
         ctx.user_data["sub_3_time"],
     )
-
     try:
         conn = get_db_connection()
         with conn, conn.cursor() as cur:
@@ -500,10 +476,9 @@ async def receive_sub3_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         await update.message.reply_text(f"❌ DB error: {e}")
-
     ctx.user_data.clear()
     return ConversationHandler.END
-
+# ------------------------------------------------------------------------------
 
 async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.clear()
@@ -512,40 +487,30 @@ async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ------------------------------------------------------------------------------
 
 # NowPayment NEW PAYMENTS PORTAL
-async def start_np_gateway_new(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global global_sub_value
-
     closed_channel_id = fetch_closed_channel_id()
     INVOICE_PAYLOAD = {
         "price_amount": global_sub_value,
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "Payment-Test-1",
-        "success_url": (
-            "https://us-central1-telepay-459221.cloudfunctions.net/success_inv"
-            f"?tele_open_id={update.effective_user.id}"
-            f"&closed_channel_id={closed_channel_id}"
-        ),
+        "success_url": f"https://us-central1-telepay-459221.cloudfunctions.net/success_inv?tele_open_id={update.effective_user.id}&closed_channel_id={closed_channel_id}",
         "is_fixed_rate": False,
-        "is_fee_paid_by_user": False,
-    }
-
+        "is_fee_paid_by_user": False
+            }
     headers = {
         "x-api-key": fetch_payment_provider_token(),
         "Content-Type": "application/json",
     }
-
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             "https://api.nowpayments.io/v1/invoice",
             headers=headers,
             json=INVOICE_PAYLOAD,
         )
-
     chat_id = update.effective_chat.id          # works for both message & callback
     bot     = context.bot                       # same bot instance
-
     if resp.status_code == 200:
         invoice_url = resp.json().get("invoice_url", "<no url>")
         reply_markup = ReplyKeyboardMarkup.from_button(
@@ -599,7 +564,6 @@ def main():
     # Echo bot (last to avoid overriding input during conversation)
     application.add_handler(CommandHandler("start", start_bot))
     application.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
-    application.add_handler(CallbackQueryHandler(button_router))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     return application
 # ------------------------------------------------------------------------------
