@@ -380,7 +380,6 @@ async def start_database(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Enter *tele_open* (≤14 chars integer):", parse_mode="Markdown")
     return TELE_OPEN_INPUT
 
-
 async def receive_tele_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if _valid_channel_id(update.message.text):
         ctx.user_data["tele_open"] = int(update.message.text)
@@ -388,7 +387,6 @@ async def receive_tele_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return TELE_CLOSED_INPUT
     await update.message.reply_text("❌ Invalid tele_open. Try again:")
     return TELE_OPEN_INPUT
-
 
 async def receive_tele_closed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if _valid_channel_id(update.message.text):
@@ -398,7 +396,6 @@ async def receive_tele_closed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Invalid tele_closed. Try again:")
     return TELE_CLOSED_INPUT
 
-
 # ── dynamic builder helpers ────────────────────────────────────────────────
 def _sub_handler(idx_key: str, next_state: int, prompt: str):
     async def inner(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -407,9 +404,8 @@ def _sub_handler(idx_key: str, next_state: int, prompt: str):
             await update.message.reply_text(prompt, parse_mode="Markdown")
             return next_state
         await update.message.reply_text("❌ Invalid sub value. Try again:")
-        return update.handler
+        return SUB1_INPUT if idx_key == "sub_1" else SUB2_INPUT if idx_key == "sub_2" else SUB3_INPUT
     return inner
-
 
 def _time_handler(idx_key: str, next_state: int, prompt: str):
     async def inner(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -418,9 +414,8 @@ def _time_handler(idx_key: str, next_state: int, prompt: str):
             await update.message.reply_text(prompt, parse_mode="Markdown")
             return next_state
         await update.message.reply_text("❌ Invalid time (1-999). Try again:")
-        return update.handler
+        return SUB1_TIME_INPUT if idx_key == "sub_1_time" else SUB2_TIME_INPUT if idx_key == "sub_2_time" else SUB3_TIME_INPUT
     return inner
-
 
 # Handlers in sequence
 receive_sub1       = _sub_handler ("sub_1",       SUB1_TIME_INPUT, "Enter *sub_1_time* (1-999):")
