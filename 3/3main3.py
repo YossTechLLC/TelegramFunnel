@@ -316,62 +316,76 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ decode error: {e}")
 # ------------------------------------------------------------------------------
 
-# Script: /database Conversation
-# ─── /database flow ─────────────────────────────────────────────────────────
-async def start_database(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    context.user_data["_conversation"] = "database"
-    await update.message.reply_text("Enter *tele_open* (integer):", parse_mode="Markdown")
+# ─── helpers ────────────────────────────────────────────────────────────────
+def _valid_channel_id(text: str) -> bool:
+    if text.lstrip("-").isdigit():
+        return len(text) <= 14
+    return False
+
+def _valid_sub(text: str) -> bool:
+    try:
+        val = float(text)
+    except ValueError:
+        return False
+    if not (0 <= val <= 9999.99):
+        return False
+    parts = text.split(".")
+    return len(parts) == 1 or len(parts[1]) <= 2
+# ------------------------------------------------------------------------------
+
+# ─── /database conversation handlers ───────────────────────────────────────
+async def start_database(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.clear()
+    await update.message.reply_text("Enter *tele_open* (≤14 chars integer):", parse_mode="Markdown")
     return TELE_OPEN_INPUT
 
 async def receive_tele_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    try:
+    if _valid_channel_id(update.message.text):
         ctx.user_data["tele_open"] = int(update.message.text)
-        await update.message.reply_text("Enter *tele_closed* (integer):", parse_mode="Markdown")
+        await update.message.reply_text("Enter *tele_closed* (≤14 chars integer):", parse_mode="Markdown")
         return TELE_CLOSED_INPUT
-    except ValueError:
-        await update.message.reply_text("❌ Not an integer. Try tele_open again:")
-        return TELE_OPEN_INPUT
+    await update.message.reply_text("❌ Invalid tele_open. Try again:")
+    return TELE_OPEN_INPUT
 
 async def receive_tele_closed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    try:
+    if _valid_channel_id(update.message.text):
         ctx.user_data["tele_closed"] = int(update.message.text)
-        await update.message.reply_text("Enter *sub_1* (integer):", parse_mode="Markdown")
+        await update.message.reply_text("Enter *sub_1* (0-9999.99):", parse_mode="Markdown")
         return SUB1_INPUT
-    except ValueError:
-        await update.message.reply_text("❌ Not an integer. Try tele_closed again:")
-        return TELE_CLOSED_INPUT
+    await update.message.reply_text("❌ Invalid tele_closed. Try again:")
+    return TELE_CLOSED_INPUT
 
-async def receive_sub1(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    try:
-        ctx.user_data["sub_1"] = int(update.message.text)
-        await update.message.reply_text("Enter *sub_2* (integer):", parse_mode="Markdown")
-        return SUB2_INPUT
-    except ValueError:
-        await update.message.reply_text("❌ Not an integer. Try sub_1 again:")
-        return SUB1_INPUT
+def _sub_handler(idx_key: str, next_state: int, prompt: str):
+    async def inner(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        if _valid_sub(update.message.text):
+            ctx.user_data[idx_key] = float(update.message.text)
+            await update.message.reply_text(prompt, parse_mode="Markdown")
+            return next_state
+        await update.message.reply_text(
+            "❌ Invalid value. Must be 0-9999.99 with ≤2 decimals. Try again:"
+        )
+        return update.handler  # stay in the same state
+    return inner
 
-async def receive_sub2(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    try:
-        ctx.user_data["sub_2"] = int(update.message.text)
-        await update.message.reply_text("Enter *sub_3* (integer):", parse_mode="Markdown")
-        return SUB3_INPUT
-    except ValueError:
-        await update.message.reply_text("❌ Not an integer. Try sub_2 again:")
-        return SUB2_INPUT
+receive_sub1 = _sub_handler("sub_1", SUB2_INPUT, "Enter *sub_2* (0-9999.99):")
+receive_sub2 = _sub_handler("sub_2", SUB3_INPUT, "Enter *sub_3* (0-9999.99):")
 
 async def receive_sub3(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _valid_sub(update.message.text):
+        await update.message.reply_text("❌ Invalid value. Try sub_3 again:")
+        return SUB3_INPUT
+
+    ctx.user_data["sub_3"] = float(update.message.text)
+
+    vals = (
+        ctx.user_data["tele_open"],
+        ctx.user_data["tele_closed"],
+        ctx.user_data["sub_1"],
+        ctx.user_data["sub_2"],
+        ctx.user_data["sub_3"],
+    )
+
     try:
-        ctx.user_data["sub_3"] = int(update.message.text)
-
-        vals = (
-            ctx.user_data["tele_open"],
-            ctx.user_data["tele_closed"],
-            ctx.user_data["sub_1"],
-            ctx.user_data["sub_2"],
-            ctx.user_data["sub_3"],
-        )
-
         conn = get_db_connection()
         with conn, conn.cursor() as cur:
             cur.execute(
@@ -380,15 +394,11 @@ async def receive_sub3(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                    VALUES (%s, %s, %s, %s, %s)""",
                 vals,
             )
-
         await update.message.reply_text(
             "✅ Saved:\n"
             f"tele_open={vals[0]}, tele_closed={vals[1]}, "
             f"sub_1={vals[2]}, sub_2={vals[3]}, sub_3={vals[4]}"
         )
-    except ValueError:
-        await update.message.reply_text("❌ Not an integer. Try sub_3 again:")
-        return SUB3_INPUT
     except Exception as e:
         await update.message.reply_text(f"❌ DB error: {e}")
 
