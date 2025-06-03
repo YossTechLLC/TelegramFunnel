@@ -123,20 +123,34 @@ def fetch_now_webhook_key():
 
 # ── db fetch OPEN ───────────────────────────────────────────────────────────
 def fetch_tele_open_list() -> None:
+
     tele_open_list.clear()
     tele_info_open_map.clear()
+
     try:
         with psycopg2.connect(
-            host=DB_HOST, 
-            port=DB_PORT, 
+            host=DB_HOST,
+            port=DB_PORT,
             dbname=DB_NAME,
-            user=DB_USER, 
-            password=DB_PASSWORD
+            user=DB_USER,
+            password=DB_PASSWORD,
         ) as conn, conn.cursor() as cur:
-            cur.execute("SELECT tele_open, sub_1, sub_2, sub_3 FROM tele_channel")
-            for tele_open, s1, s2, s3 in cur.fetchall():
+
+            cur.execute("SELECT tele_open, sub_1, sub_1_time, sub_2, sub_2_time, sub_3, sub_3_time FROM tele_channel")
+
+            for (
+                tele_open,
+                s1, s1_time,
+                s2, s2_time,
+                s3, s3_time,
+            ) in cur.fetchall():
                 tele_open_list.append(tele_open)
-                tele_info_open_map[tele_open] = {"sub_1": s1, "sub_2": s2, "sub_3": s3}
+                tele_info_open_map[tele_open] = {
+                    "sub_1": s1,       "sub_1_time": s1_time,
+                    "sub_2": s2,       "sub_2_time": s2_time,
+                    "sub_3": s3,       "sub_3_time": s3_time,
+                }
+
     except Exception as e:
         print("db tele_open error:", e)
 
@@ -231,32 +245,28 @@ def send_message(chat_id: int, html_text: str) -> None:
 
 # ── broadcast ───────────────────────────────────────────────────────────────
 def broadcast_hash_links() -> None:
-    
     if not tele_open_list:
         fetch_tele_open_list()
 
     for chat_id in tele_open_list:
-        subs = tele_info_open_map.get(chat_id, {})
+        data = tele_info_open_map.get(chat_id, {})
         base_hash = encode_id(chat_id)
 
-        inline_row = []
+        buttons = []
         for idx in (1, 2, 3):
-            price = subs.get(f"sub_{idx}")
-            days  = subs.get(f"sub_{idx}_time")
+            price = data.get(f"sub_{idx}")
+            days  = data.get(f"sub_{idx}_time")
             if price is None or days is None:
                 continue
-
             safe_sub = str(price).replace(".", "d")
             token    = f"{base_hash}_{safe_sub}"
             url      = f"https://t.me/{BOT_USERNAME}?start={token}"
+            buttons.append({"text": f"${price} for {days} days", "url": url})
 
-            button_text = f"${price} for {days} days"
-            inline_row.append({"text": button_text, "url": url})
-
-        if not inline_row:
+        if not buttons:
             continue
 
-        reply_markup = {"inline_keyboard": [inline_row]}
+        reply_markup = {"inline_keyboard": [buttons]}
 
         try:
             resp = requests.post(
@@ -272,7 +282,6 @@ def broadcast_hash_links() -> None:
             resp.raise_for_status()
 
             msg_id = resp.json()["result"]["message_id"]
-            # auto-delete after 60 s
             del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
             asyncio.get_event_loop().call_later(
                 60,
