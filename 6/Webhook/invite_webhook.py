@@ -35,6 +35,7 @@ def fetch_success_url_signing_key():
         print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
         return None
 
+# --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int]:
     """Returns (user_id, closed_channel_id) if valid, else raises Exception."""
     # Pad the token if base64 length is not a multiple of 4
@@ -67,7 +68,7 @@ def send_invite():
     token = request.args.get("token")
     if not token:
         abort(400, "Missing token")
-    # Fetch secrets
+    # Fetch hard-coded secrets
     bot_token = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
     signing_key = "sSllV0e7c6jJvBlG2l03Wub9NRIDQ4xW9p+Njke8q+sI="
     if not bot_token or not signing_key:
@@ -98,8 +99,12 @@ def send_invite():
             )
         asyncio.run(run_invite())
     except Exception as e:
-        app.logger.error("telegram error: %s", e, exc_info=True)
-        abort(500, "telegram error")
+        # Improved exception logging
+        import traceback
+        error_msg = f"telegram error: {e}\n{traceback.format_exc()}"
+        print(error_msg)
+        app.logger.error(error_msg)
+        abort(500, f"telegram error: {e}")
 
     return jsonify(status="ok"), 200
 
