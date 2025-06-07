@@ -37,7 +37,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ConversationHandler,
-    CallbackQueryHandler,      # NEW: Needed for inline menu button callbacks
+    CallbackQueryHandler,
 )
 
 # Global Setup
@@ -376,9 +376,9 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
     # menu buttons  ----------------------------------------------------------
     buttons_cfg = [
-        {"text": "Start", callback_data: "CMD_START"},
-        {"text": "Database", callback_data: "CMD_DATABASE"},
-        {"text": "Payment Gateway", callback_data: "CMD_GATEWAY"},
+        {"text": "Start", "callback_data": "CMD_START"},
+        {"text": "Database", "callback_data": "CMD_DATABASE"},
+        {"text": "Payment Gateway", "callback_data": "CMD_GATEWAY"},
     ]
     keyboard = build_menu_buttons(buttons_cfg)
     await context.bot.send_message(
@@ -641,7 +641,6 @@ def main():
     # Echo bot (last to avoid overriding input during conversation)
     application.add_handler(CommandHandler("start", start_bot))
     application.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
-    # NEW: Register CallbackQueryHandler for inline menu
     application.add_handler(CallbackQueryHandler(main_menu_callback))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     return application
