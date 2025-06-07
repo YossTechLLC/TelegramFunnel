@@ -68,8 +68,8 @@ def send_invite():
     if not token:
         abort(400, "Missing token")
     # Fetch secrets
-    bot_token = fetch_telegram_token()
-    signing_key = fetch_success_url_signing_key()
+    bot_token = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
+    signing_key = "sSllV0e7c6jJvBlG2l03Wub9NRIDQ4xW9p+Njke8q+sI="
     if not bot_token or not signing_key:
         abort(500, "Missing credentials")
     # Validate and decode token
