@@ -572,7 +572,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "Payment-Test-1",
-        "success_url": secure_success_url,
+        # "success_url": secure_success_url,
         "is_fixed_rate": False,
         "is_fee_paid_by_user": False
     }
