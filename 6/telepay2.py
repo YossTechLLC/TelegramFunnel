@@ -11,7 +11,7 @@ from html import escape
 from flask import Flask, request
 import nest_asyncio
 from json import dumps as _json_dumps
-import struct      # NEW: For compact binary packing
+import struct
 
 #!/usr/bin/env python
 import os
@@ -254,21 +254,13 @@ def send_message(chat_id: int, html_text: str) -> None:
 
 # ── inline keyboard builder ────────────────────────────────────────────────
 def build_menu_buttons(buttons_config):
-    """
-    buttons_config: List of dicts:
-        [
-            {"text": ..., "callback_data": ...},   # for callbacks
-            {"text": ..., "url": ...},            # for links
-        ]
-    Returns: InlineKeyboardMarkup
-    """
     buttons = []
     for b in buttons_config:
         if "callback_data" in b:
             buttons.append(InlineKeyboardButton(text=b["text"], callback_data=b["callback_data"]))
         elif "url" in b:
             buttons.append(InlineKeyboardButton(text=b["text"], url=b["url"]))
-    return InlineKeyboardMarkup([buttons])  # single row
+    return InlineKeyboardMarkup([buttons])
 
 # ── broadcast ───────────────────────────────────────────────────────────────
 def broadcast_hash_links() -> None:
@@ -334,6 +326,14 @@ def decode_start():
     except Exception as e:
         return f"err {e}", 500
 # ------------------------------------------------------------------------------
+
+def get_telegram_user_id(update):
+    """Helper to get Telegram user ID regardless of Command or Callback context."""
+    if hasattr(update, "effective_user") and update.effective_user:
+        return update.effective_user.id
+    if hasattr(update, "callback_query") and update.callback_query and update.callback_query.from_user:
+        return update.callback_query.from_user.id
+    return None
 
 # NEW: CallbackQuery handler for main menu buttons
 async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -460,7 +460,6 @@ async def receive_tele_closed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Invalid tele_closed. Try again:")
     return TELE_CLOSED_INPUT
 
-# ── dynamic builder helpers ────────────────────────────────────────────────
 def _sub_handler(idx_key: str, next_state: int, prompt: str):
     async def inner(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if _valid_sub(update.message.text):
@@ -481,13 +480,11 @@ def _time_handler(idx_key: str, next_state: int, prompt: str):
         return SUB1_TIME_INPUT if idx_key == "sub_1_time" else SUB2_TIME_INPUT if idx_key == "sub_2_time" else SUB3_TIME_INPUT
     return inner
 
-# Handlers in sequence
 receive_sub1       = _sub_handler ("sub_1",       SUB1_TIME_INPUT, "Enter *sub_1_time* (1-999):")
 receive_sub1_time  = _time_handler("sub_1_time",  SUB2_INPUT,      "Enter *sub_2* (0-9999.99):")
 receive_sub2       = _sub_handler ("sub_2",       SUB2_TIME_INPUT, "Enter *sub_2_time* (1-999):")
 receive_sub2_time  = _time_handler("sub_2_time",  SUB3_INPUT,      "Enter *sub_3* (0-9999.99):")
 receive_sub3       = _sub_handler ("sub_3",       SUB3_TIME_INPUT, "Enter *sub_3_time* (1-999):")
-# ------------------------------------------------------------------------------
 
 async def receive_sub3_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _valid_time(update.message.text):
@@ -525,41 +522,56 @@ async def receive_sub3_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ DB error: {e}")
     ctx.user_data.clear()
     return ConversationHandler.END
-# ------------------------------------------------------------------------------
 
 async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.clear()
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
-# ------------------------------------------------------------------------------
 
-# Utility: encode & sign success url parameters (COMPACT VERSION)
+# Utility: encode & sign success url parameters (COMPACT VERSION, with safety)
 def build_signed_success_url(tele_open_id, closed_channel_id, signing_key, base_url="https://us-central1-telepay-459221.cloudfunctions.net/success_inv"):
-    # Use 8 bytes for IDs (bigint), 4 bytes for timestamp (enough for 136 years), 32 bytes for sig (sha256)
+    try:
+        tele_open_id = int(tele_open_id)
+    except Exception:
+        tele_open_id = 0
+    try:
+        closed_channel_id = int(closed_channel_id)
+    except Exception:
+        closed_channel_id = 0
     timestamp = int(time.time())
-    packed = struct.pack(">QQI", int(tele_open_id), int(closed_channel_id), timestamp)
+    packed = struct.pack(">QQI", tele_open_id, closed_channel_id, timestamp)
     signature = hmac.new(signing_key.encode(), packed, hashlib.sha256).digest()
-    payload = packed + signature  # 8+8+4+32 = 52 bytes
+    payload = packed + signature
     token = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     return f"{base_url}?token={token}"
 
-# NowPayment NEW PAYMENTS PORTAL
+# NowPayment NEW PAYMENTS PORTAL (robust for both command and callback context)
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global global_sub_value
+    # Try to get Telegram user id in a robust way:
+    user_id = get_telegram_user_id(update)
+    if not user_id:
+        chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
+        if chat_id:
+            await context.bot.send_message(chat_id, "❌ Could not determine user ID.")
+        return
     closed_channel_id = fetch_closed_channel_id()
-    # --- signed, encoded success_url ---
+    if closed_channel_id is None:
+        closed_channel_id = 0
     if not SUCCESS_URL_SIGNING_KEY:
-        await context.bot.send_message(update.effective_chat.id, "❌ Signing key missing, cannot generate secure URL.")
+        chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
+        if chat_id:
+            await context.bot.send_message(chat_id, "❌ Signing key missing, cannot generate secure URL.")
         return
     secure_success_url = build_signed_success_url(
-        tele_open_id=update.effective_user.id,
+        tele_open_id=user_id,
         closed_channel_id=closed_channel_id,
         signing_key=SUCCESS_URL_SIGNING_KEY,
     )
     INVOICE_PAYLOAD = {
         "price_amount": global_sub_value,
         "price_currency": "USD",
-        "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
+        "order_id": f"PGP-{user_id}{global_open_channel_id}",
         "order_description": "Payment-Test-1",
         "success_url": secure_success_url,
         "is_fixed_rate": False,
@@ -575,7 +587,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
             headers=headers,
             json=INVOICE_PAYLOAD,
         )
-    chat_id = update.effective_chat.id
+    chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
     bot     = context.bot
     if resp.status_code == 200:
         invoice_url = resp.json().get("invoice_url", "<no url>")
@@ -586,7 +598,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         )
         text = (
-            f"{closed_channel_id} – {update.effective_user.id} – "
+            f"{closed_channel_id} – {user_id} – "
             f"{global_sub_value}\n\n"
             "Please click ‘Open Payment Gateway’ below. "
             "You have 20 minutes to complete the payment."
@@ -597,9 +609,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
             chat_id,
             f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}",
         )
-# ------------------------------------------------------------------------------
 
-# Main Entry
 def main():
     telegram_token = fetch_telegram_token()
     payment_provider_token = fetch_payment_provider_token()
@@ -627,18 +637,14 @@ def main():
     )
     application.add_handler(database_handler)
 
-    # Echo bot (last to avoid overriding input during conversation)
     application.add_handler(CommandHandler("start", start_bot))
     application.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
     application.add_handler(CallbackQueryHandler(main_menu_callback))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     return application
-# ------------------------------------------------------------------------------
 
-# START MAIN    
 if __name__ == "__main__":
     fetch_tele_open_list()
     broadcast_hash_links()
     app = main()
     app.run(host="0.0.0.0", port=5000)
-# ------------------------------------------------------------------------------
