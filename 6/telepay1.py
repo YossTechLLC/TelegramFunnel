@@ -598,7 +598,8 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         text = (
             f"{closed_channel_id} – {update.effective_user.id} – "
-            f"{global_sub_value}\n\n"
+            f"{global_sub_value}\n"
+            f"{secure_success_url}\n"
             "Please click ‘Open Payment Gateway’ below. "
             "You have 20 minutes to complete the payment."
         )
