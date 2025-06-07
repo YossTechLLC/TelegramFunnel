@@ -328,12 +328,23 @@ def decode_start():
 # ------------------------------------------------------------------------------
 
 def get_telegram_user_id(update):
-    """Helper to get Telegram user ID regardless of Command or Callback context."""
     if hasattr(update, "effective_user") and update.effective_user:
         return update.effective_user.id
     if hasattr(update, "callback_query") and update.callback_query and update.callback_query.from_user:
         return update.callback_query.from_user.id
     return None
+
+# NEW: Helper to guarantee int is within 0 and 2**64-1 for struct.pack(">Q")
+def safe_int64(val):
+    try:
+        val = int(val)
+        if val < 0:
+            val = 0
+        if val > 2**64 - 1:
+            val = 2**64 - 1
+    except Exception:
+        val = 0
+    return val
 
 # NEW: CallbackQuery handler for main menu buttons
 async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -341,7 +352,6 @@ async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     data = query.data
     chat_id = query.message.chat.id
-    # Route by callback data value
     if data == "CMD_START":
         await context.bot.send_message(chat_id, "You clicked Start!")
     elif data == "CMD_DATABASE":
@@ -359,7 +369,6 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user    = update.effective_user
     args    = context.args[0] if context.args else None
 
-    # deep-link     ----------------------------------------------------------
     if args and '-' in args:
         try:
             chat_part, channel_part, cmd = args.split('-', 2)
@@ -375,7 +384,6 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
         except Exception as e:
             await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
-    # menu buttons  ----------------------------------------------------------
     buttons_cfg = [
         {"text": "Start", "callback_data": "CMD_START"},
         {"text": "Database", "callback_data": "CMD_DATABASE"},
@@ -388,10 +396,8 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML",
         reply_markup=keyboard,
     )
-    # if invoked by plain /start with no token, stop here
     if not context.args:
         return
-    # decode token   ---------------------------------------------------------
     try:
         token = context.args[0]
         hash_part, _, sub_part = token.partition("_")
@@ -412,9 +418,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         await context.bot.send_message(chat_id, f"❌ decode error: {e}")
-# ------------------------------------------------------------------------------
 
-# ─── helpers ────────────────────────────────────────────────────────────────
 def _valid_channel_id(text: str) -> bool:
     if text.lstrip("-").isdigit():
         return len(text) <= 14
@@ -433,7 +437,6 @@ def _valid_sub(text: str) -> bool:
 def _valid_time(text: str) -> bool:
     return text.isdigit() and 1 <= int(text) <= 999
 
-# ─── /database conversation handlers ───────────────────────────────────────
 async def start_database(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.clear()
     chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
@@ -530,14 +533,8 @@ async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 # Utility: encode & sign success url parameters (COMPACT VERSION, with safety)
 def build_signed_success_url(tele_open_id, closed_channel_id, signing_key, base_url="https://us-central1-telepay-459221.cloudfunctions.net/success_inv"):
-    try:
-        tele_open_id = int(tele_open_id)
-    except Exception:
-        tele_open_id = 0
-    try:
-        closed_channel_id = int(closed_channel_id)
-    except Exception:
-        closed_channel_id = 0
+    tele_open_id = safe_int64(tele_open_id)
+    closed_channel_id = safe_int64(closed_channel_id)
     timestamp = int(time.time())
     packed = struct.pack(">QQI", tele_open_id, closed_channel_id, timestamp)
     signature = hmac.new(signing_key.encode(), packed, hashlib.sha256).digest()
@@ -545,10 +542,8 @@ def build_signed_success_url(tele_open_id, closed_channel_id, signing_key, base_
     token = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     return f"{base_url}?token={token}"
 
-# NowPayment NEW PAYMENTS PORTAL (robust for both command and callback context)
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global global_sub_value
-    # Try to get Telegram user id in a robust way:
     user_id = get_telegram_user_id(update)
     if not user_id:
         chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
