@@ -37,6 +37,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ConversationHandler,
+    CallbackQueryHandler,      # NEW: Needed for inline menu button callbacks
 )
 
 # Global Setup
@@ -250,6 +251,24 @@ def send_message(chat_id: int, html_text: str) -> None:
     except Exception as e:
         print(f"❌ send error to {chat_id}: {e}")
 
+# ── inline keyboard builder ────────────────────────────────────────────────
+def build_menu_buttons(buttons_config):
+    """
+    buttons_config: List of dicts:
+        [
+            {"text": ..., "callback_data": ...},   # for callbacks
+            {"text": ..., "url": ...},            # for links
+        ]
+    Returns: InlineKeyboardMarkup
+    """
+    buttons = []
+    for b in buttons_config:
+        if "callback_data" in b:
+            buttons.append(InlineKeyboardButton(text=b["text"], callback_data=b["callback_data"]))
+        elif "url" in b:
+            buttons.append(InlineKeyboardButton(text=b["text"], url=b["url"]))
+    return InlineKeyboardMarkup([buttons])  # single row
+
 # ── broadcast ───────────────────────────────────────────────────────────────
 def broadcast_hash_links() -> None:
     if not tele_open_list:
@@ -257,7 +276,7 @@ def broadcast_hash_links() -> None:
     for chat_id in tele_open_list:
         data = tele_info_open_map.get(chat_id, {})
         base_hash = encode_id(chat_id)
-        buttons = []
+        buttons_cfg = []
         for idx in (1, 2, 3):
             price = data.get(f"sub_{idx}")
             days  = data.get(f"sub_{idx}_time")
@@ -266,10 +285,10 @@ def broadcast_hash_links() -> None:
             safe_sub = str(price).replace(".", "d")
             token    = f"{base_hash}_{safe_sub}"
             url      = f"https://t.me/{BOT_USERNAME}?start={token}"
-            buttons.append({"text": f"${price} for {days} days", "url": url})
-        if not buttons:
+            buttons_cfg.append({"text": f"${price} for {days} days", "url": url})
+        if not buttons_cfg:
             continue
-        reply_markup = {"inline_keyboard": [buttons]}
+        reply_markup = build_menu_buttons(buttons_cfg)
         try:
             resp = requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -277,7 +296,7 @@ def broadcast_hash_links() -> None:
                     "chat_id": chat_id,
                     "text": "<b>Choose your Subscription Tier</b>",
                     "parse_mode": "HTML",
-                    "reply_markup": reply_markup,
+                    "reply_markup": reply_markup.to_dict(),
                 },
                 timeout=10,
             )
@@ -315,6 +334,22 @@ def decode_start():
         return f"err {e}", 500
 # ------------------------------------------------------------------------------
 
+# NEW: CallbackQuery handler for main menu buttons
+async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    chat_id = query.message.chat.id
+    # Route by callback data value
+    if data == "CMD_START":
+        await context.bot.send_message(chat_id, "You clicked Start!")
+    elif data == "CMD_DATABASE":
+        await start_database(update, context)
+    elif data == "CMD_GATEWAY":
+        await start_np_gateway_new(update, context)
+    else:
+        await context.bot.send_message(chat_id, "Unknown command.")
+
 # Script: Echo Bot
 async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global global_sub_value, global_open_channel_id
@@ -340,15 +375,12 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
     # menu buttons  ----------------------------------------------------------
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("Start", callback_data="CMD_START"),
-                InlineKeyboardButton("Database", callback_data="CMD_DATABASE"),
-                InlineKeyboardButton("Payment Gateway", callback_data="CMD_GATEWAY"),
-            ]
-        ]
-    )
+    buttons_cfg = [
+        {"text": "Start", callback_data: "CMD_START"},
+        {"text": "Database", callback_data: "CMD_DATABASE"},
+        {"text": "Payment Gateway", callback_data: "CMD_GATEWAY"},
+    ]
+    keyboard = build_menu_buttons(buttons_cfg)
     await context.bot.send_message(
         chat_id,
         rf"Hi {user.mention_html()}! 👋",
@@ -403,7 +435,7 @@ def _valid_time(text: str) -> bool:
 # ─── /database conversation handlers ───────────────────────────────────────
 async def start_database(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.clear()
-    chat_id = update.effective_chat.id
+    chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
     await ctx.bot.send_message(
         chat_id,
         "Enter *tele_open* (≤14 chars integer):",
@@ -609,6 +641,8 @@ def main():
     # Echo bot (last to avoid overriding input during conversation)
     application.add_handler(CommandHandler("start", start_bot))
     application.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
+    # NEW: Register CallbackQueryHandler for inline menu
+    application.add_handler(CallbackQueryHandler(main_menu_callback))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     return application
 # ------------------------------------------------------------------------------
