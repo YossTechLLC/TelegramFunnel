@@ -11,7 +11,6 @@ from html import escape
 from flask import Flask, request
 import nest_asyncio
 import struct
-
 import os
 import logging
 import json
@@ -116,8 +115,21 @@ def fetch_success_url_signing_key():
         print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
         return None
 
-# SQL helpers
+# ── Conversation states for /database
+(
+    TELE_OPEN_INPUT,
+    TELE_CLOSED_INPUT,
+    SUB1_INPUT,
+    SUB2_INPUT,
+    SUB3_INPUT,
+    SUB1_TIME_INPUT,
+    SUB2_TIME_INPUT,
+    SUB3_TIME_INPUT,
+) = range(8)
+
+# ── DB fetch helpers ───────────────────────────────────────────────────────────
 def fetch_closed_channel_id(open_channel_id):
+    """Looks up closed_channel_id in DB, given an open_channel_id (both as string)."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -159,7 +171,6 @@ def build_signed_success_url(tele_open_id, closed_channel_id, signing_key, base_
     token = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     return f"{base_url}?token={token}"
 
-# Telegram utils
 def get_telegram_user_id(update):
     if hasattr(update, "effective_user") and update.effective_user:
         return update.effective_user.id
@@ -228,7 +239,7 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         token = context.args[0]
         hash_part, _, sub_part = token.partition("_")
-        open_channel_id = int(base64.urlsafe_b64decode(hash_part.encode()).decode())
+        open_channel_id = base64.urlsafe_b64decode(hash_part.encode()).decode()
         sub_raw = sub_part.replace("d", ".") if sub_part else "n/a"
         try:
             local_sub_value = float(sub_raw)
@@ -253,16 +264,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
             await context.bot.send_message(chat_id, "❌ Could not determine user ID.")
         return
 
-    # Now always decode the open_channel_id from context or a passed variable, not from a global!
-    if hasattr(update, "effective_chat") and hasattr(update.effective_chat, "id"):
-        open_channel_id = str(update.effective_chat.id)
-    else:
-        # fallback or error handling if you have a different flow
-        chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
-        if chat_id:
-            await context.bot.send_message(chat_id, "❌ Could not determine open_channel_id.")
-        return
-
+    open_channel_id = str(update.effective_chat.id)
     closed_channel_id = fetch_closed_channel_id(open_channel_id)
     if not closed_channel_id:
         chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
@@ -326,8 +328,116 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
             f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}",
         )
 
-# ConversationHandler and database-related code omitted for brevity
-# (Insert your handlers for /database as before)
+# --- /database logic ---
+def _valid_channel_id(text: str) -> bool:
+    return text.lstrip("-").isdigit() and len(text) <= 14
+
+def _valid_sub(text: str) -> bool:
+    try:
+        val = float(text)
+    except ValueError:
+        return False
+    if not (0 <= val <= 9999.99):
+        return False
+    parts = text.split(".")
+    return len(parts) == 1 or len(parts[1]) <= 2
+
+def _valid_time(text: str) -> bool:
+    return text.isdigit() and 1 <= int(text) <= 999
+
+async def start_database(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.clear()
+    chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
+    await ctx.bot.send_message(
+        chat_id,
+        "Enter *tele_open* (≤14 chars integer):",
+        parse_mode="Markdown",
+    )
+    return TELE_OPEN_INPUT
+
+async def receive_tele_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if _valid_channel_id(update.message.text):
+        ctx.user_data["tele_open"] = update.message.text.strip()
+        await update.message.reply_text("Enter *tele_closed* (≤14 chars integer):", parse_mode="Markdown")
+        return TELE_CLOSED_INPUT
+    await update.message.reply_text("❌ Invalid tele_open. Try again:")
+    return TELE_OPEN_INPUT
+
+async def receive_tele_closed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if _valid_channel_id(update.message.text):
+        ctx.user_data["tele_closed"] = update.message.text.strip()
+        await update.message.reply_text("Enter *sub_1* (0-9999.99):", parse_mode="Markdown")
+        return SUB1_INPUT
+    await update.message.reply_text("❌ Invalid tele_closed. Try again:")
+    return TELE_CLOSED_INPUT
+
+def _sub_handler(idx_key: str, next_state: int, prompt: str):
+    async def inner(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        if _valid_sub(update.message.text):
+            ctx.user_data[idx_key] = float(update.message.text)
+            await update.message.reply_text(prompt, parse_mode="Markdown")
+            return next_state
+        await update.message.reply_text("❌ Invalid sub value. Try again:")
+        return SUB1_INPUT if idx_key == "sub_1" else SUB2_INPUT if idx_key == "sub_2" else SUB3_INPUT
+    return inner
+
+def _time_handler(idx_key: str, next_state: int, prompt: str):
+    async def inner(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        if _valid_time(update.message.text):
+            ctx.user_data[idx_key] = int(update.message.text)
+            await update.message.reply_text(prompt, parse_mode="Markdown")
+            return next_state
+        await update.message.reply_text("❌ Invalid time (1-999). Try again:")
+        return SUB1_TIME_INPUT if idx_key == "sub_1_time" else SUB2_TIME_INPUT if idx_key == "sub_2_time" else SUB3_TIME_INPUT
+    return inner
+
+receive_sub1       = _sub_handler ("sub_1",       SUB1_TIME_INPUT, "Enter *sub_1_time* (1-999):")
+receive_sub1_time  = _time_handler("sub_1_time",  SUB2_INPUT,      "Enter *sub_2* (0-9999.99):")
+receive_sub2       = _sub_handler ("sub_2",       SUB2_TIME_INPUT, "Enter *sub_2_time* (1-999):")
+receive_sub2_time  = _time_handler("sub_2_time",  SUB3_INPUT,      "Enter *sub_3* (0-9999.99):")
+receive_sub3       = _sub_handler ("sub_3",       SUB3_TIME_INPUT, "Enter *sub_3_time* (1-999):")
+
+async def receive_sub3_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _valid_time(update.message.text):
+        await update.message.reply_text("❌ Invalid time. Try sub_3_time again:")
+        return SUB3_TIME_INPUT
+    ctx.user_data["sub_3_time"] = int(update.message.text)
+    vals = (
+        ctx.user_data["tele_open"],
+        ctx.user_data["tele_closed"],
+        ctx.user_data["sub_1"],
+        ctx.user_data["sub_1_time"],
+        ctx.user_data["sub_2"],
+        ctx.user_data["sub_2_time"],
+        ctx.user_data["sub_3"],
+        ctx.user_data["sub_3_time"],
+    )
+    try:
+        conn = get_db_connection()
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO tele_channel
+                   (tele_open, tele_closed,
+                    sub_1, sub_1_time,
+                    sub_2, sub_2_time,
+                    sub_3, sub_3_time)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                vals,
+            )
+        await update.message.reply_text(
+            "✅ Saved:\n"
+            f"tele_open={vals[0]}, tele_closed={vals[1]},\n"
+            f"sub_1={vals[2]} ({vals[3]}), sub_2={vals[4]} ({vals[5]}), sub_3={vals[6]} ({vals[7]})"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ DB error: {e}")
+    ctx.user_data.clear()
+    return ConversationHandler.END
+
+async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.clear()
+    await update.message.reply_text("❌ Operation cancelled.")
+    return ConversationHandler.END
 
 def main():
     telegram_token = fetch_telegram_token()
@@ -340,7 +450,21 @@ def main():
     
     application = Application.builder().token(telegram_token).build()
 
-    # Insert ConversationHandler setup for /database, as before
+    database_handler = ConversationHandler(
+        entry_points=[CommandHandler("database", start_database)],
+        states={
+            TELE_OPEN_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_tele_open)],
+            TELE_CLOSED_INPUT : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_tele_closed)],
+            SUB1_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_sub1)],
+            SUB1_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_sub1_time)],
+            SUB2_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_sub2)],
+            SUB2_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_sub2_time)],
+            SUB3_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_sub3)],
+            SUB3_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_sub3_time)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    application.add_handler(database_handler)
     application.add_handler(CommandHandler("start", start_bot))
     application.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
     application.add_handler(CallbackQueryHandler(main_menu_callback))
