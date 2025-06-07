@@ -5,35 +5,10 @@ import base64
 import hmac
 import hashlib
 import asyncio
-from typing import Tuple, Dict, Any
+from typing import Tuple
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
-from google.cloud import secretmanager
-
-# --- Secure Secret Fetchers (GCP) ---
-def fetch_telegram_token():
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
-        if not secret_name:
-            raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
-        response = client.access_secret_version(request={"name": secret_name})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"Error fetching the Telegram bot TOKEN: {e}")
-        return None
-
-def fetch_success_url_signing_key():
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("SUCCESS_URL_SIGNING_KEY")
-        if not secret_name:
-            raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set.")
-        response = client.access_secret_version(request={"name": secret_name})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
-        return None
+# from google.cloud import secretmanager  # not used since secrets are hard-coded
 
 # --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int]:
@@ -45,14 +20,23 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int]:
     except Exception:
         raise ValueError("Invalid token: cannot decode base64")
     if len(raw) != 8+8+4+32:
-        raise ValueError("Invalid token: wrong size")
-    data = raw[:8+8+4]
-    sig  = raw[8+8+4:]
-    # Verify signature
+        raise ValueError(f"Invalid token: wrong size (got {len(raw)}, expected {8+8+4+32})")
+    data = raw[:20]
+    sig  = raw[20:]
+    # Debug logs for troubleshooting
+    print(f"[DEBUG] raw: {raw.hex()}")
+    print(f"[DEBUG] data: {data.hex()}")
+    print(f"[DEBUG] sig: {sig.hex()}")
     expected_sig = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()
     if not hmac.compare_digest(sig, expected_sig):
         raise ValueError("Signature mismatch")
     tele_open_id, closed_channel_id, timestamp = struct.unpack(">QQI", data)
+    # If closed_channel_id is "negative" in Telegram, fix here:
+    if tele_open_id > 2**63 - 1:
+        tele_open_id -= 2**64
+    if closed_channel_id > 2**63 - 1:
+        closed_channel_id -= 2**64
+    print(f"[DEBUG] Decoded tele_open_id: {tele_open_id}, closed_channel_id: {closed_channel_id}, timestamp: {timestamp}")
     # Optionally check for expiration (e.g., 2hr window)
     now = int(time.time())
     if not (now - 7200 <= timestamp <= now + 300):
@@ -68,7 +52,7 @@ def send_invite():
     token = request.args.get("token")
     if not token:
         abort(400, "Missing token")
-    # Fetch hard-coded secrets
+    # Fetch hard-coded secrets (substitute your own values)
     bot_token = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
     signing_key = "sSllV0e7c6jJvBlG2l03Wub9NRIDQ4xW9p+Njke8q+sI="
     if not bot_token or not signing_key:
@@ -103,7 +87,6 @@ def send_invite():
             )
         asyncio.run(run_invite())
     except Exception as e:
-        # Improved exception logging, including user_id and closed_channel_id
         import traceback
         error_msg = (
             f"telegram error: {e}\n"
