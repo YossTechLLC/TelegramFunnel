@@ -512,14 +512,12 @@ async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
 
-print(f"[DEBUG] Packing for token: tele_open_id={tele_open_id}, closed_channel_id={closed_channel_id}, timestamp={timestamp}")
-
-
 # Utility: encode & sign success url parameters (COMPACT VERSION, with safety)
 def build_signed_success_url(tele_open_id, closed_channel_id, signing_key, base_url="https://invite-webhook-291176869049.us-central1.run.app"):
     tele_open_id = safe_int64(tele_open_id)
     closed_channel_id = safe_int64(closed_channel_id)
     timestamp = int(time.time())
+    print(f"[DEBUG] Packing for token: tele_open_id={tele_open_id}, closed_channel_id={closed_channel_id}, timestamp={timestamp}")
     packed = struct.pack(">QQI", tele_open_id, closed_channel_id, timestamp)
     signature = hmac.new(signing_key.encode(), packed, hashlib.sha256).digest()
     payload = packed + signature
