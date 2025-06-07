@@ -558,7 +558,6 @@ def build_signed_success_url(tele_open_id, closed_channel_id, signing_key, base_
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global global_sub_value
     closed_channel_id = fetch_closed_channel_id()
-    np_api_key = fetch_payment_provider_token()
     # --- signed, encoded success_url ---
     if not SUCCESS_URL_SIGNING_KEY:
         await context.bot.send_message(update.effective_chat.id, "❌ Signing key missing, cannot generate secure URL.")
@@ -573,12 +572,12 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         "price_currency": "USD",
         "order_id": f"PGP-{update.effective_user.id}{global_open_channel_id}",
         "order_description": "Payment-Test-1",
-        "success_url": secure_success_url,
+        # "success_url": secure_success_url,
         "is_fixed_rate": False,
         "is_fee_paid_by_user": False
     }
     headers = {
-        "x-api-key": np_api_key,
+        "x-api-key": fetch_payment_provider_token(),
         "Content-Type": "application/json",
     }
     async with httpx.AsyncClient(timeout=30) as client:
