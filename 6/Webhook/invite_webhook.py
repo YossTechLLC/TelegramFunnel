@@ -73,6 +73,10 @@ def send_invite():
     signing_key = "sSllV0e7c6jJvBlG2l03Wub9NRIDQ4xW9p+Njke8q+sI="
     if not bot_token or not signing_key:
         abort(500, "Missing credentials")
+
+    user_id = None
+    closed_channel_id = None
+
     # Validate and decode token
     try:
         user_id, closed_channel_id = decode_and_verify_token(token, signing_key)
@@ -99,12 +103,19 @@ def send_invite():
             )
         asyncio.run(run_invite())
     except Exception as e:
-        # Improved exception logging
+        # Improved exception logging, including user_id and closed_channel_id
         import traceback
-        error_msg = f"telegram error: {e}\n{traceback.format_exc()}"
+        error_msg = (
+            f"telegram error: {e}\n"
+            f"user_id: {user_id}, closed_channel_id: {closed_channel_id}\n"
+            f"{traceback.format_exc()}"
+        )
         print(error_msg)
         app.logger.error(error_msg)
-        abort(500, f"telegram error: {e}")
+        abort(
+            500,
+            f"telegram error: {e}\nuser_id: {user_id}, closed_channel_id: {closed_channel_id}"
+        )
 
     return jsonify(status="ok"), 200
 
