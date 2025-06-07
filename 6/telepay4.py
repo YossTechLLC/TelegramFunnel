@@ -164,7 +164,6 @@ def fetch_closed_channel_id(open_channel_id):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        # Make sure to cast open_channel_id to str if tele_open is VARCHAR
         cur.execute("SELECT tele_closed FROM tele_channel WHERE tele_open = %s", (str(open_channel_id),))
         result = cur.fetchone()
         cur.close()
