@@ -289,6 +289,7 @@ def broadcast_hash_links() -> None:
 def decode_start():
     token = (request.args.get("start") or request.form.get("start"))
     user = request.args.get("tele_open_id", "unknown")
+    closed_channel = fetch_closed_channel_id()
     if not token:
         return "missing start", 400
     try:
@@ -298,6 +299,7 @@ def decode_start():
         send_message(
             open_channel_id,
             f"🔓 decoded ID: <code>{open_channel_id}</code>\n"
+            f"closed ID : <code>{closed_channel}</code>\n"
             f"👤 user: <code>{escape(user)}</code>\n"
             f"📦 sub value: <code>{escape(sub or 'n/a')}</code>",
         )
