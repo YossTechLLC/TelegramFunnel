@@ -584,10 +584,13 @@ def run_flask_server():
 if __name__ == "__main__":
     fetch_tele_open_list()
     broadcast_hash_links()
-    # Start both Flask and Telegram bot in parallel
-    loop = asyncio.get_event_loop()
-    # Run Flask in a thread, Telegram bot in the event loop
     from threading import Thread
     flask_thread = Thread(target=run_flask_server, daemon=True)
     flask_thread.start()
-    loop.run_until_complete(run_telegram_bot())
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(run_telegram_bot())
+    except KeyboardInterrupt:
+        print("\nShutting down gracefully. Goodbye!")
+        # No need to call loop.close()!
+
