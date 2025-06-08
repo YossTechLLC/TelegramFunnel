@@ -44,7 +44,7 @@ logging.basicConfig(
 )
 
 nest_asyncio.apply()
-app = Flask(__name__)
+flask_app = Flask(__name__)
 
 # Global Sub Value and Channel IDs
 global_sub_value = 5.0
@@ -546,7 +546,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
             f"nowpayments error ❌ — status {resp.status_code}\n{resp.text}",
         )
 
-def main():
+async def run_telegram_bot():
     telegram_token = fetch_telegram_token()
     payment_provider_token = fetch_payment_provider_token()
 
@@ -575,11 +575,19 @@ def main():
     application.add_handler(CommandHandler("start", start_bot))
     application.add_handler(CommandHandler("start_np_gateway_new", start_np_gateway_new))
     application.add_handler(CallbackQueryHandler(main_menu_callback))
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-    return application
+    # Await, do not block main thread
+    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+def run_flask_server():
+    flask_app.run(host="0.0.0.0", port=5000)
 
 if __name__ == "__main__":
     fetch_tele_open_list()
     broadcast_hash_links()
-    app = main()
-    app.run(host="0.0.0.0", port=5000)
+    # Start both Flask and Telegram bot in parallel
+    loop = asyncio.get_event_loop()
+    # Run Flask in a thread, Telegram bot in the event loop
+    from threading import Thread
+    flask_thread = Thread(target=run_flask_server, daemon=True)
+    flask_thread.start()
+    loop.run_until_complete(run_telegram_bot())
