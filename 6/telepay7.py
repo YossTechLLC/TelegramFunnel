@@ -341,6 +341,19 @@ async def start_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     if not context.args:
         return
+    try:
+        token = context.args[0]
+        hash_part, _, sub_part = token.partition("_")
+        open_channel_id = decode_hash(hash_part)
+        global_open_channel_id = open_channel_id  # always a string!
+        sub_raw = sub_part.replace("d", ".") if sub_part else "n/a"
+        try:
+            local_sub_value = float(sub_raw)
+        except ValueError:
+            local_sub_value = 15.0
+        global_sub_value = local_sub_value
+    except Exception as e:
+        await context.bot.send_message(chat_id, f"❌ decode error: {e}")
 
 def _valid_channel_id(text: str) -> bool:
     if text.lstrip("-").isdigit():
