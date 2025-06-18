@@ -1,21 +1,20 @@
 #!/usr/bin/env python
-import psycopg2
 import requests
 import base64
 import asyncio
-import hmac
-import hashlib
-import time
 from html import escape
 from flask import Flask, request
 import nest_asyncio
-import struct
 import socket
 
 import os
 import logging
 from google.cloud import secretmanager
-import httpx
+
+# Import our custom modules
+from database import DatabaseManager, _valid_channel_id, _valid_sub, _valid_time, receive_sub3_time_db
+from secure_webhook import SecureWebhookManager
+from start_np_gateway import PaymentGatewayManager
 
 from telegram import (
     Bot,
@@ -56,6 +55,11 @@ tele_open_list: list[str] = []
 tele_closed_list: list[str] = []
 tele_info_open_map: dict[str, dict[str, int | None]] = {}
 
+# Initialize our managers
+db_manager = DatabaseManager()
+webhook_manager = SecureWebhookManager()
+payment_manager = PaymentGatewayManager()
+
 # Conversation states for /database
 (
     TELE_OPEN_INPUT,
@@ -84,19 +88,6 @@ def fetch_telegram_token():
         print(f"Error fetching the Telegram bot TOKEN: {e}")
         return None
 
-def fetch_payment_provider_token():
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("PAYMENT_PROVIDER_SECRET_NAME")
-        if not secret_name:
-            raise ValueError("Environment variable PAYMENT_PROVIDER_SECRET_NAME is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
-        return None
-
 def fetch_now_webhook_key():
     try:
         client = secretmanager.SecretManagerServiceClient()
@@ -110,82 +101,23 @@ def fetch_now_webhook_key():
         print(f"Error fetching the NOWPAYMENT_WEBHOOK_KEY: {e}")
         return None
 
-def fetch_success_url_signing_key():
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("SUCCESS_URL_SIGNING_KEY")
-        if not secret_name:
-            raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
-        return None
-
 def fetch_tele_open_list() -> None:
+    global tele_open_list, tele_info_open_map
     tele_open_list.clear()
     tele_info_open_map.clear()
-    try:
-        with psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-        ) as conn, conn.cursor() as cur:
-            cur.execute("SELECT tele_open, sub_1, sub_1_time, sub_2, sub_2_time, sub_3, sub_3_time FROM tele_channel")
-            for (tele_open, s1, s1_time, s2, s2_time, s3, s3_time,) in cur.fetchall():
-                tele_open_list.append(tele_open)
-                tele_info_open_map[tele_open] = {
-                    "sub_1": s1,
-                    "sub_1_time": s1_time,
-                    "sub_2": s2,
-                    "sub_2_time": s2_time,
-                    "sub_3": s3,
-                    "sub_3_time": s3_time,
-                }
-    except Exception as e:
-        print("db tele_open error:", e)
+    
+    new_list, new_map = db_manager.fetch_tele_open_list()
+    tele_open_list.extend(new_list)
+    tele_info_open_map.update(new_map)
 
 def fetch_closed_channel_id(open_channel_id):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        print(f"[DEBUG] Looking up closed_channel_id for tele_open: {str(open_channel_id)}")
-        cur.execute("SELECT tele_closed FROM tele_channel WHERE tele_open = %s", (str(open_channel_id),))
-        result = cur.fetchone()
-        print(f"[DEBUG] fetch_closed_channel_id result: {result}")
-        cur.close()
-        conn.close()
-        if result and result[0]:
-            return result[0]
-        else:
-            print("❌ No matching record found for tele_open =", open_channel_id)
-            return None
-    except Exception as e:
-        print(f"❌ Error fetching tele_closed: {e}")
-        return None
+    return db_manager.fetch_closed_channel_id(open_channel_id)
 
-DB_HOST = '34.58.246.248'
-DB_PORT = 5432
-DB_NAME = 'client_table'
-DB_USER = 'postgres'
-DB_PASSWORD = 'Chigdabeast123$'
-
-def get_db_connection():
-    return psycopg2.connect(
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT
-    )
+# Database connection moved to database.py module
 
 BOT_TOKEN = fetch_telegram_token()
 BOT_USERNAME = "PayGatePrime_bot"
 NOW_WEBHOOK_KEY = fetch_now_webhook_key()
-SUCCESS_URL_SIGNING_KEY = fetch_success_url_signing_key()
 
 def send_message(chat_id: int, html_text: str) -> None:
     try:
@@ -419,61 +351,18 @@ receive_sub2_time  = _time_handler("sub_2_time",  SUB3_INPUT,      "Enter *sub_3
 receive_sub3       = _sub_handler ("sub_3",       SUB3_TIME_INPUT, "Enter *sub_3_time* (1-999):")
 
 async def receive_sub3_time(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not _valid_time(update.message.text):
-        await update.message.reply_text("❌ Invalid time. Try sub_3_time again:")
-        return SUB3_TIME_INPUT
-    ctx.user_data["sub_3_time"] = int(update.message.text)
-    vals = (
-        ctx.user_data["tele_open"],
-        ctx.user_data["tele_closed"],
-        ctx.user_data["sub_1"],
-        ctx.user_data["sub_1_time"],
-        ctx.user_data["sub_2"],
-        ctx.user_data["sub_2_time"],
-        ctx.user_data["sub_3"],
-        ctx.user_data["sub_3_time"],
-    )
-    try:
-        conn = get_db_connection()
-        with conn, conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO tele_channel
-                   (tele_open, tele_closed,
-                    sub_1, sub_1_time,
-                    sub_2, sub_2_time,
-                    sub_3, sub_3_time)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
-                vals,
-            )
-        await update.message.reply_text(
-            "✅ Saved:\n"
-            f"tele_open={vals[0]}, tele_closed={vals[1]},\n"
-            f"sub_1={vals[2]} ({vals[3]}), sub_2={vals[4]} ({vals[5]}), sub_3={vals[6]} ({vals[7]})"
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ DB error: {e}")
-    ctx.user_data.clear()
-    return ConversationHandler.END
+    return await receive_sub3_time_db(update, ctx, db_manager)
 
 async def cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.clear()
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
 
-def build_signed_success_url(tele_open_id, closed_channel_id, signing_key, base_url="https://invite-webhook-291176869049.us-central1.run.app"):
-    tele_open_id = safe_int64(tele_open_id)
-    closed_channel_id = safe_int64(closed_channel_id)
-    timestamp = int(time.time())
-    print(f"[DEBUG] Packing for token: tele_open_id={tele_open_id}, closed_channel_id={closed_channel_id}, timestamp={timestamp}")
-    packed = struct.pack(">QQI", tele_open_id, closed_channel_id, timestamp)
-    signature = hmac.new(signing_key.encode(), packed, hashlib.sha256).digest()
-    payload = packed + signature
-    token = base64.urlsafe_b64encode(payload).decode().rstrip("=")
-    return f"{base_url}?token={token}"
+# build_signed_success_url moved to secure_webhook.py
 
 async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global global_sub_value, global_open_channel_id
-    user_id = get_telegram_user_id(update)
+    user_id = payment_manager.get_telegram_user_id(update)
     if not user_id:
         chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
         if chat_id:
@@ -486,16 +375,15 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         await context.bot.send_message(chat_id, "❌ Could not find a closed_channel_id for this open_channel_id. Please check your database!")
         return
 
-    if not SUCCESS_URL_SIGNING_KEY:
+    if not webhook_manager.signing_key:
         chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
         if chat_id:
             await context.bot.send_message(chat_id, "❌ Signing key missing, cannot generate secure URL.")
         return
 
-    secure_success_url = build_signed_success_url(
+    secure_success_url = webhook_manager.build_signed_success_url(
         tele_open_id=user_id,
         closed_channel_id=closed_channel_id,
-        signing_key=SUCCESS_URL_SIGNING_KEY,
     )
     INVOICE_PAYLOAD = {
         "price_amount": global_sub_value,
@@ -503,11 +391,11 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         "order_id": f"PGP-{user_id}{global_open_channel_id}",
         "order_description": "Payment-Test-1",
         "success_url": secure_success_url,
-        "is_fixed_rate": True,
-        "is_fee_paid_by_user": True
+        "is_fixed_rate": False,
+        "is_fee_paid_by_user": False
     }
     headers = {
-        "x-api-key": fetch_payment_provider_token(),
+        "x-api-key": payment_manager.payment_token,
         "Content-Type": "application/json",
     }
     async with httpx.AsyncClient(timeout=30) as client:
@@ -539,11 +427,9 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def run_telegram_bot():
     telegram_token = fetch_telegram_token()
-    payment_provider_token = fetch_payment_provider_token()
-
     if not telegram_token:
         raise RuntimeError("Bot cannot start: TELEGRAM_BOT_SECRET_NAME is missing or invalid.")
-    if not payment_provider_token:
+    if not payment_manager.payment_token:
         raise RuntimeError("Bot cannot start: PAYMENT_PROVIDER_SECRET_NAME is missing or invalid.")
 
     application = Application.builder().token(telegram_token).build()
