@@ -107,6 +107,17 @@ class InputHandlers:
     async def receive_sub3_time(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await receive_sub3_time_db(update, ctx, self.db_manager)
     
+    async def start_donation_conversation(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Entry point specifically for donation conversation handler from button clicks"""
+        print(f"[DEBUG] CMD_DONATE conversation entry point triggered by user {update.effective_user.id if update.effective_user else 'Unknown'}")
+        
+        # Set donation context for menu-based donations (no specific channel)
+        ctx.user_data["donation_channel_id"] = "donation_default"
+        print(f"[DEBUG] Set donation_channel_id to 'donation_default' for menu-based donation")
+        
+        # Start the donation conversation
+        return await self.start_donation(update, ctx)
+    
     async def start_donation(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         """Start the donation conversation by asking for amount"""
         print(f"[DEBUG] Starting donation conversation for user: {update.effective_user.id if update.effective_user else 'Unknown'}")

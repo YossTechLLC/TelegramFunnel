@@ -48,7 +48,7 @@ class BotManager:
         # Donation conversation handler
         donation_handler = ConversationHandler(
             entry_points=[
-                CallbackQueryHandler(self.menu_callback_handler, pattern="^CMD_DONATE$"),
+                CallbackQueryHandler(self.input_handlers.start_donation_conversation, pattern="^CMD_DONATE$"),
             ],
             states={
                 DONATION_AMOUNT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_donation_amount)],
