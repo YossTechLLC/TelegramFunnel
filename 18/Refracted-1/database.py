@@ -85,6 +85,40 @@ class DatabaseManager:
             print(f"❌ Error fetching tele_closed: {e}")
             return None
     
+    def fetch_client_wallet_info(self, tele_open_id: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Get the client wallet address and payout currency for a given tele_open ID.
+        
+        Args:
+            tele_open_id: The tele_open ID to look up
+            
+        Returns:
+            Tuple of (client_wallet_address, client_payout_currency) if found, (None, None) otherwise
+        """
+        try:
+            conn = self.get_connection()
+            cur = conn.cursor()
+            print(f"[DEBUG] Looking up wallet info for tele_open: {str(tele_open_id)}")
+            cur.execute(
+                "SELECT client_wallet_address, client_payout_currency FROM tele_channel WHERE tele_open = %s", 
+                (str(tele_open_id),)
+            )
+            result = cur.fetchone()
+            print(f"[DEBUG] fetch_client_wallet_info result: {result}")
+            cur.close()
+            conn.close()
+            
+            if result:
+                wallet_address, payout_currency = result
+                return wallet_address, payout_currency
+            else:
+                print("❌ No wallet info found for tele_open =", tele_open_id)
+                return None, None
+                
+        except Exception as e:
+            print(f"❌ Error fetching wallet info: {e}")
+            return None, None
+    
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """
         Insert a new channel configuration into the database.

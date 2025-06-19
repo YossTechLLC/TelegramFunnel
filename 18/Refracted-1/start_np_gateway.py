@@ -181,16 +181,22 @@ class PaymentGatewayManager:
             await context.bot.send_message(chat_id, "❌ Could not find a closed_channel_id for this open_channel_id. Please check your database!")
             return
 
+        # Get wallet info from database
+        wallet_address, payout_currency = db_manager.fetch_client_wallet_info(global_open_channel_id)
+        print(f"[DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}'")
+
         if not webhook_manager.signing_key:
             chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
             if chat_id:
                 await context.bot.send_message(chat_id, "❌ Signing key missing, cannot generate secure URL.")
             return
 
-        # Build secure success URL
+        # Build secure success URL with wallet info
         secure_success_url = webhook_manager.build_signed_success_url(
             tele_open_id=user_id,
             closed_channel_id=closed_channel_id,
+            client_wallet_address=wallet_address or "",
+            client_payout_currency=payout_currency or ""
         )
         
         # Use the new payment flow method
