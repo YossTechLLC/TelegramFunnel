@@ -12,7 +12,16 @@ from telegram import Bot
 
 # --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str]:
-    """Returns (user_id, closed_channel_id, wallet_address, payout_currency) if valid, else raises Exception."""
+    """Returns (user_id, closed_channel_id, wallet_address, payout_currency) if valid, else raises Exception.
+    
+    Decodes optimized token format:
+    - 6 bytes user_id (48-bit)
+    - 6 bytes closed_channel_id (48-bit) 
+    - 2 bytes timestamp_minutes
+    - 1 byte wallet_length + wallet_address
+    - 1 byte currency_length + payout_currency
+    - 16 bytes truncated HMAC signature
+    """
     # Pad the token if base64 length is not a multiple of 4
     padding = '=' * (-len(token) % 4)
     try:
@@ -20,22 +29,23 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     except Exception:
         raise ValueError("Invalid token: cannot decode base64")
     
-    # Minimum size check: 8+8+4+2+2+32 = 56 bytes
-    if len(raw) < 56:
-        raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 56)")
+    # Minimum size check: 6+6+2+1+1+16 = 32 bytes
+    if len(raw) < 32:
+        raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 32)")
     
-    # Parse fixed part: 8 bytes user_id, 8 bytes channel_id, 4 bytes timestamp
-    fixed_data = raw[:20]
-    tele_open_id, closed_channel_id, timestamp = struct.unpack(">QQI", fixed_data)
+    # Parse fixed part: 6 bytes user_id, 6 bytes channel_id, 2 bytes timestamp_minutes
+    user_id = int.from_bytes(raw[0:6], 'big')
+    closed_channel_id = int.from_bytes(raw[6:12], 'big')
+    timestamp_minutes = struct.unpack(">H", raw[12:14])[0]
     
     # Parse variable part: wallet address and currency
-    offset = 20
+    offset = 14
     
     # Read wallet address length and data
-    if offset + 2 > len(raw):
+    if offset + 1 > len(raw):
         raise ValueError("Invalid token: missing wallet length field")
-    wallet_len = struct.unpack(">H", raw[offset:offset+2])[0]
-    offset += 2
+    wallet_len = struct.unpack(">B", raw[offset:offset+1])[0]
+    offset += 1
     
     if offset + wallet_len > len(raw):
         raise ValueError("Invalid token: incomplete wallet address")
@@ -43,19 +53,19 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     offset += wallet_len
     
     # Read currency length and data
-    if offset + 2 > len(raw):
+    if offset + 1 > len(raw):
         raise ValueError("Invalid token: missing currency length field")
-    currency_len = struct.unpack(">H", raw[offset:offset+2])[0]
-    offset += 2
+    currency_len = struct.unpack(">B", raw[offset:offset+1])[0]
+    offset += 1
     
     if offset + currency_len > len(raw):
         raise ValueError("Invalid token: incomplete currency")
     payout_currency = raw[offset:offset+currency_len].decode('utf-8')
     offset += currency_len
     
-    # The remaining bytes should be the 32-byte signature
-    if len(raw) - offset != 32:
-        raise ValueError(f"Invalid token: wrong signature size (got {len(raw) - offset}, expected 32)")
+    # The remaining bytes should be the 16-byte truncated signature
+    if len(raw) - offset != 16:
+        raise ValueError(f"Invalid token: wrong signature size (got {len(raw) - offset}, expected 16)")
     
     data = raw[:offset]  # All data except signature
     sig = raw[offset:]   # The signature
@@ -66,18 +76,39 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     print(f"[DEBUG] sig: {sig.hex()}")
     print(f"[DEBUG] wallet_address: '{wallet_address}', payout_currency: '{payout_currency}'")
     
-    # Verify signature
-    expected_sig = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()
+    # Verify truncated signature
+    expected_full_sig = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()
+    expected_sig = expected_full_sig[:16]  # Compare only first 16 bytes
     if not hmac.compare_digest(sig, expected_sig):
         raise ValueError("Signature mismatch")
     
-    # If IDs are "negative" in Telegram, fix here:
-    if tele_open_id > 2**63 - 1:
-        tele_open_id -= 2**64
-    if closed_channel_id > 2**63 - 1:
-        closed_channel_id -= 2**64
+    # If IDs are "negative" in Telegram, fix here (48-bit range):
+    if user_id > 2**47 - 1:
+        user_id -= 2**48
+    if closed_channel_id > 2**47 - 1:
+        closed_channel_id -= 2**48
     
-    print(f"[DEBUG] Decoded tele_open_id: {tele_open_id}, closed_channel_id: {closed_channel_id}, timestamp: {timestamp}")
+    # Reconstruct full timestamp from minutes
+    current_time = int(time.time())
+    current_minutes = current_time // 60
+    
+    # Handle timestamp wrap-around (65536 minute cycle ≈ 45 days)
+    minutes_in_current_cycle = current_minutes % 65536
+    base_minutes = current_minutes - minutes_in_current_cycle
+    
+    if timestamp_minutes > minutes_in_current_cycle:
+        # Timestamp is likely from previous cycle
+        timestamp = (base_minutes - 65536 + timestamp_minutes) * 60
+    else:
+        # Timestamp is from current cycle  
+        timestamp = (base_minutes + timestamp_minutes) * 60
+    
+    # Additional validation: ensure timestamp is reasonable (within ~45 days)
+    time_diff = abs(current_time - timestamp)
+    if time_diff > 45 * 24 * 3600:  # 45 days in seconds
+        raise ValueError(f"Timestamp too far from current time: {time_diff} seconds difference")
+    
+    print(f"[DEBUG] Decoded user_id: {user_id}, closed_channel_id: {closed_channel_id}, timestamp: {timestamp} (from minutes: {timestamp_minutes})")
     print(f"[DEBUG] Wallet: '{wallet_address}', Currency: '{payout_currency}'")
     
     # Check for expiration (e.g., 2hr window)
@@ -85,7 +116,7 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     if not (now - 7200 <= timestamp <= now + 300):
         raise ValueError("Token expired or not yet valid")
     
-    return tele_open_id, closed_channel_id, wallet_address, payout_currency
+    return user_id, closed_channel_id, wallet_address, payout_currency
 
 # --- Flask app and webhook handler ---
 app = Flask(__name__)

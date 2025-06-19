@@ -493,7 +493,7 @@ async def start_np_gateway_new(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     secure_success_url = build_signed_success_url(
-        tele_open_id=user_id,
+        user_id=user_id,
         closed_channel_id=closed_channel_id,
         signing_key=SUCCESS_URL_SIGNING_KEY,
     )

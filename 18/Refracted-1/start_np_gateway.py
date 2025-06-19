@@ -193,7 +193,7 @@ class PaymentGatewayManager:
 
         # Build secure success URL with wallet info
         secure_success_url = webhook_manager.build_signed_success_url(
-            tele_open_id=user_id,
+            user_id=user_id,
             closed_channel_id=closed_channel_id,
             client_wallet_address=wallet_address or "",
             client_payout_currency=payout_currency or ""
