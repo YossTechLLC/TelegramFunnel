@@ -33,36 +33,36 @@ class SecureWebhookManager:
             print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
             return None
     
-    def safe_int64(self, val) -> int:
+    def safe_int48(self, val) -> int:
         """
-        Convert a value to a safe 64-bit integer for struct packing.
+        Convert a value to a safe 48-bit integer for optimized struct packing.
         
         Args:
             val: The value to convert
             
         Returns:
-            A 64-bit integer suitable for struct packing
+            A 48-bit integer suitable for struct packing
         """
         try:
             val = int(val)
             if val < 0:
-                val = 2**64 + val
-            if val > 2**64 - 1:
-                val = 2**64 - 1
+                val = 2**48 + val
+            if val > 2**48 - 1:
+                val = 2**48 - 1
         except Exception:
             val = 0
         return val
     
-    def build_signed_success_url(self, tele_open_id: int, closed_channel_id: int, 
+    def build_signed_success_url(self, user_id: int, closed_channel_id: int, 
                                  client_wallet_address: str = "", client_payout_currency: str = "") -> str:
         """
         Build a cryptographically signed success URL for post-payment redirect.
         
         Args:
-            tele_open_id: The user's Telegram ID
+            user_id: The user's ID
             closed_channel_id: The closed channel ID to grant access to
-            client_wallet_address: The client's wallet address
-            client_payout_currency: The client's preferred payout currency
+            client_wallet_address: The client's wallet address (max 95 chars)
+            client_payout_currency: The client's preferred payout currency (max 4 chars)
             
         Returns:
             A signed URL containing the encrypted token
@@ -70,29 +70,49 @@ class SecureWebhookManager:
         if not self.signing_key:
             raise ValueError("Signing key is not available")
         
-        tele_open_id = self.safe_int64(tele_open_id)
-        closed_channel_id = self.safe_int64(closed_channel_id)
-        timestamp = int(time.time())
+        # Validate ID ranges for 48-bit packing
+        if not (-2**47 <= user_id <= 2**47 - 1):
+            raise ValueError(f"User ID {user_id} out of 48-bit range")
+        if not (-2**47 <= closed_channel_id <= 2**47 - 1):
+            raise ValueError(f"Channel ID {closed_channel_id} out of 48-bit range")
+            
+        user_id = self.safe_int48(user_id)
+        closed_channel_id = self.safe_int48(closed_channel_id)
+        # Use minutes since epoch for compact timestamp (2 bytes, ~45 day cycle)
+        timestamp_minutes = int(time.time() // 60) % 65536
         
         # Ensure wallet address and currency are strings and handle None values
-        wallet_address = client_wallet_address or ""
-        payout_currency = client_payout_currency or ""
+        wallet_address = (client_wallet_address or "")[:95]  # Enforce max length
+        payout_currency = (client_payout_currency or "")[:4]   # Enforce max length
         
         # Encode strings to bytes
         wallet_bytes = wallet_address.encode('utf-8')
         currency_bytes = payout_currency.encode('utf-8')
         
-        print(f"[DEBUG] Packing for token: tele_open_id={tele_open_id}, closed_channel_id={closed_channel_id}, timestamp={timestamp}")
+        # Validate length constraints
+        if len(wallet_bytes) > 95:
+            raise ValueError(f"Wallet address too long: {len(wallet_bytes)} bytes (max 95)")
+        if len(currency_bytes) > 4:
+            raise ValueError(f"Currency too long: {len(currency_bytes)} bytes (max 4)")
+        
+        print(f"[DEBUG] Packing for token: user_id={user_id}, closed_channel_id={closed_channel_id}, timestamp_minutes={timestamp_minutes}")
         print(f"[DEBUG] Wallet: '{wallet_address}' ({len(wallet_bytes)} bytes), Currency: '{payout_currency}' ({len(currency_bytes)} bytes)")
         
-        # Pack the data: 8 bytes user_id, 8 bytes channel_id, 4 bytes timestamp, 
-        # 2 bytes wallet_length, N bytes wallet, 2 bytes currency_length, M bytes currency
-        packed = struct.pack(">QQI", tele_open_id, closed_channel_id, timestamp)
-        packed += struct.pack(">H", len(wallet_bytes)) + wallet_bytes
-        packed += struct.pack(">H", len(currency_bytes)) + currency_bytes
+        # Optimized packing: 6 bytes user_id, 6 bytes channel_id, 2 bytes timestamp_minutes,
+        # 1 byte wallet_length, N bytes wallet, 1 byte currency_length, M bytes currency
         
-        # Create HMAC signature
-        signature = hmac.new(self.signing_key.encode(), packed, hashlib.sha256).digest()
+        # Pack 48-bit integers as 6 bytes each
+        user_id_bytes = user_id.to_bytes(6, 'big')
+        channel_id_bytes = closed_channel_id.to_bytes(6, 'big')
+        
+        # Pack the optimized data structure
+        packed = user_id_bytes + channel_id_bytes + struct.pack(">H", timestamp_minutes)
+        packed += struct.pack(">B", len(wallet_bytes)) + wallet_bytes
+        packed += struct.pack(">B", len(currency_bytes)) + currency_bytes
+        
+        # Create truncated HMAC signature (first 16 bytes for compactness)
+        full_signature = hmac.new(self.signing_key.encode(), packed, hashlib.sha256).digest()
+        signature = full_signature[:16]  # Truncate to 16 bytes
         
         # Combine data and signature
         payload = packed + signature
@@ -124,17 +144,17 @@ class SecureWebhookManager:
             padding = '=' * (-len(token) % 4)
             raw = base64.urlsafe_b64decode(token + padding)
             
-            # Minimum: 8+8+4+2+2+32 = 56 bytes (user_id + channel_id + timestamp + 2 length fields + signature)
-            if len(raw) < 56:
+            # Minimum: 6+6+2+1+1+16 = 32 bytes (user_id + channel_id + timestamp + 2 length fields + signature)
+            if len(raw) < 32:
                 return False
                 
             # Check if we can parse the variable length fields
-            if len(raw) >= 20:  # At least the fixed part (8+8+4)
+            if len(raw) >= 14:  # At least the fixed part (6+6+2)
                 # Try to read wallet length and currency length
-                wallet_len = struct.unpack(">H", raw[20:22])[0]
-                if len(raw) >= 22 + wallet_len + 2:  # Check if currency length field exists
-                    currency_len = struct.unpack(">H", raw[22 + wallet_len:24 + wallet_len])[0]
-                    expected_total = 20 + 2 + wallet_len + 2 + currency_len + 32  # +32 for signature
+                wallet_len = struct.unpack(">B", raw[14:15])[0]
+                if len(raw) >= 15 + wallet_len + 1:  # Check if currency length field exists
+                    currency_len = struct.unpack(">B", raw[15 + wallet_len:16 + wallet_len])[0]
+                    expected_total = 14 + 1 + wallet_len + 1 + currency_len + 16  # +16 for signature
                     return len(raw) == expected_total
             
             return False
