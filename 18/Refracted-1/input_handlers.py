@@ -111,9 +111,14 @@ class InputHandlers:
         """Entry point specifically for donation conversation handler from button clicks"""
         print(f"[DEBUG] CMD_DONATE conversation entry point triggered by user {update.effective_user.id if update.effective_user else 'Unknown'}")
         
-        # Set donation context for menu-based donations (no specific channel)
-        ctx.user_data["donation_channel_id"] = "donation_default"
-        print(f"[DEBUG] Set donation_channel_id to 'donation_default' for menu-based donation")
+        # Check if we already have a donation_channel_id set (from token parsing)
+        existing_channel_id = ctx.user_data.get("donation_channel_id")
+        if not existing_channel_id:
+            # Set donation context for menu-based donations (no specific channel)
+            ctx.user_data["donation_channel_id"] = "donation_default"
+            print(f"[DEBUG] Set donation_channel_id to 'donation_default' for menu-based donation")
+        else:
+            print(f"[DEBUG] Using existing donation_channel_id: {existing_channel_id} (likely from token)")
         
         # Start the donation conversation
         return await self.start_donation(update, ctx)

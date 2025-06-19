@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from telegram import Update
+from telegram import Update, Message, CallbackQuery
 from telegram.ext import ContextTypes
 from broadcast_manager import BroadcastManager
 from input_handlers import TELE_OPEN_INPUT
@@ -92,7 +92,29 @@ class MenuHandlers:
                 # Also set global channel ID for consistency
                 self.global_open_channel_id = open_channel_id
                 print(f"[DEBUG] Set donation context: channel_id={open_channel_id}")
-                await self.input_handlers.start_donation(update, context)
+                
+                # For token-based donations, we need to simulate the CMD_DONATE callback
+                # to properly enter the ConversationHandler state machine
+                print(f"[DEBUG] Triggering donation conversation handler for token-based donation")
+                
+                # Create a fake callback query to trigger the ConversationHandler properly
+                # This simulates clicking the CMD_DONATE button
+                fake_callback = CallbackQuery(
+                    id="donation_token_callback",
+                    from_user=update.effective_user,
+                    message=update.message,
+                    data="CMD_DONATE",
+                    chat_instance=str(update.effective_chat.id)
+                )
+                
+                # Create new update with callback query
+                fake_update = Update(
+                    update_id=update.update_id + 1000000,
+                    callback_query=fake_callback
+                )
+                
+                # Process this fake update to trigger the ConversationHandler
+                await context.application.process_update(fake_update)
                 return
             
             # Handle regular subscription tokens
