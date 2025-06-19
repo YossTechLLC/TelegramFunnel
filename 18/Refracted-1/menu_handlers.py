@@ -31,22 +31,9 @@ class MenuHandlers:
         elif data == "CMD_GATEWAY":
             await self.payment_gateway_handler(update, context)
         elif data == "CMD_DONATE":
-            # Start donation conversation directly
-            print(f"[DEBUG] CMD_DONATE button pressed by user {query.from_user.id if query.from_user else 'Unknown'}")
-            print(f"[DEBUG] Current global values: sub_value={self.global_sub_value}, channel_id='{self.global_open_channel_id}'")
-            
-            # Store current context for donation if available
-            if self.global_open_channel_id:
-                context.user_data["donation_channel_id"] = self.global_open_channel_id
-                print(f"[DEBUG] Set donation_channel_id from global: {self.global_open_channel_id}")
-            else:
-                # No specific channel context, use default for menu-based donations
-                context.user_data["donation_channel_id"] = "donation_default"
-                print(f"[DEBUG] No global channel ID, using donation_default")
-            
-            await self.input_handlers.start_donation(update, context)
-            from input_handlers import DONATION_AMOUNT_INPUT
-            return DONATION_AMOUNT_INPUT
+            # This should not be reached as CMD_DONATE is handled by ConversationHandler
+            print(f"[DEBUG] CMD_DONATE reached menu callback handler - this shouldn't happen!")
+            await context.bot.send_message(chat_id, "Please try the donation button again.")
         else:
             await context.bot.send_message(chat_id, "Unknown command.")
     

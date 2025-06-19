@@ -111,7 +111,27 @@ class InputHandlers:
         """Start the donation conversation by asking for amount"""
         print(f"[DEBUG] Starting donation conversation for user: {update.effective_user.id if update.effective_user else 'Unknown'}")
         
-        # Check if we have a donation channel ID from token-based access
+        # Handle both regular messages and callback queries
+        if update.callback_query:
+            message = update.callback_query.message
+            await update.callback_query.answer()
+            print("[DEBUG] Processing donation start from callback query")
+            
+            # Set up donation context from menu handlers when starting from button
+            menu_handlers = ctx.bot_data.get('menu_handlers')
+            if menu_handlers:
+                if menu_handlers.global_open_channel_id:
+                    ctx.user_data["donation_channel_id"] = menu_handlers.global_open_channel_id
+                    print(f"[DEBUG] Set donation_channel_id from global: {menu_handlers.global_open_channel_id}")
+                else:
+                    # No specific channel context, use default for menu-based donations
+                    ctx.user_data["donation_channel_id"] = "donation_default"
+                    print(f"[DEBUG] No global channel ID, using donation_default")
+        else:
+            message = update.message
+            print("[DEBUG] Processing donation start from message")
+        
+        # Check if we have a donation channel ID from token-based access or menu context
         donation_channel_id = ctx.user_data.get("donation_channel_id")
         
         # If no channel ID from token, try to get a default one from menu handlers
@@ -124,9 +144,9 @@ class InputHandlers:
             else:
                 print("[DEBUG] No channel ID available, donation will require manual setup")
         else:
-            print(f"[DEBUG] Using token-based channel ID for donation: {donation_channel_id}")
+            print(f"[DEBUG] Using context channel ID for donation: {donation_channel_id}")
         
-        await update.message.reply_text(
+        await message.reply_text(
             "💝 *How much would you like to donate?*\n\n"
             "Please enter an amount in USD (e.g., 25.50)\n"
             "Range: $1.00 - $9999.99",
