@@ -8,7 +8,7 @@ import hashlib
 from google.cloud import secretmanager
 
 class SecureWebhookManager:
-    def __init__(self, signing_key: str = None, base_url: str = "https://invite-webhook-291176869049.us-central1.run.app"):
+    def __init__(self, signing_key: str = None, base_url: str = "https://tph1-291176869049.us-central1.run.app"):
         """
         Initialize the SecureWebhookManager.
         
