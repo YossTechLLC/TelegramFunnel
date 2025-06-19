@@ -51,6 +51,7 @@ class BroadcastManager:
             base_hash = self.encode_id(chat_id)
             buttons_cfg = []
             
+            # Add subscription tier buttons
             for idx in (1, 2, 3):
                 price = data.get(f"sub_{idx}")
                 days = data.get(f"sub_{idx}_time")
@@ -60,6 +61,11 @@ class BroadcastManager:
                 token = f"{base_hash}_{safe_sub}"
                 url = f"https://t.me/{self.bot_username}?start={token}"
                 buttons_cfg.append({"text": f"${price} for {days} days", "url": url})
+            
+            # Add donation button
+            donation_token = f"{base_hash}_DONATE"
+            donation_url = f"https://t.me/{self.bot_username}?start={donation_token}"
+            buttons_cfg.append({"text": "💝 Donate", "url": donation_url})
             
             if not buttons_cfg:
                 continue

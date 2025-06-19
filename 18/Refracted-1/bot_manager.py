@@ -9,14 +9,15 @@ from telegram.ext import (
     ConversationHandler,
     CallbackQueryHandler,
 )
-from input_handlers import InputHandlers, TELE_OPEN_INPUT, TELE_CLOSED_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT
+from input_handlers import InputHandlers, TELE_OPEN_INPUT, TELE_CLOSED_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT
 
 class BotManager:
-    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler):
+    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None):
         self.input_handlers = input_handlers
         self.menu_callback_handler = menu_callback_handler
         self.start_bot_handler = start_bot_handler
         self.payment_gateway_handler = payment_gateway_handler
+        self.menu_handlers = menu_handlers
     
     def setup_handlers(self, application: Application):
         """Set up all bot handlers"""
@@ -43,11 +44,24 @@ class BotManager:
             per_message=False,  # This is default, warning can be ignored or silenced
         )
         
+        # Donation conversation handler
+        donation_handler = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(self.menu_callback_handler, pattern="^CMD_DONATE$"),
+            ],
+            states={
+                DONATION_AMOUNT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_donation_amount)],
+            },
+            fallbacks=[CommandHandler("cancel", self.input_handlers.cancel)],
+            per_message=False,
+        )
+        
         # Add all handlers
         application.add_handler(database_handler)
+        application.add_handler(donation_handler)
         application.add_handler(CommandHandler("start", self.start_bot_handler))
         application.add_handler(CommandHandler("start_np_gateway_new", self.payment_gateway_handler))
-        application.add_handler(CallbackQueryHandler(self.menu_callback_handler, pattern="^(?!CMD_DATABASE).*$"))
+        application.add_handler(CallbackQueryHandler(self.menu_callback_handler, pattern="^(?!CMD_DATABASE|CMD_DONATE).*$"))
     
     async def run_telegram_bot(self, telegram_token: str, payment_token: str):
         """Main bot runner function"""
@@ -57,6 +71,10 @@ class BotManager:
             raise RuntimeError("Bot cannot start: PAYMENT_PROVIDER_SECRET_NAME is missing or invalid.")
 
         application = Application.builder().token(telegram_token).build()
+        
+        # Store references in bot_data for donation flow  
+        application.bot_data['menu_handlers'] = self.menu_handlers
+        application.bot_data['payment_gateway_handler'] = self.payment_gateway_handler
         
         # Setup all handlers
         self.setup_handlers(application)

@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from database import DatabaseManager, receive_sub3_time_db
 
-# Conversation states for /database
+# Conversation states for /database and donations
 (
     TELE_OPEN_INPUT,
     TELE_CLOSED_INPUT,
@@ -13,7 +13,8 @@ from database import DatabaseManager, receive_sub3_time_db
     SUB1_TIME_INPUT,
     SUB2_TIME_INPUT,
     SUB3_TIME_INPUT,
-) = range(8)
+    DONATION_AMOUNT_INPUT,
+) = range(9)
 
 class InputHandlers:
     def __init__(self, db_manager: DatabaseManager):
@@ -39,6 +40,18 @@ class InputHandlers:
     @staticmethod
     def _valid_time(text: str) -> bool:
         return text.isdigit() and 1 <= int(text) <= 999
+    
+    @staticmethod
+    def _valid_donation_amount(text: str) -> bool:
+        """Validate donation amount (1-9999 USD with max 2 decimal places)"""
+        try:
+            val = float(text)
+        except ValueError:
+            return False
+        if not (1.0 <= val <= 9999.99):
+            return False
+        parts = text.split(".")
+        return len(parts) == 1 or len(parts[1]) <= 2
     
     async def start_database(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data.clear()
@@ -93,6 +106,73 @@ class InputHandlers:
     
     async def receive_sub3_time(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await receive_sub3_time_db(update, ctx, self.db_manager)
+    
+    async def start_donation(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Start the donation conversation by asking for amount"""
+        await update.message.reply_text(
+            "💝 *How much would you like to donate?*\n\n"
+            "Please enter an amount in USD (e.g., 25.50)\n"
+            "Range: $1.00 - $9999.99",
+            parse_mode="Markdown"
+        )
+        return DONATION_AMOUNT_INPUT
+    
+    async def receive_donation_amount(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Process and validate the donation amount"""
+        amount_text = update.message.text.strip()
+        
+        # Remove $ symbol if user included it
+        if amount_text.startswith('$'):
+            amount_text = amount_text[1:]
+        
+        if self._valid_donation_amount(amount_text):
+            donation_amount = float(amount_text)
+            
+            # Store donation amount and trigger payment gateway
+            ctx.user_data["donation_amount"] = donation_amount
+            
+            await update.message.reply_text(
+                f"✅ *Donation Amount: ${donation_amount:.2f}*\n\n"
+                "Preparing your payment gateway...",
+                parse_mode="Markdown"
+            )
+            
+            # Complete the donation by triggering payment gateway
+            return await self.complete_donation(update, ctx)
+        else:
+            await update.message.reply_text(
+                "❌ Invalid amount. Please enter a valid donation amount between $1.00 and $9999.99\n"
+                "Examples: 25, 10.50, 100.99"
+            )
+            return DONATION_AMOUNT_INPUT
+    
+    async def complete_donation(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Complete the donation by setting global values and triggering payment"""
+        # Get the donation amount
+        donation_amount = ctx.user_data.get("donation_amount")
+        channel_id = ctx.user_data.get("donation_channel_id")
+        
+        if not donation_amount or not channel_id:
+            await update.message.reply_text("❌ Donation session expired. Please try again.")
+            ctx.user_data.clear()
+            return ConversationHandler.END
+        
+        # Get menu handlers instance from bot data to set global values
+        menu_handlers = ctx.bot_data.get('menu_handlers')
+        if menu_handlers:
+            # Set global values in menu handlers (same as subscription flow)
+            menu_handlers.global_sub_value = donation_amount
+            menu_handlers.global_open_channel_id = channel_id
+        
+        # Trigger payment gateway (reuse existing payment flow)
+        payment_gateway_handler = ctx.bot_data.get('payment_gateway_handler')
+        if payment_gateway_handler:
+            await payment_gateway_handler(update, ctx)
+        else:
+            await update.message.reply_text("❌ Unable to process donation. Please try again later.")
+        
+        ctx.user_data.clear()
+        return ConversationHandler.END
     
     async def cancel(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data.clear()

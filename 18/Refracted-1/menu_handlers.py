@@ -30,6 +30,11 @@ class MenuHandlers:
             return TELE_OPEN_INPUT
         elif data == "CMD_GATEWAY":
             await self.payment_gateway_handler(update, context)
+        elif data == "CMD_DONATE":
+            # Start donation conversation directly
+            await self.input_handlers.start_donation(update, context)
+            from input_handlers import DONATION_AMOUNT_INPUT
+            return DONATION_AMOUNT_INPUT
         else:
             await context.bot.send_message(chat_id, "Unknown command.")
     
@@ -60,6 +65,7 @@ class MenuHandlers:
             {"text": "Start", "callback_data": "CMD_START"},
             {"text": "Database", "callback_data": "CMD_DATABASE"},
             {"text": "Payment Gateway", "callback_data": "CMD_GATEWAY"},
+            {"text": "💝 Donate", "callback_data": "CMD_DONATE"},
         ]
         keyboard = BroadcastManager.build_menu_buttons(buttons_cfg)
         await context.bot.send_message(
@@ -78,6 +84,15 @@ class MenuHandlers:
             hash_part, _, sub_part = token.partition("_")
             open_channel_id = BroadcastManager.decode_hash(hash_part)
             self.global_open_channel_id = open_channel_id  # always a string!
+            
+            # Check if this is a donation token
+            if sub_part == "DONATE":
+                # Store channel ID for donation and start donation conversation
+                context.user_data["donation_channel_id"] = open_channel_id
+                await self.input_handlers.start_donation(update, context)
+                return
+            
+            # Handle regular subscription tokens
             sub_raw = sub_part.replace("d", ".") if sub_part else "n/a"
             try:
                 local_sub_value = float(sub_raw)

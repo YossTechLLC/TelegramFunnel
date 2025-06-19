@@ -80,7 +80,8 @@ class AppInitializer:
             self.input_handlers, 
             self.menu_handlers.main_menu_callback, 
             self.menu_handlers.start_bot, 
-            payment_gateway_wrapper
+            payment_gateway_wrapper,
+            self.menu_handlers
         )
         
         # Initialize broadcast data
