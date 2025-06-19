@@ -70,6 +70,15 @@ class SecureWebhookManager:
         if not self.signing_key:
             raise ValueError("Signing key is not available")
         
+        # Convert string inputs to integers if needed
+        try:
+            if isinstance(user_id, str):
+                user_id = int(user_id)
+            if isinstance(closed_channel_id, str):
+                closed_channel_id = int(closed_channel_id)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid ID format - must be convertible to integer: {e}")
+        
         # Validate ID ranges for 48-bit packing
         if not (-2**47 <= user_id <= 2**47 - 1):
             raise ValueError(f"User ID {user_id} out of 48-bit range")
