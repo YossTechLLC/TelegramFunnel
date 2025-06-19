@@ -130,7 +130,7 @@ class InputHandlers:
         # Handle both regular messages and callback queries
         if update.callback_query:
             message = update.callback_query.message
-            await update.callback_query.answer()
+            await ctx.bot.answer_callback_query(update.callback_query.id)
             print("[DEBUG] Processing donation start from callback query")
             
             # Set up donation context from menu handlers when starting from button
