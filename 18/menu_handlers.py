@@ -1,0 +1,95 @@
+#!/usr/bin/env python
+from telegram import Update
+from telegram.ext import ContextTypes
+from broadcast_manager import BroadcastManager
+from input_handlers import TELE_OPEN_INPUT
+
+class MenuHandlers:
+    def __init__(self, input_handlers, payment_gateway_handler):
+        self.input_handlers = input_handlers
+        self.payment_gateway_handler = payment_gateway_handler
+        self.global_sub_value = 5.0
+        self.global_open_channel_id = ""
+    
+    async def main_menu_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle main menu button callbacks"""
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        chat_id = query.message.chat.id
+        
+        if data == "CMD_START":
+            await context.bot.send_message(chat_id, "You clicked Start!")
+        elif data == "CMD_DATABASE":
+            # DO NOT edit the message! Just send prompt for input.
+            await context.bot.send_message(
+                chat_id,
+                "Enter *tele_open* (≤14 chars integer):",
+                parse_mode="Markdown"
+            )
+            return TELE_OPEN_INPUT
+        elif data == "CMD_GATEWAY":
+            await self.payment_gateway_handler(update, context)
+        else:
+            await context.bot.send_message(chat_id, "Unknown command.")
+    
+    async def start_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start command and token parsing"""
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        args = context.args[0] if context.args else None
+
+        if args and '-' in args:
+            try:
+                chat_part, channel_part, cmd = args.split('-', 2)
+                await context.bot.send_message(
+                    chat_id,
+                    f"🔍 Parsed tele_open_id: {chat_part}, channel_id: {channel_part}",
+                )
+                if cmd == "start_np_gateway_new":
+                    await self.payment_gateway_handler(update, context)
+                    return
+                elif cmd == "database":
+                    await self.input_handlers.start_database(update, context)
+                    return
+            except Exception as e:
+                await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
+        
+        # Build main menu
+        buttons_cfg = [
+            {"text": "Start", "callback_data": "CMD_START"},
+            {"text": "Database", "callback_data": "CMD_DATABASE"},
+            {"text": "Payment Gateway", "callback_data": "CMD_GATEWAY"},
+        ]
+        keyboard = BroadcastManager.build_menu_buttons(buttons_cfg)
+        await context.bot.send_message(
+            chat_id,
+            rf"Hi {user.mention_html()}! 👋",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+        
+        # Handle token parsing for payment
+        if not context.args:
+            return
+        
+        try:
+            token = context.args[0]
+            hash_part, _, sub_part = token.partition("_")
+            open_channel_id = BroadcastManager.decode_hash(hash_part)
+            self.global_open_channel_id = open_channel_id  # always a string!
+            sub_raw = sub_part.replace("d", ".") if sub_part else "n/a"
+            try:
+                local_sub_value = float(sub_raw)
+            except ValueError:
+                local_sub_value = 15.0
+            self.global_sub_value = local_sub_value
+        except Exception as e:
+            await context.bot.send_message(chat_id, f"❌ decode error: {e}")
+    
+    def get_global_values(self):
+        """Return current global values for use by other modules"""
+        return {
+            'sub_value': self.global_sub_value,
+            'open_channel_id': self.global_open_channel_id
+        }

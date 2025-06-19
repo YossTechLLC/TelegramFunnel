@@ -1,0 +1,65 @@
+#!/usr/bin/env python
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+    ConversationHandler,
+    CallbackQueryHandler,
+)
+from input_handlers import InputHandlers, TELE_OPEN_INPUT, TELE_CLOSED_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT
+
+class BotManager:
+    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler):
+        self.input_handlers = input_handlers
+        self.menu_callback_handler = menu_callback_handler
+        self.start_bot_handler = start_bot_handler
+        self.payment_gateway_handler = payment_gateway_handler
+    
+    def setup_handlers(self, application: Application):
+        """Set up all bot handlers"""
+        # Get handler functions from input_handlers
+        handlers = self.input_handlers.get_handlers()
+        
+        # Accept both /database and CMD_DATABASE button to start conversation
+        database_handler = ConversationHandler(
+            entry_points=[
+                CommandHandler("database", self.input_handlers.start_database),
+                CallbackQueryHandler(self.menu_callback_handler, pattern="^CMD_DATABASE$"),
+            ],
+            states={
+                TELE_OPEN_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_tele_open)],
+                TELE_CLOSED_INPUT : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_tele_closed)],
+                SUB1_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub1'])],
+                SUB1_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub1_time'])],
+                SUB2_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub2'])],
+                SUB2_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub2_time'])],
+                SUB3_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub3'])],
+                SUB3_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_sub3_time)],
+            },
+            fallbacks=[CommandHandler("cancel", self.input_handlers.cancel)],
+            per_message=False,  # This is default, warning can be ignored or silenced
+        )
+        
+        # Add all handlers
+        application.add_handler(database_handler)
+        application.add_handler(CommandHandler("start", self.start_bot_handler))
+        application.add_handler(CommandHandler("start_np_gateway_new", self.payment_gateway_handler))
+        application.add_handler(CallbackQueryHandler(self.menu_callback_handler, pattern="^(?!CMD_DATABASE).*$"))
+    
+    async def run_telegram_bot(self, telegram_token: str, payment_token: str):
+        """Main bot runner function"""
+        if not telegram_token:
+            raise RuntimeError("Bot cannot start: TELEGRAM_BOT_SECRET_NAME is missing or invalid.")
+        if not payment_token:
+            raise RuntimeError("Bot cannot start: PAYMENT_PROVIDER_SECRET_NAME is missing or invalid.")
+
+        application = Application.builder().token(telegram_token).build()
+        
+        # Setup all handlers
+        self.setup_handlers(application)
+        
+        # Start polling
+        await application.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -159,3 +159,45 @@ class PaymentGatewayManager:
                 chat_id,
                 f"nowpayments error ❌ — status {status_code}\n{error_msg}",
             )
+
+    async def start_np_gateway_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                                  global_sub_value: float, global_open_channel_id: str,
+                                  webhook_manager, db_manager) -> None:
+        """
+        Legacy function for backward compatibility with existing code.
+        This wraps the new start_payment_flow method.
+        """
+        user_id = self.get_telegram_user_id(update)
+        if not user_id:
+            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
+            if chat_id:
+                await context.bot.send_message(chat_id, "❌ Could not determine user ID.")
+            return
+
+        # Get closed channel ID from database
+        closed_channel_id = db_manager.fetch_closed_channel_id(global_open_channel_id)
+        if not closed_channel_id:
+            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
+            await context.bot.send_message(chat_id, "❌ Could not find a closed_channel_id for this open_channel_id. Please check your database!")
+            return
+
+        if not webhook_manager.signing_key:
+            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
+            if chat_id:
+                await context.bot.send_message(chat_id, "❌ Signing key missing, cannot generate secure URL.")
+            return
+
+        # Build secure success URL
+        secure_success_url = webhook_manager.build_signed_success_url(
+            tele_open_id=user_id,
+            closed_channel_id=closed_channel_id,
+        )
+        
+        # Use the new payment flow method
+        await self.start_payment_flow(
+            update=update,
+            context=context,
+            sub_value=global_sub_value,
+            open_channel_id=global_open_channel_id,
+            secure_success_url=secure_success_url
+        )
