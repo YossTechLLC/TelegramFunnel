@@ -117,6 +117,7 @@ class PaymentGatewayManager:
             open_channel_id: The open channel ID
             secure_success_url: The signed success URL for post-payment redirect
         """
+        print(f"[DEBUG] Starting payment flow: amount=${sub_value:.2f}, channel_id={open_channel_id}")
         user_id = self.get_telegram_user_id(update)
         if not user_id:
             chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
@@ -141,6 +142,8 @@ class PaymentGatewayManager:
         
         if invoice_result.get("success"):
             invoice_url = invoice_result["data"].get("invoice_url", "<no url>")
+            print(f"[DEBUG] Payment gateway created successfully for ${sub_value:.2f}")
+            print(f"[DEBUG] Invoice URL: {invoice_url}")
             reply_markup = ReplyKeyboardMarkup.from_button(
                 KeyboardButton(
                     text="Open Payment Gateway",
@@ -148,10 +151,12 @@ class PaymentGatewayManager:
                 )
             )
             text = (
+                f"💳 *Payment Gateway Ready*\n\n"
+                f"Amount: ${sub_value:.2f}\n\n"
                 "Please click 'Open Payment Gateway' below. "
                 "You have 20 minutes to complete the payment."
             )
-            await bot.send_message(chat_id, text, reply_markup=reply_markup)
+            await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="Markdown")
         else:
             error_msg = invoice_result.get("error", "Unknown error")
             status_code = invoice_result.get("status_code", "N/A")
@@ -174,16 +179,24 @@ class PaymentGatewayManager:
                 await context.bot.send_message(chat_id, "❌ Could not determine user ID.")
             return
 
-        # Get closed channel ID from database
-        closed_channel_id = db_manager.fetch_closed_channel_id(global_open_channel_id)
-        if not closed_channel_id:
-            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
-            await context.bot.send_message(chat_id, "❌ Could not find a closed_channel_id for this open_channel_id. Please check your database!")
-            return
+        # Handle special donation default case
+        if global_open_channel_id == "donation_default":
+            print("[DEBUG] Handling donation_default case - using placeholder values")
+            closed_channel_id = "donation_default_closed"
+            wallet_address = ""
+            payout_currency = ""
+        else:
+            # Get closed channel ID from database
+            closed_channel_id = db_manager.fetch_closed_channel_id(global_open_channel_id)
+            if not closed_channel_id:
+                chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
+                await context.bot.send_message(chat_id, "❌ Could not find a closed_channel_id for this open_channel_id. Please check your database!")
+                return
+            
+            # Get wallet info from database
+            wallet_address, payout_currency = db_manager.fetch_client_wallet_info(global_open_channel_id)
+            print(f"[DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}'")
 
-        # Get wallet info from database
-        wallet_address, payout_currency = db_manager.fetch_client_wallet_info(global_open_channel_id)
-        print(f"[DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}'")
 
         if not webhook_manager.signing_key:
             chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None

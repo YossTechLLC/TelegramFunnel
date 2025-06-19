@@ -32,6 +32,18 @@ class MenuHandlers:
             await self.payment_gateway_handler(update, context)
         elif data == "CMD_DONATE":
             # Start donation conversation directly
+            print(f"[DEBUG] CMD_DONATE button pressed by user {query.from_user.id if query.from_user else 'Unknown'}")
+            print(f"[DEBUG] Current global values: sub_value={self.global_sub_value}, channel_id='{self.global_open_channel_id}'")
+            
+            # Store current context for donation if available
+            if self.global_open_channel_id:
+                context.user_data["donation_channel_id"] = self.global_open_channel_id
+                print(f"[DEBUG] Set donation_channel_id from global: {self.global_open_channel_id}")
+            else:
+                # No specific channel context, use default for menu-based donations
+                context.user_data["donation_channel_id"] = "donation_default"
+                print(f"[DEBUG] No global channel ID, using donation_default")
+            
             await self.input_handlers.start_donation(update, context)
             from input_handlers import DONATION_AMOUNT_INPUT
             return DONATION_AMOUNT_INPUT
@@ -87,8 +99,12 @@ class MenuHandlers:
             
             # Check if this is a donation token
             if sub_part == "DONATE":
+                print(f"[DEBUG] Donation token detected: channel_id={open_channel_id}")
                 # Store channel ID for donation and start donation conversation
                 context.user_data["donation_channel_id"] = open_channel_id
+                # Also set global channel ID for consistency
+                self.global_open_channel_id = open_channel_id
+                print(f"[DEBUG] Set donation context: channel_id={open_channel_id}")
                 await self.input_handlers.start_donation(update, context)
                 return
             

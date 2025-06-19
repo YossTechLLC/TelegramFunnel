@@ -109,6 +109,23 @@ class InputHandlers:
     
     async def start_donation(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         """Start the donation conversation by asking for amount"""
+        print(f"[DEBUG] Starting donation conversation for user: {update.effective_user.id if update.effective_user else 'Unknown'}")
+        
+        # Check if we have a donation channel ID from token-based access
+        donation_channel_id = ctx.user_data.get("donation_channel_id")
+        
+        # If no channel ID from token, try to get a default one from menu handlers
+        if not donation_channel_id:
+            menu_handlers = ctx.bot_data.get('menu_handlers')
+            if menu_handlers and menu_handlers.global_open_channel_id:
+                donation_channel_id = menu_handlers.global_open_channel_id
+                ctx.user_data["donation_channel_id"] = donation_channel_id
+                print(f"[DEBUG] Using global channel ID for donation: {donation_channel_id}")
+            else:
+                print("[DEBUG] No channel ID available, donation will require manual setup")
+        else:
+            print(f"[DEBUG] Using token-based channel ID for donation: {donation_channel_id}")
+        
         await update.message.reply_text(
             "💝 *How much would you like to donate?*\n\n"
             "Please enter an amount in USD (e.g., 25.50)\n"
@@ -120,16 +137,20 @@ class InputHandlers:
     async def receive_donation_amount(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         """Process and validate the donation amount"""
         amount_text = update.message.text.strip()
+        print(f"[DEBUG] Received donation amount input: '{amount_text}' from user {update.effective_user.id if update.effective_user else 'Unknown'}")
         
         # Remove $ symbol if user included it
         if amount_text.startswith('$'):
             amount_text = amount_text[1:]
+            print(f"[DEBUG] Removed $ symbol, amount now: '{amount_text}'")
         
         if self._valid_donation_amount(amount_text):
             donation_amount = float(amount_text)
+            print(f"[DEBUG] Valid donation amount: ${donation_amount:.2f}")
             
             # Store donation amount and trigger payment gateway
             ctx.user_data["donation_amount"] = donation_amount
+            print(f"[DEBUG] Stored donation amount in user_data: {ctx.user_data.get('donation_amount')}")
             
             await update.message.reply_text(
                 f"✅ *Donation Amount: ${donation_amount:.2f}*\n\n"
@@ -138,8 +159,10 @@ class InputHandlers:
             )
             
             # Complete the donation by triggering payment gateway
+            print(f"[DEBUG] Proceeding to complete donation")
             return await self.complete_donation(update, ctx)
         else:
+            print(f"[DEBUG] Invalid donation amount: '{amount_text}'")
             await update.message.reply_text(
                 "❌ Invalid amount. Please enter a valid donation amount between $1.00 and $9999.99\n"
                 "Examples: 25, 10.50, 100.99"
@@ -152,29 +175,71 @@ class InputHandlers:
         donation_amount = ctx.user_data.get("donation_amount")
         channel_id = ctx.user_data.get("donation_channel_id")
         
-        if not donation_amount or not channel_id:
-            await update.message.reply_text("❌ Donation session expired. Please try again.")
+        print(f"[DEBUG] Completing donation: amount={donation_amount}, channel_id={channel_id}")
+        
+        if not donation_amount:
+            await update.message.reply_text("❌ Donation amount missing. Please try again.")
             ctx.user_data.clear()
             return ConversationHandler.END
+        
+        # Handle missing channel ID gracefully
+        if not channel_id:
+            print("[DEBUG] No channel ID found, attempting to get default from database")
+            
+            # Try to get a default channel ID from database (first available open channel)
+            try:
+                db_manager = ctx.bot_data.get('db_manager')
+                if db_manager:
+                    default_channel = db_manager.get_default_donation_channel()
+                    if default_channel:
+                        channel_id = default_channel
+                        ctx.user_data["donation_channel_id"] = channel_id
+                        print(f"[DEBUG] Using default donation channel: {channel_id}")
+                    else:
+                        print("[DEBUG] No default channel available in database")
+                else:
+                    print("[DEBUG] db_manager not available in bot_data")
+            except Exception as e:
+                print(f"[DEBUG] Error getting default channel: {e}")
+            
+            # If still no channel ID, inform user but continue with a placeholder
+            if not channel_id:
+                await update.message.reply_text(
+                    "⚠️ *No Channel Configuration Found*\n\n"
+                    "This donation will use default settings. "
+                    "For channel-specific donations, please use a proper donation link.",
+                    parse_mode="Markdown"
+                )
+                # Use a placeholder channel ID that can be handled by the payment system
+                channel_id = "donation_default"  # This will be handled as a special case
+                ctx.user_data["donation_channel_id"] = channel_id
+                print(f"[DEBUG] Using placeholder channel ID: {channel_id}")
         
         # Get menu handlers instance from bot data to set global values
         menu_handlers = ctx.bot_data.get('menu_handlers')
         if menu_handlers:
             # Set global values in menu handlers (same as subscription flow)
+            print(f"[DEBUG] Setting global values: sub_value={donation_amount}, channel_id={channel_id}")
             menu_handlers.global_sub_value = donation_amount
             menu_handlers.global_open_channel_id = channel_id
+            print(f"[DEBUG] Global values set: sub_value={menu_handlers.global_sub_value}, channel_id={menu_handlers.global_open_channel_id}")
+        else:
+            print("[DEBUG] Warning: menu_handlers not found in bot_data")
         
         # Trigger payment gateway (reuse existing payment flow)
         payment_gateway_handler = ctx.bot_data.get('payment_gateway_handler')
         if payment_gateway_handler:
+            print("[DEBUG] Triggering payment gateway for donation")
             await payment_gateway_handler(update, ctx)
         else:
+            print("[DEBUG] Error: payment_gateway_handler not found in bot_data")
             await update.message.reply_text("❌ Unable to process donation. Please try again later.")
         
         ctx.user_data.clear()
         return ConversationHandler.END
     
     async def cancel(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        print(f"[DEBUG] Conversation cancelled by user {update.effective_user.id if update.effective_user else 'Unknown'}")
         ctx.user_data.clear()
         await update.message.reply_text("❌ Operation cancelled.")
         return ConversationHandler.END

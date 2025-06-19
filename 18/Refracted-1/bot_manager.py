@@ -12,12 +12,13 @@ from telegram.ext import (
 from input_handlers import InputHandlers, TELE_OPEN_INPUT, TELE_CLOSED_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT
 
 class BotManager:
-    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None):
+    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None):
         self.input_handlers = input_handlers
         self.menu_callback_handler = menu_callback_handler
         self.start_bot_handler = start_bot_handler
         self.payment_gateway_handler = payment_gateway_handler
         self.menu_handlers = menu_handlers
+        self.db_manager = db_manager
     
     def setup_handlers(self, application: Application):
         """Set up all bot handlers"""
@@ -75,6 +76,8 @@ class BotManager:
         # Store references in bot_data for donation flow  
         application.bot_data['menu_handlers'] = self.menu_handlers
         application.bot_data['payment_gateway_handler'] = self.payment_gateway_handler
+        application.bot_data['db_manager'] = self.db_manager
+        print(f"[DEBUG] Bot data setup: menu_handlers={self.menu_handlers is not None}, payment_handler={self.payment_gateway_handler is not None}, db_manager={self.db_manager is not None}")
         
         # Setup all handlers
         self.setup_handlers(application)

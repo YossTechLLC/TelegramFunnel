@@ -181,6 +181,28 @@ class DatabaseManager:
             print(f"❌ Error fetching wallet info: {e}")
             return None, None
     
+    def get_default_donation_channel(self) -> Optional[str]:
+        """
+        Get the first available channel for donations.
+        This can be used as a fallback when no specific channel is provided.
+        
+        Returns:
+            The first available tele_open channel ID, or None if no channels exist
+        """
+        try:
+            with self.get_connection() as conn, conn.cursor() as cur:
+                cur.execute("SELECT tele_open FROM tele_channel LIMIT 1")
+                result = cur.fetchone()
+                if result:
+                    print(f"[DEBUG] Found default donation channel: {result[0]}")
+                    return result[0]
+                else:
+                    print("[DEBUG] No channels found in database for default donation")
+                    return None
+        except Exception as e:
+            print(f"[DEBUG] Error getting default donation channel: {e}")
+            return None
+    
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """
         Insert a new channel configuration into the database.
