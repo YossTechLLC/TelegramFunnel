@@ -130,8 +130,13 @@ class InputHandlers:
         # Handle both regular messages and callback queries
         if update.callback_query:
             message = update.callback_query.message
-            await ctx.bot.answer_callback_query(update.callback_query.id)
-            print("[DEBUG] Processing donation start from callback query")
+            # Only answer if callback query is valid and not already answered
+            try:
+                await ctx.bot.answer_callback_query(update.callback_query.id)
+                print("[DEBUG] Processing donation start from callback query")
+            except Exception as e:
+                print(f"[DEBUG] Callback query already answered or invalid: {e}")
+                print("[DEBUG] Processing donation start from callback query (callback answer skipped)")
             
             # Set up donation context from menu handlers when starting from button
             menu_handlers = ctx.bot_data.get('menu_handlers')
