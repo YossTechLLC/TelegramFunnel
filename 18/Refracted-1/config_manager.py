@@ -7,7 +7,8 @@ class ConfigManager:
     def __init__(self):
         self.bot_token = None
         self.webhook_key = None
-        self.bot_username = "PayGatePrime_bot"
+        # Get bot username from environment variable with fallback
+        self.bot_username = os.getenv("BOT_USERNAME", "PayGatePrime_bot")
     
     def fetch_telegram_token(self) -> Optional[str]:
         """Fetch the Telegram bot token from Google Secret Manager."""

@@ -6,12 +6,68 @@ from google.cloud import secretmanager
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
-# Database configuration
-DB_HOST = '34.58.246.248'
-DB_PORT = 5432
-DB_NAME = 'client_table'
-DB_USER = 'postgres'
-DB_PASSWORD = 'Chigdabeast123$'
+def fetch_database_host() -> str:
+    """Fetch database host from Google Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = os.getenv("DATABASE_HOST_SECRET")
+        if not secret_name:
+            raise ValueError("Environment variable DATABASE_HOST_SECRET is not set.")
+        secret_path = f"{secret_name}"
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error fetching DATABASE_HOST_SECRET: {e}")
+        return "34.58.246.248"  # Fallback for migration period
+
+def fetch_database_name() -> str:
+    """Fetch database name from Google Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = os.getenv("DATABASE_NAME_SECRET")
+        if not secret_name:
+            raise ValueError("Environment variable DATABASE_NAME_SECRET is not set.")
+        secret_path = f"{secret_name}"
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error fetching DATABASE_NAME_SECRET: {e}")
+        return "client_table"  # Fallback for migration period
+
+def fetch_database_user() -> str:
+    """Fetch database user from Google Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = os.getenv("DATABASE_USER_SECRET")
+        if not secret_name:
+            raise ValueError("Environment variable DATABASE_USER_SECRET is not set.")
+        secret_path = f"{secret_name}"
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error fetching DATABASE_USER_SECRET: {e}")
+        return "postgres"  # Fallback for migration period
+
+def fetch_database_password() -> str:
+    """Fetch database password from Google Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = os.getenv("DATABASE_PASSWORD_SECRET")
+        if not secret_name:
+            raise ValueError("Environment variable DATABASE_PASSWORD_SECRET is not set.")
+        secret_path = f"{secret_name}"
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error fetching DATABASE_PASSWORD_SECRET: {e}")
+        return None  # No fallback for password - this should fail safely
+
+# Database configuration - now using Secret Manager
+DB_HOST = fetch_database_host()
+DB_PORT = 5432  # This can remain hardcoded as it's not sensitive
+DB_NAME = fetch_database_name()
+DB_USER = fetch_database_user()
+DB_PASSWORD = fetch_database_password()
 
 class DatabaseManager:
     def __init__(self):
@@ -20,6 +76,12 @@ class DatabaseManager:
         self.dbname = DB_NAME
         self.user = DB_USER
         self.password = DB_PASSWORD
+        
+        # Validate that critical credentials are available
+        if not self.password:
+            raise RuntimeError("Database password not available from Secret Manager. Cannot initialize DatabaseManager.")
+        if not self.host or not self.dbname or not self.user:
+            raise RuntimeError("Critical database configuration missing from Secret Manager.")
     
     def get_connection(self):
         """Create and return a database connection."""

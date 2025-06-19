@@ -8,16 +8,17 @@ import hashlib
 from google.cloud import secretmanager
 
 class SecureWebhookManager:
-    def __init__(self, signing_key: str = None, base_url: str = "https://tph1-291176869049.us-central1.run.app"):
+    def __init__(self, signing_key: str = None, base_url: str = None):
         """
         Initialize the SecureWebhookManager.
         
         Args:
             signing_key: The HMAC signing key for URLs. If None, will fetch from secrets
-            base_url: The base URL for the webhook service
+            base_url: The base URL for the webhook service. If None, will use environment variable or default
         """
         self.signing_key = signing_key or self.fetch_success_url_signing_key()
-        self.base_url = base_url
+        # Get base URL from environment variable with fallback to default
+        self.base_url = base_url or os.getenv("WEBHOOK_BASE_URL", "https://tph1-291176869049.us-central1.run.app")
     
     def fetch_success_url_signing_key(self) -> str:
         """Fetch the signing key from Google Secret Manager."""

@@ -8,7 +8,7 @@ import asyncio
 from typing import Tuple
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
-# from google.cloud import secretmanager  # not used since secrets are hard-coded
+from google.cloud import secretmanager
 
 # --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str]:
@@ -118,6 +118,34 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     
     return user_id, closed_channel_id, wallet_address, payout_currency
 
+def fetch_telegram_bot_token() -> str:
+    """Fetch Telegram bot token from Google Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
+        if not secret_name:
+            raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
+        secret_path = f"{secret_name}"
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error fetching Telegram bot token: {e}")
+        return None
+
+def fetch_success_url_signing_key() -> str:
+    """Fetch success URL signing key from Google Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = os.getenv("SUCCESS_URL_SIGNING_KEY")
+        if not secret_name:
+            raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set.")
+        secret_path = f"{secret_name}"
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"Error fetching success URL signing key: {e}")
+        return None
+
 # --- Flask app and webhook handler ---
 app = Flask(__name__)
 
@@ -127,11 +155,13 @@ def send_invite():
     token = request.args.get("token")
     if not token:
         abort(400, "Missing token")
-    # Fetch hard-coded secrets (substitute your own values)
-    bot_token = "8139434770:AAGQNpGzbpeY1FgENcuJ_rctuXOAmRuPVJU"
-    signing_key = "sSllV0e7c6jJvBlG2l03Wub9NRIDQ4xW9p+Njke8q+sI="
+    
+    # Fetch secrets from Google Secret Manager
+    bot_token = fetch_telegram_bot_token()
+    signing_key = fetch_success_url_signing_key()
+    
     if not bot_token or not signing_key:
-        abort(500, "Missing credentials")
+        abort(500, "Missing credentials - unable to fetch from Secret Manager")
 
     user_id = None
     closed_channel_id = None
