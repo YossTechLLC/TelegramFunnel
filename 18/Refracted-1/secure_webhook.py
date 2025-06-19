@@ -100,7 +100,14 @@ class SecureWebhookManager:
         # Base64 encode and create token
         token = base64.urlsafe_b64encode(payload).decode().rstrip("=")
         
-        return f"{self.base_url}?token={token}"
+        # Build the complete success URL
+        success_url = f"{self.base_url}?token={token}"
+        
+        print(f"[DEBUG] Complete success URL generated: {success_url}")
+        print(f"[DEBUG] Token length: {len(token)} characters")
+        print(f"[DEBUG] Payload size: {len(payload)} bytes")
+        
+        return success_url
     
     def verify_token_format(self, token: str) -> bool:
         """
