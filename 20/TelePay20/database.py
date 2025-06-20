@@ -264,7 +264,7 @@ async def receive_sub3_time_db(update: Update, ctx: ContextTypes.DEFAULT_TYPE, d
     """Handle the final step of database entry conversation."""
     if not _valid_time(update.message.text):
         await update.message.reply_text("❌ Invalid time. Try sub_3_time again:")
-        from telepay18_1 import SUB3_TIME_INPUT  # Import conversation state
+        from input_handlers import SUB3_TIME_INPUT  # Import conversation state
         return SUB3_TIME_INPUT
     
     ctx.user_data["sub_3_time"] = int(update.message.text)

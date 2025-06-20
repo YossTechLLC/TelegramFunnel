@@ -20,10 +20,10 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code
-COPY tph1.py .
+COPY tph2.py .
 
 # Expose the port
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tph1.py"]
+CMD ["python", "tph2.py"]
