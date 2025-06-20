@@ -99,7 +99,7 @@ class DatabaseManager:
         
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT tele_open, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time FROM main_client_database")
+                cur.execute("SELECT tele_open, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time FROM main_clients_database")
                 for (tele_open, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time,) in cur.fetchall():
                     tele_open_list.append(tele_open)
                     tele_info_open_map[tele_open] = {
@@ -129,7 +129,7 @@ class DatabaseManager:
             conn = self.get_connection()
             cur = conn.cursor()
             print(f"🔍 [DEBUG] Looking up closed_channel_id for tele_open: {str(open_channel_id)}")
-            cur.execute("SELECT tele_closed FROM main_client_database WHERE tele_open = %s", (str(open_channel_id),))
+            cur.execute("SELECT tele_closed FROM main_clients_database WHERE tele_open = %s", (str(open_channel_id),))
             result = cur.fetchone()
             print(f"📋 [DEBUG] fetch_closed_channel_id result: {result}")
             cur.close()
@@ -158,7 +158,7 @@ class DatabaseManager:
             cur = conn.cursor()
             print(f"🔍 [DEBUG] Looking up wallet info for tele_open: {str(tele_open_id)}")
             cur.execute(
-                "SELECT client_wallet_address, client_payout_currency FROM main_client_database WHERE tele_open = %s", 
+                "SELECT client_wallet_address, client_payout_currency FROM main_clients_database WHERE tele_open = %s", 
                 (str(tele_open_id),)
             )
             result = cur.fetchone()
@@ -187,7 +187,7 @@ class DatabaseManager:
         """
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT tele_open FROM main_client_database LIMIT 1")
+                cur.execute("SELECT tele_open FROM main_clients_database LIMIT 1")
                 result = cur.fetchone()
                 if result:
                     print(f"🎯 [DEBUG] Found default donation channel: {result[0]}")
@@ -224,7 +224,7 @@ class DatabaseManager:
             conn = self.get_connection()
             with conn, conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO main_client_database
+                    """INSERT INTO main_clients_database
                        (tele_open, tele_closed,
                         sub_1_price, sub_1_time,
                         sub_2_price, sub_2_time,
