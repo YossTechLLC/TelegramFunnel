@@ -10,22 +10,15 @@ from flask import Flask, request, abort, jsonify
 from telegram import Bot
 from google.cloud import secretmanager
 
-# Database functionality is provided by Cloud SQL Connector with pg8000
-# psycopg2 is no longer used
-PSYCOPG2_AVAILABLE = False
-
-# Try to import Cloud SQL Connector and SQLAlchemy
+# Import Cloud SQL Connector for database functionality
 try:
     from google.cloud.sql.connector import Connector
-    import sqlalchemy
     CLOUD_SQL_AVAILABLE = True
-    print("[INFO] Cloud SQL Connector imported successfully - enhanced database connectivity enabled")
+    print("[INFO] Cloud SQL Connector imported successfully")
 except ImportError as e:
     print(f"[ERROR] Cloud SQL Connector import failed: {e}")
-    print("[ERROR] Database functionality will be disabled - webhook will still send invites")
     CLOUD_SQL_AVAILABLE = False
     Connector = None
-    sqlalchemy = None
 
 # --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str, int]:
@@ -137,315 +130,87 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     
     return user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days
 
+# Simplified secret/environment variable functions
+def get_env_secret(env_var_name: str, fallback: str = None) -> str:
+    """Get value from environment variable with optional fallback."""
+    value = os.getenv(env_var_name)
+    if not value:
+        if fallback:
+            return fallback
+        raise ValueError(f"Environment variable {env_var_name} is not set")
+    return value
+
 def fetch_telegram_bot_token() -> str:
-    """Fetch Telegram bot token from Google Secret Manager."""
+    """Get Telegram bot token from environment."""
     try:
         client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
-        if not secret_name:
-            raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
+        secret_name = get_env_secret("TELEGRAM_BOT_SECRET_NAME")
+        response = client.access_secret_version(request={"name": secret_name})
         return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching Telegram bot token: {e}")
         return None
 
 def fetch_success_url_signing_key() -> str:
-    """Fetch success URL signing key from Google Secret Manager."""
+    """Get success URL signing key from environment."""
     try:
         client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("SUCCESS_URL_SIGNING_KEY")
-        if not secret_name:
-            raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
+        secret_name = get_env_secret("SUCCESS_URL_SIGNING_KEY")
+        response = client.access_secret_version(request={"name": secret_name})
         return response.payload.data.decode("UTF-8")
     except Exception as e:
-        print(f"Error fetching success URL signing key: {e}")
+        print(f"Error fetching signing key: {e}")
         return None
-
-def fetch_database_host() -> str:
-    """Fetch database host from environment variable or Google Secret Manager."""
-    try:
-        secret_value = os.getenv("DATABASE_HOST_SECRET")
-        if not secret_value:
-            raise ValueError("Environment variable DATABASE_HOST_SECRET is not set.")
-        
-        # Check if this is a direct value or a secret path
-        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
-            # This is a secret path - use Secret Manager API
-            print(f"[DEBUG] DATABASE_HOST_SECRET contains secret path: {secret_value}")
-            client = secretmanager.SecretManagerServiceClient()
-            response = client.access_secret_version(request={"name": secret_value})
-            result = response.payload.data.decode("UTF-8")
-            print(f"[DEBUG] Fetched database host from Secret Manager: {result}")
-            return result
-        else:
-            # This is a direct value from --set-secrets
-            print(f"[DEBUG] DATABASE_HOST_SECRET contains direct value: {secret_value}")
-            return secret_value
-            
-    except Exception as e:
-        print(f"Error fetching DATABASE_HOST_SECRET: {e}")
-        fallback = "34.58.246.248"
-        print(f"[DEBUG] Using fallback database host: {fallback}")
-        return fallback
 
 def fetch_database_name() -> str:
-    """Fetch database name from environment variable or Google Secret Manager."""
-    try:
-        secret_value = os.getenv("DATABASE_NAME_SECRET")
-        if not secret_value:
-            raise ValueError("Environment variable DATABASE_NAME_SECRET is not set.")
-        
-        # Check if this is a direct value or a secret path
-        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
-            # This is a secret path - use Secret Manager API
-            print(f"[DEBUG] DATABASE_NAME_SECRET contains secret path: {secret_value}")
-            client = secretmanager.SecretManagerServiceClient()
-            response = client.access_secret_version(request={"name": secret_value})
-            result = response.payload.data.decode("UTF-8")
-            print(f"[DEBUG] Fetched database name from Secret Manager: {result}")
-            return result
-        else:
-            # This is a direct value from --set-secrets
-            print(f"[DEBUG] DATABASE_NAME_SECRET contains direct value: {secret_value}")
-            return secret_value
-            
-    except Exception as e:
-        print(f"Error fetching DATABASE_NAME_SECRET: {e}")
-        fallback = "client_table"
-        print(f"[DEBUG] Using fallback database name: {fallback}")
-        return fallback
+    """Get database name from environment."""
+    return get_env_secret("DATABASE_NAME_SECRET", "client_table")
 
 def fetch_database_user() -> str:
-    """Fetch database user from environment variable or Google Secret Manager."""
-    try:
-        secret_value = os.getenv("DATABASE_USER_SECRET")
-        if not secret_value:
-            raise ValueError("Environment variable DATABASE_USER_SECRET is not set.")
-        
-        # Check if this is a direct value or a secret path
-        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
-            # This is a secret path - use Secret Manager API
-            print(f"[DEBUG] DATABASE_USER_SECRET contains secret path: {secret_value}")
-            client = secretmanager.SecretManagerServiceClient()
-            response = client.access_secret_version(request={"name": secret_value})
-            result = response.payload.data.decode("UTF-8")
-            print(f"[DEBUG] Fetched database user from Secret Manager: {result}")
-            return result
-        else:
-            # This is a direct value from --set-secrets
-            print(f"[DEBUG] DATABASE_USER_SECRET contains direct value: {secret_value}")
-            return secret_value
-            
-    except Exception as e:
-        print(f"Error fetching DATABASE_USER_SECRET: {e}")
-        fallback = "postgres"
-        print(f"[DEBUG] Using fallback database user: {fallback}")
-        return fallback
+    """Get database user from environment."""
+    return get_env_secret("DATABASE_USER_SECRET", "postgres")
 
 def fetch_database_password() -> str:
-    """Fetch database password from environment variable or Google Secret Manager."""
-    try:
-        secret_value = os.getenv("DATABASE_PASSWORD_SECRET")
-        if not secret_value:
-            raise ValueError("Environment variable DATABASE_PASSWORD_SECRET is not set.")
-        
-        # Check if this is a direct value or a secret path
-        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
-            # This is a secret path - use Secret Manager API
-            print(f"[DEBUG] DATABASE_PASSWORD_SECRET contains secret path")
-            client = secretmanager.SecretManagerServiceClient()
-            response = client.access_secret_version(request={"name": secret_value})
-            result = response.payload.data.decode("UTF-8")
-            print(f"[DEBUG] Fetched database password from Secret Manager (length: {len(result)})")
-            return result
-        else:
-            # This is a direct value from --set-secrets
-            print(f"[DEBUG] DATABASE_PASSWORD_SECRET contains direct value (length: {len(secret_value)})")
-            return secret_value
-            
-    except Exception as e:
-        print(f"Error fetching DATABASE_PASSWORD_SECRET: {e}")
-        print(f"[DEBUG] No fallback for password - returning None")
-        return None  # No fallback for password - this should fail safely
+    """Get database password from environment."""
+    return get_env_secret("DATABASE_PASSWORD_SECRET")
 
 def fetch_cloud_sql_connection_name() -> str:
-    """Fetch Cloud SQL connection name from environment variable or Google Secret Manager."""
-    try:
-        secret_value = os.getenv("CLOUD_SQL_CONNECTION_NAME")
-        if not secret_value:
-            raise ValueError("Environment variable CLOUD_SQL_CONNECTION_NAME is not set.")
-        
-        # Check if this is a direct value or a secret path
-        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
-            # This is a secret path - use Secret Manager API
-            print(f"[DEBUG] CLOUD_SQL_CONNECTION_NAME contains secret path")
-            client = secretmanager.SecretManagerServiceClient()
-            response = client.access_secret_version(request={"name": secret_value})
-            result = response.payload.data.decode("UTF-8")
-            print(f"[DEBUG] Fetched Cloud SQL connection name from Secret Manager: {result}")
-            return result
-        else:
-            # This is a direct value - likely the connection name itself
-            print(f"[DEBUG] CLOUD_SQL_CONNECTION_NAME contains direct value: {secret_value}")
-            return secret_value
-            
-    except Exception as e:
-        print(f"Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
-        print(f"[DEBUG] No fallback for Cloud SQL connection name - returning None")
-        return None
+    """Get Cloud SQL connection name from environment."""
+    return get_env_secret("CLOUD_SQL_CONNECTION_NAME")
 
 def get_database_connection():
-    """Create and return a database connection using Cloud SQL Connector when available."""
-    print("[DEBUG] Starting database connection process...")
-    
-    # Check if Cloud SQL Connector is available
+    """Create and return a database connection using Cloud SQL Connector."""
     if not CLOUD_SQL_AVAILABLE:
-        print("[ERROR] Cloud SQL Connector not available - cannot create database connection")
+        print("[ERROR] Cloud SQL Connector not available")
         return None
     
-    # Fetch credentials
-    dbname = fetch_database_name()  
-    user = fetch_database_user()
-    password = fetch_database_password()
-    
-    print(f"[DEBUG] Database connection parameters:")
-    print(f"[DEBUG]   Database: {dbname}")
-    print(f"[DEBUG]   User: {user}")
-    print(f"[DEBUG]   Password: {'***' if password else 'None'} (length: {len(password) if password else 0})")
-    
-    if not password:
-        print("[ERROR] Database password is None - cannot connect")
-        return None
-    
-    # Use Cloud SQL Connector (only method available)
-    print("[DEBUG] Attempting Cloud SQL Connector connection...")
     try:
+        # Get database credentials
+        dbname = fetch_database_name()
+        user = fetch_database_user()
+        password = fetch_database_password()
         connection_name = fetch_cloud_sql_connection_name()
-        if not connection_name:
-            print("[ERROR] Cloud SQL connection name not available - cannot connect")
+        
+        if not password or not connection_name:
+            print("[ERROR] Missing database credentials")
             return None
         
-        print(f"[DEBUG] Using Cloud SQL connection: {connection_name}")
-        
-        # Initialize the Cloud SQL Connector
+        # Create connection
         connector = Connector()
-        
-        def getconn():
-            return connector.connect(
-                connection_name,
-                "pg8000",
-                user=user,
-                password=password,
-                db=dbname
-            )
-        
-        # Test the connection
-        connection = getconn()
+        connection = connector.connect(
+            connection_name,
+            "pg8000",
+            user=user,
+            password=password,
+            db=dbname
+        )
         print("[DEBUG] ✅ Cloud SQL Connector connection successful!")
         return connection
         
     except Exception as e:
-        error_msg = str(e)
-        print(f"[ERROR] Cloud SQL Connector failed: {e}")
-        
-        # Check for specific IAM permission issues
-        if "403" in error_msg and "Forbidden" in error_msg:
-            print(f"[ERROR] IAM Permission Issue Detected!")
-            print(f"[ERROR] Cloud Run service account lacks Cloud SQL permissions.")
-            print(f"[ERROR] Required fixes:")
-            print(f"[ERROR] 1. Enable Cloud SQL Admin API: gcloud services enable sqladmin.googleapis.com")
-            print(f"[ERROR] 2. Grant Cloud SQL Client role to service account")
-            print(f"[ERROR] 3. Ensure Cloud SQL instance allows connections")
-        elif "Driver" in error_msg and "not supported" in error_msg:
-            print(f"[ERROR] Database driver issue - check pg8000 installation")
-        
-        print(f"[ERROR] Cloud SQL Connector connection failed - no fallback available")
+        print(f"[ERROR] Database connection failed: {e}")
         return None
 
-def test_database_health() -> bool:
-    """
-    Test database connectivity and table existence.
-    
-    Returns:
-        True if database is healthy, False otherwise
-    """
-    print("[DEBUG] Starting database health check...")
-    
-    if not CLOUD_SQL_AVAILABLE:
-        print("[ERROR] Cloud SQL Connector not available - database health check failed")
-        return False
-    
-    conn = None
-    cur = None
-    try:
-        conn = get_database_connection()
-        if not conn:
-            print("[ERROR] Database health check failed - no connection")
-            return False
-        
-        cur = conn.cursor()
-        
-        # Test 1: Basic connection test
-        print("[DEBUG] Testing basic connectivity...")
-        cur.execute("SELECT 1")
-        result = cur.fetchone()
-        if result[0] != 1:
-            print("[ERROR] Basic connectivity test failed")
-            return False
-        print("[DEBUG] ✅ Basic connectivity test passed")
-        
-        # Test 2: Check if private_channel_users table exists
-        print("[DEBUG] Checking if private_channel_users table exists...")
-        cur.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'private_channel_users'
-            )
-        """)
-        table_exists = cur.fetchone()[0]
-        if not table_exists:
-            print("[ERROR] Table 'private_channel_users' does not exist")
-            return False
-        print("[DEBUG] ✅ Table 'private_channel_users' exists")
-        
-        # Test 3: Check table structure
-        print("[DEBUG] Checking table structure...")
-        cur.execute("""
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_schema = 'public' 
-            AND table_name = 'private_channel_users'
-            ORDER BY ordinal_position
-        """)
-        columns = cur.fetchall()
-        print(f"[DEBUG] Table columns found: {columns}")
-        
-        # Expected columns: private_channel_id, user_id, sub_time, is_active
-        expected_columns = {'private_channel_id', 'user_id', 'sub_time', 'is_active'}
-        actual_columns = {col[0] for col in columns}
-        
-        if not expected_columns.issubset(actual_columns):
-            missing = expected_columns - actual_columns
-            print(f"[ERROR] Missing required columns: {missing}")
-            return False
-        print("[DEBUG] ✅ All required columns present")
-        
-        print("[DEBUG] ✅ Database health check passed!")
-        return True
-        
-    except Exception as e:
-        print(f"[ERROR] Database health check failed: {e}")
-        return False
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 def record_private_channel_user(user_id: int, private_channel_id: int, sub_time: int, is_active: bool = True) -> bool:
     """
@@ -474,8 +239,6 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
             print("[ERROR] ❌ Could not establish database connection")
             return False
         
-        print(f"[DEBUG] Database connection established, preparing SQL query...")
-        
         cur = conn.cursor()
         
         # First, try to update existing record
@@ -486,13 +249,8 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         """
         update_params = (sub_time, is_active, private_channel_id, user_id)
         
-        print(f"[DEBUG] Attempting UPDATE first:")
-        print(f"[DEBUG] Query: {update_query.strip()}")
-        print(f"[DEBUG] Parameters: {update_params}")
-        
         cur.execute(update_query, update_params)
         rows_updated = cur.rowcount
-        print(f"[DEBUG] UPDATE completed. Rows affected: {rows_updated}")
         
         # If no rows were updated, insert a new record
         if rows_updated == 0:
@@ -502,13 +260,8 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
             """
             insert_params = (private_channel_id, user_id, sub_time, is_active)
             
-            print(f"[DEBUG] No existing record found, attempting INSERT:")
-            print(f"[DEBUG] Query: {insert_query.strip()}")
-            print(f"[DEBUG] Parameters: {insert_params}")
-            
             cur.execute(insert_query, insert_params)
-            rows_inserted = cur.rowcount
-            print(f"[DEBUG] INSERT completed. Rows affected: {rows_inserted}")
+            print(f"[DEBUG] Inserted new record for user {user_id}")
         else:
             print(f"[DEBUG] Updated existing record for user {user_id}")
         
@@ -524,12 +277,10 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         if conn:
             try:
                 conn.rollback()
-                print(f"[DEBUG] Transaction rolled back due to error")
-            except Exception as rollback_error:
-                print(f"[DEBUG] Error during rollback: {rollback_error}")
+            except Exception:
+                pass
         
         print(f"[ERROR] ❌ Database error recording private channel user: {e}")
-        print(f"[ERROR] Error type: {type(e).__name__}")
         return False
     finally:
         if cur:
@@ -572,32 +323,24 @@ def send_invite():
     print(f"[INFO] Starting database recording process for user {user_id}...")
     
     try:
-        # First, run a database health check
+        # Record user subscription in database
         if CLOUD_SQL_AVAILABLE:
-            print(f"[DEBUG] Running database health check before recording...")
-            health_ok = test_database_health()
-            if not health_ok:
-                print(f"[WARNING] ❌ Database health check failed - skipping database recording")
-                print(f"[WARNING] User {user_id} will receive invite but subscription won't be recorded")
+            success = record_private_channel_user(
+                user_id=user_id,
+                private_channel_id=closed_channel_id,
+                sub_time=subscription_time_days,
+                is_active=True
+            )
+            if success:
+                print(f"[INFO] ✅ Database: Successfully recorded user {user_id} subscription for channel {closed_channel_id}")
             else:
-                print(f"[DEBUG] Database health check passed - proceeding with recording...")
-                success = record_private_channel_user(
-                    user_id=user_id,
-                    private_channel_id=closed_channel_id,
-                    sub_time=subscription_time_days,
-                    is_active=True
-                )
-                if success:
-                    print(f"[INFO] ✅ Database: Successfully recorded user {user_id} subscription for channel {closed_channel_id}")
-                else:
-                    print(f"[WARNING] ❌ Database: Failed to record user {user_id} subscription - continuing with invite")
+                print(f"[WARNING] ❌ Database: Failed to record user {user_id} subscription - continuing with invite")
         else:
             print(f"[ERROR] ❌ Cloud SQL Connector not available - skipping database recording for user {user_id}")
             
     except Exception as e:
         # Log error but don't fail the webhook - user should still get their invite
         print(f"[ERROR] ❌ Database error (non-fatal): {e}")
-        print(f"[ERROR] Error type: {type(e).__name__}")
         print(f"[WARNING] User {user_id} will receive invite but subscription recording failed")
 
     # Send invite via Telegram
