@@ -33,7 +33,7 @@ class MenuHandlers:
             await self.payment_gateway_handler(update, context)
         elif data == "CMD_DONATE":
             # This should not be reached as CMD_DONATE is handled by ConversationHandler
-            print(f"⚠️ [DEBUG] CMD_DONATE reached menu callback handler - this shouldn't happen!")
+            print(f"[DEBUG] CMD_DONATE reached menu callback handler - this shouldn't happen!")
             await context.bot.send_message(chat_id, "Please try the donation button again.")
         else:
             await context.bot.send_message(chat_id, "Unknown command.")
@@ -87,16 +87,16 @@ class MenuHandlers:
             
             # Check if this is a donation token
             if remaining_part == "DONATE":
-                print(f"🎯 [DEBUG] Donation token detected: channel_id={open_channel_id}")
+                print(f"[DEBUG] Donation token detected: channel_id={open_channel_id}")
                 # Store channel ID for donation and start donation conversation
                 context.user_data["donation_channel_id"] = open_channel_id
                 # Also set global channel ID for consistency
                 self.global_open_channel_id = open_channel_id
-                print(f"⚙️ [DEBUG] Set donation context: channel_id={open_channel_id}")
+                print(f"[DEBUG] Set donation context: channel_id={open_channel_id}")
                 
                 # For token-based donations, we need to simulate the CMD_DONATE callback
                 # to properly enter the ConversationHandler state machine
-                print(f"🚀 [DEBUG] Triggering donation conversation handler for token-based donation")
+                print(f"[DEBUG] Triggering donation conversation handler for token-based donation")
                 
                 # Create a fake callback query to trigger the ConversationHandler properly
                 # This simulates clicking the CMD_DONATE button
@@ -125,13 +125,13 @@ class MenuHandlers:
                 try:
                     local_sub_time = int(time_part)
                     self.global_sub_time = local_sub_time
-                    print(f"📅 [DEBUG] Parsed subscription time: {local_sub_time} days")
+                    print(f"[DEBUG] Parsed subscription time: {local_sub_time} days")
                 except ValueError:
-                    print(f"⚠️ [DEBUG] Invalid subscription time '{time_part}', using default: {self.global_sub_time}")
+                    print(f"[DEBUG] Invalid subscription time '{time_part}', using default: {self.global_sub_time}")
             else:
                 # Fallback for old token format without time
                 sub_part = remaining_part
-                print(f"ℹ️ [DEBUG] Old token format detected, using default subscription time: {self.global_sub_time}")
+                print(f"[DEBUG] Old token format detected, using default subscription time: {self.global_sub_time}")
             
             # Parse subscription value
             sub_raw = sub_part.replace("d", ".") if sub_part else "n/a"
@@ -140,7 +140,7 @@ class MenuHandlers:
             except ValueError:
                 local_sub_value = 15.0
             self.global_sub_value = local_sub_value
-            print(f"💰 [DEBUG] Parsed subscription: ${local_sub_value:.2f} for {self.global_sub_time} days")
+            print(f"[DEBUG] Parsed subscription: ${local_sub_value:.2f} for {self.global_sub_time} days")
         except Exception as e:
             await context.bot.send_message(chat_id, f"❌ decode error: {e}")
     

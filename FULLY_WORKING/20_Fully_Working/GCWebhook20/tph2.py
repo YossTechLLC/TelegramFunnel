@@ -280,7 +280,7 @@ def get_database_connection():
         connection_name = fetch_cloud_sql_connection_name()
         
         if not password or not connection_name:
-            print("❌ [ERROR] Missing database credentials")
+            print("[ERROR] Missing database credentials")
             return None
         
         # Create connection
@@ -479,7 +479,7 @@ def send_invite():
             f"user_id: {user_id}, closed_channel_id: {closed_channel_id}\n"
             f"{traceback.format_exc()}"
         )
-        print(f"❌ {error_msg}")
+        print(error_msg)
         app.logger.error(error_msg)
         abort(
             500,

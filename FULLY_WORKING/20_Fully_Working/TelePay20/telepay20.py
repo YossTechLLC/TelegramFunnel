@@ -19,7 +19,7 @@ async def run_application(app):
         await asyncio.gather(bot_task, subscription_task)
         
     except Exception as e:
-        print(f"❌ Error in application tasks: {e}")
+        print(f"Error in application tasks: {e}")
         # Stop subscription monitoring if it's running
         if hasattr(app, 'subscription_manager'):
             app.subscription_manager.stop_monitoring()
@@ -41,7 +41,7 @@ def main():
         asyncio.run(run_application(app))
         
     except KeyboardInterrupt:
-        print("👋\nShutting down gracefully. Goodbye!")
+        print("\nShutting down gracefully. Goodbye!")
         # Stop subscription monitoring gracefully
         try:
             if 'app' in locals() and hasattr(app, 'subscription_manager'):
@@ -49,7 +49,7 @@ def main():
         except:
             pass
     except Exception as e:
-        print(f"❌ Application error: {e}")
+        print(f"Application error: {e}")
         raise
 
 if __name__ == "__main__":

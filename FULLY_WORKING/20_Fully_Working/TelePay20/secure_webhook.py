@@ -32,7 +32,7 @@ class SecureWebhookManager:
             response = client.access_secret_version(request={"name": secret_path})
             return response.payload.data.decode("UTF-8")
         except Exception as e:
-            print(f"❌ Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
+            print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
             return None
     
     def safe_int48(self, val) -> int:
@@ -112,8 +112,8 @@ class SecureWebhookManager:
         if len(currency_bytes) > 4:
             raise ValueError(f"Currency too long: {len(currency_bytes)} bytes (max 4)")
         
-        print(f"📦 [DEBUG] Packing for token: user_id={user_id}, closed_channel_id={closed_channel_id}, timestamp_minutes={timestamp_minutes}, subscription_time={subscription_time}")
-        print(f"💰 [DEBUG] Wallet: '{wallet_address}' ({len(wallet_bytes)} bytes), Currency: '{payout_currency}' ({len(currency_bytes)} bytes)")
+        print(f"[DEBUG] Packing for token: user_id={user_id}, closed_channel_id={closed_channel_id}, timestamp_minutes={timestamp_minutes}, subscription_time={subscription_time}")
+        print(f"[DEBUG] Wallet: '{wallet_address}' ({len(wallet_bytes)} bytes), Currency: '{payout_currency}' ({len(currency_bytes)} bytes)")
         
         # Optimized packing: 6 bytes user_id, 6 bytes channel_id, 2 bytes timestamp_minutes,
         # 2 bytes subscription_time, 1 byte wallet_length, N bytes wallet, 1 byte currency_length, M bytes currency
@@ -141,9 +141,9 @@ class SecureWebhookManager:
         # Build the complete success URL
         success_url = f"{self.base_url}?token={token}"
         
-        print(f"✅ [DEBUG] Complete success URL generated: {success_url}")
-        print(f"📏 [DEBUG] Token length: {len(token)} characters")
-        print(f"📊 [DEBUG] Payload size: {len(payload)} bytes")
+        print(f"[DEBUG] Complete success URL generated: {success_url}")
+        print(f"[DEBUG] Token length: {len(token)} characters")
+        print(f"[DEBUG] Payload size: {len(payload)} bytes")
         
         return success_url
     

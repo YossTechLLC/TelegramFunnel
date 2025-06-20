@@ -27,7 +27,7 @@ class PaymentGatewayManager:
             response = client.access_secret_version(request={"name": secret_path})
             return response.payload.data.decode("UTF-8")
         except Exception as e:
-            print(f"❌ Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
+            print(f"Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
             return None
     
     async def create_payment_invoice(self, user_id: int, amount: float, success_url: str, order_id: str) -> Dict[str, Any]:
@@ -116,7 +116,7 @@ class PaymentGatewayManager:
             open_channel_id: The open channel ID
             secure_success_url: The signed success URL for post-payment redirect
         """
-        print(f"💳 [DEBUG] Starting payment flow: amount=${sub_value:.2f}, channel_id={open_channel_id}")
+        print(f"[DEBUG] Starting payment flow: amount=${sub_value:.2f}, channel_id={open_channel_id}")
         user_id = self.get_telegram_user_id(update)
         if not user_id:
             chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
@@ -141,8 +141,8 @@ class PaymentGatewayManager:
         
         if invoice_result.get("success"):
             invoice_url = invoice_result["data"].get("invoice_url", "<no url>")
-            print(f"✅ [DEBUG] Payment gateway created successfully for ${sub_value:.2f}")
-            print(f"🔗 [DEBUG] Invoice URL: {invoice_url}")
+            print(f"[DEBUG] Payment gateway created successfully for ${sub_value:.2f}")
+            print(f"[DEBUG] Invoice URL: {invoice_url}")
             reply_markup = ReplyKeyboardMarkup.from_button(
                 KeyboardButton(
                     text="Open Payment Gateway",
@@ -180,7 +180,7 @@ class PaymentGatewayManager:
 
         # Handle special donation default case
         if global_open_channel_id == "donation_default":
-            print("🎯 [DEBUG] Handling donation_default case - using placeholder values")
+            print("[DEBUG] Handling donation_default case - using placeholder values")
             closed_channel_id = "donation_default_closed"
             wallet_address = ""
             payout_currency = ""
@@ -194,7 +194,7 @@ class PaymentGatewayManager:
             
             # Get wallet info from database
             wallet_address, payout_currency = db_manager.fetch_client_wallet_info(global_open_channel_id)
-            print(f"💰 [DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}'")
+            print(f"[DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}'")
 
 
         if not webhook_manager.signing_key:

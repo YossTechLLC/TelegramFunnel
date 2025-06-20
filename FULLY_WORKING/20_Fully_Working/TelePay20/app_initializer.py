@@ -64,13 +64,13 @@ class AppInitializer:
         
         # Create payment gateway wrapper function
         async def payment_gateway_wrapper(update, context):
-            print(f"🔄 [DEBUG] Payment gateway wrapper called for user: {update.effective_user.id if update.effective_user else 'Unknown'}")
+            print(f"[DEBUG] Payment gateway wrapper called for user: {update.effective_user.id if update.effective_user else 'Unknown'}")
             global_values = self.menu_handlers.get_global_values() if self.menu_handlers else {
                 'sub_value': 5.0, 
                 'open_channel_id': '',
                 'sub_time': 30
             }
-            print(f"🎯 [DEBUG] Payment gateway using global values: {global_values}")
+            print(f"[DEBUG] Payment gateway using global values: {global_values}")
             await self.payment_manager.start_np_gateway_new(
                 update, context, 
                 global_values['sub_value'], 
