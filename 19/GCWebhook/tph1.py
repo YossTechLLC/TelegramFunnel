@@ -478,28 +478,39 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         
         cur = conn.cursor()
         
-        # Use INSERT ... ON CONFLICT to handle both insert and update cases
-        # Use PostgreSQL-style parameterization for pg8000
-        sql_query = """
-            INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (private_channel_id, user_id) 
-            DO UPDATE SET 
-                sub_time = EXCLUDED.sub_time,
-                is_active = EXCLUDED.is_active
+        # First, try to update existing record
+        update_query = """
+            UPDATE private_channel_users 
+            SET sub_time = %s, is_active = %s
+            WHERE private_channel_id = %s AND user_id = %s
         """
+        update_params = (sub_time, is_active, private_channel_id, user_id)
         
-        sql_params = (private_channel_id, user_id, sub_time, is_active)
+        print(f"[DEBUG] Attempting UPDATE first:")
+        print(f"[DEBUG] Query: {update_query.strip()}")
+        print(f"[DEBUG] Parameters: {update_params}")
         
-        print(f"[DEBUG] Executing SQL:")
-        print(f"[DEBUG] Query: {sql_query.strip()}")
-        print(f"[DEBUG] Parameters: {sql_params}")
+        cur.execute(update_query, update_params)
+        rows_updated = cur.rowcount
+        print(f"[DEBUG] UPDATE completed. Rows affected: {rows_updated}")
         
-        cur.execute(sql_query, sql_params)
-        
-        # Check if any rows were affected
-        rows_affected = cur.rowcount
-        print(f"[DEBUG] SQL execution completed. Rows affected: {rows_affected}")
+        # If no rows were updated, insert a new record
+        if rows_updated == 0:
+            insert_query = """
+                INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
+                VALUES (%s, %s, %s, %s)
+            """
+            insert_params = (private_channel_id, user_id, sub_time, is_active)
+            
+            print(f"[DEBUG] No existing record found, attempting INSERT:")
+            print(f"[DEBUG] Query: {insert_query.strip()}")
+            print(f"[DEBUG] Parameters: {insert_params}")
+            
+            cur.execute(insert_query, insert_params)
+            rows_inserted = cur.rowcount
+            print(f"[DEBUG] INSERT completed. Rows affected: {rows_inserted}")
+        else:
+            print(f"[DEBUG] Updated existing record for user {user_id}")
         
         print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
         return True
