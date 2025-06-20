@@ -5,6 +5,7 @@ import struct
 import base64
 import hmac
 import hashlib
+from google.cloud import secretmanager
 
 class SecureWebhookManager:
     def __init__(self, signing_key: str = None, base_url: str = None):

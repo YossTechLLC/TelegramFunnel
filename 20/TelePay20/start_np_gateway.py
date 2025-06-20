@@ -2,6 +2,7 @@
 import os
 import httpx
 from typing import Dict, Any, Optional
+from google.cloud import secretmanager
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 
