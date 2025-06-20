@@ -99,15 +99,15 @@ class DatabaseManager:
         
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT tele_open, sub_1, sub_1_time, sub_2, sub_2_time, sub_3, sub_3_time FROM tele_channel")
-                for (tele_open, s1, s1_time, s2, s2_time, s3, s3_time,) in cur.fetchall():
+                cur.execute("SELECT tele_open, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time FROM main_client_database")
+                for (tele_open, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time,) in cur.fetchall():
                     tele_open_list.append(tele_open)
                     tele_info_open_map[tele_open] = {
-                        "sub_1": s1,
+                        "sub_1_price": s1_price,
                         "sub_1_time": s1_time,
-                        "sub_2": s2,
+                        "sub_2_price": s2_price,
                         "sub_2_time": s2_time,
-                        "sub_3": s3,
+                        "sub_3_price": s3_price,
                         "sub_3_time": s3_time,
                     }
         except Exception as e:
@@ -129,7 +129,7 @@ class DatabaseManager:
             conn = self.get_connection()
             cur = conn.cursor()
             print(f"🔍 [DEBUG] Looking up closed_channel_id for tele_open: {str(open_channel_id)}")
-            cur.execute("SELECT tele_closed FROM tele_channel WHERE tele_open = %s", (str(open_channel_id),))
+            cur.execute("SELECT tele_closed FROM main_client_database WHERE tele_open = %s", (str(open_channel_id),))
             result = cur.fetchone()
             print(f"📋 [DEBUG] fetch_closed_channel_id result: {result}")
             cur.close()
@@ -158,7 +158,7 @@ class DatabaseManager:
             cur = conn.cursor()
             print(f"🔍 [DEBUG] Looking up wallet info for tele_open: {str(tele_open_id)}")
             cur.execute(
-                "SELECT client_wallet_address, client_payout_currency FROM tele_channel WHERE tele_open = %s", 
+                "SELECT client_wallet_address, client_payout_currency FROM main_client_database WHERE tele_open = %s", 
                 (str(tele_open_id),)
             )
             result = cur.fetchone()
@@ -187,7 +187,7 @@ class DatabaseManager:
         """
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT tele_open FROM tele_channel LIMIT 1")
+                cur.execute("SELECT tele_open FROM main_client_database LIMIT 1")
                 result = cur.fetchone()
                 if result:
                     print(f"🎯 [DEBUG] Found default donation channel: {result[0]}")
@@ -212,11 +212,11 @@ class DatabaseManager:
         vals = (
             channel_data["tele_open"],
             channel_data["tele_closed"],
-            channel_data["sub_1"],
+            channel_data["sub_1_price"],
             channel_data["sub_1_time"],
-            channel_data["sub_2"],
+            channel_data["sub_2_price"],
             channel_data["sub_2_time"],
-            channel_data["sub_3"],
+            channel_data["sub_3_price"],
             channel_data["sub_3_time"],
         )
         
@@ -224,11 +224,11 @@ class DatabaseManager:
             conn = self.get_connection()
             with conn, conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO tele_channel
+                    """INSERT INTO main_client_database
                        (tele_open, tele_closed,
-                        sub_1, sub_1_time,
-                        sub_2, sub_2_time,
-                        sub_3, sub_3_time)
+                        sub_1_price, sub_1_time,
+                        sub_2_price, sub_2_time,
+                        sub_3_price, sub_3_time)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
                     vals,
                 )
@@ -253,7 +253,7 @@ class DatabaseManager:
                 # Query active subscriptions with expiration data
                 query = """
                     SELECT user_id, private_channel_id, expire_time, expire_date
-                    FROM private_channel_users 
+                    FROM private_channel_users_database 
                     WHERE is_active = true 
                     AND expire_time IS NOT NULL 
                     AND expire_date IS NOT NULL
@@ -309,7 +309,7 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
                 update_query = """
-                    UPDATE private_channel_users 
+                    UPDATE private_channel_users_database 
                     SET is_active = false 
                     WHERE user_id = %s AND private_channel_id = %s AND is_active = true
                 """
@@ -363,25 +363,25 @@ async def receive_sub3_time_db(update: Update, ctx: ContextTypes.DEFAULT_TYPE, d
     channel_data = {
         "tele_open": ctx.user_data["tele_open"],
         "tele_closed": ctx.user_data["tele_closed"],
-        "sub_1": ctx.user_data["sub_1"],
+        "sub_1_price": ctx.user_data["sub_1_price"],
         "sub_1_time": ctx.user_data["sub_1_time"],
-        "sub_2": ctx.user_data["sub_2"],
+        "sub_2_price": ctx.user_data["sub_2_price"],
         "sub_2_time": ctx.user_data["sub_2_time"],
-        "sub_3": ctx.user_data["sub_3"],
+        "sub_3_price": ctx.user_data["sub_3_price"],
         "sub_3_time": ctx.user_data["sub_3_time"],
     }
     
     if db_manager.insert_channel_config(channel_data):
         vals = (
             channel_data["tele_open"], channel_data["tele_closed"],
-            channel_data["sub_1"], channel_data["sub_1_time"],
-            channel_data["sub_2"], channel_data["sub_2_time"],
-            channel_data["sub_3"], channel_data["sub_3_time"],
+            channel_data["sub_1_price"], channel_data["sub_1_time"],
+            channel_data["sub_2_price"], channel_data["sub_2_time"],
+            channel_data["sub_3_price"], channel_data["sub_3_time"],
         )
         await update.message.reply_text(
             "✅ Saved:\n"
             f"tele_open={vals[0]}, tele_closed={vals[1]},\n"
-            f"sub_1={vals[2]} ({vals[3]}), sub_2={vals[4]} ({vals[5]}), sub_3={vals[6]} ({vals[7]})"
+            f"sub_1_price={vals[2]} ({vals[3]}), sub_2_price={vals[4]} ({vals[5]}), sub_3_price={vals[6]} ({vals[7]})"
         )
     else:
         await update.message.reply_text("❌ Failed to save to database.")

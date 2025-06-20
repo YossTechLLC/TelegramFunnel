@@ -141,8 +141,34 @@ class MenuHandlers:
                 local_sub_value = 15.0
             self.global_sub_value = local_sub_value
             print(f"💰 [DEBUG] Parsed subscription: ${local_sub_value:.2f} for {self.global_sub_time} days")
+            
+            # For subscription tokens, immediately trigger payment gateway (skip amount input)
+            print(f"🚀 [DEBUG] Triggering direct payment for subscription tier")
+            await self.send_payment_gateway_ready(update, context)
+            return
+            
         except Exception as e:
             await context.bot.send_message(chat_id, f"❌ decode error: {e}")
+    
+    async def send_payment_gateway_ready(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Send 'Payment Gateway Ready' message with payment button for subscription tiers"""
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        
+        chat_id = update.effective_chat.id
+        
+        # Create payment gateway button
+        keyboard = [[
+            InlineKeyboardButton("💰 Payment Gateway", callback_data="TRIGGER_PAYMENT")
+        ]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Send the "Payment Gateway Ready" message
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="💳 Payment Gateway Ready",
+            reply_markup=reply_markup
+        )
+        print(f"✅ [DEBUG] Sent Payment Gateway Ready message to user {update.effective_user.id if update.effective_user else 'Unknown'}")
     
     def get_global_values(self):
         """Return current global values for use by other modules"""

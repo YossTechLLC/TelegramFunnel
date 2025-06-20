@@ -71,14 +71,15 @@ def calculate_expiration_time(sub_time_minutes: int) -> tuple[str, str]:
     return expire_time, expire_date
 
 # --- Utility to decode and verify signed token ---
-def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str, int]:
-    """Returns (user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days) if valid, else raises Exception.
+def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str, int, str]:
+    """Returns (user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days, subscription_price) if valid, else raises Exception.
     
     Decodes optimized token format:
     - 6 bytes user_id (48-bit)
     - 6 bytes closed_channel_id (48-bit) 
     - 2 bytes timestamp_minutes
     - 2 bytes subscription_time_days
+    - 1 byte price_length + subscription_price
     - 1 byte wallet_length + wallet_address
     - 1 byte currency_length + payout_currency
     - 16 bytes truncated HMAC signature
@@ -90,9 +91,9 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     except Exception:
         raise ValueError("Invalid token: cannot decode base64")
     
-    # Minimum size check: 6+6+2+2+1+1+16 = 34 bytes
-    if len(raw) < 34:
-        raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 34)")
+    # Minimum size check: 6+6+2+2+1+1+1+1+16 = 36 bytes (added price field)
+    if len(raw) < 36:
+        raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 36)")
     
     # Parse fixed part: 6 bytes user_id, 6 bytes channel_id, 2 bytes timestamp_minutes, 2 bytes subscription_time
     user_id = int.from_bytes(raw[0:6], 'big')
@@ -100,8 +101,19 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
     timestamp_minutes = struct.unpack(">H", raw[12:14])[0]
     subscription_time_days = struct.unpack(">H", raw[14:16])[0]
     
-    # Parse variable part: wallet address and currency
+    # Parse variable part: subscription price, wallet address and currency
     offset = 16
+    
+    # Read subscription price length and data
+    if offset + 1 > len(raw):
+        raise ValueError("Invalid token: missing price length field")
+    price_len = struct.unpack(">B", raw[offset:offset+1])[0]
+    offset += 1
+    
+    if offset + price_len > len(raw):
+        raise ValueError("Invalid token: incomplete subscription price")
+    subscription_price = raw[offset:offset+price_len].decode('utf-8')
+    offset += price_len
     
     # Read wallet address length and data
     if offset + 1 > len(raw):
@@ -171,14 +183,14 @@ def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str
         raise ValueError(f"Timestamp too far from current time: {time_diff} seconds difference")
     
     print(f"🔓 [DEBUG] Decoded user_id: {user_id}, closed_channel_id: {closed_channel_id}, timestamp: {timestamp} (from minutes: {timestamp_minutes})")
-    print(f"🏦 [DEBUG] Wallet: '{wallet_address}', Currency: '{payout_currency}', Subscription: {subscription_time_days} days")
+    print(f"🏦 [DEBUG] Wallet: '{wallet_address}', Currency: '{payout_currency}', Subscription: {subscription_time_days} days, Price: ${subscription_price}")
     
     # Check for expiration (e.g., 2hr window)
     now = int(time.time())
     if not (now - 7200 <= timestamp <= now + 300):
         raise ValueError("Token expired or not yet valid")
     
-    return user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days
+    return user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days, subscription_price
 
 # Simplified secret/environment variable functions
 def get_env_secret(env_var_name: str, fallback: str = None) -> str:
@@ -300,15 +312,16 @@ def get_database_connection():
         return None
 
 
-def record_private_channel_user(user_id: int, private_channel_id: int, sub_time: int, 
+def record_private_channel_user(user_id: int, private_channel_id: int, sub_time: int, sub_price: str,
                                 expire_time: str = "", expire_date: str = "", is_active: bool = True) -> bool:
     """
-    Record a user's subscription in the private_channel_users table.
+    Record a user's subscription in the private_channel_users_database table.
     
     Args:
         user_id: The user's Telegram ID
         private_channel_id: The private channel ID (closed channel ID)
         sub_time: Subscription time in minutes (for testing - will be days in production)
+        sub_price: Subscription price as string (e.g., "15.00")
         expire_time: Expiration time in HH:MM:SS format
         expire_date: Expiration date in YYYY-MM-DD format
         is_active: Whether the subscription is active (default: True)
@@ -339,29 +352,29 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         print(f"🔄 [DEBUG] Starting transaction for user {user_id}")
         
         # Always update existing record for user/channel combination
-        # Update record with expire_time and expire_date
+        # Update record with all fields including sub_price
         try:
             update_query = """
-                    UPDATE private_channel_users 
-                    SET sub_time = %s, timestamp = %s, datestamp = %s, is_active = %s, 
+                    UPDATE private_channel_users_database 
+                    SET sub_time = %s, sub_price = %s, timestamp = %s, datestamp = %s, is_active = %s, 
                         expire_time = %s, expire_date = %s
                     WHERE user_id = %s AND private_channel_id = %s
             """
-            update_params = (sub_time, current_timestamp, current_datestamp, is_active, 
+            update_params = (sub_time, sub_price, current_timestamp, current_datestamp, is_active, 
                            expire_time, expire_date, user_id, private_channel_id)
             cur.execute(update_query, update_params)
             rows_affected = cur.rowcount
-            print(f"✅ [DEBUG] UPDATE with expiration executed. Rows affected: {rows_affected}")
-            operation = "updated with expiration"
+            print(f"✅ [DEBUG] UPDATE with full data executed. Rows affected: {rows_affected}")
+            operation = "updated with full data"
         except Exception as update_error:
-            print(f"⚠️ [DEBUG] Update with expiration failed, trying without: {update_error}")
+            print(f"⚠️ [DEBUG] Update with full data failed, trying basic: {update_error}")
             # Fallback to basic update without expire columns
             update_query = """
-                UPDATE private_channel_users 
-                SET sub_time = %s, timestamp = %s, datestamp = %s, is_active = %s
+                UPDATE private_channel_users_database 
+                SET sub_time = %s, sub_price = %s, timestamp = %s, datestamp = %s, is_active = %s
                 WHERE user_id = %s AND private_channel_id = %s
             """
-            update_params = (sub_time, current_timestamp, current_datestamp, is_active, user_id, private_channel_id)
+            update_params = (sub_time, sub_price, current_timestamp, current_datestamp, is_active, user_id, private_channel_id)
             cur.execute(update_query, update_params)
             rows_affected = cur.rowcount
             print(f"✅ [DEBUG] Basic UPDATE executed. Rows affected: {rows_affected}")
@@ -414,12 +427,13 @@ def send_invite():
     wallet_address = None
     payout_currency = None
     subscription_time_days = None
+    subscription_price = None
 
     # Validate and decode token
     try:
-        user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days = decode_and_verify_token(token, signing_key)
+        user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days, subscription_price = decode_and_verify_token(token, signing_key)
         print(f"✅ [INFO] Successfully decoded token - User: {user_id}, Channel: {closed_channel_id}")
-        print(f"💳 [INFO] Wallet: '{wallet_address}', Currency: '{payout_currency}', Subscription: {subscription_time_days} days")
+        print(f"💳 [INFO] Wallet: '{wallet_address}', Currency: '{payout_currency}', Subscription: {subscription_time_days} days, Price: ${subscription_price}")
     except Exception as e:
         abort(400, f"Token error: {e}")
 
@@ -427,7 +441,7 @@ def send_invite():
     expire_time, expire_date = calculate_expiration_time(subscription_time_days)
     print(f"📅 [INFO] Calculated expiration: {expire_time} on {expire_date} ({subscription_time_days} minutes from now)")
     
-    # Record user subscription in private_channel_users table
+    # Record user subscription in private_channel_users_database table
     print(f"📊 [INFO] Starting database recording process for user {user_id}...")
     
     try:
@@ -437,6 +451,7 @@ def send_invite():
                 user_id=user_id,
                 private_channel_id=closed_channel_id,
                 sub_time=subscription_time_days,
+                sub_price=subscription_price,
                 expire_time=expire_time,
                 expire_date=expire_date,
                 is_active=True

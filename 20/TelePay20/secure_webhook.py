@@ -57,16 +57,17 @@ class SecureWebhookManager:
     
     def build_signed_success_url(self, user_id: int, closed_channel_id: int, 
                                  client_wallet_address: str = "", client_payout_currency: str = "",
-                                 subscription_time: int = 30) -> str:
+                                 subscription_time: int = 30, subscription_price: str = "15.00") -> str:
         """
         Build a cryptographically signed success URL for post-payment redirect.
         
         Args:
             user_id: The user's ID
             closed_channel_id: The closed channel ID to grant access to
-            client_wallet_address: The client's wallet address (max 95 chars)
+            client_wallet_address: The client's wallet address (max 110 chars)
             client_payout_currency: The client's preferred payout currency (max 4 chars)
             subscription_time: The subscription duration in days (1-999)
+            subscription_price: The subscription price as string (e.g., "15.00")
             
         Returns:
             A signed URL containing the encrypted token
@@ -98,25 +99,29 @@ class SecureWebhookManager:
         # Use minutes since epoch for compact timestamp (2 bytes, ~45 day cycle)
         timestamp_minutes = int(time.time() // 60) % 65536
         
-        # Ensure wallet address and currency are strings and handle None values
-        wallet_address = (client_wallet_address or "")[:95]  # Enforce max length
+        # Ensure wallet address, currency, and price are strings and handle None values
+        wallet_address = (client_wallet_address or "")[:110]  # Enforce max length
         payout_currency = (client_payout_currency or "")[:4]   # Enforce max length
+        subscription_price = (subscription_price or "15.00")[:6]  # Enforce max length for price
         
         # Encode strings to bytes
         wallet_bytes = wallet_address.encode('utf-8')
         currency_bytes = payout_currency.encode('utf-8')
+        price_bytes = subscription_price.encode('utf-8')
         
         # Validate length constraints
-        if len(wallet_bytes) > 95:
-            raise ValueError(f"Wallet address too long: {len(wallet_bytes)} bytes (max 95)")
+        if len(wallet_bytes) > 110:
+            raise ValueError(f"Wallet address too long: {len(wallet_bytes)} bytes (max 110)")
         if len(currency_bytes) > 4:
             raise ValueError(f"Currency too long: {len(currency_bytes)} bytes (max 4)")
+        if len(price_bytes) > 6:
+            raise ValueError(f"Subscription price too long: {len(price_bytes)} bytes (max 6)")
         
         print(f"📦 [DEBUG] Packing for token: user_id={user_id}, closed_channel_id={closed_channel_id}, timestamp_minutes={timestamp_minutes}, subscription_time={subscription_time}")
-        print(f"💰 [DEBUG] Wallet: '{wallet_address}' ({len(wallet_bytes)} bytes), Currency: '{payout_currency}' ({len(currency_bytes)} bytes)")
+        print(f"💰 [DEBUG] Wallet: '{wallet_address}' ({len(wallet_bytes)} bytes), Currency: '{payout_currency}' ({len(currency_bytes)} bytes), Price: '{subscription_price}' ({len(price_bytes)} bytes)")
         
         # Optimized packing: 6 bytes user_id, 6 bytes channel_id, 2 bytes timestamp_minutes,
-        # 2 bytes subscription_time, 1 byte wallet_length, N bytes wallet, 1 byte currency_length, M bytes currency
+        # 2 bytes subscription_time, 1 byte price_length, N bytes price, 1 byte wallet_length, M bytes wallet, 1 byte currency_length, P bytes currency
         
         # Pack 48-bit integers as 6 bytes each
         user_id_bytes = user_id.to_bytes(6, 'big')
@@ -125,6 +130,7 @@ class SecureWebhookManager:
         # Pack the optimized data structure
         packed = user_id_bytes + channel_id_bytes + struct.pack(">H", timestamp_minutes)
         packed += struct.pack(">H", subscription_time)  # Add subscription time as 2 bytes
+        packed += struct.pack(">B", len(price_bytes)) + price_bytes  # Add subscription price
         packed += struct.pack(">B", len(wallet_bytes)) + wallet_bytes
         packed += struct.pack(">B", len(currency_bytes)) + currency_bytes
         

@@ -62,7 +62,8 @@ class BotManager:
         application.add_handler(donation_handler)
         application.add_handler(CommandHandler("start", self.start_bot_handler))
         application.add_handler(CommandHandler("start_np_gateway_new", self.payment_gateway_handler))
-        application.add_handler(CallbackQueryHandler(self.menu_callback_handler, pattern="^(?!CMD_DATABASE|CMD_DONATE).*$"))
+        application.add_handler(CallbackQueryHandler(self.trigger_payment_handler, pattern="^TRIGGER_PAYMENT$"))
+        application.add_handler(CallbackQueryHandler(self.menu_callback_handler, pattern="^(?!CMD_DATABASE|CMD_DONATE|TRIGGER_PAYMENT).*$"))
     
     async def run_telegram_bot(self, telegram_token: str, payment_token: str):
         """Main bot runner function"""
@@ -84,3 +85,22 @@ class BotManager:
         
         # Start polling
         await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    async def trigger_payment_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle TRIGGER_PAYMENT callback - directly invoke payment gateway"""
+        print(f"💳 [DEBUG] TRIGGER_PAYMENT callback received from user {update.effective_user.id if update.effective_user else 'Unknown'}")
+        
+        try:
+            # Answer the callback query first
+            await context.bot.answer_callback_query(update.callback_query.id)
+            
+            # Trigger the payment gateway handler directly
+            await self.payment_gateway_handler(update, context)
+            print(f"✅ [DEBUG] Payment gateway triggered successfully")
+            
+        except Exception as e:
+            print(f"❌ [DEBUG] Error triggering payment gateway: {e}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error processing payment. Please try again."
+            )

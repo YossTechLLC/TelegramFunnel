@@ -97,7 +97,7 @@ class SubscriptionManager:
                 # Query active subscriptions with expiration data
                 query = """
                     SELECT user_id, private_channel_id, expire_time, expire_date
-                    FROM private_channel_users 
+                    FROM private_channel_users_database 
                     WHERE is_active = true 
                     AND expire_time IS NOT NULL 
                     AND expire_date IS NOT NULL
@@ -196,7 +196,7 @@ class SubscriptionManager:
         try:
             with self.db_manager.get_connection() as conn, conn.cursor() as cur:
                 update_query = """
-                    UPDATE private_channel_users 
+                    UPDATE private_channel_users_database 
                     SET is_active = false 
                     WHERE user_id = %s AND private_channel_id = %s AND is_active = true
                 """
