@@ -512,10 +512,22 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         else:
             print(f"[DEBUG] Updated existing record for user {user_id}")
         
+        # Commit the transaction to persist changes
+        conn.commit()
+        print(f"[DEBUG] Transaction committed successfully")
+        
         print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
         return True
         
     except Exception as e:
+        # Rollback transaction on error
+        if conn:
+            try:
+                conn.rollback()
+                print(f"[DEBUG] Transaction rolled back due to error")
+            except Exception as rollback_error:
+                print(f"[DEBUG] Error during rollback: {rollback_error}")
+        
         print(f"[ERROR] ❌ Database error recording private channel user: {e}")
         print(f"[ERROR] Error type: {type(e).__name__}")
         return False
