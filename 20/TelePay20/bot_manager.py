@@ -77,7 +77,7 @@ class BotManager:
         application.bot_data['menu_handlers'] = self.menu_handlers
         application.bot_data['payment_gateway_handler'] = self.payment_gateway_handler
         application.bot_data['db_manager'] = self.db_manager
-        print(f"\ud83e\udd16 [DEBUG] Bot data setup: menu_handlers={self.menu_handlers is not None}, payment_handler={self.payment_gateway_handler is not None}, db_manager={self.db_manager is not None}")
+        print(f"⚙️ [DEBUG] Bot data setup: menu_handlers={self.menu_handlers is not None}, payment_handler={self.payment_gateway_handler is not None}, db_manager={self.db_manager is not None}")
         
         # Setup all handlers
         self.setup_handlers(application)

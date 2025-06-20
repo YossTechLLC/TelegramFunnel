@@ -18,7 +18,7 @@ class ServerManager:
     def start(self):
         """Start the Flask server."""
         self.port = self.find_free_port(5000)
-        print(f"\ud83c\udf0d Running Flask on port {self.port}")
+        print(f"🔗 Running Flask on port {self.port}")
         self.flask_app.run(host="0.0.0.0", port=self.port)
     
     def get_app(self):

@@ -46,7 +46,7 @@ class SubscriptionManager:
     def stop_monitoring(self):
         """Stop the subscription monitoring task."""
         self.is_running = False
-        self.logger.info("🛑 Stopping subscription expiration monitoring")
+        self.logger.info("⏹️ Stopping subscription expiration monitoring")
     
     async def check_expired_subscriptions(self):
         """Check for expired subscriptions and process them."""
