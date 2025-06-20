@@ -2,54 +2,63 @@
 import psycopg2
 import os
 from typing import Optional, Tuple, List, Dict, Any
+from google.cloud import secretmanager
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 def fetch_database_host() -> str:
-    """Fetch database host from environment."""
+    """Fetch database host from Secret Manager."""
     try:
-        secret_value = os.getenv("DATABASE_HOST_SECRET")
-        if not secret_value:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("DATABASE_HOST_SECRET")
+        if not secret_path:
             raise ValueError("Environment variable DATABASE_HOST_SECRET is not set.")
-        return secret_value
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching DATABASE_HOST_SECRET: {e}")
         raise
 
 def fetch_database_name() -> str:
-    """Fetch database name from environment."""
+    """Fetch database name from Secret Manager."""
     try:
-        secret_value = os.getenv("DATABASE_NAME_SECRET")
-        if not secret_value:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("DATABASE_NAME_SECRET")
+        if not secret_path:
             raise ValueError("Environment variable DATABASE_NAME_SECRET is not set.")
-        return secret_value
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching DATABASE_NAME_SECRET: {e}")
         raise
 
 def fetch_database_user() -> str:
-    """Fetch database user from environment."""
+    """Fetch database user from Secret Manager."""
     try:
-        secret_value = os.getenv("DATABASE_USER_SECRET")
-        if not secret_value:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("DATABASE_USER_SECRET")
+        if not secret_path:
             raise ValueError("Environment variable DATABASE_USER_SECRET is not set.")
-        return secret_value
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching DATABASE_USER_SECRET: {e}")
         raise
 
 def fetch_database_password() -> str:
-    """Fetch database password from environment."""
+    """Fetch database password from Secret Manager."""
     try:
-        secret_value = os.getenv("DATABASE_PASSWORD_SECRET")
-        if not secret_value:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("DATABASE_PASSWORD_SECRET")
+        if not secret_path:
             return None  # No fallback for password - this should fail safely
-        return secret_value
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching DATABASE_PASSWORD_SECRET: {e}")
         return None  # No fallback for password - this should fail safely
 
-# Database configuration - now using environment variables
+# Database configuration - now using Secret Manager
 DB_HOST = fetch_database_host()
 DB_PORT = 5432  # This can remain hardcoded as it's not sensitive
 DB_NAME = fetch_database_name()
@@ -66,9 +75,9 @@ class DatabaseManager:
         
         # Validate that critical credentials are available
         if not self.password:
-            raise RuntimeError("Database password not available from environment variables. Cannot initialize DatabaseManager.")
+            raise RuntimeError("Database password not available from Secret Manager. Cannot initialize DatabaseManager.")
         if not self.host or not self.dbname or not self.user:
-            raise RuntimeError("Critical database configuration missing from environment variables.")
+            raise RuntimeError("Critical database configuration missing from Secret Manager.")
     
     def get_connection(self):
         """Create and return a database connection."""

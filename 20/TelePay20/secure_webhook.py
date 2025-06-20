@@ -22,12 +22,14 @@ class SecureWebhookManager:
             raise ValueError("Environment variable WEBHOOK_BASE_URL is not set.")
     
     def fetch_success_url_signing_key(self) -> str:
-        """Fetch the signing key from environment."""
+        """Fetch the signing key from Secret Manager."""
         try:
-            key = os.getenv("SUCCESS_URL_SIGNING_KEY")
-            if not key:
+            client = secretmanager.SecretManagerServiceClient()
+            secret_path = os.getenv("SUCCESS_URL_SIGNING_KEY")
+            if not secret_path:
                 raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set.")
-            return key
+            response = client.access_secret_version(request={"name": secret_path})
+            return response.payload.data.decode("UTF-8")
         except Exception as e:
             print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
             return None

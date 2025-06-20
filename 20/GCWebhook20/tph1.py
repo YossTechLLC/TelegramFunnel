@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Tuple, Optional
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
+from google.cloud import secretmanager
 
 # Import Cloud SQL Connector for database functionality
 try:
@@ -190,67 +191,77 @@ def get_env_secret(env_var_name: str, fallback: str = None) -> str:
     return value
 
 def fetch_telegram_bot_token() -> str:
-    """Get Telegram bot token from environment."""
+    """Get Telegram bot token from Secret Manager."""
     try:
-        token = os.getenv("TELEGRAM_BOT_SECRET_NAME")
-        if not token:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("TELEGRAM_BOT_SECRET_NAME")
+        if not secret_path:
             raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set")
-        return token
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching Telegram bot token: {e}")
         return None
 
 def fetch_success_url_signing_key() -> str:
-    """Get success URL signing key from environment."""
+    """Get success URL signing key from Secret Manager."""
     try:
-        key = os.getenv("SUCCESS_URL_SIGNING_KEY")
-        if not key:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("SUCCESS_URL_SIGNING_KEY")
+        if not secret_path:
             raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set")
-        return key
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching signing key: {e}")
         return None
 
 def fetch_database_name() -> str:
-    """Get database name from environment."""
+    """Get database name from Secret Manager."""
     try:
-        secret_value = os.getenv("DATABASE_NAME_SECRET")
-        if not secret_value:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("DATABASE_NAME_SECRET")
+        if not secret_path:
             raise ValueError("Environment variable DATABASE_NAME_SECRET is not set.")
-        return secret_value
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching database name: {e}")
         raise
 
 def fetch_database_user() -> str:
-    """Get database user from environment."""
+    """Get database user from Secret Manager."""
     try:
-        secret_value = os.getenv("DATABASE_USER_SECRET")
-        if not secret_value:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("DATABASE_USER_SECRET")
+        if not secret_path:
             raise ValueError("Environment variable DATABASE_USER_SECRET is not set.")
-        return secret_value
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching database user: {e}")
         raise
 
 def fetch_database_password() -> str:
-    """Get database password from environment."""
+    """Get database password from Secret Manager."""
     try:
-        secret_value = os.getenv("DATABASE_PASSWORD_SECRET")
-        if not secret_value:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("DATABASE_PASSWORD_SECRET")
+        if not secret_path:
             return None
-        return secret_value
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"Error fetching database password: {e}")
         return None
 
 def fetch_cloud_sql_connection_name() -> str:
-    """Get Cloud SQL connection name from environment."""
+    """Get Cloud SQL connection name from environment (direct value)."""
     try:
-        secret_value = os.getenv("CLOUD_SQL_CONNECTION_NAME")
-        if not secret_value:
+        connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not connection_name:
             return None
-        return secret_value
+        return connection_name
     except Exception as e:
         print(f"Error fetching Cloud SQL connection name: {e}")
         return None

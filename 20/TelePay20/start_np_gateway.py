@@ -17,12 +17,14 @@ class PaymentGatewayManager:
         self.api_url = "https://api.nowpayments.io/v1/invoice"
     
     def fetch_payment_provider_token(self) -> Optional[str]:
-        """Fetch the payment provider token from environment."""
+        """Fetch the payment provider token from Secret Manager."""
         try:
-            token = os.getenv("PAYMENT_PROVIDER_SECRET_NAME")
-            if not token:
+            client = secretmanager.SecretManagerServiceClient()
+            secret_path = os.getenv("PAYMENT_PROVIDER_SECRET_NAME")
+            if not secret_path:
                 raise ValueError("Environment variable PAYMENT_PROVIDER_SECRET_NAME is not set.")
-            return token
+            response = client.access_secret_version(request={"name": secret_path})
+            return response.payload.data.decode("UTF-8")
         except Exception as e:
             print(f"Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
             return None
