@@ -10,16 +10,9 @@ from flask import Flask, request, abort, jsonify
 from telegram import Bot
 from google.cloud import secretmanager
 
-# Try to import psycopg2 with graceful error handling
-try:
-    import psycopg2
-    PSYCOPG2_AVAILABLE = True
-    print("[INFO] psycopg2 imported successfully - database functionality enabled")
-except ImportError as e:
-    print(f"[WARNING] psycopg2 import failed: {e}")
-    print("[WARNING] Database functionality will be disabled - webhook will still send invites")
-    PSYCOPG2_AVAILABLE = False
-    psycopg2 = None
+# Database functionality is provided by Cloud SQL Connector with pg8000
+# psycopg2 is no longer used
+PSYCOPG2_AVAILABLE = False
 
 # Try to import Cloud SQL Connector and SQLAlchemy
 try:
@@ -29,8 +22,8 @@ try:
     CLOUD_SQL_AVAILABLE = True
     print("[INFO] Cloud SQL Connector imported successfully - enhanced database connectivity enabled")
 except ImportError as e:
-    print(f"[WARNING] Cloud SQL Connector import failed: {e}")
-    print("[WARNING] Falling back to direct psycopg2 connections (may have IP restrictions)")
+    print(f"[ERROR] Cloud SQL Connector import failed: {e}")
+    print("[ERROR] Database functionality will be disabled - webhook will still send invites")
     CLOUD_SQL_AVAILABLE = False
     Connector = None
     sqlalchemy = None
@@ -310,9 +303,9 @@ def get_database_connection():
     """Create and return a database connection using Cloud SQL Connector when available."""
     print("[DEBUG] Starting database connection process...")
     
-    # Check if both database drivers are available
-    if not PSYCOPG2_AVAILABLE:
-        print("[WARNING] psycopg2 not available - cannot create database connection")
+    # Check if Cloud SQL Connector is available
+    if not CLOUD_SQL_AVAILABLE:
+        print("[ERROR] Cloud SQL Connector not available - cannot create database connection")
         return None
     
     # Fetch credentials
@@ -329,80 +322,49 @@ def get_database_connection():
         print("[ERROR] Database password is None - cannot connect")
         return None
     
-    # Try Cloud SQL Connector first (preferred method)
-    if CLOUD_SQL_AVAILABLE:
-        print("[DEBUG] Attempting Cloud SQL Connector connection...")
-        try:
-            connection_name = fetch_cloud_sql_connection_name()
-            if not connection_name:
-                print("[WARNING] Cloud SQL connection name not available - falling back to direct connection")
-            else:
-                print(f"[DEBUG] Using Cloud SQL connection: {connection_name}")
-                
-                # Initialize the Cloud SQL Connector
-                connector = Connector()
-                
-                def getconn():
-                    return connector.connect(
-                        connection_name,
-                        "pg8000",
-                        user=user,
-                        password=password,
-                        db=dbname
-                    )
-                
-                # Test the connection
-                connection = getconn()
-                print("[DEBUG] ✅ Cloud SQL Connector connection successful!")
-                return connection
-                
-        except Exception as e:
-            error_msg = str(e)
-            print(f"[WARNING] Cloud SQL Connector failed: {e}")
-            
-            # Check for specific IAM permission issues
-            if "403" in error_msg and "Forbidden" in error_msg:
-                print(f"[ERROR] IAM Permission Issue Detected!")
-                print(f"[ERROR] Cloud Run service account lacks Cloud SQL permissions.")
-                print(f"[ERROR] Required fixes:")
-                print(f"[ERROR] 1. Enable Cloud SQL Admin API: gcloud services enable sqladmin.googleapis.com")
-                print(f"[ERROR] 2. Grant Cloud SQL Client role to service account")
-                print(f"[ERROR] 3. Ensure Cloud SQL instance allows connections")
-            elif "Driver" in error_msg and "not supported" in error_msg:
-                print(f"[ERROR] Database driver issue - check pg8000 installation")
-            
-            print(f"[WARNING] Falling back to direct psycopg2 connection...")
-    
-    # Fallback to direct psycopg2 connection (legacy method)
-    print("[DEBUG] Using direct psycopg2 connection...")
+    # Use Cloud SQL Connector (only method available)
+    print("[DEBUG] Attempting Cloud SQL Connector connection...")
     try:
-        host = fetch_database_host()
-        port = 5432
+        connection_name = fetch_cloud_sql_connection_name()
+        if not connection_name:
+            print("[ERROR] Cloud SQL connection name not available - cannot connect")
+            return None
         
-        print(f"[DEBUG]   Host: {host}")
-        print(f"[DEBUG]   Port: {port}")
-        print("[DEBUG] Attempting direct psycopg2.connect()...")
+        print(f"[DEBUG] Using Cloud SQL connection: {connection_name}")
         
-        connection = psycopg2.connect(
-            dbname=dbname,
-            user=user,
-            password=password,
-            host=host,
-            port=port,
-            connect_timeout=10  # Add 10 second timeout
-        )
+        # Initialize the Cloud SQL Connector
+        connector = Connector()
         
-        print("[DEBUG] ✅ Direct psycopg2 connection successful!")
+        def getconn():
+            return connector.connect(
+                connection_name,
+                "pg8000",
+                user=user,
+                password=password,
+                db=dbname
+            )
+        
+        # Test the connection
+        connection = getconn()
+        print("[DEBUG] ✅ Cloud SQL Connector connection successful!")
         return connection
         
-    except psycopg2.OperationalError as e:
-        print(f"[ERROR] PostgreSQL connection error: {e}")
-        print(f"[ERROR] This usually indicates wrong credentials, network issues, or IP blocking")
-        print(f"[ERROR] Consider setting CLOUD_SQL_CONNECTION_NAME environment variable for Cloud SQL Connector")
-        return None
     except Exception as e:
-        print(f"[ERROR] Unexpected error creating database connection: {e}")
-        print(f"[ERROR] Error type: {type(e).__name__}")
+        error_msg = str(e)
+        print(f"[ERROR] Cloud SQL Connector failed: {e}")
+        
+        # Check for specific IAM permission issues
+        if "403" in error_msg and "Forbidden" in error_msg:
+            print(f"[ERROR] IAM Permission Issue Detected!")
+            print(f"[ERROR] Cloud Run service account lacks Cloud SQL permissions.")
+            print(f"[ERROR] Required fixes:")
+            print(f"[ERROR] 1. Enable Cloud SQL Admin API: gcloud services enable sqladmin.googleapis.com")
+            print(f"[ERROR] 2. Grant Cloud SQL Client role to service account")
+            print(f"[ERROR] 3. Ensure Cloud SQL instance allows connections")
+        elif "Driver" in error_msg and "not supported" in error_msg:
+            print(f"[ERROR] Database driver issue - check pg8000 installation")
+        
+        print(f"[ERROR] Cloud SQL Connector connection failed - no fallback available")
         return None
 
 def test_database_health() -> bool:
@@ -414,74 +376,77 @@ def test_database_health() -> bool:
     """
     print("[DEBUG] Starting database health check...")
     
-    if not PSYCOPG2_AVAILABLE:
-        print("[WARNING] psycopg2 not available - database health check failed")
+    if not CLOUD_SQL_AVAILABLE:
+        print("[ERROR] Cloud SQL Connector not available - database health check failed")
         return False
     
+    conn = None
+    cur = None
     try:
         conn = get_database_connection()
         if not conn:
             print("[ERROR] Database health check failed - no connection")
             return False
         
-        with conn:
-            cur = conn.cursor()
-            try:
-                # Test 1: Basic connection test
-                print("[DEBUG] Testing basic connectivity...")
-                cur.execute("SELECT 1;")
-                result = cur.fetchone()
-                if result[0] != 1:
-                    print("[ERROR] Basic connectivity test failed")
-                    return False
-                print("[DEBUG] ✅ Basic connectivity test passed")
-                
-                # Test 2: Check if private_channel_users table exists
-                print("[DEBUG] Checking if private_channel_users table exists...")
-                cur.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'public' 
-                        AND table_name = 'private_channel_users'
-                    );
-                """)
-                table_exists = cur.fetchone()[0]
-                if not table_exists:
-                    print("[ERROR] Table 'private_channel_users' does not exist")
-                    return False
-                print("[DEBUG] ✅ Table 'private_channel_users' exists")
-                
-                # Test 3: Check table structure
-                print("[DEBUG] Checking table structure...")
-                cur.execute("""
-                    SELECT column_name, data_type 
-                    FROM information_schema.columns 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'private_channel_users'
-                    ORDER BY ordinal_position;
-                """)
-                columns = cur.fetchall()
-                print(f"[DEBUG] Table columns found: {columns}")
-                
-                # Expected columns: private_channel_id, user_id, sub_time, is_active
-                expected_columns = {'private_channel_id', 'user_id', 'sub_time', 'is_active'}
-                actual_columns = {col[0] for col in columns}
-                
-                if not expected_columns.issubset(actual_columns):
-                    missing = expected_columns - actual_columns
-                    print(f"[ERROR] Missing required columns: {missing}")
-                    return False
-                print("[DEBUG] ✅ All required columns present")
-                
-                print("[DEBUG] ✅ Database health check passed!")
-                return True
-                
-            finally:
-                cur.close()
-            
+        cur = conn.cursor()
+        
+        # Test 1: Basic connection test
+        print("[DEBUG] Testing basic connectivity...")
+        cur.execute(text("SELECT 1"))
+        result = cur.fetchone()
+        if result[0] != 1:
+            print("[ERROR] Basic connectivity test failed")
+            return False
+        print("[DEBUG] ✅ Basic connectivity test passed")
+        
+        # Test 2: Check if private_channel_users table exists
+        print("[DEBUG] Checking if private_channel_users table exists...")
+        cur.execute(text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'private_channel_users'
+            )
+        """))
+        table_exists = cur.fetchone()[0]
+        if not table_exists:
+            print("[ERROR] Table 'private_channel_users' does not exist")
+            return False
+        print("[DEBUG] ✅ Table 'private_channel_users' exists")
+        
+        # Test 3: Check table structure
+        print("[DEBUG] Checking table structure...")
+        cur.execute(text("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'private_channel_users'
+            ORDER BY ordinal_position
+        """))
+        columns = cur.fetchall()
+        print(f"[DEBUG] Table columns found: {columns}")
+        
+        # Expected columns: private_channel_id, user_id, sub_time, is_active
+        expected_columns = {'private_channel_id', 'user_id', 'sub_time', 'is_active'}
+        actual_columns = {col[0] for col in columns}
+        
+        if not expected_columns.issubset(actual_columns):
+            missing = expected_columns - actual_columns
+            print(f"[ERROR] Missing required columns: {missing}")
+            return False
+        print("[DEBUG] ✅ All required columns present")
+        
+        print("[DEBUG] ✅ Database health check passed!")
+        return True
+        
     except Exception as e:
         print(f"[ERROR] Database health check failed: {e}")
         return False
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 def record_private_channel_user(user_id: int, private_channel_id: int, sub_time: int, is_active: bool = True) -> bool:
     """
@@ -498,10 +463,12 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
     """
     print(f"[DEBUG] Starting database insert for user {user_id}, channel {private_channel_id}, sub_time {sub_time}, active {is_active}")
     
-    if not PSYCOPG2_AVAILABLE:
-        print("[WARNING] Database functionality disabled - cannot record user subscription")
+    if not CLOUD_SQL_AVAILABLE:
+        print("[ERROR] Cloud SQL Connector not available - cannot record user subscription")
         return False
         
+    conn = None
+    cur = None
     try:
         conn = get_database_connection()
         if not conn:
@@ -510,45 +477,48 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         
         print(f"[DEBUG] Database connection established, preparing SQL query...")
         
-        with conn:
-            cur = conn.cursor()
-            try:
-                # Use INSERT ... ON CONFLICT to handle both insert and update cases
-                sql_query = """
-                    INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (private_channel_id, user_id) 
-                    DO UPDATE SET 
-                        sub_time = EXCLUDED.sub_time,
-                        is_active = EXCLUDED.is_active
-                """
-                sql_params = (private_channel_id, user_id, sub_time, is_active)
-                
-                print(f"[DEBUG] Executing SQL:")
-                print(f"[DEBUG] Query: {sql_query.strip()}")
-                print(f"[DEBUG] Parameters: {sql_params}")
-                
-                cur.execute(sql_query, sql_params)
-                
-                # Check if any rows were affected
-                rows_affected = cur.rowcount
-                print(f"[DEBUG] SQL execution completed. Rows affected: {rows_affected}")
-                
-                print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
-                return True
-                
-            finally:
-                cur.close()
-            
-    except psycopg2.Error as e:
-        print(f"[ERROR] ❌ PostgreSQL error recording private channel user: {e}")
-        print(f"[ERROR] Error code: {e.pgcode if hasattr(e, 'pgcode') else 'N/A'}")
-        print(f"[ERROR] Error details: {e.pgerror if hasattr(e, 'pgerror') else 'N/A'}")
-        return False
+        cur = conn.cursor()
+        
+        # Use INSERT ... ON CONFLICT to handle both insert and update cases
+        # Use SQLAlchemy text() for parameterized query
+        sql_query = text("""
+            INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
+            VALUES (:private_channel_id, :user_id, :sub_time, :is_active)
+            ON CONFLICT (private_channel_id, user_id) 
+            DO UPDATE SET 
+                sub_time = EXCLUDED.sub_time,
+                is_active = EXCLUDED.is_active
+        """)
+        
+        sql_params = {
+            'private_channel_id': private_channel_id,
+            'user_id': user_id,
+            'sub_time': sub_time,
+            'is_active': is_active
+        }
+        
+        print(f"[DEBUG] Executing SQL:")
+        print(f"[DEBUG] Query: {sql_query}")
+        print(f"[DEBUG] Parameters: {sql_params}")
+        
+        cur.execute(sql_query, sql_params)
+        
+        # Check if any rows were affected
+        rows_affected = cur.rowcount
+        print(f"[DEBUG] SQL execution completed. Rows affected: {rows_affected}")
+        
+        print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
+        return True
+        
     except Exception as e:
-        print(f"[ERROR] ❌ Unexpected error recording private channel user: {e}")
+        print(f"[ERROR] ❌ Database error recording private channel user: {e}")
         print(f"[ERROR] Error type: {type(e).__name__}")
         return False
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 # --- Flask app and webhook handler ---
 app = Flask(__name__)
@@ -586,7 +556,7 @@ def send_invite():
     
     try:
         # First, run a database health check
-        if PSYCOPG2_AVAILABLE:
+        if CLOUD_SQL_AVAILABLE:
             print(f"[DEBUG] Running database health check before recording...")
             health_ok = test_database_health()
             if not health_ok:
@@ -605,7 +575,7 @@ def send_invite():
                 else:
                     print(f"[WARNING] ❌ Database: Failed to record user {user_id} subscription - continuing with invite")
         else:
-            print(f"[WARNING] ❌ psycopg2 not available - skipping database recording for user {user_id}")
+            print(f"[ERROR] ❌ Cloud SQL Connector not available - skipping database recording for user {user_id}")
             
     except Exception as e:
         # Log error but don't fail the webhook - user should still get their invite
