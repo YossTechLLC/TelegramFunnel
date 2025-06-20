@@ -7,8 +7,9 @@ class ServerManager:
         self.flask_app = Flask(__name__)
         self.port = None
     
-    def find_free_port(self, start_port=5000, max_tries=20):
+    def find_free_port(self, start_port=5000, max_tries=1000):
         """Find a free port for the Flask server."""
+        # First try the specified range
         for port in range(start_port, start_port + max_tries):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 try:
@@ -16,7 +17,15 @@ class ServerManager:
                     return port
                 except OSError:
                     continue
-        raise OSError("No available port found for Flask.")
+        
+        # Fallback: let OS assign an available port
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('localhost', 0))  # 0 means OS will assign available port
+                port = s.getsockname()[1]
+                return port
+            except OSError as e:
+                raise OSError(f"No available port found for Flask after trying {max_tries} ports and OS assignment: {e}")
     
     def start(self):
         """Start the Flask server."""
