@@ -11,8 +11,11 @@ class ServerManager:
         """Find a free port for the Flask server."""
         for port in range(start_port, start_port + max_tries):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                if s.connect_ex(('localhost', port)) != 0:
+                try:
+                    s.bind(('localhost', port))
                     return port
+                except OSError:
+                    continue
         raise OSError("No available port found for Flask.")
     
     def start(self):
