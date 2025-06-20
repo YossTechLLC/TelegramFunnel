@@ -338,34 +338,35 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         # Start with explicit transaction control
         print(f"[DEBUG] Starting transaction for user {user_id}")
         
-        # Always insert new record for each payment
-        # Insert new record with expire_time and expire_date
+        # Always update existing record for user/channel combination
+        # Update record with expire_time and expire_date
         try:
-            insert_query = """
-                    INSERT INTO private_channel_users 
-                    (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active, 
-                     expire_time, expire_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            update_query = """
+                    UPDATE private_channel_users 
+                    SET sub_time = %s, timestamp = %s, datestamp = %s, is_active = %s, 
+                        expire_time = %s, expire_date = %s
+                    WHERE user_id = %s AND private_channel_id = %s
             """
-            insert_params = (private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, 
-                           is_active, expire_time, expire_date)
-            cur.execute(insert_query, insert_params)
+            update_params = (sub_time, current_timestamp, current_datestamp, is_active, 
+                           expire_time, expire_date, user_id, private_channel_id)
+            cur.execute(update_query, update_params)
             rows_affected = cur.rowcount
-            print(f"[DEBUG] INSERT with expiration executed. Rows affected: {rows_affected}")
-            operation = "inserted with expiration"
-        except Exception as insert_error:
-            print(f"[DEBUG] Insert with expiration failed, trying without: {insert_error}")
-            # Fallback to basic insert without expire columns
-            insert_query = """
-                INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active)
-                VALUES (%s, %s, %s, %s, %s, %s)
+            print(f"[DEBUG] UPDATE with expiration executed. Rows affected: {rows_affected}")
+            operation = "updated with expiration"
+        except Exception as update_error:
+            print(f"[DEBUG] Update with expiration failed, trying without: {update_error}")
+            # Fallback to basic update without expire columns
+            update_query = """
+                UPDATE private_channel_users 
+                SET sub_time = %s, timestamp = %s, datestamp = %s, is_active = %s
+                WHERE user_id = %s AND private_channel_id = %s
             """
-            insert_params = (private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, is_active)
-            cur.execute(insert_query, insert_params)
+            update_params = (sub_time, current_timestamp, current_datestamp, is_active, user_id, private_channel_id)
+            cur.execute(update_query, update_params)
             rows_affected = cur.rowcount
-            print(f"[DEBUG] Basic INSERT executed. Rows affected: {rows_affected}")
+            print(f"[DEBUG] Basic UPDATE executed. Rows affected: {rows_affected}")
             print(f"[INFO] Expiration not stored in DB (columns missing): expire_time={expire_time}, expire_date={expire_date}")
-            operation = "inserted (basic)"
+            operation = "updated (basic)"
         
         # Commit the transaction
         conn.commit()
