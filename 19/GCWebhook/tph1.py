@@ -160,59 +160,110 @@ def fetch_success_url_signing_key() -> str:
         return None
 
 def fetch_database_host() -> str:
-    """Fetch database host from Google Secret Manager."""
+    """Fetch database host from environment variable or Google Secret Manager."""
     try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("DATABASE_HOST_SECRET")
-        if not secret_name:
+        secret_value = os.getenv("DATABASE_HOST_SECRET")
+        if not secret_value:
             raise ValueError("Environment variable DATABASE_HOST_SECRET is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
+        
+        # Check if this is a direct value or a secret path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            # This is a secret path - use Secret Manager API
+            print(f"[DEBUG] DATABASE_HOST_SECRET contains secret path: {secret_value}")
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            result = response.payload.data.decode("UTF-8")
+            print(f"[DEBUG] Fetched database host from Secret Manager: {result}")
+            return result
+        else:
+            # This is a direct value from --set-secrets
+            print(f"[DEBUG] DATABASE_HOST_SECRET contains direct value: {secret_value}")
+            return secret_value
+            
     except Exception as e:
         print(f"Error fetching DATABASE_HOST_SECRET: {e}")
-        return "34.58.246.248"  # Fallback for migration period
+        fallback = "34.58.246.248"
+        print(f"[DEBUG] Using fallback database host: {fallback}")
+        return fallback
 
 def fetch_database_name() -> str:
-    """Fetch database name from Google Secret Manager."""
+    """Fetch database name from environment variable or Google Secret Manager."""
     try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("DATABASE_NAME_SECRET")
-        if not secret_name:
+        secret_value = os.getenv("DATABASE_NAME_SECRET")
+        if not secret_value:
             raise ValueError("Environment variable DATABASE_NAME_SECRET is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
+        
+        # Check if this is a direct value or a secret path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            # This is a secret path - use Secret Manager API
+            print(f"[DEBUG] DATABASE_NAME_SECRET contains secret path: {secret_value}")
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            result = response.payload.data.decode("UTF-8")
+            print(f"[DEBUG] Fetched database name from Secret Manager: {result}")
+            return result
+        else:
+            # This is a direct value from --set-secrets
+            print(f"[DEBUG] DATABASE_NAME_SECRET contains direct value: {secret_value}")
+            return secret_value
+            
     except Exception as e:
         print(f"Error fetching DATABASE_NAME_SECRET: {e}")
-        return "client_table"  # Fallback for migration period
+        fallback = "client_table"
+        print(f"[DEBUG] Using fallback database name: {fallback}")
+        return fallback
 
 def fetch_database_user() -> str:
-    """Fetch database user from Google Secret Manager."""
+    """Fetch database user from environment variable or Google Secret Manager."""
     try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("DATABASE_USER_SECRET")
-        if not secret_name:
+        secret_value = os.getenv("DATABASE_USER_SECRET")
+        if not secret_value:
             raise ValueError("Environment variable DATABASE_USER_SECRET is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
+        
+        # Check if this is a direct value or a secret path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            # This is a secret path - use Secret Manager API
+            print(f"[DEBUG] DATABASE_USER_SECRET contains secret path: {secret_value}")
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            result = response.payload.data.decode("UTF-8")
+            print(f"[DEBUG] Fetched database user from Secret Manager: {result}")
+            return result
+        else:
+            # This is a direct value from --set-secrets
+            print(f"[DEBUG] DATABASE_USER_SECRET contains direct value: {secret_value}")
+            return secret_value
+            
     except Exception as e:
         print(f"Error fetching DATABASE_USER_SECRET: {e}")
-        return "postgres"  # Fallback for migration period
+        fallback = "postgres"
+        print(f"[DEBUG] Using fallback database user: {fallback}")
+        return fallback
 
 def fetch_database_password() -> str:
-    """Fetch database password from Google Secret Manager."""
+    """Fetch database password from environment variable or Google Secret Manager."""
     try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_name = os.getenv("DATABASE_PASSWORD_SECRET")
-        if not secret_name:
+        secret_value = os.getenv("DATABASE_PASSWORD_SECRET")
+        if not secret_value:
             raise ValueError("Environment variable DATABASE_PASSWORD_SECRET is not set.")
-        secret_path = f"{secret_name}"
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
+        
+        # Check if this is a direct value or a secret path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            # This is a secret path - use Secret Manager API
+            print(f"[DEBUG] DATABASE_PASSWORD_SECRET contains secret path")
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            result = response.payload.data.decode("UTF-8")
+            print(f"[DEBUG] Fetched database password from Secret Manager (length: {len(result)})")
+            return result
+        else:
+            # This is a direct value from --set-secrets
+            print(f"[DEBUG] DATABASE_PASSWORD_SECRET contains direct value (length: {len(secret_value)})")
+            return secret_value
+            
     except Exception as e:
         print(f"Error fetching DATABASE_PASSWORD_SECRET: {e}")
+        print(f"[DEBUG] No fallback for password - returning None")
         return None  # No fallback for password - this should fail safely
 
 def get_database_connection():
@@ -220,18 +271,122 @@ def get_database_connection():
     if not PSYCOPG2_AVAILABLE:
         print("[WARNING] psycopg2 not available - cannot create database connection")
         return None
-        
+    
+    print("[DEBUG] Starting database connection process...")
+    
     try:
-        return psycopg2.connect(
-            dbname=fetch_database_name(),
-            user=fetch_database_user(),
-            password=fetch_database_password(),
-            host=fetch_database_host(),
-            port=5432
+        # Fetch all credentials with logging
+        host = fetch_database_host()
+        dbname = fetch_database_name()  
+        user = fetch_database_user()
+        password = fetch_database_password()
+        port = 5432
+        
+        print(f"[DEBUG] Database connection parameters:")
+        print(f"[DEBUG]   Host: {host}")
+        print(f"[DEBUG]   Database: {dbname}")
+        print(f"[DEBUG]   User: {user}")
+        print(f"[DEBUG]   Password: {'***' if password else 'None'} (length: {len(password) if password else 0})")
+        print(f"[DEBUG]   Port: {port}")
+        
+        if not password:
+            print("[ERROR] Database password is None - cannot connect")
+            return None
+        
+        print("[DEBUG] Attempting psycopg2.connect()...")
+        connection = psycopg2.connect(
+            dbname=dbname,
+            user=user,
+            password=password,
+            host=host,
+            port=port,
+            connect_timeout=10  # Add 10 second timeout
         )
-    except Exception as e:
-        print(f"Error creating database connection: {e}")
+        
+        print("[DEBUG] ✅ Database connection successful!")
+        return connection
+        
+    except psycopg2.OperationalError as e:
+        print(f"[ERROR] PostgreSQL connection error: {e}")
+        print(f"[ERROR] This usually indicates wrong credentials, network issues, or database unavailable")
         return None
+    except Exception as e:
+        print(f"[ERROR] Unexpected error creating database connection: {e}")
+        print(f"[ERROR] Error type: {type(e).__name__}")
+        return None
+
+def test_database_health() -> bool:
+    """
+    Test database connectivity and table existence.
+    
+    Returns:
+        True if database is healthy, False otherwise
+    """
+    print("[DEBUG] Starting database health check...")
+    
+    if not PSYCOPG2_AVAILABLE:
+        print("[WARNING] psycopg2 not available - database health check failed")
+        return False
+    
+    try:
+        conn = get_database_connection()
+        if not conn:
+            print("[ERROR] Database health check failed - no connection")
+            return False
+        
+        with conn, conn.cursor() as cur:
+            # Test 1: Basic connection test
+            print("[DEBUG] Testing basic connectivity...")
+            cur.execute("SELECT 1;")
+            result = cur.fetchone()
+            if result[0] != 1:
+                print("[ERROR] Basic connectivity test failed")
+                return False
+            print("[DEBUG] ✅ Basic connectivity test passed")
+            
+            # Test 2: Check if private_channel_users table exists
+            print("[DEBUG] Checking if private_channel_users table exists...")
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'private_channel_users'
+                );
+            """)
+            table_exists = cur.fetchone()[0]
+            if not table_exists:
+                print("[ERROR] Table 'private_channel_users' does not exist")
+                return False
+            print("[DEBUG] ✅ Table 'private_channel_users' exists")
+            
+            # Test 3: Check table structure
+            print("[DEBUG] Checking table structure...")
+            cur.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = 'private_channel_users'
+                ORDER BY ordinal_position;
+            """)
+            columns = cur.fetchall()
+            print(f"[DEBUG] Table columns found: {columns}")
+            
+            # Expected columns: private_channel_id, user_id, sub_time, is_active
+            expected_columns = {'private_channel_id', 'user_id', 'sub_time', 'is_active'}
+            actual_columns = {col[0] for col in columns}
+            
+            if not expected_columns.issubset(actual_columns):
+                missing = expected_columns - actual_columns
+                print(f"[ERROR] Missing required columns: {missing}")
+                return False
+            print("[DEBUG] ✅ All required columns present")
+            
+            print("[DEBUG] ✅ Database health check passed!")
+            return True
+            
+    except Exception as e:
+        print(f"[ERROR] Database health check failed: {e}")
+        return False
 
 def record_private_channel_user(user_id: int, private_channel_id: int, sub_time: int, is_active: bool = True) -> bool:
     """
@@ -246,6 +401,8 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
     Returns:
         True if successful, False otherwise
     """
+    print(f"[DEBUG] Starting database insert for user {user_id}, channel {private_channel_id}, sub_time {sub_time}, active {is_active}")
+    
     if not PSYCOPG2_AVAILABLE:
         print("[WARNING] Database functionality disabled - cannot record user subscription")
         return False
@@ -253,25 +410,44 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
     try:
         conn = get_database_connection()
         if not conn:
-            print("❌ Could not establish database connection")
+            print("[ERROR] ❌ Could not establish database connection")
             return False
+        
+        print(f"[DEBUG] Database connection established, preparing SQL query...")
         
         with conn, conn.cursor() as cur:
             # Use INSERT ... ON CONFLICT to handle both insert and update cases
-            cur.execute("""
+            sql_query = """
                 INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (private_channel_id, user_id) 
                 DO UPDATE SET 
                     sub_time = EXCLUDED.sub_time,
                     is_active = EXCLUDED.is_active
-            """, (private_channel_id, user_id, sub_time, is_active))
+            """
+            sql_params = (private_channel_id, user_id, sub_time, is_active)
             
-            print(f"✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
+            print(f"[DEBUG] Executing SQL:")
+            print(f"[DEBUG] Query: {sql_query.strip()}")
+            print(f"[DEBUG] Parameters: {sql_params}")
+            
+            cur.execute(sql_query, sql_params)
+            
+            # Check if any rows were affected
+            rows_affected = cur.rowcount
+            print(f"[DEBUG] SQL execution completed. Rows affected: {rows_affected}")
+            
+            print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
             return True
             
+    except psycopg2.Error as e:
+        print(f"[ERROR] ❌ PostgreSQL error recording private channel user: {e}")
+        print(f"[ERROR] Error code: {e.pgcode if hasattr(e, 'pgcode') else 'N/A'}")
+        print(f"[ERROR] Error details: {e.pgerror if hasattr(e, 'pgerror') else 'N/A'}")
+        return False
     except Exception as e:
-        print(f"❌ Error recording private channel user: {e}")
+        print(f"[ERROR] ❌ Unexpected error recording private channel user: {e}")
+        print(f"[ERROR] Error type: {type(e).__name__}")
         return False
 
 # --- Flask app and webhook handler ---
@@ -306,20 +482,36 @@ def send_invite():
         abort(400, f"Token error: {e}")
 
     # Record user subscription in private_channel_users table
+    print(f"[INFO] Starting database recording process for user {user_id}...")
+    
     try:
-        success = record_private_channel_user(
-            user_id=user_id,
-            private_channel_id=closed_channel_id,
-            sub_time=subscription_time_days,
-            is_active=True
-        )
-        if success:
-            print(f"[INFO] ✅ Database: Recorded user {user_id} subscription for channel {closed_channel_id}")
+        # First, run a database health check
+        if PSYCOPG2_AVAILABLE:
+            print(f"[DEBUG] Running database health check before recording...")
+            health_ok = test_database_health()
+            if not health_ok:
+                print(f"[WARNING] ❌ Database health check failed - skipping database recording")
+                print(f"[WARNING] User {user_id} will receive invite but subscription won't be recorded")
+            else:
+                print(f"[DEBUG] Database health check passed - proceeding with recording...")
+                success = record_private_channel_user(
+                    user_id=user_id,
+                    private_channel_id=closed_channel_id,
+                    sub_time=subscription_time_days,
+                    is_active=True
+                )
+                if success:
+                    print(f"[INFO] ✅ Database: Successfully recorded user {user_id} subscription for channel {closed_channel_id}")
+                else:
+                    print(f"[WARNING] ❌ Database: Failed to record user {user_id} subscription - continuing with invite")
         else:
-            print(f"[WARNING] ❌ Database: Failed to record user {user_id} subscription - continuing with invite")
+            print(f"[WARNING] ❌ psycopg2 not available - skipping database recording for user {user_id}")
+            
     except Exception as e:
         # Log error but don't fail the webhook - user should still get their invite
         print(f"[ERROR] ❌ Database error (non-fatal): {e}")
+        print(f"[ERROR] Error type: {type(e).__name__}")
+        print(f"[WARNING] User {user_id} will receive invite but subscription recording failed")
 
     # Send invite via Telegram
     try:
