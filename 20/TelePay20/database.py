@@ -99,16 +99,21 @@ class DatabaseManager:
         
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT tele_open, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time FROM main_clients_database")
-                for (tele_open, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time,) in cur.fetchall():
+                cur.execute("SELECT tele_open, tele_open_description, tele_closed, tele_closed_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency FROM main_clients_database")
+                for (tele_open, tele_open_desc, tele_closed, tele_closed_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency) in cur.fetchall():
                     tele_open_list.append(tele_open)
                     tele_info_open_map[tele_open] = {
+                        "tele_open_description": tele_open_desc,
+                        "tele_closed": tele_closed,
+                        "tele_closed_description": tele_closed_desc,
                         "sub_1_price": s1_price,
                         "sub_1_time": s1_time,
                         "sub_2_price": s2_price,
                         "sub_2_time": s2_time,
                         "sub_3_price": s3_price,
                         "sub_3_time": s3_time,
+                        "client_wallet_address": wallet_addr,
+                        "client_payout_currency": payout_currency,
                     }
         except Exception as e:
             print("❌ db tele_open error:", e)
@@ -211,13 +216,17 @@ class DatabaseManager:
         """
         vals = (
             channel_data["tele_open"],
+            channel_data.get("tele_open_description", "Default Description"),
             channel_data["tele_closed"],
+            channel_data.get("tele_closed_description", "Default Description"),
             channel_data["sub_1_price"],
             channel_data["sub_1_time"],
             channel_data["sub_2_price"],
             channel_data["sub_2_time"],
             channel_data["sub_3_price"],
             channel_data["sub_3_time"],
+            channel_data.get("client_wallet_address", ""),
+            channel_data.get("client_payout_currency", "USD"),
         )
         
         try:
@@ -225,11 +234,12 @@ class DatabaseManager:
             with conn, conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO main_clients_database
-                       (tele_open, tele_closed,
+                       (tele_open, tele_open_description, tele_closed, tele_closed_description,
                         sub_1_price, sub_1_time,
                         sub_2_price, sub_2_time,
-                        sub_3_price, sub_3_time)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        sub_3_price, sub_3_time,
+                        client_wallet_address, client_payout_currency)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     vals,
                 )
             return True

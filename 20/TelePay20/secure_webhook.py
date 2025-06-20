@@ -100,7 +100,7 @@ class SecureWebhookManager:
         timestamp_minutes = int(time.time() // 60) % 65536
         
         # Ensure wallet address, currency, and price are strings and handle None values
-        wallet_address = (client_wallet_address or "")[:110]  # Enforce max length
+        wallet_address = (client_wallet_address or "")[:110]  # Enforce max length (updated from 95 to 110)
         payout_currency = (client_payout_currency or "")[:4]   # Enforce max length
         subscription_price = (subscription_price or "15.00")[:6]  # Enforce max length for price
         

@@ -351,35 +351,34 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         # Start with explicit transaction control
         print(f"🔄 [DEBUG] Starting transaction for user {user_id}")
         
-        # Always update existing record for user/channel combination
-        # Update record with all fields including sub_price
-        try:
-            update_query = """
-                    UPDATE private_channel_users_database 
-                    SET sub_time = %s, sub_price = %s, timestamp = %s, datestamp = %s, is_active = %s, 
-                        expire_time = %s, expire_date = %s
-                    WHERE user_id = %s AND private_channel_id = %s
+        # Update existing record or insert new record for user/channel combination
+        update_query = """
+            UPDATE private_channel_users_database 
+            SET sub_time = %s, sub_price = %s, timestamp = %s, datestamp = %s, is_active = %s, 
+                expire_time = %s, expire_date = %s
+            WHERE user_id = %s AND private_channel_id = %s
+        """
+        update_params = (sub_time, sub_price, current_timestamp, current_datestamp, is_active, 
+                        expire_time, expire_date, user_id, private_channel_id)
+        cur.execute(update_query, update_params)
+        rows_affected = cur.rowcount
+        
+        if rows_affected == 0:
+            # No existing record found, insert new record
+            print(f"📝 [DEBUG] No existing record found, inserting new record for user {user_id}")
+            insert_query = """
+                INSERT INTO private_channel_users_database 
+                (private_channel_id, user_id, sub_time, sub_price, timestamp, datestamp, expire_time, expire_date, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
-            update_params = (sub_time, sub_price, current_timestamp, current_datestamp, is_active, 
-                           expire_time, expire_date, user_id, private_channel_id)
-            cur.execute(update_query, update_params)
-            rows_affected = cur.rowcount
-            print(f"✅ [DEBUG] UPDATE with full data executed. Rows affected: {rows_affected}")
-            operation = "updated with full data"
-        except Exception as update_error:
-            print(f"⚠️ [DEBUG] Update with full data failed, trying basic: {update_error}")
-            # Fallback to basic update without expire columns
-            update_query = """
-                UPDATE private_channel_users_database 
-                SET sub_time = %s, sub_price = %s, timestamp = %s, datestamp = %s, is_active = %s
-                WHERE user_id = %s AND private_channel_id = %s
-            """
-            update_params = (sub_time, sub_price, current_timestamp, current_datestamp, is_active, user_id, private_channel_id)
-            cur.execute(update_query, update_params)
-            rows_affected = cur.rowcount
-            print(f"✅ [DEBUG] Basic UPDATE executed. Rows affected: {rows_affected}")
-            print(f"ℹ️ [INFO] Expiration not stored in DB (columns missing): expire_time={expire_time}, expire_date={expire_date}")
-            operation = "updated (basic)"
+            insert_params = (private_channel_id, user_id, sub_time, sub_price, current_timestamp, current_datestamp, 
+                           expire_time, expire_date, is_active)
+            cur.execute(insert_query, insert_params)
+            operation = "inserted new record"
+            print(f"✅ [DEBUG] INSERT executed successfully")
+        else:
+            operation = "updated existing record"
+            print(f"✅ [DEBUG] UPDATE executed successfully. Rows affected: {rows_affected}")
         
         # Commit the transaction
         conn.commit()

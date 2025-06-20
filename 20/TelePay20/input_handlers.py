@@ -69,7 +69,7 @@ class InputHandlers:
     async def receive_tele_closed(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if self._valid_channel_id(update.message.text):
             ctx.user_data["tele_closed"] = update.message.text.strip()
-            await update.message.reply_text("Enter *sub_1* (0-9999.99):", parse_mode="Markdown")
+            await update.message.reply_text("Enter *sub_1_price* (0-9999.99):", parse_mode="Markdown")
             return SUB1_INPUT
         await update.message.reply_text("❌ Invalid tele_closed. Try again:")
         return TELE_CLOSED_INPUT
@@ -81,7 +81,7 @@ class InputHandlers:
                 await update.message.reply_text(prompt, parse_mode="Markdown")
                 return next_state
             await update.message.reply_text("❌ Invalid sub value. Try again:")
-            return SUB1_INPUT if idx_key == "sub_1" else SUB2_INPUT if idx_key == "sub_2" else SUB3_INPUT
+            return SUB1_INPUT if idx_key == "sub_1_price" else SUB2_INPUT if idx_key == "sub_2_price" else SUB3_INPUT
         return inner
     
     def _time_handler(self, idx_key: str, next_state: int, prompt: str):
@@ -97,11 +97,11 @@ class InputHandlers:
     def get_handlers(self):
         """Returns all the handler functions as a dictionary"""
         return {
-            'receive_sub1': self._sub_handler("sub_1", SUB1_TIME_INPUT, "Enter *sub_1_time* (1-999):"),
-            'receive_sub1_time': self._time_handler("sub_1_time", SUB2_INPUT, "Enter *sub_2* (0-9999.99):"),
-            'receive_sub2': self._sub_handler("sub_2", SUB2_TIME_INPUT, "Enter *sub_2_time* (1-999):"),
-            'receive_sub2_time': self._time_handler("sub_2_time", SUB3_INPUT, "Enter *sub_3* (0-9999.99):"),
-            'receive_sub3': self._sub_handler("sub_3", SUB3_TIME_INPUT, "Enter *sub_3_time* (1-999):"),
+            'receive_sub1': self._sub_handler("sub_1_price", SUB1_TIME_INPUT, "Enter *sub_1_time* (1-999):"),
+            'receive_sub1_time': self._time_handler("sub_1_time", SUB2_INPUT, "Enter *sub_2_price* (0-9999.99):"),
+            'receive_sub2': self._sub_handler("sub_2_price", SUB2_TIME_INPUT, "Enter *sub_2_time* (1-999):"),
+            'receive_sub2_time': self._time_handler("sub_2_time", SUB3_INPUT, "Enter *sub_3_price* (0-9999.99):"),
+            'receive_sub3': self._sub_handler("sub_3_price", SUB3_TIME_INPUT, "Enter *sub_3_time* (1-999):"),
         }
     
     async def receive_sub3_time(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
