@@ -236,6 +236,97 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ DB error: {e}")
             return False
+    
+    def fetch_expired_subscriptions(self) -> List[Tuple[int, int, str, str]]:
+        """
+        Fetch all expired subscriptions from database.
+        
+        Returns:
+            List of tuples: (user_id, private_channel_id, expire_time, expire_date)
+        """
+        from datetime import datetime
+        
+        expired_subscriptions = []
+        
+        try:
+            with self.get_connection() as conn, conn.cursor() as cur:
+                # Query active subscriptions with expiration data
+                query = """
+                    SELECT user_id, private_channel_id, expire_time, expire_date
+                    FROM private_channel_users 
+                    WHERE is_active = true 
+                    AND expire_time IS NOT NULL 
+                    AND expire_date IS NOT NULL
+                """
+                
+                cur.execute(query)
+                results = cur.fetchall()
+                
+                current_datetime = datetime.now()
+                
+                for row in results:
+                    user_id, private_channel_id, expire_time_str, expire_date_str = row
+                    
+                    try:
+                        # Parse expiration time and date
+                        if isinstance(expire_date_str, str):
+                            expire_date_obj = datetime.strptime(expire_date_str, '%Y-%m-%d').date()
+                        else:
+                            expire_date_obj = expire_date_str
+                            
+                        if isinstance(expire_time_str, str):
+                            expire_time_obj = datetime.strptime(expire_time_str, '%H:%M:%S').time()
+                        else:
+                            expire_time_obj = expire_time_str
+                        
+                        # Combine date and time
+                        expire_datetime = datetime.combine(expire_date_obj, expire_time_obj)
+                        
+                        # Check if subscription has expired
+                        if current_datetime > expire_datetime:
+                            expired_subscriptions.append((user_id, private_channel_id, expire_time_str, expire_date_str))
+                    
+                    except Exception as e:
+                        print(f"Error parsing expiration data for user {user_id}: {e}")
+                        continue
+                        
+        except Exception as e:
+            print(f"Database error fetching expired subscriptions: {e}")
+            
+        return expired_subscriptions
+    
+    def deactivate_subscription(self, user_id: int, private_channel_id: int) -> bool:
+        """
+        Mark subscription as inactive in database.
+        
+        Args:
+            user_id: User's Telegram ID
+            private_channel_id: Private channel ID
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.get_connection() as conn, conn.cursor() as cur:
+                update_query = """
+                    UPDATE private_channel_users 
+                    SET is_active = false 
+                    WHERE user_id = %s AND private_channel_id = %s AND is_active = true
+                """
+                
+                cur.execute(update_query, (user_id, private_channel_id))
+                rows_affected = cur.rowcount
+                
+                if rows_affected > 0:
+                    print(f"[DEBUG] Marked subscription as inactive: user {user_id}, channel {private_channel_id}")
+                    return True
+                else:
+                    print(f"[WARNING] No active subscription found to deactivate: user {user_id}, channel {private_channel_id}")
+                    return False
+                    
+        except Exception as e:
+            print(f"[ERROR] Database error deactivating subscription for user {user_id}, channel {private_channel_id}: {e}")
+            return False
 
 # Validation functions
 def _valid_channel_id(text: str) -> bool:

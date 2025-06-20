@@ -10,6 +10,7 @@ from input_handlers import InputHandlers
 from menu_handlers import MenuHandlers
 from bot_manager import BotManager
 from message_utils import MessageUtils
+from subscription_manager import SubscriptionManager
 
 class AppInitializer:
     def __init__(self):
@@ -37,6 +38,7 @@ class AppInitializer:
         self.menu_handlers = None
         self.bot_manager = None
         self.message_utils = None
+        self.subscription_manager = None
     
     def initialize(self):
         """Initialize all application components."""
@@ -86,6 +88,12 @@ class AppInitializer:
             self.menu_handlers.start_bot, 
             payment_gateway_wrapper,
             self.menu_handlers,
+            self.db_manager
+        )
+        
+        # Initialize subscription manager
+        self.subscription_manager = SubscriptionManager(
+            self.config['bot_token'], 
             self.db_manager
         )
         
