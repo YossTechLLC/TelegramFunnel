@@ -8,8 +8,11 @@ ENV PYTHONUNBUFFERED=1
 # Set workdir
 WORKDIR /app
 
-# Install system dependencies (if any)
+# Install system dependencies for PostgreSQL and build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    gcc \
+    libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install

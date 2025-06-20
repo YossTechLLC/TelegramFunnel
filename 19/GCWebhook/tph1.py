@@ -5,11 +5,21 @@ import base64
 import hmac
 import hashlib
 import asyncio
-import psycopg2
 from typing import Tuple, Optional
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
 from google.cloud import secretmanager
+
+# Try to import psycopg2 with graceful error handling
+try:
+    import psycopg2
+    PSYCOPG2_AVAILABLE = True
+    print("[INFO] psycopg2 imported successfully - database functionality enabled")
+except ImportError as e:
+    print(f"[WARNING] psycopg2 import failed: {e}")
+    print("[WARNING] Database functionality will be disabled - webhook will still send invites")
+    PSYCOPG2_AVAILABLE = False
+    psycopg2 = None
 
 # --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str, int]:
@@ -207,6 +217,10 @@ def fetch_database_password() -> str:
 
 def get_database_connection():
     """Create and return a database connection."""
+    if not PSYCOPG2_AVAILABLE:
+        print("[WARNING] psycopg2 not available - cannot create database connection")
+        return None
+        
     try:
         return psycopg2.connect(
             dbname=fetch_database_name(),
@@ -232,6 +246,10 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
     Returns:
         True if successful, False otherwise
     """
+    if not PSYCOPG2_AVAILABLE:
+        print("[WARNING] Database functionality disabled - cannot record user subscription")
+        return False
+        
     try:
         conn = get_database_connection()
         if not conn:
