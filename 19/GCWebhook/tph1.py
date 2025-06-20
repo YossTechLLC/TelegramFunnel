@@ -345,7 +345,7 @@ def get_database_connection():
                 def getconn():
                     return connector.connect(
                         connection_name,
-                        "psycopg2",
+                        "pg8000",
                         user=user,
                         password=password,
                         db=dbname
@@ -357,7 +357,20 @@ def get_database_connection():
                 return connection
                 
         except Exception as e:
+            error_msg = str(e)
             print(f"[WARNING] Cloud SQL Connector failed: {e}")
+            
+            # Check for specific IAM permission issues
+            if "403" in error_msg and "Forbidden" in error_msg:
+                print(f"[ERROR] IAM Permission Issue Detected!")
+                print(f"[ERROR] Cloud Run service account lacks Cloud SQL permissions.")
+                print(f"[ERROR] Required fixes:")
+                print(f"[ERROR] 1. Enable Cloud SQL Admin API: gcloud services enable sqladmin.googleapis.com")
+                print(f"[ERROR] 2. Grant Cloud SQL Client role to service account")
+                print(f"[ERROR] 3. Ensure Cloud SQL instance allows connections")
+            elif "Driver" in error_msg and "not supported" in error_msg:
+                print(f"[ERROR] Database driver issue - check pg8000 installation")
+            
             print(f"[WARNING] Falling back to direct psycopg2 connection...")
     
     # Fallback to direct psycopg2 connection (legacy method)
