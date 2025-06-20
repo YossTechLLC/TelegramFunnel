@@ -293,19 +293,14 @@ def get_database_connection():
         return None
 
 
-def record_private_channel_user(user_id: int, private_channel_id: int, sub_time: int, 
-                                wallet_address: str = "", payout_currency: str = "", 
-                                is_active: bool = True) -> bool:
+def record_private_channel_user(user_id: int, private_channel_id: int, sub_time: int, is_active: bool = True) -> bool:
     """
-    Record a new payment in the private_channel_users table.
-    Each payment creates a new record with unique payment identifier.
+    Record or update a user's subscription in the private_channel_users table.
     
     Args:
         user_id: The user's Telegram ID
         private_channel_id: The private channel ID (closed channel ID)
         sub_time: Subscription time in days
-        wallet_address: Client's wallet address for payment tracking
-        payout_currency: Client's preferred payout currency
         is_active: Whether the subscription is active (default: True)
         
     Returns:
@@ -314,13 +309,7 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
     # Get current timestamp and datestamp for PostgreSQL
     current_timestamp = get_current_timestamp()
     current_datestamp = get_current_datestamp()
-    
-    # Generate unique payment ID using timestamp and user ID
-    payment_id = f"PAY_{user_id}_{int(time.time() * 1000)}"  # millisecond precision
-    
-    print(f"[DEBUG] Starting database insert for user {user_id}, channel {private_channel_id}, sub_time {sub_time}")
-    print(f"[DEBUG] Payment details: ID={payment_id}, wallet='{wallet_address}', currency='{payout_currency}'")
-    print(f"[DEBUG] Timestamp: {current_timestamp}, Date: {current_datestamp}, Active: {is_active}")
+    print(f"[DEBUG] Starting database insert for user {user_id}, channel {private_channel_id}, sub_time {sub_time}, timestamp {current_timestamp}, datestamp {current_datestamp}, active {is_active}")
     
     if not CLOUD_SQL_AVAILABLE:
         print("[ERROR] Cloud SQL Connector not available - cannot record user subscription")
@@ -337,68 +326,52 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         cur = conn.cursor()
         
         # Start with explicit transaction control
-        print(f"[DEBUG] Starting transaction for payment {payment_id}")
+        print(f"[DEBUG] Starting transaction for user {user_id}")
         
-        # Always insert new payment record - each payment gets its own record
-        # Try with extended columns first, fallback to basic columns if they don't exist
-        try:
-            insert_query = """
-                INSERT INTO private_channel_users 
-                (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active, 
-                 payment_id, wallet_address, payout_currency)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        # First check if record exists
+        check_query = """
+            SELECT COUNT(*) FROM private_channel_users 
+            WHERE private_channel_id = %s AND user_id = %s
+        """
+        check_params = (private_channel_id, user_id)
+        cur.execute(check_query, check_params)
+        existing_count = cur.fetchone()[0]
+        print(f"[DEBUG] Found {existing_count} existing records for user {user_id}, channel {private_channel_id}")
+        
+        if existing_count > 0:
+            # Update existing record
+            update_query = """
+                UPDATE private_channel_users 
+                SET sub_time = %s, timestamp = %s, datestamp = %s, is_active = %s
+                WHERE private_channel_id = %s AND user_id = %s
             """
-            insert_params = (
-                private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, 
-                is_active, payment_id, wallet_address, payout_currency
-            )
-            cur.execute(insert_query, insert_params)
+            update_params = (sub_time, current_timestamp, current_datestamp, is_active, private_channel_id, user_id)
+            cur.execute(update_query, update_params)
             rows_affected = cur.rowcount
-            print(f"[DEBUG] INSERT with payment tracking executed. Rows affected: {rows_affected}")
-            
-        except Exception as column_error:
-            print(f"[DEBUG] Extended columns not available, falling back to basic insert: {column_error}")
-            # Fallback to basic columns without payment tracking
-            basic_insert_query = """
-                INSERT INTO private_channel_users 
-                (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active)
+            print(f"[DEBUG] UPDATE executed. Rows affected: {rows_affected}")
+            operation = "updated"
+        else:
+            # Insert new record
+            insert_query = """
+                INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """
-            basic_insert_params = (
-                private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, is_active
-            )
-            cur.execute(basic_insert_query, basic_insert_params)
+            insert_params = (private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, is_active)
+            cur.execute(insert_query, insert_params)
             rows_affected = cur.rowcount
-            print(f"[DEBUG] Basic INSERT executed. Rows affected: {rows_affected}")
-            print(f"[INFO] Payment details not stored in DB (columns missing): ID={payment_id}, wallet='{wallet_address}', currency='{payout_currency}'")
+            print(f"[DEBUG] INSERT executed. Rows affected: {rows_affected}")
+            operation = "inserted"
         
         # Commit the transaction
         conn.commit()
-        print(f"[DEBUG] Transaction committed successfully - inserted new payment record {payment_id}")
+        print(f"[DEBUG] Transaction committed successfully - {operation} record for user {user_id}")
         
-        # Verify the record was inserted 
-        try:
-            # Try to verify using payment_id first
-            verify_query = """
-                SELECT COUNT(*) FROM private_channel_users 
-                WHERE payment_id = %s
-            """
-            cur.execute(verify_query, (payment_id,))
-            verification_count = cur.fetchone()[0]
-            print(f"[DEBUG] Verification: Found {verification_count} records with payment_id {payment_id}")
-        except Exception:
-            # Fallback verification using user and channel ID with recent timestamp
-            print(f"[DEBUG] Payment ID column not available, using timestamp verification")
-            verify_query = """
-                SELECT COUNT(*) FROM private_channel_users 
-                WHERE private_channel_id = %s AND user_id = %s AND timestamp = %s
-            """
-            cur.execute(verify_query, (private_channel_id, user_id, current_timestamp))
-            verification_count = cur.fetchone()[0]
-            print(f"[DEBUG] Verification: Found {verification_count} records for user {user_id} at {current_timestamp}")
+        # Verify the record exists after commit
+        cur.execute(check_query, check_params)
+        final_count = cur.fetchone()[0]
+        print(f"[DEBUG] Verification: Found {final_count} records after commit")
         
-        print(f"[DEBUG] ✅ Successfully recorded payment {payment_id} for user {user_id} channel {private_channel_id}")
-        print(f"[DEBUG] Payment details: {sub_time} days, wallet: '{wallet_address}', currency: '{payout_currency}'")
+        print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription at {current_timestamp} on {current_datestamp}")
         return True
         
     except Exception as e:
@@ -452,14 +425,12 @@ def send_invite():
     print(f"[INFO] Starting database recording process for user {user_id}...")
     
     try:
-        # Record user subscription in database with payment details
+        # Record user subscription in database
         if CLOUD_SQL_AVAILABLE:
             success = record_private_channel_user(
                 user_id=user_id,
                 private_channel_id=closed_channel_id,
                 sub_time=subscription_time_days,
-                wallet_address=wallet_address,
-                payout_currency=payout_currency,
                 is_active=True
             )
             if success:
