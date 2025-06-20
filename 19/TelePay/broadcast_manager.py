@@ -58,7 +58,8 @@ class BroadcastManager:
                 if price is None or days is None:
                     continue
                 safe_sub = str(price).replace(".", "d")
-                token = f"{base_hash}_{safe_sub}"
+                # Include subscription time in token: {hash}_{price}_{time}
+                token = f"{base_hash}_{safe_sub}_{days}"
                 url = f"https://t.me/{self.bot_username}?start={token}"
                 buttons_cfg.append({"text": f"${price} for {days} days", "url": url})
             

@@ -260,10 +260,13 @@ class InputHandlers:
         menu_handlers = ctx.bot_data.get('menu_handlers')
         if menu_handlers:
             # Set global values in menu handlers (same as subscription flow)
-            print(f"[DEBUG] Setting global values: sub_value={donation_amount}, channel_id={channel_id}")
+            # For donations, use a special time value (365 days = 1 year access)
+            donation_time = 365
+            print(f"[DEBUG] Setting global values: sub_value={donation_amount}, channel_id={channel_id}, sub_time={donation_time}")
             menu_handlers.global_sub_value = donation_amount
             menu_handlers.global_open_channel_id = channel_id
-            print(f"[DEBUG] Global values set: sub_value={menu_handlers.global_sub_value}, channel_id={menu_handlers.global_open_channel_id}")
+            menu_handlers.global_sub_time = donation_time
+            print(f"[DEBUG] Global values set: sub_value={menu_handlers.global_sub_value}, channel_id={menu_handlers.global_open_channel_id}, sub_time={menu_handlers.global_sub_time}")
         else:
             print("[DEBUG] Warning: menu_handlers not found in bot_data")
         

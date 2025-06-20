@@ -10,6 +10,7 @@ class MenuHandlers:
         self.payment_gateway_handler = payment_gateway_handler
         self.global_sub_value = 5.0
         self.global_open_channel_id = ""
+        self.global_sub_time = 30  # Default subscription time in days
     
     async def main_menu_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle main menu button callbacks"""
@@ -80,12 +81,12 @@ class MenuHandlers:
         
         try:
             token = context.args[0]
-            hash_part, _, sub_part = token.partition("_")
+            hash_part, _, remaining_part = token.partition("_")
             open_channel_id = BroadcastManager.decode_hash(hash_part)
             self.global_open_channel_id = open_channel_id  # always a string!
             
             # Check if this is a donation token
-            if sub_part == "DONATE":
+            if remaining_part == "DONATE":
                 print(f"[DEBUG] Donation token detected: channel_id={open_channel_id}")
                 # Store channel ID for donation and start donation conversation
                 context.user_data["donation_channel_id"] = open_channel_id
@@ -117,13 +118,29 @@ class MenuHandlers:
                 await context.application.process_update(fake_update)
                 return
             
-            # Handle regular subscription tokens
+            # Handle regular subscription tokens with format: {hash}_{price}_{time}
+            # Split remaining part into price and time
+            if "_" in remaining_part:
+                sub_part, time_part = remaining_part.rsplit("_", 1)  # Split from right to handle prices with underscores
+                try:
+                    local_sub_time = int(time_part)
+                    self.global_sub_time = local_sub_time
+                    print(f"[DEBUG] Parsed subscription time: {local_sub_time} days")
+                except ValueError:
+                    print(f"[DEBUG] Invalid subscription time '{time_part}', using default: {self.global_sub_time}")
+            else:
+                # Fallback for old token format without time
+                sub_part = remaining_part
+                print(f"[DEBUG] Old token format detected, using default subscription time: {self.global_sub_time}")
+            
+            # Parse subscription value
             sub_raw = sub_part.replace("d", ".") if sub_part else "n/a"
             try:
                 local_sub_value = float(sub_raw)
             except ValueError:
                 local_sub_value = 15.0
             self.global_sub_value = local_sub_value
+            print(f"[DEBUG] Parsed subscription: ${local_sub_value:.2f} for {self.global_sub_time} days")
         except Exception as e:
             await context.bot.send_message(chat_id, f"❌ decode error: {e}")
     
@@ -131,5 +148,6 @@ class MenuHandlers:
         """Return current global values for use by other modules"""
         return {
             'sub_value': self.global_sub_value,
-            'open_channel_id': self.global_open_channel_id
+            'open_channel_id': self.global_open_channel_id,
+            'sub_time': self.global_sub_time
         }

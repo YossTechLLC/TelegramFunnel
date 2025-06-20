@@ -65,13 +65,15 @@ class AppInitializer:
             print(f"[DEBUG] Payment gateway wrapper called for user: {update.effective_user.id if update.effective_user else 'Unknown'}")
             global_values = self.menu_handlers.get_global_values() if self.menu_handlers else {
                 'sub_value': 5.0, 
-                'open_channel_id': ''
+                'open_channel_id': '',
+                'sub_time': 30
             }
             print(f"[DEBUG] Payment gateway using global values: {global_values}")
             await self.payment_manager.start_np_gateway_new(
                 update, context, 
                 global_values['sub_value'], 
                 global_values['open_channel_id'],
+                global_values['sub_time'],
                 self.webhook_manager, 
                 self.db_manager
             )

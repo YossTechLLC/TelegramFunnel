@@ -55,7 +55,8 @@ class SecureWebhookManager:
         return val
     
     def build_signed_success_url(self, user_id: int, closed_channel_id: int, 
-                                 client_wallet_address: str = "", client_payout_currency: str = "") -> str:
+                                 client_wallet_address: str = "", client_payout_currency: str = "",
+                                 subscription_time: int = 30) -> str:
         """
         Build a cryptographically signed success URL for post-payment redirect.
         
@@ -64,6 +65,7 @@ class SecureWebhookManager:
             closed_channel_id: The closed channel ID to grant access to
             client_wallet_address: The client's wallet address (max 95 chars)
             client_payout_currency: The client's preferred payout currency (max 4 chars)
+            subscription_time: The subscription duration in days (1-999)
             
         Returns:
             A signed URL containing the encrypted token
@@ -85,6 +87,10 @@ class SecureWebhookManager:
             raise ValueError(f"User ID {user_id} out of 48-bit range")
         if not (-2**47 <= closed_channel_id <= 2**47 - 1):
             raise ValueError(f"Channel ID {closed_channel_id} out of 48-bit range")
+        
+        # Validate subscription time range (1-999 days)
+        if not (1 <= subscription_time <= 999):
+            raise ValueError(f"Subscription time {subscription_time} out of valid range (1-999 days)")
             
         user_id = self.safe_int48(user_id)
         closed_channel_id = self.safe_int48(closed_channel_id)
@@ -105,11 +111,11 @@ class SecureWebhookManager:
         if len(currency_bytes) > 4:
             raise ValueError(f"Currency too long: {len(currency_bytes)} bytes (max 4)")
         
-        print(f"[DEBUG] Packing for token: user_id={user_id}, closed_channel_id={closed_channel_id}, timestamp_minutes={timestamp_minutes}")
+        print(f"[DEBUG] Packing for token: user_id={user_id}, closed_channel_id={closed_channel_id}, timestamp_minutes={timestamp_minutes}, subscription_time={subscription_time}")
         print(f"[DEBUG] Wallet: '{wallet_address}' ({len(wallet_bytes)} bytes), Currency: '{payout_currency}' ({len(currency_bytes)} bytes)")
         
         # Optimized packing: 6 bytes user_id, 6 bytes channel_id, 2 bytes timestamp_minutes,
-        # 1 byte wallet_length, N bytes wallet, 1 byte currency_length, M bytes currency
+        # 2 bytes subscription_time, 1 byte wallet_length, N bytes wallet, 1 byte currency_length, M bytes currency
         
         # Pack 48-bit integers as 6 bytes each
         user_id_bytes = user_id.to_bytes(6, 'big')
@@ -117,6 +123,7 @@ class SecureWebhookManager:
         
         # Pack the optimized data structure
         packed = user_id_bytes + channel_id_bytes + struct.pack(">H", timestamp_minutes)
+        packed += struct.pack(">H", subscription_time)  # Add subscription time as 2 bytes
         packed += struct.pack(">B", len(wallet_bytes)) + wallet_bytes
         packed += struct.pack(">B", len(currency_bytes)) + currency_bytes
         
@@ -154,17 +161,17 @@ class SecureWebhookManager:
             padding = '=' * (-len(token) % 4)
             raw = base64.urlsafe_b64decode(token + padding)
             
-            # Minimum: 6+6+2+1+1+16 = 32 bytes (user_id + channel_id + timestamp + 2 length fields + signature)
-            if len(raw) < 32:
+            # Minimum: 6+6+2+2+1+1+16 = 34 bytes (user_id + channel_id + timestamp + subscription_time + 2 length fields + signature)
+            if len(raw) < 34:
                 return False
                 
             # Check if we can parse the variable length fields
-            if len(raw) >= 14:  # At least the fixed part (6+6+2)
+            if len(raw) >= 16:  # At least the fixed part (6+6+2+2)
                 # Try to read wallet length and currency length
-                wallet_len = struct.unpack(">B", raw[14:15])[0]
-                if len(raw) >= 15 + wallet_len + 1:  # Check if currency length field exists
-                    currency_len = struct.unpack(">B", raw[15 + wallet_len:16 + wallet_len])[0]
-                    expected_total = 14 + 1 + wallet_len + 1 + currency_len + 16  # +16 for signature
+                wallet_len = struct.unpack(">B", raw[16:17])[0]
+                if len(raw) >= 17 + wallet_len + 1:  # Check if currency length field exists
+                    currency_len = struct.unpack(">B", raw[17 + wallet_len:18 + wallet_len])[0]
+                    expected_total = 16 + 1 + wallet_len + 1 + currency_len + 16  # +16 for signature
                     return len(raw) == expected_total
             
             return False

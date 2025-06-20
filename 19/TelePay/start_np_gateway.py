@@ -167,7 +167,7 @@ class PaymentGatewayManager:
 
     async def start_np_gateway_new(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
                                   global_sub_value: float, global_open_channel_id: str,
-                                  webhook_manager, db_manager) -> None:
+                                  global_sub_time: int, webhook_manager, db_manager) -> None:
         """
         Legacy function for backward compatibility with existing code.
         This wraps the new start_payment_flow method.
@@ -204,12 +204,13 @@ class PaymentGatewayManager:
                 await context.bot.send_message(chat_id, "❌ Signing key missing, cannot generate secure URL.")
             return
 
-        # Build secure success URL with wallet info
+        # Build secure success URL with wallet info and subscription time
         secure_success_url = webhook_manager.build_signed_success_url(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
             client_wallet_address=wallet_address or "",
-            client_payout_currency=payout_currency or ""
+            client_payout_currency=payout_currency or "",
+            subscription_time=global_sub_time
         )
         
         # Use the new payment flow method
