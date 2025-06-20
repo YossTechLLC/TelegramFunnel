@@ -1,6 +1,5 @@
 Flask==3.0.3
 python-telegram-bot==20.7
-google-cloud-secret-manager==2.16.3
 cloud-sql-python-connector==1.4.3
 sqlalchemy==2.0.23
 pg8000==1.30.3

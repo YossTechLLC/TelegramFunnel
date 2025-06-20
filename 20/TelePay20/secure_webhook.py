@@ -5,7 +5,6 @@ import struct
 import base64
 import hmac
 import hashlib
-from google.cloud import secretmanager
 
 class SecureWebhookManager:
     def __init__(self, signing_key: str = None, base_url: str = None):
@@ -14,22 +13,21 @@ class SecureWebhookManager:
         
         Args:
             signing_key: The HMAC signing key for URLs. If None, will fetch from secrets
-            base_url: The base URL for the webhook service. If None, will use environment variable or default
+            base_url: The base URL for the webhook service. If None, will use environment variable
         """
         self.signing_key = signing_key or self.fetch_success_url_signing_key()
-        # Get base URL from environment variable with fallback to default
-        self.base_url = base_url or os.getenv("WEBHOOK_BASE_URL", "https://tph1-291176869049.us-central1.run.app")
+        # Get base URL from environment variable
+        self.base_url = base_url or os.getenv("WEBHOOK_BASE_URL")
+        if not self.base_url:
+            raise ValueError("Environment variable WEBHOOK_BASE_URL is not set.")
     
     def fetch_success_url_signing_key(self) -> str:
-        """Fetch the signing key from Google Secret Manager."""
+        """Fetch the signing key from environment."""
         try:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_name = os.getenv("SUCCESS_URL_SIGNING_KEY")
-            if not secret_name:
+            key = os.getenv("SUCCESS_URL_SIGNING_KEY")
+            if not key:
                 raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set.")
-            secret_path = f"{secret_name}"
-            response = client.access_secret_version(request={"name": secret_path})
-            return response.payload.data.decode("UTF-8")
+            return key
         except Exception as e:
             print(f"Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
             return None

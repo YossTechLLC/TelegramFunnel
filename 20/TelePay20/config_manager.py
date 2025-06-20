@@ -1,39 +1,34 @@
 #!/usr/bin/env python
 import os
-from google.cloud import secretmanager
 from typing import Optional
 
 class ConfigManager:
     def __init__(self):
         self.bot_token = None
         self.webhook_key = None
-        # Get bot username from environment variable with fallback
-        self.bot_username = os.getenv("BOT_USERNAME", "PayGatePrime_bot")
+        # Get bot username from environment variable
+        self.bot_username = os.getenv("TELEGRAM_BOT_USERNAME")
+        if not self.bot_username:
+            raise ValueError("Environment variable TELEGRAM_BOT_USERNAME is not set.")
     
     def fetch_telegram_token(self) -> Optional[str]:
-        """Fetch the Telegram bot token from Google Secret Manager."""
+        """Fetch the Telegram bot token from environment."""
         try:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_name = os.getenv("TELEGRAM_BOT_SECRET_NAME")
-            if not secret_name:
+            token = os.getenv("TELEGRAM_BOT_SECRET_NAME")
+            if not token:
                 raise ValueError("Environment variable TELEGRAM_BOT_SECRET_NAME is not set.")
-            secret_path = f"{secret_name}"
-            response = client.access_secret_version(request={"name": secret_path})
-            return response.payload.data.decode("UTF-8")
+            return token
         except Exception as e:
             print(f"Error fetching the Telegram bot TOKEN: {e}")
             return None
 
     def fetch_now_webhook_key(self) -> Optional[str]:
-        """Fetch the NowPayments webhook key from Google Secret Manager."""
+        """Fetch the NowPayments webhook key from environment."""
         try:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_name = os.getenv("NOWPAYMENT_WEBHOOK_KEY")
-            if not secret_name:
+            key = os.getenv("NOWPAYMENT_WEBHOOK_KEY")
+            if not key:
                 raise ValueError("Environment variable NOWPAYMENT_WEBHOOK_KEY is not set.")
-            secret_path = f"{secret_name}"
-            response = client.access_secret_version(request={"name": secret_path})
-            return response.payload.data.decode("UTF-8")
+            return key
         except Exception as e:
             print(f"Error fetching the NOWPAYMENT_WEBHOOK_KEY: {e}")
             return None

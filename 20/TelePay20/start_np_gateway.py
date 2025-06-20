@@ -2,7 +2,6 @@
 import os
 import httpx
 from typing import Dict, Any, Optional
-from google.cloud import secretmanager
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 
@@ -18,15 +17,12 @@ class PaymentGatewayManager:
         self.api_url = "https://api.nowpayments.io/v1/invoice"
     
     def fetch_payment_provider_token(self) -> Optional[str]:
-        """Fetch the payment provider token from Google Secret Manager."""
+        """Fetch the payment provider token from environment."""
         try:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_name = os.getenv("PAYMENT_PROVIDER_SECRET_NAME")
-            if not secret_name:
+            token = os.getenv("PAYMENT_PROVIDER_SECRET_NAME")
+            if not token:
                 raise ValueError("Environment variable PAYMENT_PROVIDER_SECRET_NAME is not set.")
-            secret_path = f"{secret_name}"
-            response = client.access_secret_version(request={"name": secret_path})
-            return response.payload.data.decode("UTF-8")
+            return token
         except Exception as e:
             print(f"Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
             return None
