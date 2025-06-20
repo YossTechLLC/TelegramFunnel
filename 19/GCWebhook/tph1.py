@@ -5,6 +5,7 @@ import base64
 import hmac
 import hashlib
 import asyncio
+from datetime import datetime
 from typing import Tuple, Optional
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
@@ -19,6 +20,17 @@ except ImportError as e:
     print(f"[ERROR] Cloud SQL Connector import failed: {e}")
     CLOUD_SQL_AVAILABLE = False
     Connector = None
+
+def get_current_timestamp() -> int:
+    """
+    Get current time in 24-hour HHMM format as integer.
+    
+    Returns:
+        Integer representation of current time (e.g., 2255 for 22:55)
+    """
+    now = datetime.now()
+    timestamp = now.hour * 100 + now.minute
+    return timestamp
 
 # --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str, int]:
@@ -285,7 +297,9 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
     Returns:
         True if successful, False otherwise
     """
-    print(f"[DEBUG] Starting database insert for user {user_id}, channel {private_channel_id}, sub_time {sub_time}, active {is_active}")
+    # Get current timestamp in HHMM format
+    current_timestamp = get_current_timestamp()
+    print(f"[DEBUG] Starting database insert for user {user_id}, channel {private_channel_id}, sub_time {sub_time}, timestamp {current_timestamp}, active {is_active}")
     
     if not CLOUD_SQL_AVAILABLE:
         print("[ERROR] Cloud SQL Connector not available - cannot record user subscription")
@@ -318,10 +332,10 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
             # Update existing record
             update_query = """
                 UPDATE private_channel_users 
-                SET sub_time = %s, is_active = %s
+                SET sub_time = %s, timestamp = %s, is_active = %s
                 WHERE private_channel_id = %s AND user_id = %s
             """
-            update_params = (sub_time, is_active, private_channel_id, user_id)
+            update_params = (sub_time, current_timestamp, is_active, private_channel_id, user_id)
             cur.execute(update_query, update_params)
             rows_affected = cur.rowcount
             print(f"[DEBUG] UPDATE executed. Rows affected: {rows_affected}")
@@ -329,10 +343,10 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         else:
             # Insert new record
             insert_query = """
-                INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, timestamp, is_active)
+                VALUES (%s, %s, %s, %s, %s)
             """
-            insert_params = (private_channel_id, user_id, sub_time, is_active)
+            insert_params = (private_channel_id, user_id, sub_time, current_timestamp, is_active)
             cur.execute(insert_query, insert_params)
             rows_affected = cur.rowcount
             print(f"[DEBUG] INSERT executed. Rows affected: {rows_affected}")
@@ -347,7 +361,7 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         final_count = cur.fetchone()[0]
         print(f"[DEBUG] Verification: Found {final_count} records after commit")
         
-        print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
+        print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription at {current_timestamp}")
         return True
         
     except Exception as e:
