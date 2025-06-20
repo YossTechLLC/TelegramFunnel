@@ -21,6 +21,20 @@ except ImportError as e:
     PSYCOPG2_AVAILABLE = False
     psycopg2 = None
 
+# Try to import Cloud SQL Connector and SQLAlchemy
+try:
+    from google.cloud.sql.connector import Connector
+    import sqlalchemy
+    from sqlalchemy import text
+    CLOUD_SQL_AVAILABLE = True
+    print("[INFO] Cloud SQL Connector imported successfully - enhanced database connectivity enabled")
+except ImportError as e:
+    print(f"[WARNING] Cloud SQL Connector import failed: {e}")
+    print("[WARNING] Falling back to direct psycopg2 connections (may have IP restrictions)")
+    CLOUD_SQL_AVAILABLE = False
+    Connector = None
+    sqlalchemy = None
+
 # --- Utility to decode and verify signed token ---
 def decode_and_verify_token(token: str, signing_key: str) -> Tuple[int, int, str, str, int]:
     """Returns (user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days) if valid, else raises Exception.
@@ -266,34 +280,96 @@ def fetch_database_password() -> str:
         print(f"[DEBUG] No fallback for password - returning None")
         return None  # No fallback for password - this should fail safely
 
+def fetch_cloud_sql_connection_name() -> str:
+    """Fetch Cloud SQL connection name from environment variable or Google Secret Manager."""
+    try:
+        secret_value = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_value:
+            raise ValueError("Environment variable CLOUD_SQL_CONNECTION_NAME is not set.")
+        
+        # Check if this is a direct value or a secret path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            # This is a secret path - use Secret Manager API
+            print(f"[DEBUG] CLOUD_SQL_CONNECTION_NAME contains secret path")
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            result = response.payload.data.decode("UTF-8")
+            print(f"[DEBUG] Fetched Cloud SQL connection name from Secret Manager: {result}")
+            return result
+        else:
+            # This is a direct value - likely the connection name itself
+            print(f"[DEBUG] CLOUD_SQL_CONNECTION_NAME contains direct value: {secret_value}")
+            return secret_value
+            
+    except Exception as e:
+        print(f"Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
+        print(f"[DEBUG] No fallback for Cloud SQL connection name - returning None")
+        return None
+
 def get_database_connection():
-    """Create and return a database connection."""
+    """Create and return a database connection using Cloud SQL Connector when available."""
+    print("[DEBUG] Starting database connection process...")
+    
+    # Check if both database drivers are available
     if not PSYCOPG2_AVAILABLE:
         print("[WARNING] psycopg2 not available - cannot create database connection")
         return None
     
-    print("[DEBUG] Starting database connection process...")
+    # Fetch credentials
+    dbname = fetch_database_name()  
+    user = fetch_database_user()
+    password = fetch_database_password()
     
+    print(f"[DEBUG] Database connection parameters:")
+    print(f"[DEBUG]   Database: {dbname}")
+    print(f"[DEBUG]   User: {user}")
+    print(f"[DEBUG]   Password: {'***' if password else 'None'} (length: {len(password) if password else 0})")
+    
+    if not password:
+        print("[ERROR] Database password is None - cannot connect")
+        return None
+    
+    # Try Cloud SQL Connector first (preferred method)
+    if CLOUD_SQL_AVAILABLE:
+        print("[DEBUG] Attempting Cloud SQL Connector connection...")
+        try:
+            connection_name = fetch_cloud_sql_connection_name()
+            if not connection_name:
+                print("[WARNING] Cloud SQL connection name not available - falling back to direct connection")
+            else:
+                print(f"[DEBUG] Using Cloud SQL connection: {connection_name}")
+                
+                # Initialize the Cloud SQL Connector
+                connector = Connector()
+                
+                def getconn():
+                    return connector.connect(
+                        connection_name,
+                        "psycopg2",
+                        user=user,
+                        password=password,
+                        db=dbname
+                    )
+                
+                # Test the connection
+                connection = getconn()
+                print("[DEBUG] ✅ Cloud SQL Connector connection successful!")
+                return connection
+                
+        except Exception as e:
+            print(f"[WARNING] Cloud SQL Connector failed: {e}")
+            print(f"[WARNING] Falling back to direct psycopg2 connection...")
+    
+    # Fallback to direct psycopg2 connection (legacy method)
+    print("[DEBUG] Using direct psycopg2 connection...")
     try:
-        # Fetch all credentials with logging
         host = fetch_database_host()
-        dbname = fetch_database_name()  
-        user = fetch_database_user()
-        password = fetch_database_password()
         port = 5432
         
-        print(f"[DEBUG] Database connection parameters:")
         print(f"[DEBUG]   Host: {host}")
-        print(f"[DEBUG]   Database: {dbname}")
-        print(f"[DEBUG]   User: {user}")
-        print(f"[DEBUG]   Password: {'***' if password else 'None'} (length: {len(password) if password else 0})")
         print(f"[DEBUG]   Port: {port}")
+        print("[DEBUG] Attempting direct psycopg2.connect()...")
         
-        if not password:
-            print("[ERROR] Database password is None - cannot connect")
-            return None
-        
-        print("[DEBUG] Attempting psycopg2.connect()...")
         connection = psycopg2.connect(
             dbname=dbname,
             user=user,
@@ -303,12 +379,13 @@ def get_database_connection():
             connect_timeout=10  # Add 10 second timeout
         )
         
-        print("[DEBUG] ✅ Database connection successful!")
+        print("[DEBUG] ✅ Direct psycopg2 connection successful!")
         return connection
         
     except psycopg2.OperationalError as e:
         print(f"[ERROR] PostgreSQL connection error: {e}")
-        print(f"[ERROR] This usually indicates wrong credentials, network issues, or database unavailable")
+        print(f"[ERROR] This usually indicates wrong credentials, network issues, or IP blocking")
+        print(f"[ERROR] Consider setting CLOUD_SQL_CONNECTION_NAME environment variable for Cloud SQL Connector")
         return None
     except Exception as e:
         print(f"[ERROR] Unexpected error creating database connection: {e}")
