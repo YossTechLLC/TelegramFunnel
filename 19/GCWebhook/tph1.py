@@ -18,7 +18,6 @@ PSYCOPG2_AVAILABLE = False
 try:
     from google.cloud.sql.connector import Connector
     import sqlalchemy
-    from sqlalchemy import text
     CLOUD_SQL_AVAILABLE = True
     print("[INFO] Cloud SQL Connector imported successfully - enhanced database connectivity enabled")
 except ImportError as e:
@@ -392,7 +391,7 @@ def test_database_health() -> bool:
         
         # Test 1: Basic connection test
         print("[DEBUG] Testing basic connectivity...")
-        cur.execute(text("SELECT 1"))
+        cur.execute("SELECT 1")
         result = cur.fetchone()
         if result[0] != 1:
             print("[ERROR] Basic connectivity test failed")
@@ -401,13 +400,13 @@ def test_database_health() -> bool:
         
         # Test 2: Check if private_channel_users table exists
         print("[DEBUG] Checking if private_channel_users table exists...")
-        cur.execute(text("""
+        cur.execute("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'public' 
                 AND table_name = 'private_channel_users'
             )
-        """))
+        """)
         table_exists = cur.fetchone()[0]
         if not table_exists:
             print("[ERROR] Table 'private_channel_users' does not exist")
@@ -416,13 +415,13 @@ def test_database_health() -> bool:
         
         # Test 3: Check table structure
         print("[DEBUG] Checking table structure...")
-        cur.execute(text("""
+        cur.execute("""
             SELECT column_name, data_type 
             FROM information_schema.columns 
             WHERE table_schema = 'public' 
             AND table_name = 'private_channel_users'
             ORDER BY ordinal_position
-        """))
+        """)
         columns = cur.fetchall()
         print(f"[DEBUG] Table columns found: {columns}")
         
@@ -480,25 +479,20 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         cur = conn.cursor()
         
         # Use INSERT ... ON CONFLICT to handle both insert and update cases
-        # Use SQLAlchemy text() for parameterized query
-        sql_query = text("""
+        # Use PostgreSQL-style parameterization for pg8000
+        sql_query = """
             INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
-            VALUES (:private_channel_id, :user_id, :sub_time, :is_active)
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (private_channel_id, user_id) 
             DO UPDATE SET 
                 sub_time = EXCLUDED.sub_time,
                 is_active = EXCLUDED.is_active
-        """)
+        """
         
-        sql_params = {
-            'private_channel_id': private_channel_id,
-            'user_id': user_id,
-            'sub_time': sub_time,
-            'is_active': is_active
-        }
+        sql_params = (private_channel_id, user_id, sub_time, is_active)
         
         print(f"[DEBUG] Executing SQL:")
-        print(f"[DEBUG] Query: {sql_query}")
+        print(f"[DEBUG] Query: {sql_query.strip()}")
         print(f"[DEBUG] Parameters: {sql_params}")
         
         cur.execute(sql_query, sql_params)
