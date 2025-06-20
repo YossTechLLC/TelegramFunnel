@@ -400,16 +400,33 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
                 print(f"[INFO] Expiration not stored in DB (columns missing): expire_time={expire_time}, expire_date={expire_date}")
                 operation = "updated (basic)"
         else:
-            # Insert new record
-            insert_query = """
-                INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """
-            insert_params = (private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, is_active)
-            cur.execute(insert_query, insert_params)
-            rows_affected = cur.rowcount
-            print(f"[DEBUG] INSERT executed. Rows affected: {rows_affected}")
-            operation = "inserted"
+            # Insert new record with expire_time and expire_date
+            try:
+                insert_query = """
+                    INSERT INTO private_channel_users 
+                    (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active, 
+                     expire_time, expire_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                insert_params = (private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, 
+                               is_active, expire_time, expire_date)
+                cur.execute(insert_query, insert_params)
+                rows_affected = cur.rowcount
+                print(f"[DEBUG] INSERT with expiration executed. Rows affected: {rows_affected}")
+                operation = "inserted with expiration"
+            except Exception as insert_error:
+                print(f"[DEBUG] Insert with expiration failed, trying without: {insert_error}")
+                # Fallback to basic insert without expire columns
+                insert_query = """
+                    INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, timestamp, datestamp, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                insert_params = (private_channel_id, user_id, sub_time, current_timestamp, current_datestamp, is_active)
+                cur.execute(insert_query, insert_params)
+                rows_affected = cur.rowcount
+                print(f"[DEBUG] Basic INSERT executed. Rows affected: {rows_affected}")
+                print(f"[INFO] Expiration not stored in DB (columns missing): expire_time={expire_time}, expire_date={expire_date}")
+                operation = "inserted (basic)"
         
         # Commit the transaction
         conn.commit()
@@ -420,7 +437,8 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         final_count = cur.fetchone()[0]
         print(f"[DEBUG] Verification: Found {final_count} records after commit")
         
-        print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription at {current_timestamp} on {current_datestamp}")
+        print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} minutes subscription")
+        print(f"[DEBUG] Subscription expires at {expire_time} on {expire_date}")
         return True
         
     except Exception as e:
@@ -470,16 +488,22 @@ def send_invite():
     except Exception as e:
         abort(400, f"Token error: {e}")
 
+    # Calculate expiration time and date based on subscription time (in minutes for testing)
+    expire_time, expire_date = calculate_expiration_time(subscription_time_days)
+    print(f"[INFO] Calculated expiration: {expire_time} on {expire_date} ({subscription_time_days} minutes from now)")
+    
     # Record user subscription in private_channel_users table
     print(f"[INFO] Starting database recording process for user {user_id}...")
     
     try:
-        # Record user subscription in database
+        # Record user subscription in database with expiration details
         if CLOUD_SQL_AVAILABLE:
             success = record_private_channel_user(
                 user_id=user_id,
                 private_channel_id=closed_channel_id,
                 sub_time=subscription_time_days,
+                expire_time=expire_time,
+                expire_date=expire_date,
                 is_active=True
             )
             if success:
