@@ -163,20 +163,80 @@ def fetch_success_url_signing_key() -> str:
         return None
 
 def fetch_database_name() -> str:
-    """Get database name from environment."""
-    return get_env_secret("DATABASE_NAME_SECRET", "client_table")
+    """Get database name from environment or Secret Manager."""
+    try:
+        secret_value = os.getenv("DATABASE_NAME_SECRET")
+        if not secret_value:
+            return "client_table"  # fallback
+        
+        # Check if this is a Secret Manager path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            return response.payload.data.decode("UTF-8")
+        else:
+            # Direct value
+            return secret_value
+    except Exception as e:
+        print(f"Error fetching database name: {e}")
+        return "client_table"
 
 def fetch_database_user() -> str:
-    """Get database user from environment."""
-    return get_env_secret("DATABASE_USER_SECRET", "postgres")
+    """Get database user from environment or Secret Manager."""
+    try:
+        secret_value = os.getenv("DATABASE_USER_SECRET")
+        if not secret_value:
+            return "postgres"  # fallback
+        
+        # Check if this is a Secret Manager path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            return response.payload.data.decode("UTF-8")
+        else:
+            # Direct value
+            return secret_value
+    except Exception as e:
+        print(f"Error fetching database user: {e}")
+        return "postgres"
 
 def fetch_database_password() -> str:
-    """Get database password from environment."""
-    return get_env_secret("DATABASE_PASSWORD_SECRET")
+    """Get database password from environment or Secret Manager."""
+    try:
+        secret_value = os.getenv("DATABASE_PASSWORD_SECRET")
+        if not secret_value:
+            return None
+        
+        # Check if this is a Secret Manager path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            return response.payload.data.decode("UTF-8")
+        else:
+            # Direct value
+            return secret_value
+    except Exception as e:
+        print(f"Error fetching database password: {e}")
+        return None
 
 def fetch_cloud_sql_connection_name() -> str:
-    """Get Cloud SQL connection name from environment."""
-    return get_env_secret("CLOUD_SQL_CONNECTION_NAME")
+    """Get Cloud SQL connection name from environment or Secret Manager."""
+    try:
+        secret_value = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_value:
+            return None
+        
+        # Check if this is a Secret Manager path
+        if secret_value.startswith("projects/") and "/secrets/" in secret_value:
+            client = secretmanager.SecretManagerServiceClient()
+            response = client.access_secret_version(request={"name": secret_value})
+            return response.payload.data.decode("UTF-8")
+        else:
+            # Direct value
+            return secret_value
+    except Exception as e:
+        print(f"Error fetching Cloud SQL connection name: {e}")
+        return None
 
 def get_database_connection():
     """Create and return a database connection using Cloud SQL Connector."""
