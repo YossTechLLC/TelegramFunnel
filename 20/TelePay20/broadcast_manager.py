@@ -40,7 +40,8 @@ class BroadcastManager:
                 buttons.append(InlineKeyboardButton(text=b["text"], callback_data=b["callback_data"]))
             elif "url" in b:
                 buttons.append(InlineKeyboardButton(text=b["text"], url=b["url"]))
-        return InlineKeyboardMarkup([buttons])
+        # Create vertical layout - each button gets its own row
+        return InlineKeyboardMarkup([[button] for button in buttons])
     
     def broadcast_hash_links(self):
         if not self.tele_open_list:
@@ -51,7 +52,8 @@ class BroadcastManager:
             base_hash = self.encode_id(chat_id)
             buttons_cfg = []
             
-            # Add subscription tier buttons
+            # Add subscription tier buttons with emojis
+            tier_emojis = {1: "🥉", 2: "🥈", 3: "🥇"}
             for idx in (1, 2, 3):
                 price = data.get(f"sub_{idx}")
                 days = data.get(f"sub_{idx}_time")
@@ -61,7 +63,8 @@ class BroadcastManager:
                 # Include subscription time in token: {hash}_{price}_{time}
                 token = f"{base_hash}_{safe_sub}_{days}"
                 url = f"https://t.me/{self.bot_username}?start={token}"
-                buttons_cfg.append({"text": f"${price} for {days} days", "url": url})
+                emoji = tier_emojis.get(idx, "💰")
+                buttons_cfg.append({"text": f"{emoji} ${price} for {days} days", "url": url})
             
             # Add donation button
             donation_token = f"{base_hash}_DONATE"
