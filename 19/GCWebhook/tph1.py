@@ -301,33 +301,51 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         
         cur = conn.cursor()
         
-        # First, try to update existing record
-        update_query = """
-            UPDATE private_channel_users 
-            SET sub_time = %s, is_active = %s
+        # Start with explicit transaction control
+        print(f"[DEBUG] Starting transaction for user {user_id}")
+        
+        # First check if record exists
+        check_query = """
+            SELECT COUNT(*) FROM private_channel_users 
             WHERE private_channel_id = %s AND user_id = %s
         """
-        update_params = (sub_time, is_active, private_channel_id, user_id)
+        check_params = (private_channel_id, user_id)
+        cur.execute(check_query, check_params)
+        existing_count = cur.fetchone()[0]
+        print(f"[DEBUG] Found {existing_count} existing records for user {user_id}, channel {private_channel_id}")
         
-        cur.execute(update_query, update_params)
-        rows_updated = cur.rowcount
-        
-        # If no rows were updated, insert a new record
-        if rows_updated == 0:
+        if existing_count > 0:
+            # Update existing record
+            update_query = """
+                UPDATE private_channel_users 
+                SET sub_time = %s, is_active = %s
+                WHERE private_channel_id = %s AND user_id = %s
+            """
+            update_params = (sub_time, is_active, private_channel_id, user_id)
+            cur.execute(update_query, update_params)
+            rows_affected = cur.rowcount
+            print(f"[DEBUG] UPDATE executed. Rows affected: {rows_affected}")
+            operation = "updated"
+        else:
+            # Insert new record
             insert_query = """
                 INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
                 VALUES (%s, %s, %s, %s)
             """
             insert_params = (private_channel_id, user_id, sub_time, is_active)
-            
             cur.execute(insert_query, insert_params)
-            print(f"[DEBUG] Inserted new record for user {user_id}")
-        else:
-            print(f"[DEBUG] Updated existing record for user {user_id}")
+            rows_affected = cur.rowcount
+            print(f"[DEBUG] INSERT executed. Rows affected: {rows_affected}")
+            operation = "inserted"
         
-        # Commit the transaction to persist changes
+        # Commit the transaction
         conn.commit()
-        print(f"[DEBUG] Transaction committed successfully")
+        print(f"[DEBUG] Transaction committed successfully - {operation} record for user {user_id}")
+        
+        # Verify the record exists after commit
+        cur.execute(check_query, check_params)
+        final_count = cur.fetchone()[0]
+        print(f"[DEBUG] Verification: Found {final_count} records after commit")
         
         print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
         return True
