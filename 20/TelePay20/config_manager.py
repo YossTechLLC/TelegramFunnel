@@ -6,10 +6,8 @@ class ConfigManager:
     def __init__(self):
         self.bot_token = None
         self.webhook_key = None
-        # Get bot username from environment variable
-        self.bot_username = os.getenv("TELEGRAM_BOT_USERNAME")
-        if not self.bot_username:
-            raise ValueError("Environment variable TELEGRAM_BOT_USERNAME is not set.")
+        # Get bot username from environment variable with fallback
+        self.bot_username = os.getenv("BOT_USERNAME", "PayGatePrime_bot")
     
     def fetch_telegram_token(self) -> Optional[str]:
         """Fetch the Telegram bot token from environment."""
