@@ -424,55 +424,60 @@ def test_database_health() -> bool:
             print("[ERROR] Database health check failed - no connection")
             return False
         
-        with conn, conn.cursor() as cur:
-            # Test 1: Basic connection test
-            print("[DEBUG] Testing basic connectivity...")
-            cur.execute("SELECT 1;")
-            result = cur.fetchone()
-            if result[0] != 1:
-                print("[ERROR] Basic connectivity test failed")
-                return False
-            print("[DEBUG] ✅ Basic connectivity test passed")
-            
-            # Test 2: Check if private_channel_users table exists
-            print("[DEBUG] Checking if private_channel_users table exists...")
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
+        with conn:
+            cur = conn.cursor()
+            try:
+                # Test 1: Basic connection test
+                print("[DEBUG] Testing basic connectivity...")
+                cur.execute("SELECT 1;")
+                result = cur.fetchone()
+                if result[0] != 1:
+                    print("[ERROR] Basic connectivity test failed")
+                    return False
+                print("[DEBUG] ✅ Basic connectivity test passed")
+                
+                # Test 2: Check if private_channel_users table exists
+                print("[DEBUG] Checking if private_channel_users table exists...")
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'private_channel_users'
+                    );
+                """)
+                table_exists = cur.fetchone()[0]
+                if not table_exists:
+                    print("[ERROR] Table 'private_channel_users' does not exist")
+                    return False
+                print("[DEBUG] ✅ Table 'private_channel_users' exists")
+                
+                # Test 3: Check table structure
+                print("[DEBUG] Checking table structure...")
+                cur.execute("""
+                    SELECT column_name, data_type 
+                    FROM information_schema.columns 
                     WHERE table_schema = 'public' 
                     AND table_name = 'private_channel_users'
-                );
-            """)
-            table_exists = cur.fetchone()[0]
-            if not table_exists:
-                print("[ERROR] Table 'private_channel_users' does not exist")
-                return False
-            print("[DEBUG] ✅ Table 'private_channel_users' exists")
-            
-            # Test 3: Check table structure
-            print("[DEBUG] Checking table structure...")
-            cur.execute("""
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_schema = 'public' 
-                AND table_name = 'private_channel_users'
-                ORDER BY ordinal_position;
-            """)
-            columns = cur.fetchall()
-            print(f"[DEBUG] Table columns found: {columns}")
-            
-            # Expected columns: private_channel_id, user_id, sub_time, is_active
-            expected_columns = {'private_channel_id', 'user_id', 'sub_time', 'is_active'}
-            actual_columns = {col[0] for col in columns}
-            
-            if not expected_columns.issubset(actual_columns):
-                missing = expected_columns - actual_columns
-                print(f"[ERROR] Missing required columns: {missing}")
-                return False
-            print("[DEBUG] ✅ All required columns present")
-            
-            print("[DEBUG] ✅ Database health check passed!")
-            return True
+                    ORDER BY ordinal_position;
+                """)
+                columns = cur.fetchall()
+                print(f"[DEBUG] Table columns found: {columns}")
+                
+                # Expected columns: private_channel_id, user_id, sub_time, is_active
+                expected_columns = {'private_channel_id', 'user_id', 'sub_time', 'is_active'}
+                actual_columns = {col[0] for col in columns}
+                
+                if not expected_columns.issubset(actual_columns):
+                    missing = expected_columns - actual_columns
+                    print(f"[ERROR] Missing required columns: {missing}")
+                    return False
+                print("[DEBUG] ✅ All required columns present")
+                
+                print("[DEBUG] ✅ Database health check passed!")
+                return True
+                
+            finally:
+                cur.close()
             
     except Exception as e:
         print(f"[ERROR] Database health check failed: {e}")
@@ -505,30 +510,35 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         
         print(f"[DEBUG] Database connection established, preparing SQL query...")
         
-        with conn, conn.cursor() as cur:
-            # Use INSERT ... ON CONFLICT to handle both insert and update cases
-            sql_query = """
-                INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (private_channel_id, user_id) 
-                DO UPDATE SET 
-                    sub_time = EXCLUDED.sub_time,
-                    is_active = EXCLUDED.is_active
-            """
-            sql_params = (private_channel_id, user_id, sub_time, is_active)
-            
-            print(f"[DEBUG] Executing SQL:")
-            print(f"[DEBUG] Query: {sql_query.strip()}")
-            print(f"[DEBUG] Parameters: {sql_params}")
-            
-            cur.execute(sql_query, sql_params)
-            
-            # Check if any rows were affected
-            rows_affected = cur.rowcount
-            print(f"[DEBUG] SQL execution completed. Rows affected: {rows_affected}")
-            
-            print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
-            return True
+        with conn:
+            cur = conn.cursor()
+            try:
+                # Use INSERT ... ON CONFLICT to handle both insert and update cases
+                sql_query = """
+                    INSERT INTO private_channel_users (private_channel_id, user_id, sub_time, is_active)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (private_channel_id, user_id) 
+                    DO UPDATE SET 
+                        sub_time = EXCLUDED.sub_time,
+                        is_active = EXCLUDED.is_active
+                """
+                sql_params = (private_channel_id, user_id, sub_time, is_active)
+                
+                print(f"[DEBUG] Executing SQL:")
+                print(f"[DEBUG] Query: {sql_query.strip()}")
+                print(f"[DEBUG] Parameters: {sql_params}")
+                
+                cur.execute(sql_query, sql_params)
+                
+                # Check if any rows were affected
+                rows_affected = cur.rowcount
+                print(f"[DEBUG] SQL execution completed. Rows affected: {rows_affected}")
+                
+                print(f"[DEBUG] ✅ Successfully recorded user {user_id} for channel {private_channel_id} with {sub_time} days subscription")
+                return True
+                
+            finally:
+                cur.close()
             
     except psycopg2.Error as e:
         print(f"[ERROR] ❌ PostgreSQL error recording private channel user: {e}")
