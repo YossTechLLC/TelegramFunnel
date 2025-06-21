@@ -64,6 +64,12 @@ class BotManager:
         application.add_handler(CommandHandler("start_np_gateway_new", self.payment_gateway_handler))
         application.add_handler(CallbackQueryHandler(self.trigger_payment_handler, pattern="^TRIGGER_PAYMENT$"))
         application.add_handler(CallbackQueryHandler(self.menu_callback_handler, pattern="^(?!CMD_DATABASE|CMD_DONATE|TRIGGER_PAYMENT).*$"))
+        
+        # Add hamburger menu handler
+        application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.Regex("^(🚀 Start|💾 Database|💳 Payment Gateway|💝 Donate)$"),
+            self.menu_handlers.handle_menu_selection
+        ))
     
     async def run_telegram_bot(self, telegram_token: str, payment_token: str):
         """Main bot runner function"""

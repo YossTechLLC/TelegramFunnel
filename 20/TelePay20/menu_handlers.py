@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from telegram import Update, Message, CallbackQuery
+from telegram import Update, Message, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from broadcast_manager import BroadcastManager
 from input_handlers import TELE_OPEN_INPUT
@@ -11,6 +11,38 @@ class MenuHandlers:
         self.global_sub_value = 5.0
         self.global_open_channel_id = ""
         self.global_sub_time = 30  # Default subscription time in days
+    
+    def create_hamburger_menu(self):
+        """Create hamburger menu with ReplyKeyboardMarkup"""
+        keyboard = [
+            [KeyboardButton("🚀 Start"), KeyboardButton("💾 Database")],
+            [KeyboardButton("💳 Payment Gateway"), KeyboardButton("💝 Donate")]
+        ]
+        return ReplyKeyboardMarkup(
+            keyboard, 
+            resize_keyboard=True, 
+            one_time_keyboard=False,
+            input_field_placeholder="Choose an option..."
+        )
+    
+    async def handle_menu_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle hamburger menu selections"""
+        message_text = update.message.text
+        chat_id = update.effective_chat.id
+        
+        if message_text == "🚀 Start":
+            await context.bot.send_message(chat_id, "✅ You clicked Start!")
+        elif message_text == "💾 Database":
+            # Start database conversation
+            await self.input_handlers.start_database(update, context)
+        elif message_text == "💳 Payment Gateway":
+            await self.payment_gateway_handler(update, context)
+        elif message_text == "💝 Donate":
+            # Start donation conversation
+            await self.input_handlers.start_donation_conversation(update, context)
+        else:
+            # Unknown menu option
+            await context.bot.send_message(chat_id, "❌ Unknown menu option. Please use the menu buttons.")
     
     async def main_menu_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle main menu button callbacks"""
@@ -60,12 +92,23 @@ class MenuHandlers:
             except Exception as e:
                 await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
         
-        # Send greeting message without buttons
-        await context.bot.send_message(
-            chat_id,
-            rf"Hi {user.mention_html()}! 👋",
-            parse_mode="HTML",
-        )
+        # Send greeting message with hamburger menu (only if no subscription token)
+        if not context.args:
+            # No subscription token - show hamburger menu
+            reply_markup = self.create_hamburger_menu()
+            await context.bot.send_message(
+                chat_id,
+                rf"Hi {user.mention_html()}! 👋",
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+        else:
+            # Has subscription token - no menu (clean payment flow)
+            await context.bot.send_message(
+                chat_id,
+                rf"Hi {user.mention_html()}! 👋",
+                parse_mode="HTML",
+            )
         
         # Handle token parsing for payment
         if not context.args:
