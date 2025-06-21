@@ -60,19 +60,11 @@ class MenuHandlers:
             except Exception as e:
                 await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
         
-        # Build main menu
-        buttons_cfg = [
-            {"text": "Start", "callback_data": "CMD_START"},
-            {"text": "Database", "callback_data": "CMD_DATABASE"},
-            {"text": "Payment Gateway", "callback_data": "CMD_GATEWAY"},
-            {"text": "💝 Donate", "callback_data": "CMD_DONATE"},
-        ]
-        keyboard = BroadcastManager.build_menu_buttons(buttons_cfg)
+        # Send greeting message without buttons
         await context.bot.send_message(
             chat_id,
             rf"Hi {user.mention_html()}! 👋",
             parse_mode="HTML",
-            reply_markup=keyboard,
         )
         
         # Handle token parsing for payment
