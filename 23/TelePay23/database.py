@@ -99,12 +99,14 @@ class DatabaseManager:
         
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT open_channel_id, open_channel_description, closed_channel_id, closed_channel_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency FROM main_clients_database")
-                for (open_channel_id, open_channel_desc, closed_channel_id, closed_channel_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency) in cur.fetchall():
+                cur.execute("SELECT open_channel_id, open_channel_title, open_channel_description, closed_channel_id, closed_channel_title, closed_channel_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency FROM main_clients_database")
+                for (open_channel_id, open_channel_title, open_channel_desc, closed_channel_id, closed_channel_title, closed_channel_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency) in cur.fetchall():
                     open_channel_list.append(open_channel_id)
                     open_channel_info_map[open_channel_id] = {
+                        "open_channel_title": open_channel_title,
                         "open_channel_description": open_channel_desc,
                         "closed_channel_id": closed_channel_id,
+                        "closed_channel_title": closed_channel_title,
                         "closed_channel_description": closed_channel_desc,
                         "sub_1_price": s1_price,
                         "sub_1_time": s1_time,
@@ -216,8 +218,10 @@ class DatabaseManager:
         """
         vals = (
             channel_data["open_channel_id"],
+            channel_data.get("open_channel_title", "Default Title"),
             channel_data.get("open_channel_description", "Default Description"),
             channel_data["closed_channel_id"],
+            channel_data.get("closed_channel_title", "Default Title"),
             channel_data.get("closed_channel_description", "Default Description"),
             channel_data["sub_1_price"],
             channel_data["sub_1_time"],
@@ -234,12 +238,12 @@ class DatabaseManager:
             with conn, conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO main_clients_database
-                       (open_channel_id, open_channel_description, closed_channel_id, closed_channel_description,
+                       (open_channel_id, open_channel_title, open_channel_description, closed_channel_id, closed_channel_title, closed_channel_description,
                         sub_1_price, sub_1_time,
                         sub_2_price, sub_2_time,
                         sub_3_price, sub_3_time,
                         client_wallet_address, client_payout_currency)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     vals,
                 )
             return True

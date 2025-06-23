@@ -74,13 +74,23 @@ class BroadcastManager:
             if not buttons_cfg:
                 continue
             
+            # Create dynamic message using channel titles and descriptions
+            open_channel_title = data.get("open_channel_title", "Channel")
+            closed_channel_title = data.get("closed_channel_title", "Premium Channel")
+            closed_channel_description = data.get("closed_channel_description", "exclusive content")
+            
+            welcome_message = (
+                f"<b>Hello, welcome to {open_channel_title}: {closed_channel_description}</b>\n\n"
+                f"Please Choose your subscription tier to gain access to the <b>{closed_channel_title}: {closed_channel_description}</b>."
+            )
+            
             reply_markup = self.build_menu_buttons(buttons_cfg)
             try:
                 resp = requests.post(
                     f"https://api.telegram.org/bot{self.bot_token}/sendMessage",
                     json={
                         "chat_id": chat_id,
-                        "text": "<b>Choose your Subscription Tier</b>",
+                        "text": welcome_message,
                         "parse_mode": "HTML",
                         "reply_markup": reply_markup.to_dict(),
                     },
