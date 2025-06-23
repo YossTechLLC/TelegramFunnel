@@ -98,7 +98,7 @@ class MenuHandlers:
             reply_markup = self.create_hamburger_menu()
             await context.bot.send_message(
                 chat_id,
-                rf"Hi {user.mention_html()}! 👋",
+                f"Hi {user.mention_html()}! 👋",
                 parse_mode="HTML",
                 reply_markup=reply_markup
             )
@@ -106,7 +106,7 @@ class MenuHandlers:
             # Has subscription token - no menu (clean payment flow)
             await context.bot.send_message(
                 chat_id,
-                rf"Hi {user.mention_html()}! 👋",
+                f"Hi {user.mention_html()}! 👋",
                 parse_mode="HTML",
             )
         
@@ -186,24 +186,55 @@ class MenuHandlers:
             await context.bot.send_message(chat_id, f"❌ decode error: {e}")
     
     async def send_payment_gateway_ready(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Send 'Payment Gateway Ready' message with payment button for subscription tiers"""
+        """Send personalized payment gateway message with closed channel info"""
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         
         chat_id = update.effective_chat.id
+        user = update.effective_user
         
-        # Create payment gateway button
+        # Get closed channel info from database using the global open channel ID
+        closed_channel_title = "Premium Channel"  # Default fallback
+        closed_channel_description = "exclusive content"  # Default fallback
+        
+        if self.global_open_channel_id:
+            try:
+                # We need to get database manager from context to fetch channel info
+                from app_initializer import AppInitializer
+                # Since we don't have direct access to db_manager here, we'll use a different approach
+                # We can get the info from the broadcast manager's cached data
+                from broadcast_manager import BroadcastManager
+                
+                # Get database manager from bot_data if available
+                db_manager = context.bot_data.get('db_manager')
+                if db_manager:
+                    # Fetch channel info directly
+                    _, channel_info_map = db_manager.fetch_open_channel_list()
+                    channel_data = channel_info_map.get(self.global_open_channel_id, {})
+                    if channel_data:
+                        closed_channel_title = channel_data.get("closed_channel_title", "Premium Channel")
+                        closed_channel_description = channel_data.get("closed_channel_description", "exclusive content")
+            except Exception as e:
+                print(f"⚠️ [DEBUG] Could not fetch channel info for personalized message: {e}")
+        
+        # Create payment gateway button with updated text
         keyboard = [[
-            InlineKeyboardButton("💰 Payment Gateway", callback_data="TRIGGER_PAYMENT")
+            InlineKeyboardButton("💰 Launch Payment Gateway", callback_data="TRIGGER_PAYMENT")
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Send the "Payment Gateway Ready" message
+        # Send personalized message
+        welcome_text = (
+            f"Hi {user.mention_html()}\n\n"
+            f"Please click the button below to Launch the Payment Gateway to get access to <b>{closed_channel_title}: {closed_channel_description}</b>."
+        )
+        
         await context.bot.send_message(
             chat_id=chat_id,
-            text="💳 Payment Gateway Ready",
-            reply_markup=reply_markup
+            text=welcome_text,
+            reply_markup=reply_markup,
+            parse_mode="HTML"
         )
-        print(f"✅ [DEBUG] Sent Payment Gateway Ready message to user {update.effective_user.id if update.effective_user else 'Unknown'}")
+        print(f"✅ [DEBUG] Sent personalized payment gateway message to user {user.id if user else 'Unknown'}")
     
     def get_global_values(self):
         """Return current global values for use by other modules"""

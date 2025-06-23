@@ -105,7 +105,8 @@ class PaymentGatewayManager:
     
     async def start_payment_flow(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
                                 sub_value: float, open_channel_id: str, 
-                                secure_success_url: str) -> None:
+                                secure_success_url: str, closed_channel_title: str = "Premium Channel",
+                                closed_channel_description: str = "exclusive content") -> None:
         """
         Start the complete payment flow for a user.
         
@@ -115,6 +116,8 @@ class PaymentGatewayManager:
             sub_value: The subscription amount
             open_channel_id: The open channel ID
             secure_success_url: The signed success URL for post-payment redirect
+            closed_channel_title: The title of the closed channel
+            closed_channel_description: The description of the closed channel
         """
         print(f"💳 [DEBUG] Starting payment flow: amount=${sub_value:.2f}, channel_id={open_channel_id}")
         user_id = self.get_telegram_user_id(update)
@@ -143,19 +146,19 @@ class PaymentGatewayManager:
             invoice_url = invoice_result["data"].get("invoice_url", "<no url>")
             print(f"✅ [DEBUG] Payment gateway created successfully for ${sub_value:.2f}")
             print(f"🔗 [DEBUG] Invoice URL: {invoice_url}")
+            
+            user = update.effective_user
             reply_markup = ReplyKeyboardMarkup.from_button(
                 KeyboardButton(
-                    text="Open Payment Gateway",
+                    text="💰 Launch Payment Gateway",
                     web_app=WebAppInfo(url=invoice_url),
                 )
             )
             text = (
-                f"💳 *Payment Gateway Ready*\n\n"
-                f"Amount: ${sub_value:.2f}\n\n"
-                "Please click 'Open Payment Gateway' below. "
-                "You have 20 minutes to complete the payment."
+                f"Hi {user.mention_html() if user else 'User'}\n\n"
+                f"Please click the button below to Launch the Payment Gateway to get access to <b>{closed_channel_title}: {closed_channel_description}</b>."
             )
-            await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="Markdown")
+            await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
         else:
             error_msg = invoice_result.get("error", "Unknown error")
             status_code = invoice_result.get("status_code", "N/A")
@@ -184,6 +187,8 @@ class PaymentGatewayManager:
             closed_channel_id = "donation_default_closed"
             wallet_address = ""
             payout_currency = ""
+            closed_channel_title = "Donation Channel"
+            closed_channel_description = "supporting our community"
         else:
             # Get closed channel ID from database
             closed_channel_id = db_manager.fetch_closed_channel_id(global_open_channel_id)
@@ -195,6 +200,13 @@ class PaymentGatewayManager:
             # Get wallet info from database
             wallet_address, payout_currency = db_manager.fetch_client_wallet_info(global_open_channel_id)
             print(f"💰 [DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}'")
+            
+            # Get channel title and description info for personalized message
+            _, channel_info_map = db_manager.fetch_open_channel_list()
+            channel_data = channel_info_map.get(global_open_channel_id, {})
+            closed_channel_title = channel_data.get("closed_channel_title", "Premium Channel")
+            closed_channel_description = channel_data.get("closed_channel_description", "exclusive content")
+            print(f"🏷️ [DEBUG] Retrieved channel info: title='{closed_channel_title}', description='{closed_channel_description}'")
 
 
         if not webhook_manager.signing_key:
@@ -213,11 +225,13 @@ class PaymentGatewayManager:
             subscription_price=str(global_sub_value)
         )
         
-        # Use the new payment flow method
+        # Use the new payment flow method with channel info
         await self.start_payment_flow(
             update=update,
             context=context,
             sub_value=global_sub_value,
             open_channel_id=global_open_channel_id,
-            secure_success_url=secure_success_url
+            secure_success_url=secure_success_url,
+            closed_channel_title=closed_channel_title,
+            closed_channel_description=closed_channel_description
         )
