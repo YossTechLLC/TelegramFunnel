@@ -89,23 +89,23 @@ class DatabaseManager:
             port=self.port
         )
     
-    def fetch_tele_open_list(self) -> Tuple[List[str], Dict[str, Dict[str, Any]]]:
+    def fetch_open_channel_list(self) -> Tuple[List[str], Dict[str, Dict[str, Any]]]:
         """
-        Fetch all tele_open channels and their subscription info from database.
-        Returns: (tele_open_list, tele_info_open_map)
+        Fetch all open_channel_id channels and their subscription info from database.
+        Returns: (open_channel_list, open_channel_info_map)
         """
-        tele_open_list = []
-        tele_info_open_map = {}
+        open_channel_list = []
+        open_channel_info_map = {}
         
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT tele_open, tele_open_description, tele_closed, tele_closed_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency FROM main_clients_database")
-                for (tele_open, tele_open_desc, tele_closed, tele_closed_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency) in cur.fetchall():
-                    tele_open_list.append(tele_open)
-                    tele_info_open_map[tele_open] = {
-                        "tele_open_description": tele_open_desc,
-                        "tele_closed": tele_closed,
-                        "tele_closed_description": tele_closed_desc,
+                cur.execute("SELECT open_channel_id, open_channel_description, closed_channel_id, closed_channel_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency FROM main_clients_database")
+                for (open_channel_id, open_channel_desc, closed_channel_id, closed_channel_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency) in cur.fetchall():
+                    open_channel_list.append(open_channel_id)
+                    open_channel_info_map[open_channel_id] = {
+                        "open_channel_description": open_channel_desc,
+                        "closed_channel_id": closed_channel_id,
+                        "closed_channel_description": closed_channel_desc,
                         "sub_1_price": s1_price,
                         "sub_1_time": s1_time,
                         "sub_2_price": s2_price,
@@ -116,9 +116,9 @@ class DatabaseManager:
                         "client_payout_currency": payout_currency,
                     }
         except Exception as e:
-            print("❌ db tele_open error:", e)
+            print("❌ db open_channel error:", e)
         
-        return tele_open_list, tele_info_open_map
+        return open_channel_list, open_channel_info_map
     
     def fetch_closed_channel_id(self, open_channel_id: str) -> Optional[str]:
         """
@@ -133,8 +133,8 @@ class DatabaseManager:
         try:
             conn = self.get_connection()
             cur = conn.cursor()
-            print(f"🔍 [DEBUG] Looking up closed_channel_id for tele_open: {str(open_channel_id)}")
-            cur.execute("SELECT tele_closed FROM main_clients_database WHERE tele_open = %s", (str(open_channel_id),))
+            print(f"🔍 [DEBUG] Looking up closed_channel_id for open_channel_id: {str(open_channel_id)}")
+            cur.execute("SELECT closed_channel_id FROM main_clients_database WHERE open_channel_id = %s", (str(open_channel_id),))
             result = cur.fetchone()
             print(f"📋 [DEBUG] fetch_closed_channel_id result: {result}")
             cur.close()
@@ -142,18 +142,18 @@ class DatabaseManager:
             if result and result[0]:
                 return result[0]
             else:
-                print("❌ No matching record found for tele_open =", open_channel_id)
+                print("❌ No matching record found for open_channel_id =", open_channel_id)
                 return None
         except Exception as e:
-            print(f"❌ Error fetching tele_closed: {e}")
+            print(f"❌ Error fetching closed_channel_id: {e}")
             return None
     
-    def fetch_client_wallet_info(self, tele_open_id: str) -> Tuple[Optional[str], Optional[str]]:
+    def fetch_client_wallet_info(self, open_channel_id: str) -> Tuple[Optional[str], Optional[str]]:
         """
-        Get the client wallet address and payout currency for a given tele_open ID.
+        Get the client wallet address and payout currency for a given open_channel_id.
         
         Args:
-            tele_open_id: The tele_open ID to look up
+            open_channel_id: The open_channel_id to look up
             
         Returns:
             Tuple of (client_wallet_address, client_payout_currency) if found, (None, None) otherwise
@@ -161,10 +161,10 @@ class DatabaseManager:
         try:
             conn = self.get_connection()
             cur = conn.cursor()
-            print(f"🔍 [DEBUG] Looking up wallet info for tele_open: {str(tele_open_id)}")
+            print(f"🔍 [DEBUG] Looking up wallet info for open_channel_id: {str(open_channel_id)}")
             cur.execute(
-                "SELECT client_wallet_address, client_payout_currency FROM main_clients_database WHERE tele_open = %s", 
-                (str(tele_open_id),)
+                "SELECT client_wallet_address, client_payout_currency FROM main_clients_database WHERE open_channel_id = %s", 
+                (str(open_channel_id),)
             )
             result = cur.fetchone()
             print(f"💰 [DEBUG] fetch_client_wallet_info result: {result}")
@@ -175,7 +175,7 @@ class DatabaseManager:
                 wallet_address, payout_currency = result
                 return wallet_address, payout_currency
             else:
-                print("❌ No wallet info found for tele_open =", tele_open_id)
+                print("❌ No wallet info found for open_channel_id =", open_channel_id)
                 return None, None
                 
         except Exception as e:
@@ -188,11 +188,11 @@ class DatabaseManager:
         This can be used as a fallback when no specific channel is provided.
         
         Returns:
-            The first available tele_open channel ID, or None if no channels exist
+            The first available open_channel_id, or None if no channels exist
         """
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT tele_open FROM main_clients_database LIMIT 1")
+                cur.execute("SELECT open_channel_id FROM main_clients_database LIMIT 1")
                 result = cur.fetchone()
                 if result:
                     print(f"🎯 [DEBUG] Found default donation channel: {result[0]}")
@@ -215,10 +215,10 @@ class DatabaseManager:
             True if successful, False otherwise
         """
         vals = (
-            channel_data["tele_open"],
-            channel_data.get("tele_open_description", "Default Description"),
-            channel_data["tele_closed"],
-            channel_data.get("tele_closed_description", "Default Description"),
+            channel_data["open_channel_id"],
+            channel_data.get("open_channel_description", "Default Description"),
+            channel_data["closed_channel_id"],
+            channel_data.get("closed_channel_description", "Default Description"),
             channel_data["sub_1_price"],
             channel_data["sub_1_time"],
             channel_data["sub_2_price"],
@@ -234,7 +234,7 @@ class DatabaseManager:
             with conn, conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO main_clients_database
-                       (tele_open, tele_open_description, tele_closed, tele_closed_description,
+                       (open_channel_id, open_channel_description, closed_channel_id, closed_channel_description,
                         sub_1_price, sub_1_time,
                         sub_2_price, sub_2_time,
                         sub_3_price, sub_3_time,
@@ -371,8 +371,8 @@ async def receive_sub3_time_db(update: Update, ctx: ContextTypes.DEFAULT_TYPE, d
     ctx.user_data["sub_3_time"] = int(update.message.text)
     
     channel_data = {
-        "tele_open": ctx.user_data["tele_open"],
-        "tele_closed": ctx.user_data["tele_closed"],
+        "open_channel_id": ctx.user_data["open_channel_id"],
+        "closed_channel_id": ctx.user_data["closed_channel_id"],
         "sub_1_price": ctx.user_data["sub_1_price"],
         "sub_1_time": ctx.user_data["sub_1_time"],
         "sub_2_price": ctx.user_data["sub_2_price"],
@@ -383,14 +383,14 @@ async def receive_sub3_time_db(update: Update, ctx: ContextTypes.DEFAULT_TYPE, d
     
     if db_manager.insert_channel_config(channel_data):
         vals = (
-            channel_data["tele_open"], channel_data["tele_closed"],
+            channel_data["open_channel_id"], channel_data["closed_channel_id"],
             channel_data["sub_1_price"], channel_data["sub_1_time"],
             channel_data["sub_2_price"], channel_data["sub_2_time"],
             channel_data["sub_3_price"], channel_data["sub_3_time"],
         )
         await update.message.reply_text(
             "✅ Saved:\n"
-            f"tele_open={vals[0]}, tele_closed={vals[1]},\n"
+            f"open_channel_id={vals[0]}, closed_channel_id={vals[1]},\n"
             f"sub_1_price={vals[2]} ({vals[3]}), sub_2_price={vals[4]} ({vals[5]}), sub_3_price={vals[6]} ({vals[7]})"
         )
     else:

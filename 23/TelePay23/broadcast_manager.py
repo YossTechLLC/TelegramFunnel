@@ -13,8 +13,8 @@ class BroadcastManager:
         self.bot_token = bot_token
         self.bot_username = bot_username
         self.db_manager = db_manager
-        self.tele_open_list = []
-        self.tele_info_open_map = {}
+        self.open_channel_list = []
+        self.open_channel_info_map = {}
     
     @staticmethod
     def encode_id(i):
@@ -24,13 +24,13 @@ class BroadcastManager:
     def decode_hash(s):
         return base64.urlsafe_b64decode(s.encode()).decode()
     
-    def fetch_tele_open_list(self):
-        self.tele_open_list.clear()
-        self.tele_info_open_map.clear()
+    def fetch_open_channel_list(self):
+        self.open_channel_list.clear()
+        self.open_channel_info_map.clear()
         
-        new_list, new_map = self.db_manager.fetch_tele_open_list()
-        self.tele_open_list.extend(new_list)
-        self.tele_info_open_map.update(new_map)
+        new_list, new_map = self.db_manager.fetch_open_channel_list()
+        self.open_channel_list.extend(new_list)
+        self.open_channel_info_map.update(new_map)
     
     @staticmethod
     def build_menu_buttons(buttons_config):
@@ -44,11 +44,11 @@ class BroadcastManager:
         return InlineKeyboardMarkup([[button] for button in buttons])
     
     def broadcast_hash_links(self):
-        if not self.tele_open_list:
-            self.fetch_tele_open_list()
+        if not self.open_channel_list:
+            self.fetch_open_channel_list()
         
-        for chat_id in self.tele_open_list:
-            data = self.tele_info_open_map.get(chat_id, {})
+        for chat_id in self.open_channel_list:
+            data = self.open_channel_info_map.get(chat_id, {})
             base_hash = self.encode_id(chat_id)
             buttons_cfg = []
             

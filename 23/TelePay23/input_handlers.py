@@ -5,8 +5,8 @@ from database import DatabaseManager, receive_sub3_time_db
 
 # Conversation states for /database and donations
 (
-    TELE_OPEN_INPUT,
-    TELE_CLOSED_INPUT,
+    OPEN_CHANNEL_INPUT,
+    CLOSED_CHANNEL_INPUT,
     SUB1_INPUT,
     SUB2_INPUT,
     SUB3_INPUT,
@@ -55,24 +55,24 @@ class InputHandlers:
     
     async def start_database(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data.clear()
-        await update.message.reply_text("Enter *tele_open* (≤14 chars integer):", parse_mode="Markdown")
-        return TELE_OPEN_INPUT
+        await update.message.reply_text("Enter *open_channel_id* (≤14 chars integer):", parse_mode="Markdown")
+        return OPEN_CHANNEL_INPUT
     
-    async def receive_tele_open(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    async def receive_open_channel(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if self._valid_channel_id(update.message.text):
-            ctx.user_data["tele_open"] = update.message.text.strip()
-            await update.message.reply_text("Enter *tele_closed* (≤14 chars integer):", parse_mode="Markdown")
-            return TELE_CLOSED_INPUT
-        await update.message.reply_text("❌ Invalid tele_open. Try again:")
-        return TELE_OPEN_INPUT
+            ctx.user_data["open_channel_id"] = update.message.text.strip()
+            await update.message.reply_text("Enter *closed_channel_id* (≤14 chars integer):", parse_mode="Markdown")
+            return CLOSED_CHANNEL_INPUT
+        await update.message.reply_text("❌ Invalid open_channel_id. Try again:")
+        return OPEN_CHANNEL_INPUT
     
-    async def receive_tele_closed(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    async def receive_closed_channel(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if self._valid_channel_id(update.message.text):
-            ctx.user_data["tele_closed"] = update.message.text.strip()
+            ctx.user_data["closed_channel_id"] = update.message.text.strip()
             await update.message.reply_text("Enter *sub_1_price* (0-9999.99):", parse_mode="Markdown")
             return SUB1_INPUT
-        await update.message.reply_text("❌ Invalid tele_closed. Try again:")
-        return TELE_CLOSED_INPUT
+        await update.message.reply_text("❌ Invalid closed_channel_id. Try again:")
+        return CLOSED_CHANNEL_INPUT
     
     def _sub_handler(self, idx_key: str, next_state: int, prompt: str):
         async def inner(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

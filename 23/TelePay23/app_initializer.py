@@ -99,7 +99,7 @@ class AppInitializer:
         
         # Initialize broadcast data
         if self.broadcast_manager:
-            self.broadcast_manager.fetch_tele_open_list()
+            self.broadcast_manager.fetch_open_channel_list()
             self.broadcast_manager.broadcast_hash_links()
     
     async def run_bot(self):

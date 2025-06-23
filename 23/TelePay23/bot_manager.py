@@ -9,7 +9,7 @@ from telegram.ext import (
     ConversationHandler,
     CallbackQueryHandler,
 )
-from input_handlers import InputHandlers, TELE_OPEN_INPUT, TELE_CLOSED_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT
+from input_handlers import InputHandlers, OPEN_CHANNEL_INPUT, CLOSED_CHANNEL_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT
 
 class BotManager:
     def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None):
@@ -32,8 +32,8 @@ class BotManager:
                 CallbackQueryHandler(self.menu_callback_handler, pattern="^CMD_DATABASE$"),
             ],
             states={
-                TELE_OPEN_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_tele_open)],
-                TELE_CLOSED_INPUT : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_tele_closed)],
+                OPEN_CHANNEL_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_open_channel)],
+                CLOSED_CHANNEL_INPUT : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_closed_channel)],
                 SUB1_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub1'])],
                 SUB1_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub1_time'])],
                 SUB2_INPUT        : [MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_sub2'])],

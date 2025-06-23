@@ -2,7 +2,7 @@
 from telegram import Update, Message, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from broadcast_manager import BroadcastManager
-from input_handlers import TELE_OPEN_INPUT
+from input_handlers import OPEN_CHANNEL_INPUT
 
 class MenuHandlers:
     def __init__(self, input_handlers, payment_gateway_handler):
@@ -57,10 +57,10 @@ class MenuHandlers:
             # DO NOT edit the message! Just send prompt for input.
             await context.bot.send_message(
                 chat_id,
-                "Enter *tele_open* (≤14 chars integer):",
+                "Enter *open_channel_id* (≤14 chars integer):",
                 parse_mode="Markdown"
             )
-            return TELE_OPEN_INPUT
+            return OPEN_CHANNEL_INPUT
         elif data == "CMD_GATEWAY":
             await self.payment_gateway_handler(update, context)
         elif data == "CMD_DONATE":
@@ -81,7 +81,7 @@ class MenuHandlers:
                 chat_part, channel_part, cmd = args.split('-', 2)
                 await context.bot.send_message(
                     chat_id,
-                    f"🔍 Parsed tele_open_id: {chat_part}, channel_id: {channel_part}",
+                    f"🔍 Parsed open_channel_id: {chat_part}, channel_id: {channel_part}",
                 )
                 if cmd == "start_np_gateway_new":
                     await self.payment_gateway_handler(update, context)
