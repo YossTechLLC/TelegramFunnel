@@ -222,9 +222,8 @@ class MenuHandlers:
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Send personalized message
+        # Send personalized message without Hi statement
         welcome_text = (
-            f"Hi {user.mention_html()}\n\n"
             f"Please click the button below to Launch the Payment Gateway to get access to <b>{closed_channel_title}: {closed_channel_description}</b>."
         )
         

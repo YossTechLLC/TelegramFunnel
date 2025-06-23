@@ -106,7 +106,7 @@ class PaymentGatewayManager:
     async def start_payment_flow(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
                                 sub_value: float, open_channel_id: str, 
                                 secure_success_url: str, closed_channel_title: str = "Premium Channel",
-                                closed_channel_description: str = "exclusive content") -> None:
+                                closed_channel_description: str = "exclusive content", sub_time: int = 30) -> None:
         """
         Start the complete payment flow for a user.
         
@@ -118,6 +118,7 @@ class PaymentGatewayManager:
             secure_success_url: The signed success URL for post-payment redirect
             closed_channel_title: The title of the closed channel
             closed_channel_description: The description of the closed channel
+            sub_time: The subscription duration in days
         """
         print(f"💳 [DEBUG] Starting payment flow: amount=${sub_value:.2f}, channel_id={open_channel_id}")
         user_id = self.get_telegram_user_id(update)
@@ -147,16 +148,18 @@ class PaymentGatewayManager:
             print(f"✅ [DEBUG] Payment gateway created successfully for ${sub_value:.2f}")
             print(f"🔗 [DEBUG] Invoice URL: {invoice_url}")
             
-            user = update.effective_user
             reply_markup = ReplyKeyboardMarkup.from_button(
                 KeyboardButton(
-                    text="💰 Launch Payment Gateway",
+                    text="💰 Start Payment Gateway",
                     web_app=WebAppInfo(url=invoice_url),
                 )
             )
             text = (
-                f"Hi {user.mention_html() if user else 'User'}\n\n"
-                f"Please click the button below to Launch the Payment Gateway to get access to <b>{closed_channel_title}: {closed_channel_description}</b>."
+                f"Please click the button below to start the Payment Gateway.\n"
+                f"Private Channel: <b>{closed_channel_title}</b>\n"
+                f"Channel Description: <b>{closed_channel_description}</b>\n"
+                f"Price: <b>${sub_value:.2f}</b>\n"
+                f"Duration: <b>{sub_time} days</b>"
             )
             await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
         else:
@@ -233,5 +236,6 @@ class PaymentGatewayManager:
             open_channel_id=global_open_channel_id,
             secure_success_url=secure_success_url,
             closed_channel_title=closed_channel_title,
-            closed_channel_description=closed_channel_description
+            closed_channel_description=closed_channel_description,
+            sub_time=global_sub_time
         )
