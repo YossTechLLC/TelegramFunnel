@@ -20,7 +20,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code
-COPY tph2.py .
+COPY tph3.py .
 
 # Expose the port
 EXPOSE 8080
