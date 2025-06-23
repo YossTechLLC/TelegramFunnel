@@ -76,11 +76,12 @@ class BroadcastManager:
             
             # Create dynamic message using channel titles and descriptions
             open_channel_title = data.get("open_channel_title", "Channel")
+            open_channel_description = data.get("open_channel_description", "open channel")
             closed_channel_title = data.get("closed_channel_title", "Premium Channel")
             closed_channel_description = data.get("closed_channel_description", "exclusive content")
             
             welcome_message = (
-                f"<b>Hello, welcome to {open_channel_title}: {closed_channel_description}</b>\n\n"
+                f"<b>Hello, welcome to {open_channel_title}: {open_channel_description}</b>\n\n"
                 f"Please Choose your subscription tier to gain access to the <b>{closed_channel_title}: {closed_channel_description}</b>."
             )
             
