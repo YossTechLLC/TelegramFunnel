@@ -224,8 +224,8 @@ class MenuHandlers:
         
         # Send beautifully formatted message
         welcome_text = (
-            f"💳 <u>Please click the button below to Launch the Payment Gateway</u> 🚀\n\n"
-            f"🎯 <b>Get access to:</b> <u>{closed_channel_title}</u>\n"
+            f"💳 <b>Click the button below to Launch the Payment Gateway</b> 🚀\n\n"
+            f"🎯 <b>Get access to:</b> {closed_channel_title}\n"
             f"📝 <b>Description:</b> {closed_channel_description}"
         )
         
