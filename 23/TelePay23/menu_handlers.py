@@ -222,9 +222,11 @@ class MenuHandlers:
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Send personalized message without Hi statement
+        # Send beautifully formatted message
         welcome_text = (
-            f"Please click the button below to Launch the Payment Gateway to get access to <b>{closed_channel_title}: {closed_channel_description}</b>."
+            f"💳 <u>Please click the button below to Launch the Payment Gateway</u> 🚀\n\n"
+            f"🎯 <b>Get access to:</b> <u>{closed_channel_title}</u>\n"
+            f"📝 <b>Description:</b> {closed_channel_description}"
         )
         
         await context.bot.send_message(

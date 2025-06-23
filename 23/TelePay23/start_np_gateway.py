@@ -155,11 +155,11 @@ class PaymentGatewayManager:
                 )
             )
             text = (
-                f"Please click the button below to start the Payment Gateway.\n"
-                f"Private Channel: <b>{closed_channel_title}</b>\n"
-                f"Channel Description: <b>{closed_channel_description}</b>\n"
-                f"Price: <b>${sub_value:.2f}</b>\n"
-                f"Duration: <b>{sub_time} days</b>"
+                f"💳 <u>Please click the button below to start the Payment Gateway</u> 🚀\n\n"
+                f"🔒 <u>Private Channel:</u> <b>{closed_channel_title}</b>\n"
+                f"📝 <u>Channel Description:</u> <b>{closed_channel_description}</b>\n"
+                f"💰 <u>Price:</u> <b>${sub_value:.2f}</b>\n"
+                f"⏰ <u>Duration:</u> <b>{sub_time} days</b>"
             )
             await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
         else:
