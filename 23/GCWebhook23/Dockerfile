@@ -26,4 +26,4 @@ COPY tph2.py .
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tph2.py"]
+CMD ["python", "tph3.py"]
