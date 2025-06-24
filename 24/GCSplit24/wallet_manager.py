@@ -394,12 +394,21 @@ class WalletManager:
             print(f"📡 [INFO] {request_id}: Broadcasting transaction...")
             
             # Send transaction (handle Web3.py version compatibility)
-            try:
-                # Web3.py 6.x uses 'rawTransaction'
-                raw_tx = signed_txn.rawTransaction
-            except AttributeError:
-                # Fallback for older versions that use 'raw_transaction'
-                raw_tx = signed_txn.raw_transaction
+            # Debug: Check the type and attributes of signed transaction
+            print(f"🔍 [DEBUG] {request_id}: SignedTransaction type: {type(signed_txn)}")
+            available_attrs = [attr for attr in dir(signed_txn) if not attr.startswith('_')]
+            print(f"🔍 [DEBUG] {request_id}: Available attributes: {available_attrs}")
+            
+            # Try different possible attribute names for raw transaction data
+            raw_tx = None
+            for attr_name in ['rawTransaction', 'raw_transaction', 'raw', 'transaction', 'signed_transaction']:
+                if hasattr(signed_txn, attr_name):
+                    raw_tx = getattr(signed_txn, attr_name)
+                    print(f"✅ [DEBUG] {request_id}: Found raw transaction data using '{attr_name}' attribute")
+                    break
+            
+            if raw_tx is None:
+                raise AttributeError(f"Cannot find raw transaction data. Available attributes: {available_attrs}")
             
             tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
             tx_hash_hex = tx_hash.hex()
