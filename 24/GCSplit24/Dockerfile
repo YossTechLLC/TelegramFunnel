@@ -16,10 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements and install
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies with root-user-action flag to suppress warning
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 
-# Copy the app code
-COPY *.py .
+# Copy the app code (.py files) into the container
+COPY *.py ./
 
 # Expose the port
 EXPOSE 8080
