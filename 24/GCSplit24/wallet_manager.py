@@ -364,9 +364,8 @@ class WalletManager:
             fee_data = cost_result['fee_data']
             
             if fee_data.get('is_eip1559', False):
-                # EIP-1559 transaction
+                # EIP-1559 transaction (from field auto-derived during signing)
                 transaction = {
-                    'from': self.host_address,
                     'to': recipient_address,
                     'value': amount_wei,
                     'nonce': nonce,
@@ -375,40 +374,40 @@ class WalletManager:
                     'maxPriorityFeePerGas': fee_data['max_priority_fee_per_gas'],
                     'type': 2  # EIP-1559 transaction type
                 }
+                print(f"🔧 [INFO] {request_id}: Built EIP-1559 transaction")
             else:
-                # Legacy transaction
+                # Legacy transaction (from field auto-derived during signing)
                 transaction = {
-                    'from': self.host_address,
                     'to': recipient_address,
                     'value': amount_wei,
                     'nonce': nonce,
                     'gas': cost_result['gas_estimate'],
                     'gasPrice': cost_result['gas_price']
                 }
+                print(f"🔧 [INFO] {request_id}: Built legacy transaction")
+            
+            # Log transaction details (without sensitive data)
+            print(f"🔍 [DEBUG] {request_id}: Transaction details - To: {transaction['to']}, Value: {self.w3.from_wei(transaction['value'], 'ether')} ETH, Nonce: {transaction['nonce']}")
             
             print(f"🔐 [INFO] {request_id}: Signing transaction...")
             
             # Sign transaction
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
+            try:
+                signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
+                print(f"✅ [DEBUG] {request_id}: Transaction signed successfully")
+            except Exception as e:
+                print(f"❌ [ERROR] {request_id}: Transaction signing failed: {e}")
+                raise
             
             print(f"📡 [INFO] {request_id}: Broadcasting transaction...")
             
             # Send transaction (handle Web3.py version compatibility)
-            # Debug: Check the type and attributes of signed transaction
-            print(f"🔍 [DEBUG] {request_id}: SignedTransaction type: {type(signed_txn)}")
-            available_attrs = [attr for attr in dir(signed_txn) if not attr.startswith('_')]
-            print(f"🔍 [DEBUG] {request_id}: Available attributes: {available_attrs}")
-            
-            # Try different possible attribute names for raw transaction data
-            raw_tx = None
-            for attr_name in ['rawTransaction', 'raw_transaction', 'raw', 'transaction', 'signed_transaction']:
-                if hasattr(signed_txn, attr_name):
-                    raw_tx = getattr(signed_txn, attr_name)
-                    print(f"✅ [DEBUG] {request_id}: Found raw transaction data using '{attr_name}' attribute")
-                    break
-            
-            if raw_tx is None:
-                raise AttributeError(f"Cannot find raw transaction data. Available attributes: {available_attrs}")
+            try:
+                # Web3.py 6.x uses 'rawTransaction'
+                raw_tx = signed_txn.rawTransaction
+            except AttributeError:
+                # Fallback for older versions that use 'raw_transaction'
+                raw_tx = signed_txn.raw_transaction
             
             tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
             tx_hash_hex = tx_hash.hex()
