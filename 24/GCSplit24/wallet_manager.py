@@ -363,31 +363,41 @@ class WalletManager:
             # Build transaction
             fee_data = cost_result['fee_data']
             
-            if fee_data.get('is_eip1559', False):
+            # Temporary: Force legacy transactions for stability testing
+            # Can be removed once EIP-1559 is confirmed working
+            force_legacy = True  # Set to False to re-enable EIP-1559
+            
+            if fee_data.get('is_eip1559', False) and not force_legacy:
                 # EIP-1559 transaction (from field auto-derived during signing)
+                chain_id = self.w3.eth.chain_id
                 transaction = {
                     'to': recipient_address,
                     'value': amount_wei,
                     'nonce': nonce,
-                    'gas': cost_result['gas_estimate'],
+                    'gas': cost_result['gas_estimate'],  # Web3.py 6.x still uses 'gas' for gas limit
                     'maxFeePerGas': fee_data['max_fee_per_gas'],
                     'maxPriorityFeePerGas': fee_data['max_priority_fee_per_gas'],
+                    'chainId': chain_id,  # Required for EIP-1559 replay protection
                     'type': 2  # EIP-1559 transaction type
                 }
-                print(f"🔧 [INFO] {request_id}: Built EIP-1559 transaction")
+                print(f"🔧 [INFO] {request_id}: Built EIP-1559 transaction with chainId: {chain_id}")
             else:
                 # Legacy transaction (from field auto-derived during signing)
+                chain_id = self.w3.eth.chain_id
                 transaction = {
                     'to': recipient_address,
                     'value': amount_wei,
                     'nonce': nonce,
                     'gas': cost_result['gas_estimate'],
-                    'gasPrice': cost_result['gas_price']
+                    'gasPrice': cost_result['gas_price'],
+                    'chainId': chain_id  # Required for replay protection
                 }
-                print(f"🔧 [INFO] {request_id}: Built legacy transaction")
+                legacy_reason = "(forced for stability)" if force_legacy and fee_data.get('is_eip1559', False) else ""
+                print(f"🔧 [INFO] {request_id}: Built legacy transaction with chainId: {chain_id} {legacy_reason}")
             
             # Log transaction details (without sensitive data)
-            print(f"🔍 [DEBUG] {request_id}: Transaction details - To: {transaction['to']}, Value: {self.w3.from_wei(transaction['value'], 'ether')} ETH, Nonce: {transaction['nonce']}")
+            tx_type = "EIP-1559" if transaction.get('type') == 2 else "Legacy"
+            print(f"🔍 [DEBUG] {request_id}: {tx_type} transaction - To: {transaction['to']}, Value: {self.w3.from_wei(transaction['value'], 'ether')} ETH, Nonce: {transaction['nonce']}, ChainId: {transaction['chainId']}")
             
             print(f"🔐 [INFO] {request_id}: Signing transaction...")
             
@@ -395,6 +405,11 @@ class WalletManager:
             try:
                 signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
                 print(f"✅ [DEBUG] {request_id}: Transaction signed successfully")
+                
+                # Log raw transaction for debugging (first 20 chars only for security)
+                raw_tx_preview = signed_txn.rawTransaction.hex()[:20] + "..."
+                print(f"🔍 [DEBUG] {request_id}: Raw transaction preview: 0x{raw_tx_preview}")
+                
             except Exception as e:
                 print(f"❌ [ERROR] {request_id}: Transaction signing failed: {e}")
                 raise
