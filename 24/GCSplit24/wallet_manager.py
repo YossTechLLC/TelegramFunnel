@@ -24,8 +24,12 @@ class WalletManager:
             rpc_url: Ethereum RPC endpoint URL
         """
         self.private_key = private_key
-        self.host_address = host_address
         self.rpc_url = rpc_url
+        
+        # Ensure host address is properly checksummed
+        if not Web3.is_address(host_address):
+            raise ValueError(f"Invalid Ethereum address: {host_address}")
+        self.host_address = Web3.to_checksum_address(host_address)
         
         # Initialize Web3 connection
         self.w3 = None
@@ -74,7 +78,7 @@ class WalletManager:
             Dictionary with balance information
         """
         try:
-            # Get balance in Wei
+            # Get balance in Wei using checksummed address
             balance_wei = self.w3.eth.get_balance(self.host_address)
             
             # Convert to ETH
@@ -176,9 +180,11 @@ class WalletManager:
             amount_wei = self.w3.to_wei(amount_eth, 'ether')
             
             try:
+                # Ensure recipient address is checksummed for gas estimation
+                recipient_checksum = Web3.to_checksum_address(recipient_address)
                 gas_estimate = self.w3.eth.estimate_gas({
                     'from': self.host_address,
-                    'to': recipient_address,
+                    'to': recipient_checksum,
                     'value': amount_wei
                 })
             except Exception:

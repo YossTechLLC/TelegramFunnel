@@ -78,12 +78,20 @@ class ConfigManager:
                 self.host_wallet_private_key = '0x' + self.host_wallet_private_key
                 print("🔧 [INFO] Added 0x prefix to private key")
             
-            # Validate Ethereum address format
+            # Validate and checksum Ethereum address format
             if not self.host_wallet_eth_address.startswith('0x'):
                 raise ValueError("Host wallet ETH address must start with 0x")
             
             if len(self.host_wallet_eth_address) != 42:
                 raise ValueError("Host wallet ETH address must be 42 characters long")
+            
+            # Convert to checksum address using Web3.py for consistency
+            try:
+                from web3 import Web3
+                self.host_wallet_eth_address = Web3.to_checksum_address(self.host_wallet_eth_address)
+                print(f"✅ [INFO] Host wallet address checksummed: {self.host_wallet_eth_address}")
+            except Exception as e:
+                raise ValueError(f"Invalid Ethereum address format: {e}")
             
             self.config_loaded = True
             print("✅ [INFO] Configuration loaded successfully")
@@ -158,8 +166,18 @@ class ConfigManager:
                 print("❌ [ERROR] Invalid private key format")
                 return False
             
-            if not self.host_wallet_eth_address.startswith('0x') or len(self.host_wallet_eth_address) != 42:
-                print("❌ [ERROR] Invalid ETH address format")
+            # Validate ETH address format and checksum
+            try:
+                from web3 import Web3
+                if not self.host_wallet_eth_address.startswith('0x') or len(self.host_wallet_eth_address) != 42:
+                    print("❌ [ERROR] Invalid ETH address format")
+                    return False
+                # Verify it's a valid checksum address
+                if not Web3.is_checksum_address(self.host_wallet_eth_address):
+                    print("❌ [ERROR] ETH address is not properly checksummed")
+                    return False
+            except Exception as e:
+                print(f"❌ [ERROR] ETH address validation failed: {e}")
                 return False
             
             if not self.ethereum_rpc_url.startswith(('http://', 'https://', 'wss://')):

@@ -112,9 +112,36 @@ class EthConverter:
             if response.status_code == 200:
                 data = response.json()
                 
-                # 1INCH Spot Price API returns price in USD
-                if isinstance(data, dict) and 'price' in data:
-                    usd_per_eth = float(data['price'])
+                # Handle both old and new 1INCH API response formats
+                usd_per_eth = None
+                
+                # New format: {'0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': '1000000000000000000'}
+                # The 1INCH Spot Price API appears to return token amounts in their base units
+                # For WETH, this is likely the amount of WETH (in Wei) equivalent to 1 USD
+                if isinstance(data, dict) and weth_address.lower() in data:
+                    price_wei_str = data[weth_address.lower()]
+                    print(f"🔍 [DEBUG] 1INCH raw response for WETH: {price_wei_str}")
+                    
+                    # Since fallbacks are working, let's gracefully fall through to them
+                    # for now rather than trying to interpret this unclear format
+                    print(f"⚠️ [WARNING] 1INCH API returned new format - using fallback APIs for reliability")
+                    return {
+                        'success': False,
+                        'error': f'1INCH API format changed, using fallback APIs. Raw response: {data}',
+                        'status_code': response.status_code,
+                        'should_use_fallback': True
+                    }
+                
+                # Old format: {'price': '2441.85'}
+                elif isinstance(data, dict) and 'price' in data:
+                    try:
+                        usd_per_eth = float(data['price'])
+                        print(f"🔍 [DEBUG] 1INCH parsed price from old format: ${usd_per_eth}")
+                    except (ValueError, TypeError):
+                        pass
+                
+                # If we successfully parsed a USD price
+                if usd_per_eth and usd_per_eth > 0:
                     eth_per_usd = 1.0 / usd_per_eth
                     
                     result = {
@@ -131,7 +158,7 @@ class EthConverter:
                 else:
                     return {
                         'success': False,
-                        'error': f'Unexpected response format from 1INCH API: {data}',
+                        'error': f'Cannot parse price from 1INCH API response format: {data}',
                         'status_code': response.status_code
                     }
             else:

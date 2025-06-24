@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 TPS1 - ETH Payment Splitting Webhook Service
-Receives payment data from tph4.py, converts USD to ETH, and sends 85% to client wallets.
+Receives payment data from tph4.py, converts USD to ETH, and sends 30% to client wallets.
 """
 import os
 import json
@@ -168,11 +168,11 @@ def process_payment():
         
         eth_rate = eth_rate_result['eth_per_usd']
         total_eth_amount = sub_price_usd * eth_rate
-        client_eth_amount = total_eth_amount * 0.85  # 85% to client
+        client_eth_amount = total_eth_amount * 0.30  # 30% to client
         
         print(f"📊 [INFO] {request_id}: ETH Rate: {eth_rate:.8f} ETH/USD")
         print(f"💰 [INFO] {request_id}: Total ETH: {total_eth_amount:.8f}")
-        print(f"🎯 [INFO] {request_id}: Client gets: {client_eth_amount:.8f} ETH (85%)")
+        print(f"🎯 [INFO] {request_id}: Client gets: {client_eth_amount:.8f} ETH (30%)")
         
         # Step 2: Check wallet balance
         balance_result = wallet_manager.get_wallet_balance()
