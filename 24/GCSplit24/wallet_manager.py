@@ -393,8 +393,15 @@ class WalletManager:
             
             print(f"📡 [INFO] {request_id}: Broadcasting transaction...")
             
-            # Send transaction
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+            # Send transaction (handle Web3.py version compatibility)
+            try:
+                # Web3.py 6.x uses 'rawTransaction'
+                raw_tx = signed_txn.rawTransaction
+            except AttributeError:
+                # Fallback for older versions that use 'raw_transaction'
+                raw_tx = signed_txn.raw_transaction
+            
+            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
             tx_hash_hex = tx_hash.hex()
             
             print(f"⏳ [INFO] {request_id}: Transaction broadcast - Hash: {tx_hash_hex}")
