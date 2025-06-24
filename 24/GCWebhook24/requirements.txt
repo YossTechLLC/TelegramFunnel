@@ -4,3 +4,4 @@ google-cloud-secret-manager==2.16.3
 cloud-sql-python-connector==1.4.3
 sqlalchemy==2.0.23
 pg8000==1.30.3
+requests==2.31.0

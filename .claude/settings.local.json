@@ -7,7 +7,9 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(ls:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:portal.1inch.dev)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }

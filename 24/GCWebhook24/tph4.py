@@ -5,6 +5,7 @@ import base64
 import hmac
 import hashlib
 import asyncio
+import requests
 from datetime import datetime
 from typing import Tuple, Optional
 from flask import Flask, request, abort, jsonify
@@ -404,6 +405,67 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         if conn:
             conn.close()
 
+def trigger_eth_payment_splitting(user_id: int, client_wallet_address: str, subscription_price: str) -> None:
+    """
+    Trigger ETH payment splitting by calling the tps1.py webhook.
+    
+    Args:
+        user_id: The user's Telegram ID
+        client_wallet_address: The client's wallet address to receive ETH
+        subscription_price: The subscription price in USD as string
+    """
+    try:
+        # Get the TPS1 webhook URL from environment
+        tps1_webhook_url = os.getenv("TPS1_WEBHOOK_URL")
+        if not tps1_webhook_url:
+            print("⚠️ [WARNING] TPS1_WEBHOOK_URL not configured - skipping ETH payment splitting")
+            return
+        
+        # Validate inputs
+        if not client_wallet_address or not client_wallet_address.startswith('0x'):
+            print(f"⚠️ [WARNING] Invalid wallet address '{client_wallet_address}' - skipping ETH payment splitting")
+            return
+        
+        if not subscription_price:
+            print(f"⚠️ [WARNING] Missing subscription price - skipping ETH payment splitting")
+            return
+        
+        # Prepare payload for tps1.py webhook
+        payload = {
+            "client_wallet_address": client_wallet_address,
+            "sub_price": subscription_price,
+            "user_id": user_id
+        }
+        
+        print(f"🔄 [INFO] Calling TPS1 webhook for ETH payment splitting...")
+        print(f"📍 [INFO] URL: {tps1_webhook_url}")
+        print(f"💰 [INFO] Payload: User {user_id}, Amount: ${subscription_price}, Wallet: {client_wallet_address}")
+        
+        # Make the webhook call with timeout
+        response = requests.post(
+            tps1_webhook_url,
+            json=payload,
+            timeout=30,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ [SUCCESS] ETH payment splitting completed successfully")
+            print(f"🔗 [INFO] Transaction Hash: {result.get('transaction_hash', 'unknown')}")
+            print(f"💰 [INFO] ETH Amount Sent: {result.get('amount_eth', 'unknown')} ETH")
+            print(f"⏱️ [INFO] Processing Time: {result.get('processing_time_seconds', 'unknown')}s")
+        else:
+            print(f"❌ [ERROR] TPS1 webhook failed with status {response.status_code}")
+            print(f"❌ [ERROR] Response: {response.text}")
+            
+    except requests.exceptions.Timeout:
+        print(f"⏰ [ERROR] TPS1 webhook timeout - ETH payment may still be processing")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ [ERROR] TPS1 webhook request failed: {e}")
+    except Exception as e:
+        print(f"❌ [ERROR] Unexpected error calling TPS1 webhook: {e}")
+
 # --- Flask app and webhook handler ---
 app = Flask(__name__)
 
@@ -486,6 +548,15 @@ def send_invite():
                 disable_web_page_preview=True
             )
         asyncio.run(run_invite())
+        
+        # After successful invite, trigger ETH payment splitting
+        print(f"💰 [INFO] Triggering ETH payment splitting for user {user_id}")
+        trigger_eth_payment_splitting(
+            user_id=user_id,
+            client_wallet_address=wallet_address,
+            subscription_price=subscription_price
+        )
+        
     except Exception as e:
         import traceback
         error_msg = (
