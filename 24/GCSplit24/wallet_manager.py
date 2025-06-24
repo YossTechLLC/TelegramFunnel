@@ -41,16 +41,79 @@ class WalletManager:
     def _initialize_web3(self) -> None:
         """Initialize Web3 connection and account."""
         try:
-            # Create Web3 instance
-            self.w3 = Web3(Web3.HTTPProvider(self.rpc_url))
+            # Log RPC connection attempt (mask sensitive parts)
+            masked_rpc = self.rpc_url.replace(self.rpc_url.split('/')[-1], '***') if '/' in self.rpc_url else '***'
+            print(f"🔗 [INFO] Attempting connection to RPC endpoint: {masked_rpc}")
+            
+            # Create Web3 instance with enhanced provider settings
+            from web3.providers import HTTPProvider
+            
+            # Prepare request headers for better provider compatibility
+            headers = {
+                'User-Agent': 'TPS1-ETH-Payment-Service/1.0',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            
+            # Add provider-specific optimizations
+            if any(provider in self.rpc_url.lower() for provider in ['infura', 'alchemy', 'quicknode']):
+                headers['Accept-Encoding'] = 'gzip, deflate'
+                print(f"🔧 [INFO] Using optimized headers for managed RPC provider")
+            
+            provider = HTTPProvider(
+                self.rpc_url,
+                request_kwargs={
+                    'timeout': 30,  # 30 second timeout
+                    'headers': headers
+                }
+            )
+            self.w3 = Web3(provider)
             
             # Add middleware for POA networks (if needed)
             if 'polygon' in self.rpc_url.lower() or 'bsc' in self.rpc_url.lower():
                 self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+                print(f"🔧 [INFO] Added POA middleware for network")
             
-            # Test connection
-            if not self.w3.is_connected():
-                raise ConnectionError("Failed to connect to Ethereum node")
+            # Test basic connectivity with retries
+            print(f"🔄 [INFO] Testing Web3 connection...")
+            connection_success = False
+            max_retries = 3
+            
+            for attempt in range(max_retries):
+                try:
+                    print(f"🔄 [INFO] Connection attempt {attempt + 1}/{max_retries}")
+                    
+                    # Test basic connection
+                    if not self.w3.is_connected():
+                        raise ConnectionError("Web3.is_connected() returned False")
+                    
+                    # Try to get a basic response from the node
+                    print(f"🔄 [INFO] Testing RPC response...")
+                    client_version = self.w3.client_version
+                    print(f"🔗 [INFO] RPC client version: {client_version}")
+                    
+                    # Test getting latest block number
+                    block_number = self.w3.eth.block_number
+                    print(f"🔗 [INFO] Latest block number: {block_number}")
+                    
+                    connection_success = True
+                    break
+                    
+                except Exception as e:
+                    print(f"⚠️ [WARNING] Connection attempt {attempt + 1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        import time
+                        wait_time = (attempt + 1) * 2  # 2, 4, 6 seconds
+                        print(f"⏳ [INFO] Waiting {wait_time}s before retry...")
+                        time.sleep(wait_time)
+                    else:
+                        print(f"❌ [ERROR] All connection attempts failed")
+                        raise ConnectionError(f"Failed to establish stable connection after {max_retries} attempts: {e}")
+            
+            if not connection_success:
+                raise ConnectionError("Connection validation failed")
+            
+            print(f"✅ [INFO] Web3 connection established successfully")
             
             # Create account from private key
             self.account: LocalAccount = Account.from_key(self.private_key)
@@ -59,15 +122,27 @@ class WalletManager:
             if self.account.address.lower() != self.host_address.lower():
                 raise ValueError(f"Private key does not match host address. Expected: {self.host_address}, Got: {self.account.address}")
             
-            # Get network info
+            # Get detailed network info
             chain_id = self.w3.eth.chain_id
-            block_number = self.w3.eth.block_number
+            network_names = {
+                1: 'Ethereum Mainnet',
+                5: 'Goerli Testnet', 
+                11155111: 'Sepolia Testnet',
+                137: 'Polygon Mainnet',
+                80001: 'Polygon Mumbai',
+                56: 'BSC Mainnet',
+                97: 'BSC Testnet'
+            }
+            network_name = network_names.get(chain_id, f'Unknown Network (ID: {chain_id})')
             
-            print(f"🔗 [INFO] Connected to Ethereum network - Chain ID: {chain_id}, Block: {block_number}")
+            print(f"🌐 [INFO] Connected to {network_name} (Chain ID: {chain_id})")
             print(f"✅ [INFO] Account verified: {self.account.address}")
+            print(f"🏦 [INFO] Web3 initialization completed successfully")
             
         except Exception as e:
             print(f"❌ [ERROR] Web3 initialization failed: {e}")
+            print(f"🔍 [DEBUG] RPC URL (masked): {masked_rpc if 'masked_rpc' in locals() else 'Unknown'}")
+            print(f"🔍 [DEBUG] Error type: {type(e).__name__}")
             raise
     
     def get_wallet_balance(self) -> Dict[str, Any]:

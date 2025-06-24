@@ -49,6 +49,7 @@ def initialize_components():
         eth_converter = EthConverter(config['oneinch_api_key'])
         
         # Initialize wallet manager
+        print("🔄 [INFO] Initializing wallet manager with Web3 connection...")
         wallet_manager = WalletManager(
             private_key=config['host_wallet_private_key'],
             host_address=config['host_wallet_eth_address'],

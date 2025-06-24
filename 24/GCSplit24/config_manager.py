@@ -180,8 +180,21 @@ class ConfigManager:
                 print(f"❌ [ERROR] ETH address validation failed: {e}")
                 return False
             
+            # Validate RPC URL format and connectivity
             if not self.ethereum_rpc_url.startswith(('http://', 'https://', 'wss://')):
-                print("❌ [ERROR] Invalid RPC URL format")
+                print("❌ [ERROR] Invalid RPC URL format - must start with http://, https://, or wss://")
+                return False
+            
+            # Additional URL validation
+            try:
+                from urllib.parse import urlparse
+                parsed_url = urlparse(self.ethereum_rpc_url)
+                if not parsed_url.netloc:
+                    print("❌ [ERROR] Invalid RPC URL - missing host")
+                    return False
+                print(f"✅ [INFO] RPC URL format validated")
+            except Exception as e:
+                print(f"❌ [ERROR] RPC URL validation failed: {e}")
                 return False
             
             print("✅ [INFO] Configuration validation passed")
