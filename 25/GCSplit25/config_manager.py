@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCSplit24 ETH Payment System.
+Configuration Manager for GCSplit25 Multi-Token Payment System.
 Handles secure secret retrieval from Google Cloud Secret Manager.
 """
 import os
@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 from google.cloud import secretmanager
 
 class ConfigManager:
-    """Manages configuration and secrets for the ETH payment splitting system."""
+    """Manages configuration and secrets for the multi-token payment splitting system."""
     
     def __init__(self):
         self.host_wallet_private_key = None
@@ -65,7 +65,7 @@ class ConfigManager:
             ValueError: If required configuration is missing
         """
         try:
-            print("🔧 [INFO] Loading ETH payment system configuration...")
+            print("🔧 [INFO] Loading multi-token payment system configuration...")
             
             # Load required secrets
             self.host_wallet_private_key = self.fetch_secret("HOST_WALLET_PRIVATE_KEY", required=True)

@@ -10,6 +10,7 @@ from web3 import Web3
 from web3.middleware import geth_poa_middleware
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
+from token_registry import TokenRegistry, ERC20_ABI
 
 class WalletManager:
     """Manages Ethereum wallet operations and transactions."""
@@ -34,6 +35,7 @@ class WalletManager:
         # Initialize Web3 connection
         self.w3 = None
         self.account = None
+        self.token_registry = None
         
         self._initialize_web3()
         print(f"🏦 [INFO] Wallet Manager initialized for address: {self.host_address}")
@@ -137,6 +139,12 @@ class WalletManager:
             
             print(f"🌐 [INFO] Connected to {network_name} (Chain ID: {chain_id})")
             print(f"✅ [INFO] Account verified: {self.account.address}")
+            
+            # Initialize token registry for this chain
+            self.token_registry = TokenRegistry()
+            supported_tokens = self.token_registry.get_supported_tokens(chain_id)
+            print(f"🪙 [INFO] Token registry initialized with {len(supported_tokens)} supported tokens")
+            
             print(f"🏦 [INFO] Web3 initialization completed successfully")
             
         except Exception as e:
@@ -172,6 +180,59 @@ class WalletManager:
             
         except Exception as e:
             error_msg = f"Failed to get wallet balance: {str(e)}"
+            print(f"❌ [ERROR] {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg
+            }
+    
+    def get_erc20_balance(self, token_symbol: str) -> Dict[str, Any]:
+        """
+        Get ERC20 token balance for the host wallet.
+        
+        Args:
+            token_symbol: Token symbol (e.g., "USDT", "USDC")
+            
+        Returns:
+            Dictionary with balance information
+        """
+        try:
+            chain_id = self.w3.eth.chain_id
+            token_info = self.token_registry.get_token_info(chain_id, token_symbol)
+            
+            if not token_info:
+                return {
+                    'success': False,
+                    'error': f'Token {token_symbol} not supported on chain {chain_id}'
+                }
+            
+            # Create contract instance
+            token_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(token_info.address),
+                abi=ERC20_ABI
+            )
+            
+            # Get balance in token's smallest unit
+            balance_raw = token_contract.functions.balanceOf(self.host_address).call()
+            
+            # Convert to human-readable format
+            balance_tokens = balance_raw / (10 ** token_info.decimals)
+            
+            print(f"🪙 [INFO] {token_symbol} balance: {balance_tokens:.8f} {token_symbol}")
+            
+            return {
+                'success': True,
+                'balance_raw': balance_raw,
+                'balance_tokens': balance_tokens,
+                'token_symbol': token_symbol,
+                'token_decimals': token_info.decimals,
+                'token_address': token_info.address,
+                'address': self.host_address,
+                'timestamp': time.time()
+            }
+            
+        except Exception as e:
+            error_msg = f"Failed to get {token_symbol} balance: {str(e)}"
             print(f"❌ [ERROR] {error_msg}")
             return {
                 'success': False,
@@ -287,6 +348,85 @@ class WalletManager:
             
         except Exception as e:
             error_msg = f"Failed to estimate transaction cost: {str(e)}"
+            print(f"❌ [ERROR] {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg
+            }
+    
+    def estimate_erc20_transfer_cost(self, recipient_address: str, amount_tokens: float, token_symbol: str) -> Dict[str, Any]:
+        """
+        Estimate total gas cost for an ERC20 token transfer.
+        
+        Args:
+            recipient_address: Address to send tokens to
+            amount_tokens: Amount of tokens to send
+            token_symbol: Token symbol (e.g., "USDT", "USDC")
+            
+        Returns:
+            Dictionary with cost estimation
+        """
+        try:
+            chain_id = self.w3.eth.chain_id
+            token_info = self.token_registry.get_token_info(chain_id, token_symbol)
+            
+            if not token_info:
+                return {
+                    'success': False,
+                    'error': f'Token {token_symbol} not supported on chain {chain_id}'
+                }
+            
+            # Get gas price estimation
+            gas_result = self.estimate_gas_price()
+            if not gas_result['success']:
+                return gas_result
+            
+            # Create contract instance
+            token_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(token_info.address),
+                abi=ERC20_ABI
+            )
+            
+            # Convert amount to token's smallest unit
+            amount_raw = int(amount_tokens * (10 ** token_info.decimals))
+            
+            try:
+                # Ensure recipient address is checksummed for gas estimation
+                recipient_checksum = Web3.to_checksum_address(recipient_address)
+                
+                # Estimate gas for ERC20 transfer
+                gas_estimate = token_contract.functions.transfer(
+                    recipient_checksum, 
+                    amount_raw
+                ).estimate_gas({'from': self.host_address})
+                
+            except Exception as e:
+                # Use standard gas limit for ERC20 transfers (typically 60,000-100,000)
+                print(f"⚠️ [WARNING] Gas estimation failed, using default: {e}")
+                gas_estimate = 80000  # Conservative estimate
+            
+            # Calculate gas costs in ETH
+            gas_price = gas_result['gas_price']
+            gas_cost_wei = gas_estimate * gas_price
+            gas_cost_eth = self.w3.from_wei(gas_cost_wei, 'ether')
+            
+            return {
+                'success': True,
+                'token_symbol': token_symbol,
+                'amount_tokens': amount_tokens,
+                'amount_raw': amount_raw,
+                'gas_estimate': gas_estimate,
+                'gas_price': gas_price,
+                'gas_price_gwei': float(self.w3.from_wei(gas_price, 'gwei')),
+                'gas_cost_wei': gas_cost_wei,
+                'gas_cost_eth': float(gas_cost_eth),
+                'token_decimals': token_info.decimals,
+                'token_address': token_info.address,
+                'fee_data': gas_result['fee_data']
+            }
+            
+        except Exception as e:
+            error_msg = f"Failed to estimate {token_symbol} transfer cost: {str(e)}"
             print(f"❌ [ERROR] {error_msg}")
             return {
                 'success': False,
@@ -565,4 +705,203 @@ class WalletManager:
             return {
                 'success': False,
                 'error': f"Failed to get network info: {str(e)}"
+            }
+    
+    def send_erc20_token(self, recipient_address: str, amount_tokens: float, token_symbol: str, request_id: str = None) -> Dict[str, Any]:
+        """
+        Send ERC20 tokens to a specified address.
+        
+        Args:
+            recipient_address: Address to send tokens to
+            amount_tokens: Amount of tokens to send
+            token_symbol: Token symbol (e.g., "USDT", "USDC")
+            request_id: Optional request ID for tracking
+            
+        Returns:
+            Dictionary with transaction result
+        """
+        try:
+            request_id = request_id or f"TX_{int(time.time())}"
+            print(f"🪙 [INFO] {request_id}: Preparing {token_symbol} transfer...")
+            
+            chain_id = self.w3.eth.chain_id
+            token_info = self.token_registry.get_token_info(chain_id, token_symbol)
+            
+            if not token_info:
+                return {
+                    'success': False,
+                    'error': f'Token {token_symbol} not supported on chain {chain_id}'
+                }
+            
+            # Validate recipient address
+            if not Web3.is_address(recipient_address):
+                return {
+                    'success': False,
+                    'error': f"Invalid recipient address: {recipient_address}"
+                }
+            
+            recipient_address = Web3.to_checksum_address(recipient_address)
+            
+            # Validate amount
+            if amount_tokens <= 0:
+                return {
+                    'success': False,
+                    'error': f"Invalid amount: {amount_tokens} {token_symbol}"
+                }
+            
+            # Check token balance
+            balance_result = self.get_erc20_balance(token_symbol)
+            if not balance_result['success']:
+                return {
+                    'success': False,
+                    'error': f"Failed to check {token_symbol} balance: {balance_result.get('error', 'Unknown error')}"
+                }
+            
+            token_balance = balance_result['balance_tokens']
+            if token_balance < amount_tokens:
+                return {
+                    'success': False,
+                    'error': f"Insufficient {token_symbol} balance. Need: {amount_tokens:.8f}, Have: {token_balance:.8f}"
+                }
+            
+            # Estimate transaction costs
+            cost_result = self.estimate_erc20_transfer_cost(recipient_address, amount_tokens, token_symbol)
+            if not cost_result['success']:
+                return {
+                    'success': False,
+                    'error': f"Failed to estimate costs: {cost_result.get('error', 'Unknown error')}"
+                }
+            
+            # Check ETH balance for gas
+            eth_balance_result = self.get_wallet_balance()
+            if not eth_balance_result['success']:
+                return {
+                    'success': False,
+                    'error': f"Failed to check ETH balance for gas: {eth_balance_result.get('error', 'Unknown error')}"
+                }
+            
+            eth_balance = eth_balance_result['balance_eth']
+            gas_cost_eth = cost_result['gas_cost_eth']
+            
+            if eth_balance < gas_cost_eth:
+                return {
+                    'success': False,
+                    'error': f"Insufficient ETH for gas. Need: {gas_cost_eth:.8f} ETH, Have: {eth_balance:.8f} ETH"
+                }
+            
+            print(f"🪙 [INFO] {request_id}: Sending {amount_tokens:.8f} {token_symbol} to {recipient_address}")
+            print(f"⛽ [INFO] {request_id}: Gas cost: {gas_cost_eth:.8f} ETH ({cost_result['gas_estimate']} gas @ {cost_result['gas_price_gwei']:.2f} gwei)")
+            
+            # Create contract instance
+            token_contract = self.w3.eth.contract(
+                address=Web3.to_checksum_address(token_info.address),
+                abi=ERC20_ABI
+            )
+            
+            # Get current nonce
+            nonce = self.w3.eth.get_transaction_count(self.host_address)
+            
+            # Convert amount to token's smallest unit
+            amount_raw = int(amount_tokens * (10 ** token_info.decimals))
+            
+            # Build transaction
+            fee_data = cost_result['fee_data']
+            
+            # Use legacy transactions for ERC20 (more reliable)
+            transaction = {
+                'to': token_info.address,
+                'value': 0,  # No ETH transfer, just gas
+                'nonce': nonce,
+                'gas': cost_result['gas_estimate'],
+                'gasPrice': cost_result['gas_price'],
+                'chainId': chain_id,
+                'data': token_contract.encodeABI(fn_name='transfer', args=[recipient_address, amount_raw])
+            }
+            
+            print(f"🔍 [DEBUG] {request_id}: ERC20 transfer transaction - To: {transaction['to']}, Amount: {amount_tokens:.8f} {token_symbol}, Nonce: {transaction['nonce']}")
+            
+            print(f"🔐 [INFO] {request_id}: Signing transaction...")
+            
+            # Sign transaction
+            try:
+                signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
+                print(f"✅ [DEBUG] {request_id}: Transaction signed successfully")
+                
+                # Log raw transaction for debugging (first 20 chars only for security)
+                raw_tx_preview = signed_txn.rawTransaction.hex()[:20] + "..."
+                print(f"🔍 [DEBUG] {request_id}: Raw transaction preview: 0x{raw_tx_preview}")
+                
+            except Exception as e:
+                print(f"❌ [ERROR] {request_id}: Transaction signing failed: {e}")
+                raise
+            
+            print(f"📡 [INFO] {request_id}: Broadcasting transaction...")
+            
+            # Send transaction
+            try:
+                raw_tx = signed_txn.rawTransaction
+            except AttributeError:
+                raw_tx = signed_txn.raw_transaction
+            
+            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+            tx_hash_hex = tx_hash.hex()
+            
+            print(f"⏳ [INFO] {request_id}: Transaction broadcast - Hash: {tx_hash_hex}")
+            print(f"🔍 [INFO] {request_id}: Waiting for confirmation...")
+            
+            # Wait for transaction receipt (with timeout)
+            try:
+                tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+                
+                if tx_receipt.status == 1:
+                    # Transaction successful
+                    actual_gas_used = tx_receipt.gasUsed
+                    actual_gas_price = transaction.get('gasPrice', 0)
+                    actual_gas_cost_wei = actual_gas_used * actual_gas_price
+                    actual_gas_cost_eth = self.w3.from_wei(actual_gas_cost_wei, 'ether')
+                    
+                    print(f"✅ [SUCCESS] {request_id}: {token_symbol} transfer confirmed!")
+                    print(f"⛽ [INFO] {request_id}: Actual gas used: {actual_gas_used} (cost: {float(actual_gas_cost_eth):.8f} ETH)")
+                    
+                    return {
+                        'success': True,
+                        'transaction_hash': tx_hash_hex,
+                        'recipient': recipient_address,
+                        'amount_tokens': amount_tokens,
+                        'token_symbol': token_symbol,
+                        'token_address': token_info.address,
+                        'gas_used': actual_gas_used,
+                        'gas_price': actual_gas_price,
+                        'gas_cost_eth': float(actual_gas_cost_eth),
+                        'block_number': tx_receipt.blockNumber,
+                        'block_hash': tx_receipt.blockHash.hex(),
+                        'transaction_index': tx_receipt.transactionIndex,
+                        'request_id': request_id
+                    }
+                else:
+                    # Transaction failed
+                    return {
+                        'success': False,
+                        'error': f'{token_symbol} transfer failed (status: 0)',
+                        'transaction_hash': tx_hash_hex,
+                        'receipt': dict(tx_receipt)
+                    }
+                    
+            except Exception as e:
+                # Transaction timeout or error getting receipt
+                print(f"⚠️ [WARNING] {request_id}: Could not get transaction receipt: {e}")
+                return {
+                    'success': False,
+                    'error': f'Transaction receipt timeout: {str(e)}',
+                    'transaction_hash': tx_hash_hex,
+                    'note': 'Transaction may still be pending - check manually'
+                }
+            
+        except Exception as e:
+            error_msg = f"{token_symbol} transfer failed: {str(e)}"
+            print(f"❌ [ERROR] {request_id or 'Unknown'}: {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg,
+                'request_id': request_id
             }

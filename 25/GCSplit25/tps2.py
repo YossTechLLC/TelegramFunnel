@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """
-TPS2 - ETH Payment Splitting Webhook Service
-Receives payment data from tph5.py, converts USD to ETH, and sends 30% to client wallets.
+TPS2 - Multi-Token Payment Splitting Webhook Service
+Receives payment data from tph5.py, converts USD to tokens (ETH/ERC20), and sends 30% to client wallets.
+Supports ETH and major ERC20 tokens including USDT, USDC, DAI, LINK, UNI, AAVE, etc.
 """
 import os
 import json
@@ -14,6 +15,7 @@ from flask import Flask, request, abort, jsonify
 # Import our custom modules
 from config_manager import ConfigManager
 from eth_converter import EthConverter
+from multi_token_converter import MultiTokenConverter
 from wallet_manager import WalletManager
 
 # Setup logging
@@ -29,14 +31,15 @@ app = Flask(__name__)
 # Global components
 config_manager = None
 eth_converter = None
+multi_token_converter = None
 wallet_manager = None
 
 def initialize_components():
     """Initialize all system components."""
-    global config_manager, eth_converter, wallet_manager
+    global config_manager, eth_converter, multi_token_converter, wallet_manager
     
     try:
-        print("🚀 [INFO] Initializing ETH Payment Splitting Service...")
+        print("🚀 [INFO] Initializing Multi-Token Payment Splitting Service...")
         
         # Initialize configuration manager
         config_manager = ConfigManager()
@@ -45,8 +48,15 @@ def initialize_components():
         if not config_manager.validate_configuration():
             raise RuntimeError("Configuration validation failed")
         
-        # Initialize ETH converter
+        # Initialize ETH converter (legacy compatibility)
         eth_converter = EthConverter(config['oneinch_api_key'])
+        
+        # Initialize multi-token converter with chain ID from wallet manager
+        print("🪙 [INFO] Initializing multi-token converter...")
+        multi_token_converter = MultiTokenConverter(
+            oneinch_api_key=config['oneinch_api_key'],
+            chain_id=1  # Default to Ethereum Mainnet, will be updated after wallet connection
+        )
         
         # Initialize wallet manager
         print("🔄 [INFO] Initializing wallet manager with Web3 connection...")
@@ -73,7 +83,7 @@ def validate_request_payload(data: Dict[str, Any]) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    required_fields = ['client_wallet_address', 'sub_price', 'user_id']
+    required_fields = ['client_wallet_address', 'sub_price', 'user_id', 'client_payout_currency']
     
     # Check required fields
     for field in required_fields:
@@ -101,6 +111,15 @@ def validate_request_payload(data: Dict[str, Any]) -> Tuple[bool, str]:
     except (ValueError, TypeError):
         return False, "Invalid user ID format"
     
+    # Validate payout currency
+    payout_currency = data['client_payout_currency'].strip().upper()
+    if not payout_currency:
+        return False, "Client payout currency cannot be empty"
+    
+    # Allow basic validation - detailed validation happens in converter
+    if len(payout_currency) > 10:  # Reasonable token symbol length
+        return False, "Invalid payout currency format"
+    
     return True, ""
 
 def log_transaction_request(data: Dict[str, Any]) -> str:
@@ -118,6 +137,7 @@ def log_transaction_request(data: Dict[str, Any]) -> str:
     print(f"📝 [INFO] Transaction request received - ID: {request_id}")
     print(f"💰 [INFO] Amount: ${data.get('sub_price', 'unknown')} USD")
     print(f"🏦 [INFO] Destination: {data.get('client_wallet_address', 'unknown')}")
+    print(f"🪙 [INFO] Payout Currency: {data.get('client_payout_currency', 'unknown')}")
     print(f"👤 [INFO] User ID: {data.get('user_id', 'unknown')}")
     
     return request_id
@@ -125,13 +145,14 @@ def log_transaction_request(data: Dict[str, Any]) -> str:
 @app.route("/", methods=["POST"])
 def process_payment():
     """
-    Main webhook endpoint for processing ETH payments.
+    Main webhook endpoint for processing token payments.
     
     Expected payload:
     {
         "client_wallet_address": "0x...",
         "sub_price": "15.00",
-        "user_id": 12345
+        "user_id": 12345,
+        "client_payout_currency": "ETH" | "USDT" | "USDC" | etc.
     }
     """
     request_start_time = time.time()
@@ -155,48 +176,110 @@ def process_payment():
         client_wallet_address = data['client_wallet_address']
         sub_price_usd = float(data['sub_price'])
         user_id = int(data['user_id'])
+        client_payout_currency = data['client_payout_currency'].strip().upper()
         
-        print(f"🔄 [INFO] {request_id}: Starting ETH conversion and transfer process")
+        print(f"🔄 [INFO] {request_id}: Starting {client_payout_currency} conversion and transfer process")
         
-        # Step 1: Convert USD to ETH
-        print(f"💱 [INFO] {request_id}: Converting ${sub_price_usd:.2f} USD to ETH")
-        eth_rate_result = eth_converter.get_usd_to_eth_rate()
+        # Step 1: Determine payment flow based on currency
+        if client_payout_currency == "ETH":
+            # Legacy ETH flow for backward compatibility
+            print(f"💱 [INFO] {request_id}: Converting ${sub_price_usd:.2f} USD to ETH (legacy flow)")
+            rate_result = eth_converter.get_usd_to_eth_rate()
+            
+            if not rate_result['success']:
+                error_msg = f"Failed to get ETH conversion rate: {rate_result.get('error', 'Unknown error')}"
+                print(f"❌ [ERROR] {request_id}: {error_msg}")
+                abort(500, error_msg)
+            
+            tokens_per_usd = rate_result['eth_per_usd']
+            total_token_amount = sub_price_usd * tokens_per_usd
+            client_token_amount = total_token_amount * 0.30  # 30% to client
+            
+            print(f"📊 [INFO] {request_id}: ETH Rate: {tokens_per_usd:.8f} ETH/USD")
+            print(f"💰 [INFO] {request_id}: Total ETH: {total_token_amount:.8f}")
+            print(f"🎯 [INFO] {request_id}: Client gets: {client_token_amount:.8f} ETH (30%)")
+            
+        else:
+            # Multi-token flow for ERC20 tokens
+            print(f"🪙 [INFO] {request_id}: Converting ${sub_price_usd:.2f} USD to {client_payout_currency} (multi-token flow)")
+            
+            # First, get ETH equivalent (30% of USD amount)
+            client_usd_amount = sub_price_usd * 0.30  # 30% to client
+            print(f"💰 [INFO] {request_id}: Client USD amount (30%): ${client_usd_amount:.2f}")
+            
+            # Convert client's USD amount to target token
+            conversion_result = multi_token_converter.convert_usd_to_token(client_usd_amount, client_payout_currency)
+            
+            if not conversion_result['success']:
+                error_msg = f"Failed to convert USD to {client_payout_currency}: {conversion_result.get('error', 'Unknown error')}"
+                print(f"❌ [ERROR] {request_id}: {error_msg}")
+                abort(500, error_msg)
+            
+            client_token_amount = conversion_result['token_amount']
+            tokens_per_usd = conversion_result['tokens_per_usd']
+            
+            print(f"📊 [INFO] {request_id}: {client_payout_currency} Rate: {tokens_per_usd:.8f} {client_payout_currency}/USD")
+            print(f"🎯 [INFO] {request_id}: Client gets: {client_token_amount:.8f} {client_payout_currency} (30% of ${sub_price_usd:.2f})")
         
-        if not eth_rate_result['success']:
-            error_msg = f"Failed to get ETH conversion rate: {eth_rate_result.get('error', 'Unknown error')}"
-            print(f"❌ [ERROR] {request_id}: {error_msg}")
-            abort(500, error_msg)
-        
-        eth_rate = eth_rate_result['eth_per_usd']
-        total_eth_amount = sub_price_usd * eth_rate
-        client_eth_amount = total_eth_amount * 0.30  # 30% to client
-        
-        print(f"📊 [INFO] {request_id}: ETH Rate: {eth_rate:.8f} ETH/USD")
-        print(f"💰 [INFO] {request_id}: Total ETH: {total_eth_amount:.8f}")
-        print(f"🎯 [INFO] {request_id}: Client gets: {client_eth_amount:.8f} ETH (30%)")
-        
-        # Step 2: Check wallet balance
-        balance_result = wallet_manager.get_wallet_balance()
-        if not balance_result['success']:
-            error_msg = f"Failed to check wallet balance: {balance_result.get('error', 'Unknown error')}"
-            print(f"❌ [ERROR] {request_id}: {error_msg}")
-            abort(500, error_msg)
-        
-        wallet_balance = balance_result['balance_eth']
-        print(f"🏦 [INFO] {request_id}: Wallet balance: {wallet_balance:.8f} ETH")
-        
-        if wallet_balance < client_eth_amount:
-            error_msg = f"Insufficient wallet balance. Need: {client_eth_amount:.8f} ETH, Have: {wallet_balance:.8f} ETH"
-            print(f"❌ [ERROR] {request_id}: {error_msg}")
-            abort(500, error_msg)
-        
-        # Step 3: Send ETH to client wallet
-        print(f"📤 [INFO] {request_id}: Sending {client_eth_amount:.8f} ETH to {client_wallet_address}")
-        transaction_result = wallet_manager.send_eth_to_address(
-            recipient_address=client_wallet_address,
-            amount_eth=client_eth_amount,
-            request_id=request_id
-        )
+        # Step 2: Check wallet balances and send transaction
+        if client_payout_currency == "ETH":
+            # ETH balance check and transfer
+            balance_result = wallet_manager.get_wallet_balance()
+            if not balance_result['success']:
+                error_msg = f"Failed to check ETH wallet balance: {balance_result.get('error', 'Unknown error')}"
+                print(f"❌ [ERROR] {request_id}: {error_msg}")
+                abort(500, error_msg)
+            
+            wallet_balance = balance_result['balance_eth']
+            print(f"🏦 [INFO] {request_id}: ETH wallet balance: {wallet_balance:.8f} ETH")
+            
+            if wallet_balance < client_token_amount:
+                error_msg = f"Insufficient ETH balance. Need: {client_token_amount:.8f} ETH, Have: {wallet_balance:.8f} ETH"
+                print(f"❌ [ERROR] {request_id}: {error_msg}")
+                abort(500, error_msg)
+            
+            # Send ETH to client wallet
+            print(f"📤 [INFO] {request_id}: Sending {client_token_amount:.8f} ETH to {client_wallet_address}")
+            transaction_result = wallet_manager.send_eth_to_address(
+                recipient_address=client_wallet_address,
+                amount_eth=client_token_amount,
+                request_id=request_id
+            )
+            
+        else:
+            # ERC20 token balance check and transfer
+            token_balance_result = wallet_manager.get_erc20_balance(client_payout_currency)
+            if not token_balance_result['success']:
+                error_msg = f"Failed to check {client_payout_currency} balance: {token_balance_result.get('error', 'Unknown error')}"
+                print(f"❌ [ERROR] {request_id}: {error_msg}")
+                abort(500, error_msg)
+            
+            token_balance = token_balance_result['balance_tokens']
+            print(f"🪙 [INFO] {request_id}: {client_payout_currency} balance: {token_balance:.8f} {client_payout_currency}")
+            
+            # Also check ETH balance for gas
+            eth_balance_result = wallet_manager.get_wallet_balance()
+            if not eth_balance_result['success']:
+                error_msg = f"Failed to check ETH balance for gas: {eth_balance_result.get('error', 'Unknown error')}"
+                print(f"❌ [ERROR] {request_id}: {error_msg}")
+                abort(500, error_msg)
+            
+            eth_balance = eth_balance_result['balance_eth']
+            print(f"⛽ [INFO] {request_id}: ETH balance for gas: {eth_balance:.8f} ETH")
+            
+            if token_balance < client_token_amount:
+                error_msg = f"Insufficient {client_payout_currency} balance. Need: {client_token_amount:.8f} {client_payout_currency}, Have: {token_balance:.8f} {client_payout_currency}"
+                print(f"❌ [ERROR] {request_id}: {error_msg}")
+                abort(500, error_msg)
+            
+            # Send ERC20 tokens to client wallet
+            print(f"🪙 [INFO] {request_id}: Sending {client_token_amount:.8f} {client_payout_currency} to {client_wallet_address}")
+            transaction_result = wallet_manager.send_erc20_token(
+                recipient_address=client_wallet_address,
+                amount_tokens=client_token_amount,
+                token_symbol=client_payout_currency,
+                request_id=request_id
+            )
         
         if not transaction_result['success']:
             error_msg = f"Transaction failed: {transaction_result.get('error', 'Unknown error')}"
@@ -211,7 +294,7 @@ def process_payment():
         processing_time = time.time() - request_start_time
         
         # Log success
-        print(f"✅ [SUCCESS] {request_id}: Transaction completed successfully!")
+        print(f"✅ [SUCCESS] {request_id}: {client_payout_currency} transaction completed successfully!")
         print(f"🔗 [INFO] {request_id}: TX Hash: {transaction_hash}")
         print(f"⛽ [INFO] {request_id}: Gas used: {gas_used}, Gas price: {gas_price}")
         print(f"⏱️ [INFO] {request_id}: Processing time: {processing_time:.2f}s")
@@ -222,12 +305,18 @@ def process_payment():
             "request_id": request_id,
             "transaction_hash": transaction_hash,
             "amount_usd": sub_price_usd,
-            "amount_eth": client_eth_amount,
-            "eth_rate": eth_rate,
+            "amount_sent": client_token_amount,
+            "payout_currency": client_payout_currency,
+            "tokens_per_usd": tokens_per_usd,
             "recipient": client_wallet_address,
             "user_id": user_id,
             "processing_time_seconds": round(processing_time, 2)
         }
+        
+        # Add legacy fields for backward compatibility
+        if client_payout_currency == "ETH":
+            response_data["amount_eth"] = client_token_amount
+            response_data["eth_rate"] = tokens_per_usd
         
         return jsonify(response_data), 200
         
@@ -296,8 +385,8 @@ def get_status():
     """Get detailed system status."""
     try:
         status_data = {
-            "service": "TPS2 - ETH Payment Splitting Service",
-            "version": "1.0.0",
+            "service": "TPS2 - Multi-Token Payment Splitting Service",
+            "version": "2.0.0",
             "timestamp": datetime.utcnow().isoformat(),
             "uptime": "Service running"
         }
@@ -329,7 +418,7 @@ def get_status():
         
     except Exception as e:
         error_data = {
-            "service": "TPS2 - ETH Payment Splitting Service",
+            "service": "TPS2 - Multi-Token Payment Splitting Service",
             "status": "error",
             "timestamp": datetime.utcnow().isoformat(),
             "error": str(e)
@@ -338,7 +427,7 @@ def get_status():
 
 # Initialize components on startup
 if __name__ == "__main__":
-    print("🚀 [STARTUP] TPS2 ETH Payment Splitting Service starting...")
+    print("🚀 [STARTUP] TPS2 Multi-Token Payment Splitting Service starting...")
     
     if initialize_components():
         print("✅ [STARTUP] Initialization successful, starting Flask server...")

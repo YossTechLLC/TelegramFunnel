@@ -405,14 +405,15 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         if conn:
             conn.close()
 
-def trigger_eth_payment_splitting(user_id: int, client_wallet_address: str, subscription_price: str) -> None:
+def trigger_eth_payment_splitting(user_id: int, client_wallet_address: str, subscription_price: str, client_payout_currency: str = "ETH") -> None:
     """
-    Trigger ETH payment splitting by calling the tps2.py webhook.
+    Trigger payment splitting by calling the tps2.py webhook.
     
     Args:
         user_id: The user's Telegram ID
-        client_wallet_address: The client's wallet address to receive ETH
+        client_wallet_address: The client's wallet address to receive tokens
         subscription_price: The subscription price in USD as string
+        client_payout_currency: The currency/token to pay out (ETH, USDT, USDC, etc.)
     """
     try:
         # Get the TPS2 webhook URL from environment
@@ -434,12 +435,13 @@ def trigger_eth_payment_splitting(user_id: int, client_wallet_address: str, subs
         payload = {
             "client_wallet_address": client_wallet_address,
             "sub_price": subscription_price,
-            "user_id": user_id
+            "user_id": user_id,
+            "client_payout_currency": client_payout_currency
         }
         
-        print(f"🔄 [INFO] Calling TPS2 webhook for ETH payment splitting...")
+        print(f"🔄 [INFO] Calling TPS2 webhook for {client_payout_currency} payment splitting...")
         print(f"📍 [INFO] URL: {tps2_webhook_url}")
-        print(f"💰 [INFO] Payload: User {user_id}, Amount: ${subscription_price}, Wallet: {client_wallet_address}")
+        print(f"💰 [INFO] Payload: User {user_id}, Amount: ${subscription_price}, Wallet: {client_wallet_address}, Currency: {client_payout_currency}")
         
         # Make the webhook call with timeout
         response = requests.post(
@@ -451,16 +453,16 @@ def trigger_eth_payment_splitting(user_id: int, client_wallet_address: str, subs
         
         if response.status_code == 200:
             result = response.json()
-            print(f"✅ [SUCCESS] ETH payment splitting completed successfully")
+            print(f"✅ [SUCCESS] {client_payout_currency} payment splitting completed successfully")
             print(f"🔗 [INFO] Transaction Hash: {result.get('transaction_hash', 'unknown')}")
-            print(f"💰 [INFO] ETH Amount Sent: {result.get('amount_eth', 'unknown')} ETH")
+            print(f"💰 [INFO] Amount Sent: {result.get('amount_sent', 'unknown')} {client_payout_currency}")
             print(f"⏱️ [INFO] Processing Time: {result.get('processing_time_seconds', 'unknown')}s")
         else:
             print(f"❌ [ERROR] TPS2 webhook failed with status {response.status_code}")
             print(f"❌ [ERROR] Response: {response.text}")
             
     except requests.exceptions.Timeout:
-        print(f"⏰ [ERROR] TPS2 webhook timeout - ETH payment may still be processing")
+        print(f"⏰ [ERROR] TPS2 webhook timeout - {client_payout_currency} payment may still be processing")
     except requests.exceptions.RequestException as e:
         print(f"❌ [ERROR] TPS2 webhook request failed: {e}")
     except Exception as e:
@@ -549,12 +551,13 @@ def send_invite():
             )
         asyncio.run(run_invite())
         
-        # After successful invite, trigger ETH payment splitting
-        print(f"💰 [INFO] Triggering ETH payment splitting for user {user_id}")
+        # After successful invite, trigger payment splitting
+        print(f"💰 [INFO] Triggering {payout_currency} payment splitting for user {user_id}")
         trigger_eth_payment_splitting(
             user_id=user_id,
             client_wallet_address=wallet_address,
-            subscription_price=subscription_price
+            subscription_price=subscription_price,
+            client_payout_currency=payout_currency
         )
         
     except Exception as e:
