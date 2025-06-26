@@ -6,6 +6,18 @@ from google.cloud import secretmanager
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
+# Import token registry for validation
+try:
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'GCSplit25'))
+    from token_registry import TokenRegistry
+    TOKEN_REGISTRY_AVAILABLE = True
+    print("✅ [INFO] Token Registry imported successfully for database validation")
+except ImportError as e:
+    print(f"⚠️ [WARNING] Token Registry import failed: {e}")
+    TOKEN_REGISTRY_AVAILABLE = False
+    TokenRegistry = None
+
 def fetch_database_host() -> str:
     """Fetch database host from Secret Manager."""
     try:
@@ -72,6 +84,15 @@ class DatabaseManager:
         self.dbname = DB_NAME
         self.user = DB_USER
         self.password = DB_PASSWORD
+        
+        # Initialize token registry for validation
+        self.token_registry = None
+        if TOKEN_REGISTRY_AVAILABLE:
+            try:
+                self.token_registry = TokenRegistry()
+                print("✅ [INFO] DatabaseManager: Token Registry initialized for validation")
+            except Exception as e:
+                print(f"⚠️ [WARNING] DatabaseManager: Failed to initialize Token Registry: {e}")
         
         # Validate that critical credentials are available
         if not self.password:
@@ -169,19 +190,36 @@ class DatabaseManager:
                 (str(open_channel_id),)
             )
             result = cur.fetchone()
-            print(f"💰 [DEBUG] fetch_client_wallet_info result: {result}")
+            print(f"💰 [DEBUG] fetch_client_wallet_info raw result: {result}")
             cur.close()
             conn.close()
             
             if result:
                 wallet_address, payout_currency = result
+                
+                # Enhanced logging for currency validation
+                print(f"🏦 [DEBUG] Retrieved wallet_address: '{wallet_address}'")
+                print(f"💱 [DEBUG] Retrieved payout_currency: '{payout_currency}'")
+                
+                # Validate the retrieved payout currency
+                if payout_currency:
+                    is_valid, error_msg = self.validate_client_payout_currency(payout_currency)
+                    if is_valid:
+                        print(f"✅ [DEBUG] Payout currency '{payout_currency}' is valid")
+                    else:
+                        print(f"❌ [WARNING] Payout currency '{payout_currency}' is INVALID: {error_msg}")
+                        print(f"⚠️ [WARNING] This will likely cause payment flow issues!")
+                else:
+                    print(f"⚠️ [WARNING] Payout currency is NULL/empty for channel {open_channel_id}")
+                
                 return wallet_address, payout_currency
             else:
-                print("❌ No wallet info found for open_channel_id =", open_channel_id)
+                print(f"❌ [ERROR] No wallet info found for open_channel_id = {open_channel_id}")
+                print(f"🔍 [DEBUG] This suggests the channel is not configured in main_clients_database")
                 return None, None
                 
         except Exception as e:
-            print(f"❌ Error fetching wallet info: {e}")
+            print(f"❌ [ERROR] Database error fetching wallet info for channel {open_channel_id}: {e}")
             return None, None
     
     def get_default_donation_channel(self) -> Optional[str]:
@@ -206,6 +244,39 @@ class DatabaseManager:
             print(f"❌ [DEBUG] Error getting default donation channel: {e}")
             return None
     
+    def validate_client_payout_currency(self, payout_currency: str) -> Tuple[bool, str]:
+        """
+        Validate that the payout currency is a supported token symbol.
+        
+        Args:
+            payout_currency: The currency symbol to validate
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not payout_currency:
+            return False, "Payout currency cannot be empty"
+        
+        # Clean and standardize the currency symbol
+        payout_currency = payout_currency.strip().upper()
+        
+        # If token registry is not available, allow ETH as fallback
+        if not self.token_registry:
+            if payout_currency == "ETH":
+                return True, ""
+            else:
+                return False, f"Token registry not available - only ETH is supported as fallback"
+        
+        # Check if token is supported on Ethereum Mainnet (Chain ID 1)
+        if payout_currency == "ETH" or self.token_registry.is_token_supported(1, payout_currency):
+            return True, ""
+        
+        # Get list of supported tokens for error message
+        supported_tokens = ["ETH"] + self.token_registry.get_supported_tokens(1)
+        supported_tokens_str = ", ".join(supported_tokens)
+        
+        return False, f"Unsupported token '{payout_currency}'. Supported tokens: {supported_tokens_str}"
+    
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """
         Insert a new channel configuration into the database.
@@ -216,6 +287,19 @@ class DatabaseManager:
         Returns:
             True if successful, False otherwise
         """
+        # Validate client_payout_currency before inserting
+        payout_currency = channel_data.get("client_payout_currency", "ETH")
+        is_valid, error_msg = self.validate_client_payout_currency(payout_currency)
+        
+        if not is_valid:
+            print(f"❌ [ERROR] Invalid client_payout_currency '{payout_currency}': {error_msg}")
+            print(f"❌ [ERROR] Channel configuration insert failed for open_channel_id: {channel_data.get('open_channel_id', 'unknown')}")
+            return False
+        
+        # Standardize the currency symbol (uppercase)
+        payout_currency = payout_currency.strip().upper()
+        print(f"✅ [INFO] Validated client_payout_currency: '{payout_currency}' for channel {channel_data.get('open_channel_id', 'unknown')}")
+        
         vals = (
             channel_data["open_channel_id"],
             channel_data.get("open_channel_title", "Default Title"),
@@ -230,7 +314,7 @@ class DatabaseManager:
             channel_data["sub_3_price"],
             channel_data["sub_3_time"],
             channel_data.get("client_wallet_address", ""),
-            channel_data.get("client_payout_currency", "USD"),
+            payout_currency,
         )
         
         try:
@@ -250,6 +334,139 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ DB error: {e}")
             return False
+    
+    def migrate_usd_to_token_currency(self, target_currency: str = "ETH", dry_run: bool = True) -> Dict[str, Any]:
+        """
+        Migrate existing USD values in client_payout_currency to a valid token symbol.
+        
+        Args:
+            target_currency: The token symbol to replace USD with (default: ETH)
+            dry_run: If True, only report what would be changed without making changes
+            
+        Returns:
+            Dictionary with migration results
+        """
+        # Validate target currency
+        is_valid, error_msg = self.validate_client_payout_currency(target_currency)
+        if not is_valid:
+            return {
+                "success": False,
+                "error": f"Invalid target currency '{target_currency}': {error_msg}",
+                "records_found": 0,
+                "records_updated": 0
+            }
+        
+        target_currency = target_currency.strip().upper()
+        
+        try:
+            with self.get_connection() as conn, conn.cursor() as cur:
+                # First, find all records with USD as client_payout_currency
+                query_find = """
+                    SELECT open_channel_id, client_payout_currency 
+                    FROM main_clients_database 
+                    WHERE client_payout_currency = %s
+                """
+                cur.execute(query_find, ("USD",))
+                usd_records = cur.fetchall()
+                
+                records_found = len(usd_records)
+                print(f"🔍 [INFO] Found {records_found} records with client_payout_currency = 'USD'")
+                
+                if records_found == 0:
+                    return {
+                        "success": True,
+                        "message": "No USD records found - no migration needed",
+                        "records_found": 0,
+                        "records_updated": 0
+                    }
+                
+                # Log the records that would be updated
+                for open_channel_id, current_currency in usd_records:
+                    action = "WOULD UPDATE" if dry_run else "UPDATING"
+                    print(f"📝 [INFO] {action}: Channel {open_channel_id} from '{current_currency}' to '{target_currency}'")
+                
+                records_updated = 0
+                if not dry_run:
+                    # Perform the actual update
+                    update_query = """
+                        UPDATE main_clients_database 
+                        SET client_payout_currency = %s 
+                        WHERE client_payout_currency = %s
+                    """
+                    cur.execute(update_query, (target_currency, "USD"))
+                    records_updated = cur.rowcount
+                    
+                    print(f"✅ [INFO] Successfully updated {records_updated} records from 'USD' to '{target_currency}'")
+                else:
+                    records_updated = records_found
+                    print(f"🔄 [INFO] DRY RUN: Would update {records_updated} records from 'USD' to '{target_currency}'")
+                
+                return {
+                    "success": True,
+                    "message": f"Migration {'completed' if not dry_run else 'simulated'} successfully",
+                    "records_found": records_found,
+                    "records_updated": records_updated,
+                    "dry_run": dry_run,
+                    "target_currency": target_currency
+                }
+                
+        except Exception as e:
+            error_msg = f"Migration failed: {e}"
+            print(f"❌ [ERROR] {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "records_found": 0,
+                "records_updated": 0
+            }
+    
+    def get_currency_distribution(self) -> Dict[str, Any]:
+        """
+        Get distribution of client_payout_currency values in the database.
+        
+        Returns:
+            Dictionary with currency distribution statistics
+        """
+        try:
+            with self.get_connection() as conn, conn.cursor() as cur:
+                query = """
+                    SELECT client_payout_currency, COUNT(*) as count
+                    FROM main_clients_database 
+                    GROUP BY client_payout_currency
+                    ORDER BY count DESC
+                """
+                cur.execute(query)
+                results = cur.fetchall()
+                
+                distribution = {}
+                total_records = 0
+                
+                for currency, count in results:
+                    distribution[currency or "NULL"] = count
+                    total_records += count
+                    
+                    # Validate each currency
+                    if currency:
+                        is_valid, _ = self.validate_client_payout_currency(currency)
+                        status = "✅ VALID" if is_valid else "❌ INVALID"
+                        print(f"💰 [INFO] Currency '{currency}': {count} records - {status}")
+                    else:
+                        print(f"⚠️ [WARNING] NULL currency: {count} records - ❌ INVALID")
+                
+                return {
+                    "success": True,
+                    "total_records": total_records,
+                    "distribution": distribution,
+                    "currencies": list(distribution.keys())
+                }
+                
+        except Exception as e:
+            error_msg = f"Failed to get currency distribution: {e}"
+            print(f"❌ [ERROR] {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg
+            }
     
     def fetch_expired_subscriptions(self) -> List[Tuple[int, int, str, str]]:
         """
