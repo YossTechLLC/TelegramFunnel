@@ -52,10 +52,11 @@ class DEXSwapper:
         self.quote_endpoint = f"{self.swap_api_base}/quote"
         self.swap_endpoint = f"{self.swap_api_base}/swap"
         
-        # Rate limiting for 1INCH API to avoid 429 errors
+        # Enhanced rate limiting for 1INCH API to avoid 429 errors
         self.last_api_call_time = 0
-        self.min_request_interval = 0.6  # 600ms between requests (max ~100 req/min)
-        self.rate_limit_delay = 2.0  # 2 second delay after 429 errors
+        self.min_request_interval = 1.0  # 1000ms between requests (max ~60 req/min)
+        self.rate_limit_delay = 3.0  # 3 second delay after 429 errors
+        self.consecutive_429_count = 0  # Track consecutive 429 errors for exponential backoff
         
         print(f"🔄 [INFO] DEX Swapper initialized for chain {self.chain_id} with rate validation")
         print(f"⚙️ [INFO] Swap config: max_slippage={self.config.max_slippage_percent}%, max_eth={self.config.max_eth_per_swap} ETH")
@@ -274,6 +275,9 @@ class DEXSwapper:
                     if 'error' in quote_data:
                         print(f"❌ [DEBUG] API error in response: {quote_data['error']}")
                 
+                # Reset consecutive 429 count on successful response
+                self.consecutive_429_count = 0
+                
                 return {
                     'success': True,
                     'from_token': from_token,
@@ -291,12 +295,18 @@ class DEXSwapper:
                 print(f"🔗 [DEBUG] Failed request URL: {self.quote_endpoint}")
                 print(f"📝 [DEBUG] Request params: {params}")
                 
-                # Special handling for rate limit errors
+                # Enhanced handling for rate limit errors with exponential backoff
                 if response.status_code == 429:
-                    print(f"🚦 [WARNING] Rate limit hit (429) - implementing adaptive delay")
-                    print(f"⏳ [INFO] Will wait {self.rate_limit_delay}s before next attempt")
+                    self.consecutive_429_count += 1
+                    # Exponential backoff: 3s, 6s, 12s, max 30s
+                    adaptive_delay = min(self.rate_limit_delay * (2 ** (self.consecutive_429_count - 1)), 30.0)
+                    print(f"🚦 [WARNING] Rate limit hit (429) - attempt #{self.consecutive_429_count}")
+                    print(f"⏳ [INFO] Implementing exponential backoff: {adaptive_delay:.1f}s delay")
                     # Update the last call time to include the extra delay
-                    self.last_api_call_time = time.time() + self.rate_limit_delay
+                    self.last_api_call_time = time.time() + adaptive_delay
+                else:
+                    # Reset consecutive 429 count on any successful or non-429 response
+                    self.consecutive_429_count = 0
                 
                 return {
                     'success': False,
@@ -637,11 +647,35 @@ class DEXSwapper:
                     'error': f'All quote attempts returned zero {token_symbol} tokens - possible liquidity or API issues'
                 }
             
-            # Calculate rate and estimate ETH needed
-            rate_tokens_per_eth = initial_token_wei / initial_eth_wei
-            estimated_eth_wei = int(token_amount_wei / rate_tokens_per_eth)
+            # Calculate rate with proper decimal conversion
+            # Convert Wei amounts to human-readable amounts for rate calculation
+            initial_token_amount = initial_token_wei / (10 ** token_info.decimals)  # Convert to USDC units
+            initial_eth_amount = initial_eth_wei / (10 ** 18)  # Convert to ETH units
+            
+            # Calculate rate in human-readable units with safety checks
+            if initial_eth_amount <= 0:
+                print(f"❌ [ERROR] Invalid ETH amount in quote: {initial_eth_amount}")
+                return {
+                    'success': False,
+                    'error': f'Invalid ETH amount from quote: {initial_eth_amount}'
+                }
+            
+            rate_tokens_per_eth = initial_token_amount / initial_eth_amount
+            
+            # Validate rate is reasonable (for USDC should be ~2000-4000 per ETH)
+            if rate_tokens_per_eth <= 0:
+                print(f"❌ [ERROR] Invalid rate calculated: {rate_tokens_per_eth}")
+                return {
+                    'success': False,
+                    'error': f'Invalid rate calculated: {rate_tokens_per_eth} {token_symbol} per ETH'
+                }
+            
+            # Calculate ETH needed in human-readable units, then convert to Wei
+            eth_needed_human = token_amount / rate_tokens_per_eth
+            estimated_eth_wei = int(self.w3.to_wei(eth_needed_human, 'ether'))
             
             print(f"📊 [INFO] Rate calculation: {rate_tokens_per_eth:.2f} {token_symbol} per ETH")
+            print(f"📊 [DEBUG] Quote: {initial_eth_amount:.6f} ETH → {initial_token_amount:.6f} {token_symbol}")
             print(f"💰 [INFO] Estimated ETH needed: {float(self.w3.from_wei(estimated_eth_wei, 'ether')):.6f} ETH")
             
             # Add slippage buffer and ensure minimum viable amount
@@ -654,12 +688,14 @@ class DEXSwapper:
                 print(f"⚠️ [WARNING] Calculated ETH amount too small, using minimum: 0.002 ETH")
                 eth_needed_wei = min_swap_wei
             
+            # Calculate eth_needed_eth outside the success block to avoid scope issues
+            eth_needed_eth = float(self.w3.from_wei(eth_needed_wei, 'ether'))
+            
             # Get more accurate quote with estimated amount
-            print(f"🔍 [INFO] Getting final quote with {float(self.w3.from_wei(eth_needed_wei, 'ether')):.6f} ETH")
+            print(f"🔍 [INFO] Getting final quote with {eth_needed_eth:.6f} ETH")
             final_quote = self.get_swap_quote("ETH", token_symbol, eth_needed_wei)
             
             if final_quote['success']:
-                eth_needed_eth = float(self.w3.from_wei(eth_needed_wei, 'ether'))
                 tokens_received = final_quote['to_amount_wei'] / (10 ** token_info.decimals)
                 
                 # Validate the swap rate before proceeding
