@@ -908,13 +908,14 @@ class WalletManager:
                 'request_id': request_id
             }
     
-    def initialize_dex_swapper(self, oneinch_api_key: str, swap_config: SwapConfig = None) -> bool:
+    def initialize_dex_swapper(self, oneinch_api_key: str, swap_config: SwapConfig = None, config_manager=None) -> bool:
         """
-        Initialize the DEX swapper for automatic token conversions.
+        Initialize the DEX swapper for automatic token conversions with rate validation.
         
         Args:
             oneinch_api_key: 1INCH API key for DEX access
             swap_config: Optional swap configuration
+            config_manager: Optional ConfigManager for market data API keys
             
         Returns:
             True if initialization successful, False otherwise
@@ -929,10 +930,11 @@ class WalletManager:
                 oneinch_api_key=oneinch_api_key,
                 host_address=self.host_address,
                 private_key=self.private_key,
-                swap_config=swap_config
+                swap_config=swap_config,
+                config_manager=config_manager  # Pass config manager for market data validation
             )
             
-            print("✅ [INFO] DEX swapper initialized successfully")
+            print("✅ [INFO] DEX swapper initialized successfully with rate validation")
             return True
             
         except Exception as e:

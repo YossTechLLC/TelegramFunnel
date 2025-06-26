@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from web3 import Web3
 from token_registry import TokenRegistry, TokenInfo
+from market_data_provider import RealTimeMarketDataProvider
 
 @dataclass
 class SwapConfig:
@@ -23,9 +24,9 @@ class DEXSwapper:
     """Handles ETH to ERC20 token swaps using 1INCH DEX aggregator."""
     
     def __init__(self, w3: Web3, oneinch_api_key: str, host_address: str, private_key: str, 
-                 swap_config: SwapConfig = None):
+                 swap_config: SwapConfig = None, config_manager=None):
         """
-        Initialize the DEX swapper.
+        Initialize the DEX swapper with rate validation.
         
         Args:
             w3: Web3 instance
@@ -33,6 +34,7 @@ class DEXSwapper:
             host_address: Host wallet address
             private_key: Host wallet private key
             swap_config: Swap configuration parameters
+            config_manager: Optional ConfigManager for market data API keys
         """
         self.w3 = w3
         self.oneinch_api_key = oneinch_api_key
@@ -42,13 +44,17 @@ class DEXSwapper:
         self.token_registry = TokenRegistry()
         self.chain_id = w3.eth.chain_id
         
+        # Initialize market data provider for rate validation
+        self.market_data_provider = RealTimeMarketDataProvider(config_manager=config_manager)
+        
         # 1INCH API endpoints
         self.swap_api_base = f"https://api.1inch.dev/swap/v6.0/{self.chain_id}"
         self.quote_endpoint = f"{self.swap_api_base}/quote"
         self.swap_endpoint = f"{self.swap_api_base}/swap"
         
-        print(f"🔄 [INFO] DEX Swapper initialized for chain {self.chain_id}")
+        print(f"🔄 [INFO] DEX Swapper initialized for chain {self.chain_id} with rate validation")
         print(f"⚙️ [INFO] Swap config: max_slippage={self.config.max_slippage_percent}%, max_eth={self.config.max_eth_per_swap} ETH")
+        print(f"📊 [INFO] Market data validation: {len([s for s in self.market_data_provider.price_sources.values() if s['enabled']])} sources enabled")
     
     def _get_headers(self) -> Dict[str, str]:
         """Get headers for 1INCH API requests."""
@@ -73,6 +79,97 @@ class DEXSwapper:
         
         token_info = self.token_registry.get_token_info(self.chain_id, token_symbol)
         return token_info.address if token_info else None
+    
+    def _validate_swap_rate(self, from_token: str, to_token: str, eth_amount: float, expected_token_amount: float) -> Dict[str, Any]:
+        """
+        Validate swap rate against market data to prevent rate calculation errors.
+        
+        Args:
+            from_token: Source token (typically "ETH")
+            to_token: Target token (e.g., "LINK")
+            eth_amount: Amount of ETH being swapped
+            expected_token_amount: Expected amount of tokens to receive
+            
+        Returns:
+            Validation result dictionary
+        """
+        try:
+            print(f"🔍 [INFO] Validating swap rate: {eth_amount:.6f} {from_token} → {expected_token_amount:.6f} {to_token}")
+            
+            # Get market rates for both tokens
+            if from_token.upper() == "ETH":
+                eth_price_result = self.market_data_provider.get_token_price("ETH")
+            else:
+                eth_price_result = {'success': False, 'error': 'Only ETH swaps supported for validation'}
+            
+            to_token_price_result = self.market_data_provider.get_token_price(to_token)
+            
+            if not eth_price_result['success'] or not to_token_price_result['success']:
+                # If we can't validate, allow the swap but log warning
+                print(f"⚠️ [WARNING] Cannot validate swap rate - market data unavailable")
+                print(f"🔍 [DEBUG] ETH price: {eth_price_result.get('error', 'unknown')}")
+                print(f"🔍 [DEBUG] {to_token} price: {to_token_price_result.get('error', 'unknown')}")
+                return {
+                    'valid': True,  # Allow swap to proceed
+                    'validated': False,
+                    'reason': 'Market data unavailable for validation',
+                    'warning': True
+                }
+            
+            # Calculate expected conversion based on market rates
+            eth_usd_value = eth_amount * eth_price_result['usd_per_token']
+            expected_tokens_from_market = eth_usd_value * to_token_price_result['tokens_per_usd']
+            
+            # Calculate deviation
+            deviation = abs(expected_token_amount - expected_tokens_from_market) / expected_tokens_from_market
+            
+            print(f"📊 [INFO] Rate validation:")
+            print(f"  💱 ETH price: ${eth_price_result['usd_per_token']:.2f} (sources: {', '.join(eth_price_result['sources_used'])})")
+            print(f"  💱 {to_token} price: ${to_token_price_result['usd_per_token']:.6f} (sources: {', '.join(to_token_price_result['sources_used'])})")
+            print(f"  💰 ETH USD value: ${eth_usd_value:.2f}")
+            print(f"  🎯 Expected {to_token} from market: {expected_tokens_from_market:.6f}")
+            print(f"  🔄 1INCH quote amount: {expected_token_amount:.6f}")
+            print(f"  📈 Deviation: {deviation:.1%}")
+            
+            # Set deviation threshold (10% for now, can be made configurable)
+            max_deviation = 0.10  # 10%
+            
+            if deviation > max_deviation:
+                return {
+                    'valid': False,
+                    'validated': True,
+                    'reason': f'Swap rate deviates {deviation:.1%} from market rate (max: {max_deviation:.1%})',
+                    'market_data': {
+                        'eth_price': eth_price_result['usd_per_token'],
+                        'token_price': to_token_price_result['usd_per_token'],
+                        'expected_from_market': expected_tokens_from_market,
+                        'quote_amount': expected_token_amount,
+                        'deviation': deviation
+                    },
+                    'severity': 'high' if deviation > 0.25 else 'medium'
+                }
+            else:
+                return {
+                    'valid': True,
+                    'validated': True,
+                    'reason': f'Swap rate within acceptable range (deviation: {deviation:.1%})',
+                    'market_data': {
+                        'eth_price': eth_price_result['usd_per_token'],
+                        'token_price': to_token_price_result['usd_per_token'],
+                        'expected_from_market': expected_tokens_from_market,
+                        'quote_amount': expected_token_amount,
+                        'deviation': deviation
+                    }
+                }
+                
+        except Exception as e:
+            print(f"❌ [ERROR] Rate validation failed: {e}")
+            return {
+                'valid': True,  # Allow swap to proceed if validation fails
+                'validated': False,
+                'reason': f'Validation error: {str(e)}',
+                'error': True
+            }
     
     def get_swap_quote(self, from_token: str, to_token: str, amount_wei: int) -> Dict[str, Any]:
         """
@@ -201,8 +298,20 @@ class DEXSwapper:
                 eth_needed_eth = float(self.w3.from_wei(eth_needed_wei, 'ether'))
                 tokens_received = final_quote['to_amount_wei'] / (10 ** token_info.decimals)
                 
+                # Validate the swap rate before proceeding
+                rate_validation = self._validate_swap_rate("ETH", token_symbol, eth_needed_eth, tokens_received)
+                
                 print(f"💱 [INFO] ETH needed calculation: {eth_needed_eth:.6f} ETH → {tokens_received:.6f} {token_symbol}")
                 print(f"🎯 [INFO] Target: {token_amount:.6f} {token_symbol}, Will receive: {tokens_received:.6f}")
+                
+                # Log validation result
+                if rate_validation['validated']:
+                    if rate_validation['valid']:
+                        print(f"✅ [VALIDATION] Rate validation passed: {rate_validation['reason']}")
+                    else:
+                        print(f"⚠️ [VALIDATION] Rate validation warning: {rate_validation['reason']}")
+                else:
+                    print(f"⚠️ [VALIDATION] Rate validation skipped: {rate_validation['reason']}")
                 
                 return {
                     'success': True,
@@ -213,7 +322,8 @@ class DEXSwapper:
                     'expected_tokens_received': tokens_received,
                     'tokens_received_wei': final_quote['to_amount_wei'],
                     'gas_estimate': final_quote['gas_estimate'],
-                    'sufficient_output': tokens_received >= token_amount
+                    'sufficient_output': tokens_received >= token_amount,
+                    'rate_validation': rate_validation
                 }
             else:
                 return final_quote

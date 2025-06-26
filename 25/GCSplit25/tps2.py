@@ -53,11 +53,12 @@ def initialize_components():
         # Initialize ETH converter (legacy compatibility)
         eth_converter = EthConverter(config['oneinch_api_key'])
         
-        # Initialize multi-token converter with chain ID from wallet manager
-        print("🪙 [INFO] Initializing multi-token converter...")
+        # Initialize multi-token converter with robust market data provider
+        print("🪙 [INFO] Initializing multi-token converter with robust pricing...")
         multi_token_converter = MultiTokenConverter(
-            oneinch_api_key=config['oneinch_api_key'],
-            chain_id=1  # Default to Ethereum Mainnet, will be updated after wallet connection
+            oneinch_api_key=config['oneinch_api_key'],  # Legacy fallback
+            chain_id=1,  # Default to Ethereum Mainnet
+            config_manager=config_manager  # Pass config manager for API key access
         )
         
         # Initialize wallet manager
@@ -84,7 +85,8 @@ def initialize_components():
         
         dex_init_success = wallet_manager.initialize_dex_swapper(
             oneinch_api_key=config['oneinch_api_key'],
-            swap_config=swap_config
+            swap_config=swap_config,
+            config_manager=config_manager  # Pass config manager for market data validation
         )
         
         if dex_init_success:

@@ -73,6 +73,25 @@ class ConfigManager:
             self.ethereum_rpc_url = self.fetch_secret("ETHEREUM_RPC_URL", required=True)
             self.oneinch_api_key = self.fetch_secret("1INCH_API_KEY", required=True)
             
+            # Load optional price data API keys for enhanced rate validation
+            print("📊 [INFO] Loading optional price data API keys for robust rate validation...")
+            self.coingecko_api_key = self.fetch_secret("COINGECKO_API_KEY", required=False)
+            self.cryptocompare_api_key = self.fetch_secret("CRYPTOCOMPARE_API_KEY", required=False)
+            
+            # Log which price sources are available
+            price_sources_available = []
+            if self.coingecko_api_key:
+                price_sources_available.append("CoinGecko (with API key)")
+            else:
+                price_sources_available.append("CoinGecko (free tier)")
+                
+            if self.cryptocompare_api_key:
+                price_sources_available.append("CryptoCompare (with API key)")
+            else:
+                print("💡 [INFO] CryptoCompare API key not configured - using free tier with rate limits")
+            
+            print(f"📈 [INFO] Available price sources: {', '.join(price_sources_available)}")
+            
             # Validate private key format
             if not self.host_wallet_private_key.startswith('0x'):
                 self.host_wallet_private_key = '0x' + self.host_wallet_private_key
@@ -114,6 +133,8 @@ class ConfigManager:
             'host_wallet_eth_address': self.host_wallet_eth_address,
             'ethereum_rpc_url': self.ethereum_rpc_url,
             'oneinch_api_key': self.oneinch_api_key,
+            'coingecko_api_key': getattr(self, 'coingecko_api_key', None),
+            'cryptocompare_api_key': getattr(self, 'cryptocompare_api_key', None),
             'config_loaded': self.config_loaded
         }
     
@@ -127,11 +148,29 @@ class ConfigManager:
         if not self.config_loaded:
             return {'status': 'Configuration not loaded'}
         
+        # Count configured price data sources
+        price_sources_configured = 0
+        price_source_details = []
+        
+        if getattr(self, 'coingecko_api_key', None):
+            price_sources_configured += 1
+            price_source_details.append("CoinGecko (API key)")
+        else:
+            price_source_details.append("CoinGecko (free)")
+            
+        if getattr(self, 'cryptocompare_api_key', None):
+            price_sources_configured += 1
+            price_source_details.append("CryptoCompare (API key)")
+        else:
+            price_source_details.append("CryptoCompare (free/disabled)")
+        
         return {
             'host_wallet_address': self.host_wallet_eth_address,
             'ethereum_rpc_configured': bool(self.ethereum_rpc_url),
             'private_key_configured': bool(self.host_wallet_private_key),
             'oneinch_api_configured': bool(self.oneinch_api_key),
+            'price_api_keys_configured': price_sources_configured,
+            'price_sources_available': ', '.join(price_source_details),
             'config_status': 'Loaded successfully'
         }
     
