@@ -868,47 +868,146 @@ class WalletManager:
             # Convert amount to token's smallest unit
             amount_raw = int(amount_tokens * (10 ** token_info.decimals))
             
-            # Build transaction
+            # Build transaction with proper validation
             fee_data = cost_result['fee_data']
             
-            # Use legacy transactions for ERC20 (more reliable)
+            # Ensure contract address is properly checksummed
+            contract_address = Web3.to_checksum_address(token_info.address)
+            
+            # Encode the transfer function call with proper validation
+            try:
+                transfer_data = token_contract.encodeABI(fn_name='transfer', args=[recipient_address, amount_raw])
+                print(f"🔍 [DEBUG] {request_id}: Transfer ABI encoded successfully - data length: {len(transfer_data)} bytes")
+            except Exception as e:
+                print(f"❌ [ERROR] {request_id}: Failed to encode transfer ABI: {e}")
+                raise ValueError(f"Failed to encode ERC20 transfer: {e}")
+            
+            # Use legacy transactions for ERC20 (more reliable) with comprehensive validation
             transaction = {
-                'to': token_info.address,
+                'from': Web3.to_checksum_address(self.host_address),  # Explicitly include from address
+                'to': contract_address,  # Properly checksummed contract address
                 'value': 0,  # No ETH transfer, just gas
                 'nonce': nonce,
                 'gas': cost_result['gas_estimate'],
                 'gasPrice': cost_result['gas_price'],
                 'chainId': chain_id,
-                'data': token_contract.encodeABI(fn_name='transfer', args=[recipient_address, amount_raw])
+                'data': transfer_data
             }
             
-            print(f"🔍 [DEBUG] {request_id}: ERC20 transfer transaction - To: {transaction['to']}, Amount: {amount_tokens:.8f} {token_symbol}, Nonce: {transaction['nonce']}")
+            # Validate transaction structure before signing
+            required_fields = ['from', 'to', 'value', 'nonce', 'gas', 'gasPrice', 'chainId', 'data']
+            for field in required_fields:
+                if field not in transaction:
+                    raise ValueError(f"Missing required transaction field: {field}")
+                if transaction[field] is None:
+                    raise ValueError(f"Transaction field {field} cannot be None")
+            
+            # Validate address fields
+            if not Web3.is_address(transaction['from']):
+                raise ValueError(f"Invalid from address: {transaction['from']}")
+            if not Web3.is_address(transaction['to']):
+                raise ValueError(f"Invalid to address: {transaction['to']}")
+            
+            # Validate numeric fields
+            if transaction['gas'] <= 0:
+                raise ValueError(f"Invalid gas limit: {transaction['gas']}")
+            if transaction['gasPrice'] <= 0:
+                raise ValueError(f"Invalid gas price: {transaction['gasPrice']}")
+            if transaction['chainId'] <= 0:
+                raise ValueError(f"Invalid chain ID: {transaction['chainId']}")
+            
+            # Validate data field format
+            if not isinstance(transaction['data'], (str, bytes)):
+                raise ValueError(f"Invalid data field type: {type(transaction['data'])}")
+            if isinstance(transaction['data'], str) and not transaction['data'].startswith('0x'):
+                raise ValueError(f"Data field must be hex string starting with 0x: {transaction['data'][:20]}...")
+            
+            print(f"✅ [VALIDATION] {request_id}: Transaction structure validated successfully")
+            
+            print(f"🔍 [DEBUG] {request_id}: ERC20 transfer transaction - From: {transaction['from']}, To: {transaction['to']}, Amount: {amount_tokens:.8f} {token_symbol}, Nonce: {transaction['nonce']}, ChainId: {transaction['chainId']}")
             
             print(f"🔐 [INFO] {request_id}: Signing transaction...")
             
-            # Sign transaction
+            # Sign transaction with enhanced error handling for ERC20 transfers
             try:
                 signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
                 print(f"✅ [DEBUG] {request_id}: Transaction signed successfully")
                 
+                # Validate signed transaction
+                if not hasattr(signed_txn, 'rawTransaction'):
+                    raise ValueError("Signed transaction missing rawTransaction field")
+                
+                # Ensure raw transaction is in proper hex format
+                if isinstance(signed_txn.rawTransaction, bytes):
+                    raw_tx_hex = signed_txn.rawTransaction.hex()
+                else:
+                    raw_tx_hex = signed_txn.rawTransaction
+                
+                if not raw_tx_hex.startswith('0x'):
+                    raw_tx_hex = '0x' + raw_tx_hex
+                
                 # Log raw transaction for debugging (first 20 chars only for security)
-                raw_tx_preview = signed_txn.rawTransaction.hex()[:20] + "..."
-                print(f"🔍 [DEBUG] {request_id}: Raw transaction preview: 0x{raw_tx_preview}")
+                raw_tx_preview = raw_tx_hex[:22] + "..." if len(raw_tx_hex) > 22 else raw_tx_hex
+                print(f"🔍 [DEBUG] {request_id}: Raw transaction preview: {raw_tx_preview}")
+                print(f"🔍 [DEBUG] {request_id}: Raw transaction length: {len(raw_tx_hex)} characters")
                 
             except Exception as e:
-                print(f"❌ [ERROR] {request_id}: Transaction signing failed: {e}")
-                raise
+                error_str = str(e).lower()
+                if "invalid fields" in error_str:
+                    print(f"❌ [ERROR] {request_id}: ERC20 transaction has invalid fields")
+                    print(f"🔍 [DEBUG] {request_id}: Transaction details for debugging:")
+                    for field, value in transaction.items():
+                        if field == 'data':
+                            # Truncate data field for readability
+                            data_preview = str(value)[:50] + "..." if len(str(value)) > 50 else str(value)
+                            print(f"    {field}: {data_preview}")
+                        else:
+                            print(f"    {field}: {value}")
+                    print(f"💡 [SUGGESTION] {request_id}: Check that all ERC20 transaction fields are properly formatted")
+                    print(f"💡 [SUGGESTION] {request_id}: Verify USDC contract address and recipient address are valid")
+                    print(f"💡 [SUGGESTION] {request_id}: Ensure ABI encoding is correct for transfer function")
+                else:
+                    print(f"❌ [ERROR] {request_id}: ERC20 transaction signing failed: {e}")
+                
+                raise ValueError(f"ERC20 transaction signing failed: {e}")
             
             print(f"📡 [INFO] {request_id}: Broadcasting transaction...")
             
-            # Send transaction
+            # Send transaction with enhanced error handling
             try:
-                raw_tx = signed_txn.rawTransaction
-            except AttributeError:
-                raw_tx = signed_txn.raw_transaction
-            
-            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
-            tx_hash_hex = tx_hash.hex()
+                # Get raw transaction with proper validation
+                try:
+                    raw_tx = signed_txn.rawTransaction
+                except AttributeError:
+                    raw_tx = signed_txn.raw_transaction
+                
+                # Ensure raw transaction is in proper format
+                if isinstance(raw_tx, str) and not raw_tx.startswith('0x'):
+                    raw_tx = '0x' + raw_tx
+                elif isinstance(raw_tx, bytes):
+                    raw_tx = raw_tx.hex()
+                    if not raw_tx.startswith('0x'):
+                        raw_tx = '0x' + raw_tx
+                
+                print(f"🔍 [DEBUG] {request_id}: Broadcasting raw transaction of length {len(raw_tx)} characters")
+                
+                # Send the transaction
+                tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+                tx_hash_hex = tx_hash.hex()
+                
+            except Exception as broadcast_error:
+                error_str = str(broadcast_error).lower()
+                if "invalid fields" in error_str or "transaction had invalid fields" in error_str:
+                    print(f"❌ [ERROR] {request_id}: Blockchain rejected ERC20 transaction due to invalid fields")
+                    print(f"🔍 [DEBUG] {request_id}: Broadcast error: {broadcast_error}")
+                    print(f"🔍 [DEBUG] {request_id}: This indicates the transaction structure doesn't meet blockchain requirements")
+                    print(f"💡 [SUGGESTION] {request_id}: Check that contract address {contract_address} is valid")
+                    print(f"💡 [SUGGESTION] {request_id}: Verify recipient address {recipient_address} is correct")
+                    print(f"💡 [SUGGESTION] {request_id}: Ensure amount {amount_raw} is within valid range")
+                    raise ValueError(f"ERC20 transaction rejected by blockchain: {broadcast_error}")
+                else:
+                    print(f"❌ [ERROR] {request_id}: Failed to broadcast ERC20 transaction: {broadcast_error}")
+                    raise ValueError(f"ERC20 transaction broadcast failed: {broadcast_error}")
             
             print(f"⏳ [INFO] {request_id}: Transaction broadcast - Hash: {tx_hash_hex}")
             print(f"🔍 [INFO] {request_id}: Waiting for confirmation...")
