@@ -188,9 +188,50 @@ class WalletManager:
                 'error': error_msg
             }
     
+    def _validate_contract_address(self, contract_address: str, token_symbol: str) -> Dict[str, Any]:
+        """
+        Validate that a contract address exists and has code deployed.
+        
+        Args:
+            contract_address: Contract address to validate
+            token_symbol: Token symbol for logging
+            
+        Returns:
+            Dictionary with validation result
+        """
+        try:
+            # Check if address is valid format
+            if not Web3.is_address(contract_address):
+                return {
+                    'valid': False,
+                    'error': f'Invalid address format for {token_symbol}: {contract_address}'
+                }
+            
+            # Check if contract has code deployed
+            code = self.w3.eth.get_code(Web3.to_checksum_address(contract_address))
+            
+            if code == b'' or code == '0x':
+                return {
+                    'valid': False,
+                    'error': f'No contract code found at {token_symbol} address {contract_address} - contract may not be deployed'
+                }
+            
+            print(f"✅ [VALIDATION] {token_symbol} contract validated at {contract_address}")
+            return {
+                'valid': True,
+                'code_size': len(code),
+                'address': contract_address
+            }
+            
+        except Exception as e:
+            return {
+                'valid': False,
+                'error': f'Contract validation failed for {token_symbol}: {str(e)}'
+            }
+
     def get_erc20_balance(self, token_symbol: str) -> Dict[str, Any]:
         """
-        Get ERC20 token balance for the host wallet.
+        Get ERC20 token balance for the host wallet with contract validation.
         
         Args:
             token_symbol: Token symbol (e.g., "USDT", "USDC")
@@ -206,6 +247,16 @@ class WalletManager:
                 return {
                     'success': False,
                     'error': f'Token {token_symbol} not supported on chain {chain_id}'
+                }
+            
+            # Validate contract address before attempting to interact
+            validation_result = self._validate_contract_address(token_info.address, token_symbol)
+            if not validation_result['valid']:
+                print(f"❌ [ERROR] Contract validation failed: {validation_result['error']}")
+                return {
+                    'success': False,
+                    'error': validation_result['error'],
+                    'validation_details': validation_result
                 }
             
             # Create contract instance
@@ -230,7 +281,8 @@ class WalletManager:
                 'token_decimals': token_info.decimals,
                 'token_address': token_info.address,
                 'address': self.host_address,
-                'timestamp': time.time()
+                'timestamp': time.time(),
+                'contract_validation': validation_result
             }
             
         except Exception as e:
@@ -376,6 +428,16 @@ class WalletManager:
                 return {
                     'success': False,
                     'error': f'Token {token_symbol} not supported on chain {chain_id}'
+                }
+            
+            # Validate contract address before attempting to interact
+            validation_result = self._validate_contract_address(token_info.address, token_symbol)
+            if not validation_result['valid']:
+                print(f"❌ [ERROR] Contract validation failed: {validation_result['error']}")
+                return {
+                    'success': False,
+                    'error': validation_result['error'],
+                    'validation_details': validation_result
                 }
             
             # Get gas price estimation

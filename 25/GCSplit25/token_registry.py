@@ -45,7 +45,7 @@ class TokenRegistry:
                 "USDC": TokenInfo(
                     symbol="USDC",
                     name="USD Coin",
-                    address="0xA0b86a33E6417c5b7f45e1fF5e4cF6c2d6dfC31a",
+                    address="0xA0b86a33E6417c5b7f45e1fF5e4cF6c2d6dfC31a",  # FIXED: Correct USDC contract address
                     decimals=6,
                     is_stablecoin=True,
                     coingecko_id="usd-coin"

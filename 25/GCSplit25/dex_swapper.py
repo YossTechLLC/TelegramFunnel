@@ -52,9 +52,15 @@ class DEXSwapper:
         self.quote_endpoint = f"{self.swap_api_base}/quote"
         self.swap_endpoint = f"{self.swap_api_base}/swap"
         
+        # Rate limiting for 1INCH API to avoid 429 errors
+        self.last_api_call_time = 0
+        self.min_request_interval = 0.6  # 600ms between requests (max ~100 req/min)
+        self.rate_limit_delay = 2.0  # 2 second delay after 429 errors
+        
         print(f"🔄 [INFO] DEX Swapper initialized for chain {self.chain_id} with rate validation")
         print(f"⚙️ [INFO] Swap config: max_slippage={self.config.max_slippage_percent}%, max_eth={self.config.max_eth_per_swap} ETH")
         print(f"📊 [INFO] Market data validation: {len([s for s in self.market_data_provider.price_sources.values() if s['enabled']])} sources enabled")
+        print(f"🚦 [INFO] Rate limiting: {self.min_request_interval}s between API calls, {self.rate_limit_delay}s after 429 errors")
     
     def _get_headers(self) -> Dict[str, str]:
         """Get headers for 1INCH API requests."""
@@ -207,6 +213,17 @@ class DEXSwapper:
             print(f"🔗 [DEBUG] Quote endpoint: {self.quote_endpoint}")
             print(f"📝 [DEBUG] Quote params: src={from_address[:10]}..., dst={to_address[:10]}..., amount={amount_wei}")
             
+            # Implement rate limiting to avoid 429 errors
+            current_time = time.time()
+            time_since_last_call = current_time - self.last_api_call_time
+            
+            if time_since_last_call < self.min_request_interval:
+                sleep_time = self.min_request_interval - time_since_last_call
+                print(f"🚦 [INFO] Rate limiting: waiting {sleep_time:.2f}s before API call")
+                time.sleep(sleep_time)
+            
+            self.last_api_call_time = time.time()
+            
             response = requests.get(
                 self.quote_endpoint,
                 params=params,
@@ -219,10 +236,27 @@ class DEXSwapper:
             if response.status_code == 200:
                 quote_data = response.json()
                 
-                # Extract key information
-                from_amount = int(quote_data.get('fromTokenAmount', 0))
-                to_amount = int(quote_data.get('toTokenAmount', 0))
-                gas_estimate = int(quote_data.get('estimatedGas', 0))
+                # Validate quote response structure
+                validation_result = self._validate_quote_response(quote_data, from_token, to_token, amount_wei)
+                if not validation_result['valid']:
+                    print(f"❌ [ERROR] Quote response validation failed: {validation_result['error']}")
+                    return {
+                        'success': False,
+                        'error': f"Invalid quote response: {validation_result['error']}",
+                        'validation_details': validation_result
+                    }
+                
+                # Extract key information - CRITICAL FIX for parsing bug
+                # 1INCH API v6 uses different field names than expected
+                from_amount = int(quote_data.get('fromTokenAmount', amount_wei))  # Use input amount as fallback
+                to_amount = int(quote_data.get('dstAmount', 0))  # FIXED: Use 'dstAmount' not 'toTokenAmount'
+                gas_estimate = int(quote_data.get('gas', 0))  # FIXED: Use 'gas' not 'estimatedGas'
+                
+                # Log the actual field names for debugging
+                print(f"🔍 [DEBUG] API response fields: {list(quote_data.keys())}")
+                print(f"🔍 [DEBUG] fromTokenAmount: {quote_data.get('fromTokenAmount', 'MISSING')}")
+                print(f"🔍 [DEBUG] dstAmount: {quote_data.get('dstAmount', 'MISSING')}")
+                print(f"🔍 [DEBUG] gas: {quote_data.get('gas', 'MISSING')}")
                 
                 # Enhanced logging for debugging
                 to_amount_readable = to_amount / (10 ** 18) if to_token != 'ETH' else to_amount  # Assume 18 decimals for debugging
@@ -248,17 +282,27 @@ class DEXSwapper:
                     'to_amount_wei': to_amount,
                     'from_amount_eth': float(self.w3.from_wei(from_amount, 'ether')),
                     'gas_estimate': gas_estimate,
-                    'quote_data': quote_data
+                    'quote_data': quote_data,
+                    'validation': validation_result
                 }
             else:
                 error_msg = f"1INCH quote failed: {response.status_code} - {response.text}"
                 print(f"❌ [ERROR] {error_msg}")
                 print(f"🔗 [DEBUG] Failed request URL: {self.quote_endpoint}")
                 print(f"📝 [DEBUG] Request params: {params}")
+                
+                # Special handling for rate limit errors
+                if response.status_code == 429:
+                    print(f"🚦 [WARNING] Rate limit hit (429) - implementing adaptive delay")
+                    print(f"⏳ [INFO] Will wait {self.rate_limit_delay}s before next attempt")
+                    # Update the last call time to include the extra delay
+                    self.last_api_call_time = time.time() + self.rate_limit_delay
+                
                 return {
                     'success': False,
                     'error': error_msg,
-                    'status_code': response.status_code
+                    'status_code': response.status_code,
+                    'is_rate_limit': response.status_code == 429
                 }
                 
         except Exception as e:
@@ -271,7 +315,7 @@ class DEXSwapper:
     
     def _get_quote_with_retry(self, from_token: str, to_token: str, amount_wei: int, max_retries: int = 3) -> Dict[str, Any]:
         """
-        Get a quote with retry logic and exponential backoff.
+        Get a quote with retry logic and intelligent rate limit handling.
         
         Args:
             from_token: Source token symbol
@@ -282,12 +326,10 @@ class DEXSwapper:
         Returns:
             Dictionary with quote result
         """
-        import time
-        
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    # Exponential backoff: 1s, 2s, 4s
+                    # For 429 errors, use longer delay; otherwise exponential backoff
                     wait_time = 2 ** (attempt - 1)
                     print(f"⏳ [INFO] Retry attempt {attempt + 1}/{max_retries} after {wait_time}s delay")
                     time.sleep(wait_time)
@@ -299,7 +341,16 @@ class DEXSwapper:
                         print(f"✅ [SUCCESS] Quote succeeded on retry attempt {attempt + 1}")
                     return quote_result
                 else:
-                    print(f"⚠️ [WARNING] Quote attempt {attempt + 1} failed: {quote_result.get('error', 'Unknown error')}")
+                    error_msg = quote_result.get('error', 'Unknown error')
+                    is_rate_limit = quote_result.get('is_rate_limit', False)
+                    
+                    print(f"⚠️ [WARNING] Quote attempt {attempt + 1} failed: {error_msg}")
+                    
+                    # For rate limit errors, add extra delay before next retry
+                    if is_rate_limit and attempt < max_retries - 1:
+                        extra_delay = self.rate_limit_delay
+                        print(f"🚦 [INFO] Rate limit detected - adding extra {extra_delay}s delay")
+                        time.sleep(extra_delay)
                     
             except Exception as e:
                 print(f"❌ [ERROR] Quote attempt {attempt + 1} exception: {e}")
@@ -307,7 +358,7 @@ class DEXSwapper:
         print(f"❌ [ERROR] All {max_retries} quote attempts failed")
         return {
             'success': False,
-            'error': f'Quote failed after {max_retries} attempts with retries'
+            'error': f'Quote failed after {max_retries} attempts with intelligent retries'
         }
     
     def _analyze_quote_failures(self, from_token: str, to_token: str, attempted_amounts: list) -> Dict[str, Any]:
@@ -388,6 +439,95 @@ class DEXSwapper:
             ]
             
         return analysis
+    
+    def _validate_quote_response(self, quote_data: dict, from_token: str, to_token: str, amount_wei: int) -> Dict[str, Any]:
+        """
+        Validate 1INCH quote response to catch parsing issues early.
+        
+        Args:
+            quote_data: Raw API response data
+            from_token: Expected source token
+            to_token: Expected destination token
+            amount_wei: Expected input amount
+            
+        Returns:
+            Dictionary with validation result and details
+        """
+        validation = {
+            'valid': True,
+            'error': None,
+            'warnings': [],
+            'fields_found': list(quote_data.keys()) if isinstance(quote_data, dict) else []
+        }
+        
+        try:
+            # Check basic structure
+            if not isinstance(quote_data, dict):
+                validation['valid'] = False
+                validation['error'] = f"Response is not a dictionary: {type(quote_data)}"
+                return validation
+            
+            # Check for essential fields
+            required_fields = ['dstAmount']  # Critical field that was being missed
+            optional_fields = ['fromTokenAmount', 'gas', 'srcToken', 'dstToken', 'protocols']
+            
+            missing_required = [field for field in required_fields if field not in quote_data]
+            if missing_required:
+                validation['valid'] = False
+                validation['error'] = f"Missing required fields: {missing_required}"
+                return validation
+            
+            missing_optional = [field for field in optional_fields if field not in quote_data]
+            if missing_optional:
+                validation['warnings'].append(f"Missing optional fields: {missing_optional}")
+            
+            # Validate dstAmount is a valid number
+            dst_amount = quote_data.get('dstAmount')
+            if dst_amount is None:
+                validation['valid'] = False
+                validation['error'] = "dstAmount is None"
+                return validation
+                
+            try:
+                dst_amount_int = int(dst_amount)
+                if dst_amount_int < 0:
+                    validation['warnings'].append("dstAmount is negative")
+            except (ValueError, TypeError):
+                validation['valid'] = False
+                validation['error'] = f"dstAmount is not a valid number: {dst_amount} ({type(dst_amount)})"
+                return validation
+            
+            # Check token information if present
+            if 'srcToken' in quote_data:
+                src_token_data = quote_data['srcToken']
+                if isinstance(src_token_data, dict):
+                    src_symbol = src_token_data.get('symbol', '').upper()
+                    if src_symbol and src_symbol != from_token.upper():
+                        validation['warnings'].append(f"Source token mismatch: expected {from_token}, got {src_symbol}")
+            
+            if 'dstToken' in quote_data:
+                dst_token_data = quote_data['dstToken']
+                if isinstance(dst_token_data, dict):
+                    dst_symbol = dst_token_data.get('symbol', '').upper()
+                    if dst_symbol and dst_symbol != to_token.upper():
+                        validation['warnings'].append(f"Destination token mismatch: expected {to_token}, got {dst_symbol}")
+            
+            # Check for error field in response
+            if 'error' in quote_data:
+                validation['warnings'].append(f"API response contains error field: {quote_data['error']}")
+            
+            # Log validation results
+            if validation['warnings']:
+                print(f"⚠️ [VALIDATION] Quote response warnings: {', '.join(validation['warnings'])}")
+            
+            print(f"✅ [VALIDATION] Quote response structure validated successfully")
+            
+        except Exception as e:
+            validation['valid'] = False
+            validation['error'] = f"Validation exception: {str(e)}"
+            print(f"❌ [ERROR] Quote validation failed: {e}")
+        
+        return validation
 
     def _try_progressive_quotes(self, from_token: str, to_token: str, quote_amounts_eth: list) -> Dict[str, Any]:
         """
