@@ -11,7 +11,8 @@
       "WebFetch(domain:portal.1inch.dev)",
       "Bash(mkdir:*)",
       "WebFetch(domain:developers.circle.com)",
-      "WebFetch(domain:help.1inch.io)"
+      "WebFetch(domain:help.1inch.io)",
+      "WebFetch(domain:docs.1inch.io)"
     ],
     "deny": []
   }

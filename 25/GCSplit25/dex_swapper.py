@@ -845,6 +845,307 @@ class DEXSwapper:
                 'error': error_msg
             }
     
+    def _validate_transaction_structure(self, transaction: Dict[str, Any], tx_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate transaction structure to prevent rawTransaction errors.
+        
+        Args:
+            transaction: Built transaction object
+            tx_data: Original transaction data from 1INCH
+            
+        Returns:
+            Dictionary with validation result
+        """
+        try:
+            # Check required fields are present
+            required_fields = ['from', 'to', 'value', 'gas', 'gasPrice', 'data', 'nonce', 'chainId']
+            missing_fields = [field for field in required_fields if field not in transaction]
+            
+            if missing_fields:
+                return {
+                    'valid': False,
+                    'error': f'Missing required transaction fields: {missing_fields}'
+                }
+            
+            # Validate addresses are properly formatted
+            try:
+                Web3.to_checksum_address(transaction['from'])
+                Web3.to_checksum_address(transaction['to'])
+            except Exception as e:
+                return {
+                    'valid': False,
+                    'error': f'Invalid address format: {str(e)}'
+                }
+            
+            # Validate numeric fields are positive
+            numeric_fields = ['value', 'gas', 'gasPrice', 'nonce', 'chainId']
+            for field in numeric_fields:
+                try:
+                    value = int(transaction[field])
+                    if value < 0:
+                        return {
+                            'valid': False,
+                            'error': f'Negative value for {field}: {value}'
+                        }
+                except (ValueError, TypeError):
+                    return {
+                        'valid': False,
+                        'error': f'Invalid numeric value for {field}: {transaction[field]}'
+                    }
+            
+            # Validate gas limits are reasonable
+            gas_limit = int(transaction['gas'])
+            if gas_limit < 21000:  # Minimum gas for any transaction
+                return {
+                    'valid': False,
+                    'error': f'Gas limit too low: {gas_limit} (minimum 21000)'
+                }
+            
+            if gas_limit > 12000000:  # Very high gas limit (block limit)
+                return {
+                    'valid': False,
+                    'error': f'Gas limit too high: {gas_limit} (maximum ~12M)'
+                }
+            
+            # Validate chainId matches our expected network
+            if int(transaction['chainId']) != self.chain_id:
+                return {
+                    'valid': False,
+                    'error': f'ChainId mismatch: transaction={transaction["chainId"]}, expected={self.chain_id}'
+                }
+            
+            # Validate data field is properly formatted hex
+            data = transaction['data']
+            if not isinstance(data, str) or not data.startswith('0x'):
+                return {
+                    'valid': False,
+                    'error': f'Invalid data field format: {data}'
+                }
+            
+            print(f"✅ [VALIDATION] Transaction structure validated successfully")
+            print(f"📋 [INFO] From: {transaction['from']}")
+            print(f"📋 [INFO] To: {transaction['to']}")
+            print(f"📋 [INFO] Value: {transaction['value']} Wei")
+            print(f"📋 [INFO] Gas: {transaction['gas']}")
+            print(f"📋 [INFO] ChainId: {transaction['chainId']}")
+            print(f"📋 [INFO] Nonce: {transaction['nonce']}")
+            
+            return {
+                'valid': True,
+                'validated_fields': required_fields
+            }
+            
+        except Exception as e:
+            return {
+                'valid': False,
+                'error': f'Transaction validation exception: {str(e)}'
+            }
+    
+    def _validate_swap_parameters(self, swap_params: Dict[str, str], eth_amount_wei: int, token_symbol: str) -> Dict[str, Any]:
+        """
+        Validate swap parameters to prevent API formatting errors.
+        
+        Args:
+            swap_params: Swap parameters dictionary
+            eth_amount_wei: ETH amount in Wei
+            token_symbol: Target token symbol
+            
+        Returns:
+            Dictionary with validation result
+        """
+        try:
+            # Validate required parameters
+            required_params = ['src', 'dst', 'amount', 'from', 'slippage']
+            missing_params = [param for param in required_params if param not in swap_params]
+            
+            if missing_params:
+                return {
+                    'valid': False,
+                    'error': f'Missing required swap parameters: {missing_params}'
+                }
+            
+            # Validate addresses
+            for addr_param in ['src', 'dst', 'from']:
+                try:
+                    address = swap_params[addr_param]
+                    Web3.to_checksum_address(address)
+                except Exception as e:
+                    return {
+                        'valid': False,
+                        'error': f'Invalid address format for {addr_param}: {address} - {str(e)}'
+                    }
+            
+            # Validate amount is proper integer string
+            try:
+                amount_value = int(swap_params['amount'])
+                if amount_value != eth_amount_wei:
+                    return {
+                        'valid': False,
+                        'error': f'Amount mismatch: param={amount_value}, expected={eth_amount_wei}'
+                    }
+                if amount_value <= 0:
+                    return {
+                        'valid': False,
+                        'error': f'Invalid amount: {amount_value} (must be positive)'
+                    }
+            except (ValueError, TypeError):
+                return {
+                    'valid': False,
+                    'error': f'Invalid amount format: {swap_params["amount"]}'
+                }
+            
+            # Validate slippage percentage
+            try:
+                slippage = float(swap_params['slippage'])
+                if slippage < 0 or slippage > 50:  # 0-50% reasonable range
+                    return {
+                        'valid': False,
+                        'error': f'Invalid slippage: {slippage}% (must be 0-50%)'
+                    }
+            except (ValueError, TypeError):
+                return {
+                    'valid': False,
+                    'error': f'Invalid slippage format: {swap_params["slippage"]}'
+                }
+            
+            # Validate minTokenAmount if present
+            if 'minTokenAmount' in swap_params:
+                try:
+                    min_amount = int(swap_params['minTokenAmount'])
+                    if min_amount < 0:
+                        return {
+                            'valid': False,
+                            'error': f'Invalid minTokenAmount: {min_amount} (must be non-negative)'
+                        }
+                except (ValueError, TypeError):
+                    return {
+                        'valid': False,
+                        'error': f'Invalid minTokenAmount format: {swap_params["minTokenAmount"]}'
+                    }
+            
+            print(f"✅ [VALIDATION] Swap parameters validated successfully")
+            print(f"📋 [INFO] Amount: {swap_params['amount']} Wei ({float(swap_params['amount']) / (10**18):.6f} ETH)")
+            print(f"📋 [INFO] From: {swap_params['from']}")
+            print(f"📋 [INFO] Slippage: {swap_params['slippage']}%")
+            print(f"📋 [INFO] Target: {token_symbol}")
+            
+            return {
+                'valid': True,
+                'validated_params': list(swap_params.keys())
+            }
+            
+        except Exception as e:
+            return {
+                'valid': False,
+                'error': f'Parameter validation exception: {str(e)}'
+            }
+    
+    def _analyze_transaction_error(self, error_msg: str, transaction: Dict[str, Any], raw_tx_hex: str = None) -> Dict[str, Any]:
+        """
+        Analyze transaction errors to provide specific diagnostics for -32600 codes.
+        
+        Args:
+            error_msg: Error message from exception
+            transaction: Transaction object that failed
+            raw_tx_hex: Raw transaction hex (if available)
+            
+        Returns:
+            Dictionary with error analysis and suggestions
+        """
+        analysis = {
+            'error_type': 'unknown',
+            'likely_cause': 'unknown',
+            'suggestions': [],
+            'technical_details': {}
+        }
+        
+        try:
+            error_lower = error_msg.lower()
+            
+            # Check for specific error patterns
+            if '-32600' in error_msg or 'rawtx' in error_lower or 'rawTransaction' in error_msg:
+                analysis['error_type'] = 'raw_transaction_error'
+                analysis['likely_cause'] = 'Malformed raw transaction sent to blockchain node'
+                analysis['suggestions'] = [
+                    '🔧 Check transaction structure has all required fields (chainId, nonce, etc.)',
+                    '🔧 Verify addresses are properly checksummed',
+                    '🔧 Ensure gas values are within reasonable limits',
+                    '🔧 Confirm network/chainId matches signing parameters',
+                    '🔧 Validate raw transaction is properly hex encoded'
+                ]
+                
+                # Add specific diagnostics based on transaction data
+                if transaction:
+                    analysis['technical_details']['transaction_fields'] = list(transaction.keys())
+                    analysis['technical_details']['chain_id'] = transaction.get('chainId')
+                    analysis['technical_details']['gas_limit'] = transaction.get('gas')
+                    analysis['technical_details']['nonce'] = transaction.get('nonce')
+                    
+                    # Check for common issues
+                    if 'chainId' not in transaction:
+                        analysis['suggestions'].insert(0, '🚨 CRITICAL: Missing chainId field in transaction')
+                    
+                    if transaction.get('gas', 0) < 21000:
+                        analysis['suggestions'].insert(0, f'🚨 CRITICAL: Gas limit too low: {transaction.get("gas")}')
+                    
+                    if transaction.get('nonce', -1) < 0:
+                        analysis['suggestions'].insert(0, f'🚨 CRITICAL: Invalid nonce: {transaction.get("nonce")}')
+                
+                if raw_tx_hex:
+                    analysis['technical_details']['raw_tx_length'] = len(raw_tx_hex)
+                    analysis['technical_details']['raw_tx_format'] = 'hex' if raw_tx_hex.startswith('0x') else 'invalid'
+                    
+                    if not raw_tx_hex.startswith('0x'):
+                        analysis['suggestions'].insert(0, '🚨 CRITICAL: Raw transaction not in hex format')
+            
+            elif 'insufficient funds' in error_lower or 'balance' in error_lower:
+                analysis['error_type'] = 'insufficient_balance'
+                analysis['likely_cause'] = 'Not enough ETH for transaction value + gas'
+                analysis['suggestions'] = [
+                    '💰 Add more ETH to wallet for transaction + gas fees',
+                    '📊 Check current ETH balance vs required amount',
+                    '⛽ Consider reducing gas price if transaction is not urgent'
+                ]
+                
+            elif 'nonce' in error_lower:
+                analysis['error_type'] = 'nonce_error'
+                analysis['likely_cause'] = 'Transaction nonce conflicts with pending transactions'
+                analysis['suggestions'] = [
+                    '🔄 Wait for pending transactions to complete',
+                    '📊 Check transaction nonce against current account nonce',
+                    '⏰ Retry transaction after a few minutes'
+                ]
+                
+            elif 'gas' in error_lower:
+                analysis['error_type'] = 'gas_error'
+                analysis['likely_cause'] = 'Gas-related transaction failure'
+                analysis['suggestions'] = [
+                    '⛽ Increase gas limit for complex transactions',
+                    '💰 Ensure sufficient ETH for gas fees',
+                    '📊 Check network gas prices and adjust accordingly'
+                ]
+                
+            else:
+                analysis['error_type'] = 'general_transaction_error'
+                analysis['likely_cause'] = 'Unspecified transaction error'
+                analysis['suggestions'] = [
+                    '🔄 Retry transaction after a brief delay',
+                    '📊 Check network status and congestion',
+                    '🔧 Verify all transaction parameters are correct'
+                ]
+            
+            print(f"🔍 [ERROR ANALYSIS] Type: {analysis['error_type']}")
+            print(f"🔍 [ERROR ANALYSIS] Cause: {analysis['likely_cause']}")
+            print(f"🔍 [ERROR ANALYSIS] Suggestions:")
+            for suggestion in analysis['suggestions'][:3]:  # Show top 3 suggestions
+                print(f"  {suggestion}")
+                
+        except Exception as e:
+            print(f"❌ [ERROR] Error analysis failed: {e}")
+            analysis['error_type'] = 'analysis_failed'
+            
+        return analysis
+    
     def execute_eth_to_token_swap(self, token_symbol: str, eth_amount_wei: int, 
                                   min_token_amount_wei: int = 0) -> Dict[str, Any]:
         """
@@ -883,19 +1184,27 @@ class DEXSwapper:
                     'error': f'Token address not found for {token_symbol}'
                 }
             
-            # Build swap parameters
+            # Build swap parameters with proper formatting validation
             swap_params = {
                 'src': from_address,
                 'dst': to_address,
-                'amount': str(eth_amount_wei),
-                'from': self.host_address,
-                'slippage': str(self.config.max_slippage_percent),
+                'amount': str(int(eth_amount_wei)),  # Ensure integer string format
+                'from': Web3.to_checksum_address(self.host_address),  # Ensure proper address format
+                'slippage': f"{self.config.max_slippage_percent}",  # Ensure string format
                 'disableEstimate': 'false',
                 'allowPartialFill': 'false'
             }
             
             if min_token_amount_wei > 0:
-                swap_params['minTokenAmount'] = str(min_token_amount_wei)
+                swap_params['minTokenAmount'] = str(int(min_token_amount_wei))
+            
+            # Validate swap parameters before API call
+            param_validation = self._validate_swap_parameters(swap_params, eth_amount_wei, token_symbol)
+            if not param_validation['valid']:
+                return {
+                    'success': False,
+                    'error': f'Swap parameter validation failed: {param_validation["error"]}'
+                }
             
             print(f"🔄 [INFO] Executing 1INCH swap: {eth_amount_eth:.6f} ETH → {token_symbol}")
             
@@ -925,22 +1234,74 @@ class DEXSwapper:
                     'error': 'No transaction data received from 1INCH'
                 }
             
-            # Build and sign transaction
+            # Build transaction with all required fields for proper signing
+            nonce = self.w3.eth.get_transaction_count(self.host_address, 'pending')
+            
             transaction = {
-                'from': self.host_address,
+                'from': Web3.to_checksum_address(self.host_address),
                 'to': Web3.to_checksum_address(tx_data['to']),
                 'value': int(tx_data['value']),
                 'gas': int(tx_data['gas']),
                 'gasPrice': int(tx_data['gasPrice']),
                 'data': tx_data['data'],
-                'nonce': self.w3.eth.get_transaction_count(self.host_address)
+                'nonce': nonce,
+                'chainId': self.chain_id  # CRITICAL: Add chainId for proper signing
             }
+            
+            # Validate transaction structure before signing
+            validation_result = self._validate_transaction_structure(transaction, tx_data)
+            if not validation_result['valid']:
+                return {
+                    'success': False,
+                    'error': f'Transaction validation failed: {validation_result["error"]}'
+                }
             
             print(f"📝 [INFO] Swap transaction: gas={transaction['gas']}, gasPrice={transaction['gasPrice']}")
             
-            # Sign and send transaction
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            # Sign transaction with comprehensive validation
+            try:
+                signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
+                
+                # Validate signed transaction structure
+                if not hasattr(signed_txn, 'rawTransaction'):
+                    return {
+                        'success': False,
+                        'error': 'Signed transaction missing rawTransaction field'
+                    }
+                
+                # Ensure rawTransaction is properly encoded as hex
+                raw_tx = signed_txn.rawTransaction
+                if isinstance(raw_tx, bytes):
+                    raw_tx_hex = self.w3.to_hex(raw_tx)
+                else:
+                    raw_tx_hex = raw_tx
+                
+                # Validate hex format
+                if not isinstance(raw_tx_hex, str) or not raw_tx_hex.startswith('0x'):
+                    return {
+                        'success': False,
+                        'error': f'Invalid rawTransaction format: {type(raw_tx_hex)} - {raw_tx_hex[:50]}...'
+                    }
+                
+                print(f"✅ [VALIDATION] Signed transaction validated successfully")
+                print(f"📋 [INFO] Transaction hash: {signed_txn.hash.hex()}")
+                print(f"📋 [INFO] Raw transaction length: {len(raw_tx_hex)} characters")
+                
+                # Send the properly formatted raw transaction
+                tx_hash = self.w3.eth.send_raw_transaction(raw_tx_hex)
+                
+            except Exception as e:
+                error_msg = f"Transaction signing/sending failed: {str(e)}"
+                print(f"❌ [ERROR] {error_msg}")
+                
+                # Check for specific -32600 rawTransaction errors
+                error_analysis = self._analyze_transaction_error(str(e), transaction, raw_tx_hex if 'raw_tx_hex' in locals() else None)
+                
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'error_analysis': error_analysis
+                }
             
             # Wait for confirmation
             print(f"⏳ [INFO] Waiting for swap confirmation: {tx_hash.hex()}")
