@@ -17,6 +17,7 @@ from config_manager import ConfigManager
 from eth_converter import EthConverter
 from multi_token_converter import MultiTokenConverter
 from wallet_manager import WalletManager
+from dex_swapper import SwapConfig
 
 # Setup logging
 logging.basicConfig(
@@ -65,6 +66,30 @@ def initialize_components():
             host_address=config['host_wallet_eth_address'],
             rpc_url=config['ethereum_rpc_url']
         )
+        
+        # Initialize DEX swapper for automatic token conversion
+        print("🔄 [INFO] Initializing DEX swapper for automatic token conversion...")
+        
+        # Configure swap parameters (can be overridden via environment variables)
+        swap_config = SwapConfig(
+            max_slippage_percent=float(os.getenv("SWAP_MAX_SLIPPAGE", "1.0")),  # 1% default slippage
+            max_eth_per_swap=float(os.getenv("SWAP_MAX_ETH", "0.1")),           # 0.1 ETH maximum per swap
+            min_eth_reserve=float(os.getenv("SWAP_MIN_ETH_RESERVE", "0.01")),   # Keep 0.01 ETH minimum for gas
+            swap_timeout_seconds=int(os.getenv("SWAP_TIMEOUT", "30")),          # 30 second timeout
+            enable_swapping=os.getenv("ENABLE_AUTO_SWAPPING", "true").lower() == "true"  # Enable by default
+        )
+        
+        print(f"⚙️ [INFO] Swap configuration: slippage={swap_config.max_slippage_percent}%, max_eth={swap_config.max_eth_per_swap}, reserve={swap_config.min_eth_reserve}")
+        
+        dex_init_success = wallet_manager.initialize_dex_swapper(
+            oneinch_api_key=config['oneinch_api_key'],
+            swap_config=swap_config
+        )
+        
+        if dex_init_success:
+            print("✅ [INFO] DEX swapper initialized - automatic token conversion enabled")
+        else:
+            print("⚠️ [WARNING] DEX swapper initialization failed - manual token management required")
         
         print("✅ [INFO] All components initialized successfully")
         return True
@@ -267,10 +292,56 @@ def process_payment():
             eth_balance = eth_balance_result['balance_eth']
             print(f"⛽ [INFO] {request_id}: ETH balance for gas: {eth_balance:.8f} ETH")
             
+            # Ensure sufficient token balance (automatic conversion if needed)
             if token_balance < client_token_amount:
-                error_msg = f"Insufficient {client_payout_currency} balance. Need: {client_token_amount:.8f} {client_payout_currency}, Have: {token_balance:.8f} {client_payout_currency}"
-                print(f"❌ [ERROR] {request_id}: {error_msg}")
-                abort(500, error_msg)
+                print(f"📉 [INFO] {request_id}: Insufficient {client_payout_currency} balance - attempting automatic conversion")
+                print(f"💰 [INFO] {request_id}: Need: {client_token_amount:.8f} {client_payout_currency}, Have: {token_balance:.8f} {client_payout_currency}")
+                
+                # Attempt to acquire tokens via ETH swap
+                ensure_result = wallet_manager.ensure_token_balance(
+                    token_symbol=client_payout_currency,
+                    required_amount=client_token_amount,
+                    request_id=request_id
+                )
+                
+                if not ensure_result['success']:
+                    error_details = ensure_result.get('error', 'Unknown error')
+                    action_attempted = ensure_result.get('action_taken', 'unknown')
+                    
+                    error_msg = f"Failed to acquire sufficient {client_payout_currency}: {error_details}"
+                    print(f"❌ [ERROR] {request_id}: {error_msg}")
+                    print(f"🔍 [DEBUG] {request_id}: Action attempted: {action_attempted}")
+                    
+                    # Provide specific troubleshooting suggestions based on error type
+                    if "insufficient eth" in error_details.lower():
+                        print(f"💡 [SUGGESTION] {request_id}: Add more ETH to host wallet for automatic swapping")
+                        print(f"⛽ [SUGGESTION] {request_id}: Current ETH: {eth_balance:.6f}, Min reserve: {swap_config.min_eth_reserve:.6f}")
+                    elif "dex swapper not initialized" in error_details.lower():
+                        print(f"💡 [SUGGESTION] {request_id}: Check 1INCH API key configuration or manually add {client_payout_currency} tokens")
+                    elif "swapping is disabled" in error_details.lower():
+                        print(f"💡 [SUGGESTION] {request_id}: Enable auto-swapping or manually add {client_payout_currency} tokens")
+                    else:
+                        print(f"💡 [SUGGESTION] {request_id}: Ensure host wallet has sufficient ETH for swapping or manually add {client_payout_currency} tokens")
+                    
+                    # Log additional context for debugging
+                    print(f"🔍 [DEBUG] {request_id}: Required tokens: {client_token_amount:.8f} {client_payout_currency}")
+                    print(f"🔍 [DEBUG] {request_id}: Current token balance: {token_balance:.8f} {client_payout_currency}")
+                    print(f"🔍 [DEBUG] {request_id}: ETH balance: {eth_balance:.8f} ETH")
+                    
+                    abort(500, error_msg)
+                
+                action_taken = ensure_result.get('action_taken', 'unknown')
+                if action_taken == 'eth_to_token_swap':
+                    swap_result = ensure_result.get('swap_result', {})
+                    tx_hash = swap_result.get('transaction_hash', 'unknown')
+                    print(f"✅ [SUCCESS] {request_id}: Automatically swapped ETH for {client_payout_currency}")
+                    print(f"🔗 [INFO] {request_id}: Swap TX Hash: {tx_hash}")
+                    
+                    # Update balance info for logging
+                    new_balance = ensure_result.get('new_balance', client_token_amount)
+                    print(f"🪙 [INFO] {request_id}: Updated {client_payout_currency} balance: {new_balance:.8f} {client_payout_currency}")
+                else:
+                    print(f"✅ [INFO] {request_id}: Token balance ensured (action: {action_taken})")
             
             # Send ERC20 tokens to client wallet
             print(f"🪙 [INFO] {request_id}: Sending {client_token_amount:.8f} {client_payout_currency} to {client_wallet_address}")
@@ -341,7 +412,9 @@ def health_check():
         components_status = {
             "config_manager": config_manager is not None and config_manager.config_loaded,
             "eth_converter": eth_converter is not None,
-            "wallet_manager": wallet_manager is not None
+            "wallet_manager": wallet_manager is not None,
+            "dex_swapper": wallet_manager is not None and wallet_manager.dex_swapper is not None,
+            "auto_swapping": wallet_manager is not None and wallet_manager.dex_swapper is not None and wallet_manager.dex_swapper.config.enable_swapping
         }
         
         all_healthy = all(components_status.values())

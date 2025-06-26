@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Wallet Manager - Ethereum transaction handling using web3.py.
-Manages ETH transfers, balance checking, and transaction monitoring.
+Manages ETH transfers, balance checking, transaction monitoring, and automatic token swapping.
 """
 import time
 from typing import Dict, Any, Optional, Union
@@ -11,6 +11,7 @@ from web3.middleware import geth_poa_middleware
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from token_registry import TokenRegistry, ERC20_ABI
+from dex_swapper import DEXSwapper, SwapConfig
 
 class WalletManager:
     """Manages Ethereum wallet operations and transactions."""
@@ -36,6 +37,7 @@ class WalletManager:
         self.w3 = None
         self.account = None
         self.token_registry = None
+        self.dex_swapper = None
         
         self._initialize_web3()
         print(f"🏦 [INFO] Wallet Manager initialized for address: {self.host_address}")
@@ -904,4 +906,212 @@ class WalletManager:
                 'success': False,
                 'error': error_msg,
                 'request_id': request_id
+            }
+    
+    def initialize_dex_swapper(self, oneinch_api_key: str, swap_config: SwapConfig = None) -> bool:
+        """
+        Initialize the DEX swapper for automatic token conversions.
+        
+        Args:
+            oneinch_api_key: 1INCH API key for DEX access
+            swap_config: Optional swap configuration
+            
+        Returns:
+            True if initialization successful, False otherwise
+        """
+        try:
+            if not oneinch_api_key:
+                print("⚠️ [WARNING] No 1INCH API key provided - DEX swapping disabled")
+                return False
+            
+            self.dex_swapper = DEXSwapper(
+                w3=self.w3,
+                oneinch_api_key=oneinch_api_key,
+                host_address=self.host_address,
+                private_key=self.private_key,
+                swap_config=swap_config
+            )
+            
+            print("✅ [INFO] DEX swapper initialized successfully")
+            return True
+            
+        except Exception as e:
+            print(f"❌ [ERROR] Failed to initialize DEX swapper: {e}")
+            return False
+    
+    def ensure_token_balance(self, token_symbol: str, required_amount: float, 
+                           request_id: str = None) -> Dict[str, Any]:
+        """
+        Ensure sufficient token balance by checking current balance and swapping ETH if needed.
+        
+        Args:
+            token_symbol: Token symbol needed (e.g., "LINK", "USDT")
+            required_amount: Required amount of tokens
+            request_id: Optional request ID for tracking
+            
+        Returns:
+            Dictionary with balance ensuring result
+        """
+        try:
+            request_id = request_id or f"ENSURE_{int(time.time())}"
+            
+            print(f"🔍 [INFO] {request_id}: Ensuring {required_amount:.6f} {token_symbol} balance...")
+            
+            # Check current token balance
+            balance_result = self.get_erc20_balance(token_symbol)
+            if not balance_result['success']:
+                return {
+                    'success': False,
+                    'error': f"Failed to check {token_symbol} balance: {balance_result.get('error', 'Unknown error')}",
+                    'action_taken': 'none'
+                }
+            
+            current_balance = balance_result['balance_tokens']
+            print(f"💰 [INFO] {request_id}: Current {token_symbol} balance: {current_balance:.6f}")
+            
+            # Check if we already have enough
+            if current_balance >= required_amount:
+                print(f"✅ [INFO] {request_id}: Sufficient {token_symbol} balance available")
+                return {
+                    'success': True,
+                    'message': 'Sufficient balance available',
+                    'current_balance': current_balance,
+                    'required_amount': required_amount,
+                    'action_taken': 'none'
+                }
+            
+            # Calculate deficit
+            deficit = required_amount - current_balance
+            print(f"📉 [INFO] {request_id}: {token_symbol} deficit: {deficit:.6f} (need {required_amount:.6f}, have {current_balance:.6f})")
+            
+            # Check if DEX swapper is available
+            if not self.dex_swapper:
+                return {
+                    'success': False,
+                    'error': 'DEX swapper not initialized - cannot acquire tokens automatically',
+                    'current_balance': current_balance,
+                    'required_amount': required_amount,
+                    'deficit': deficit,
+                    'action_taken': 'none'
+                }
+            
+            # Check ETH balance for swapping
+            eth_balance_result = self.get_wallet_balance()
+            if not eth_balance_result['success']:
+                return {
+                    'success': False,
+                    'error': 'Failed to check ETH balance for swapping',
+                    'action_taken': 'none'
+                }
+            
+            eth_balance = eth_balance_result['balance_eth']
+            print(f"⛽ [INFO] {request_id}: ETH available for swapping: {eth_balance:.6f} ETH")
+            
+            # Ensure we have enough ETH (keep reserve for gas)
+            min_eth_reserve = self.dex_swapper.config.min_eth_reserve
+            if eth_balance <= min_eth_reserve:
+                return {
+                    'success': False,
+                    'error': f'Insufficient ETH for swapping. Have {eth_balance:.6f} ETH, need at least {min_eth_reserve:.6f} ETH reserve',
+                    'action_taken': 'none'
+                }
+            
+            # Calculate ETH needed for the deficit (with some buffer)
+            swap_amount = deficit * 1.05  # Add 5% buffer for slippage/estimation errors
+            print(f"🔄 [INFO] {request_id}: Attempting to swap ETH for {swap_amount:.6f} {token_symbol}")
+            
+            # Execute the swap
+            swap_result = self.dex_swapper.swap_eth_for_exact_tokens(token_symbol, swap_amount)
+            
+            if swap_result['success']:
+                print(f"✅ [SUCCESS] {request_id}: Successfully swapped ETH for {token_symbol}")
+                
+                # Verify new balance
+                new_balance_result = self.get_erc20_balance(token_symbol)
+                if new_balance_result['success']:
+                    new_balance = new_balance_result['balance_tokens']
+                    print(f"💰 [INFO] {request_id}: New {token_symbol} balance: {new_balance:.6f}")
+                    
+                    return {
+                        'success': True,
+                        'message': 'Successfully acquired tokens via swap',
+                        'initial_balance': current_balance,
+                        'new_balance': new_balance,
+                        'required_amount': required_amount,
+                        'swap_result': swap_result,
+                        'action_taken': 'eth_to_token_swap'
+                    }
+                else:
+                    # Swap succeeded but balance check failed
+                    return {
+                        'success': True,
+                        'message': 'Swap completed but balance verification failed',
+                        'swap_result': swap_result,
+                        'action_taken': 'eth_to_token_swap',
+                        'warning': 'Could not verify new balance'
+                    }
+            else:
+                return {
+                    'success': False,
+                    'error': f"Token swap failed: {swap_result.get('error', 'Unknown error')}",
+                    'current_balance': current_balance,
+                    'required_amount': required_amount,
+                    'action_taken': 'swap_attempted_failed'
+                }
+                
+        except Exception as e:
+            error_msg = f"Balance ensuring failed: {str(e)}"
+            print(f"❌ [ERROR] {request_id or 'Unknown'}: {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg,
+                'action_taken': 'error'
+            }
+    
+    def swap_eth_to_token(self, token_symbol: str, eth_amount: float, 
+                         request_id: str = None) -> Dict[str, Any]:
+        """
+        Swap a specific amount of ETH for tokens.
+        
+        Args:
+            token_symbol: Target token symbol
+            eth_amount: Amount of ETH to swap
+            request_id: Optional request ID for tracking
+            
+        Returns:
+            Dictionary with swap result
+        """
+        try:
+            request_id = request_id or f"SWAP_{int(time.time())}"
+            
+            if not self.dex_swapper:
+                return {
+                    'success': False,
+                    'error': 'DEX swapper not initialized'
+                }
+            
+            print(f"🔄 [INFO] {request_id}: Swapping {eth_amount:.6f} ETH for {token_symbol}")
+            
+            # Convert ETH amount to Wei
+            eth_amount_wei = self.w3.to_wei(eth_amount, 'ether')
+            
+            # Execute swap
+            swap_result = self.dex_swapper.execute_eth_to_token_swap(
+                token_symbol=token_symbol,
+                eth_amount_wei=eth_amount_wei
+            )
+            
+            if swap_result['success']:
+                print(f"✅ [SUCCESS] {request_id}: ETH to {token_symbol} swap completed")
+            else:
+                print(f"❌ [ERROR] {request_id}: ETH to {token_symbol} swap failed")
+            
+            return swap_result
+            
+        except Exception as e:
+            error_msg = f"ETH to {token_symbol} swap failed: {str(e)}"
+            print(f"❌ [ERROR] {request_id or 'Unknown'}: {error_msg}")
+            return {
+                'success': False,
+                'error': error_msg
             }
