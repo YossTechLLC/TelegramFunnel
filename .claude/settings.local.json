@@ -9,7 +9,8 @@
       "Bash(ls:*)",
       "Bash(python:*)",
       "WebFetch(domain:portal.1inch.dev)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "WebFetch(domain:developers.circle.com)"
     ],
     "deny": []
   }
