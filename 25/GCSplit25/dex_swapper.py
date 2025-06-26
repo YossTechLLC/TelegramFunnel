@@ -15,7 +15,7 @@ class SwapConfig:
     """Configuration for DEX swap parameters."""
     max_slippage_percent: float = 1.0  # 1% maximum slippage
     max_eth_per_swap: float = 0.1  # Maximum 0.1 ETH per swap
-    min_eth_reserve: float = 0.01  # Keep 0.01 ETH minimum for gas
+    min_eth_reserve: float = 0.001  # Keep 0.001 ETH minimum for gas
     swap_timeout_seconds: int = 30  # API timeout
     enable_swapping: bool = True  # Global swap enable/disable
 

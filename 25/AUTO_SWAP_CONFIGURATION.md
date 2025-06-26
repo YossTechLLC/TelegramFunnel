@@ -14,8 +14,22 @@ The TelegramFunnel system now supports automatic ETH-to-token conversion using t
    - Configure environment variable to point to Secret Manager path
 
 2. **Host Wallet ETH Balance**: Sufficient ETH for gas + swapping
-   - Minimum recommended: 0.05 ETH
+   - Minimum recommended: 0.01 ETH (for small operations)
+   - Production recommended: 0.05+ ETH
    - System reserves minimum ETH for gas (configurable)
+
+### ETH Requirements & Gas Costs (2024)
+
+**Typical Ethereum Gas Costs:**
+- Simple ETH transfer: ~0.0004-0.0005 ETH (normal conditions)
+- ERC20 token transfer: ~0.001-0.005 ETH  
+- DEX swaps (1INCH): ~0.01-0.05 ETH (varies with network congestion)
+- Complex DeFi operations: 0.05+ ETH during high gas periods
+
+**Reserve Calculations:**
+- **0.001 ETH reserve**: Covers 1-2 token transfers reliably
+- **Conservative**: Use 0.002-0.005 ETH during high gas periods
+- **Emergency**: Can lower to 0.0005 ETH if needed (risky during congestion)
 
 ## Environment Variables
 
@@ -25,7 +39,7 @@ The TelegramFunnel system now supports automatic ETH-to-token conversion using t
 |----------|---------|-------------|
 | `SWAP_MAX_SLIPPAGE` | `1.0` | Maximum slippage percentage (1.0 = 1%) |
 | `SWAP_MAX_ETH` | `0.1` | Maximum ETH per swap transaction |
-| `SWAP_MIN_ETH_RESERVE` | `0.01` | Minimum ETH to keep for gas |
+| `SWAP_MIN_ETH_RESERVE` | `0.001` | Minimum ETH to keep for gas |
 | `SWAP_TIMEOUT` | `30` | API timeout in seconds |
 | `ENABLE_AUTO_SWAPPING` | `true` | Enable/disable automatic swapping |
 
@@ -40,7 +54,7 @@ The TelegramFunnel system now supports automatic ETH-to-token conversion using t
 # Optional swap parameters
 SWAP_MAX_SLIPPAGE=1.5          # 1.5% slippage tolerance
 SWAP_MAX_ETH=0.05              # Maximum 0.05 ETH per swap
-SWAP_MIN_ETH_RESERVE=0.02      # Keep 0.02 ETH minimum
+SWAP_MIN_ETH_RESERVE=0.001     # Keep 0.001 ETH minimum
 SWAP_TIMEOUT=45                # 45 second timeout
 ENABLE_AUTO_SWAPPING=true      # Enable automatic swapping
 ```
@@ -133,6 +147,8 @@ The `/health` endpoint now includes swap status:
 - **Cause**: Host wallet ETH below minimum reserve
 - **Solution**: Add more ETH to host wallet
 - **Formula**: Need at least `(swap_amount + gas_fees + min_reserve)` ETH
+- **Example**: For 0.006 ETH balance with 0.001 reserve = ~0.005 ETH available for swapping
+- **Gas Reality**: DEX swaps typically cost 0.01-0.05 ETH, so budget accordingly
 
 #### 3. "Swap amount exceeds maximum"
 - **Cause**: Required tokens need more ETH than `SWAP_MAX_ETH`

@@ -34,10 +34,11 @@ config_manager = None
 eth_converter = None
 multi_token_converter = None
 wallet_manager = None
+swap_config = None
 
 def initialize_components():
     """Initialize all system components."""
-    global config_manager, eth_converter, multi_token_converter, wallet_manager
+    global config_manager, eth_converter, multi_token_converter, wallet_manager, swap_config
     
     try:
         print("🚀 [INFO] Initializing Multi-Token Payment Splitting Service...")
@@ -74,7 +75,7 @@ def initialize_components():
         swap_config = SwapConfig(
             max_slippage_percent=float(os.getenv("SWAP_MAX_SLIPPAGE", "1.0")),  # 1% default slippage
             max_eth_per_swap=float(os.getenv("SWAP_MAX_ETH", "0.1")),           # 0.1 ETH maximum per swap
-            min_eth_reserve=float(os.getenv("SWAP_MIN_ETH_RESERVE", "0.01")),   # Keep 0.01 ETH minimum for gas
+            min_eth_reserve=float(os.getenv("SWAP_MIN_ETH_RESERVE", "0.001")),  # Keep 0.001 ETH minimum for gas
             swap_timeout_seconds=int(os.getenv("SWAP_TIMEOUT", "30")),          # 30 second timeout
             enable_swapping=os.getenv("ENABLE_AUTO_SWAPPING", "true").lower() == "true"  # Enable by default
         )
@@ -315,13 +316,25 @@ def process_payment():
                     # Provide specific troubleshooting suggestions based on error type
                     if "insufficient eth" in error_details.lower():
                         print(f"💡 [SUGGESTION] {request_id}: Add more ETH to host wallet for automatic swapping")
-                        print(f"⛽ [SUGGESTION] {request_id}: Current ETH: {eth_balance:.6f}, Min reserve: {swap_config.min_eth_reserve:.6f}")
+                        # Access swap config through wallet manager if available
+                        min_reserve = "unknown"
+                        if wallet_manager and wallet_manager.dex_swapper and wallet_manager.dex_swapper.config:
+                            min_reserve = f"{wallet_manager.dex_swapper.config.min_eth_reserve:.6f}"
+                            required_total = wallet_manager.dex_swapper.config.min_eth_reserve + 0.003  # Estimate for swap + gas
+                            print(f"⛽ [SUGGESTION] {request_id}: Current ETH: {eth_balance:.6f}, Min reserve: {min_reserve}")
+                            print(f"📊 [SUGGESTION] {request_id}: Recommended total ETH: >{required_total:.6f} (reserve + swap + gas)")
+                        else:
+                            print(f"⛽ [SUGGESTION] {request_id}: Current ETH: {eth_balance:.6f}, Min reserve: {min_reserve}")
+                        print(f"🔧 [ALTERNATIVE] {request_id}: Lower reserve with env var SWAP_MIN_ETH_RESERVE=0.001")
                     elif "dex swapper not initialized" in error_details.lower():
                         print(f"💡 [SUGGESTION] {request_id}: Check 1INCH API key configuration or manually add {client_payout_currency} tokens")
+                        print(f"🔍 [DEBUG] {request_id}: Verify 1INCH_API_KEY points to valid Secret Manager path")
                     elif "swapping is disabled" in error_details.lower():
                         print(f"💡 [SUGGESTION] {request_id}: Enable auto-swapping or manually add {client_payout_currency} tokens")
+                        print(f"🔧 [FIX] {request_id}: Set environment variable ENABLE_AUTO_SWAPPING=true")
                     else:
                         print(f"💡 [SUGGESTION] {request_id}: Ensure host wallet has sufficient ETH for swapping or manually add {client_payout_currency} tokens")
+                        print(f"🔧 [ALTERNATIVES] {request_id}: 1) Add ETH to wallet, 2) Add {client_payout_currency} tokens directly, 3) Adjust SWAP_MIN_ETH_RESERVE")
                     
                     # Log additional context for debugging
                     print(f"🔍 [DEBUG] {request_id}: Required tokens: {client_token_amount:.8f} {client_payout_currency}")
