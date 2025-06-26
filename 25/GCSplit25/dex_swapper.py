@@ -202,7 +202,10 @@ class DEXSwapper:
                 'includeGas': 'true'
             }
             
-            print(f"🔍 [INFO] Getting 1INCH quote: {amount_wei} Wei {from_token} → {to_token}")
+            amount_eth = float(self.w3.from_wei(amount_wei, 'ether'))
+            print(f"🔍 [INFO] Getting 1INCH quote: {amount_eth:.6f} ETH ({amount_wei} Wei) {from_token} → {to_token}")
+            print(f"🔗 [DEBUG] Quote endpoint: {self.quote_endpoint}")
+            print(f"📝 [DEBUG] Quote params: src={from_address[:10]}..., dst={to_address[:10]}..., amount={amount_wei}")
             
             response = requests.get(
                 self.quote_endpoint,
@@ -211,6 +214,8 @@ class DEXSwapper:
                 timeout=self.config.swap_timeout_seconds
             )
             
+            print(f"📡 [DEBUG] 1INCH API response status: {response.status_code}")
+            
             if response.status_code == 200:
                 quote_data = response.json()
                 
@@ -218,6 +223,22 @@ class DEXSwapper:
                 from_amount = int(quote_data.get('fromTokenAmount', 0))
                 to_amount = int(quote_data.get('toTokenAmount', 0))
                 gas_estimate = int(quote_data.get('estimatedGas', 0))
+                
+                # Enhanced logging for debugging
+                to_amount_readable = to_amount / (10 ** 18) if to_token != 'ETH' else to_amount  # Assume 18 decimals for debugging
+                print(f"📊 [DEBUG] Quote result: {from_amount} Wei in → {to_amount} Wei out (~{to_amount_readable:.6f} {to_token})")
+                print(f"⛽ [DEBUG] Estimated gas: {gas_estimate}")
+                
+                # Check for zero token output and log additional details
+                if to_amount == 0:
+                    print(f"⚠️ [WARNING] Quote returned ZERO tokens for {amount_eth:.6f} ETH → {to_token}")
+                    print(f"🔍 [DEBUG] Raw quote response: {quote_data}")
+                    # Log specific fields that might indicate why
+                    if 'protocols' in quote_data:
+                        protocols = quote_data.get('protocols', [])
+                        print(f"🔗 [DEBUG] Available protocols: {len(protocols)} protocols found")
+                    if 'error' in quote_data:
+                        print(f"❌ [DEBUG] API error in response: {quote_data['error']}")
                 
                 return {
                     'success': True,
@@ -232,6 +253,8 @@ class DEXSwapper:
             else:
                 error_msg = f"1INCH quote failed: {response.status_code} - {response.text}"
                 print(f"❌ [ERROR] {error_msg}")
+                print(f"🔗 [DEBUG] Failed request URL: {self.quote_endpoint}")
+                print(f"📝 [DEBUG] Request params: {params}")
                 return {
                     'success': False,
                     'error': error_msg,
@@ -246,9 +269,173 @@ class DEXSwapper:
                 'error': error_msg
             }
     
+    def _get_quote_with_retry(self, from_token: str, to_token: str, amount_wei: int, max_retries: int = 3) -> Dict[str, Any]:
+        """
+        Get a quote with retry logic and exponential backoff.
+        
+        Args:
+            from_token: Source token symbol
+            to_token: Target token symbol
+            amount_wei: Amount in Wei
+            max_retries: Maximum number of retry attempts
+            
+        Returns:
+            Dictionary with quote result
+        """
+        import time
+        
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # Exponential backoff: 1s, 2s, 4s
+                    wait_time = 2 ** (attempt - 1)
+                    print(f"⏳ [INFO] Retry attempt {attempt + 1}/{max_retries} after {wait_time}s delay")
+                    time.sleep(wait_time)
+                
+                quote_result = self.get_swap_quote(from_token, to_token, amount_wei)
+                
+                if quote_result['success']:
+                    if attempt > 0:
+                        print(f"✅ [SUCCESS] Quote succeeded on retry attempt {attempt + 1}")
+                    return quote_result
+                else:
+                    print(f"⚠️ [WARNING] Quote attempt {attempt + 1} failed: {quote_result.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                print(f"❌ [ERROR] Quote attempt {attempt + 1} exception: {e}")
+                
+        print(f"❌ [ERROR] All {max_retries} quote attempts failed")
+        return {
+            'success': False,
+            'error': f'Quote failed after {max_retries} attempts with retries'
+        }
+    
+    def _analyze_quote_failures(self, from_token: str, to_token: str, attempted_amounts: list) -> Dict[str, Any]:
+        """
+        Analyze quote failures and provide specific diagnostics and suggestions.
+        
+        Args:
+            from_token: Source token that failed
+            to_token: Target token that failed
+            attempted_amounts: List of ETH amounts that were attempted
+            
+        Returns:
+            Dictionary with failure analysis and suggestions
+        """
+        analysis = {
+            'failure_type': 'unknown',
+            'suggested_actions': [],
+            'diagnostics': {},
+            'severity': 'medium'
+        }
+        
+        try:
+            # Check if it's a common token pair issue
+            if to_token.upper() in ['LINK', 'UNI', 'AAVE']:
+                analysis['failure_type'] = 'low_liquidity_token'
+                analysis['suggested_actions'] = [
+                    f"🔄 Try increasing ETH amount above {max(attempted_amounts):.3f} ETH",
+                    f"📊 Check {to_token} market conditions and liquidity",
+                    f"💱 Consider using a more liquid token (USDT, USDC, DAI)",
+                    f"⏰ Try again during different market hours for better liquidity"
+                ]
+                analysis['severity'] = 'high'
+                
+            elif to_token.upper() in ['USDT', 'USDC', 'DAI']:
+                analysis['failure_type'] = 'stablecoin_issue'
+                analysis['suggested_actions'] = [
+                    f"🔧 Check 1INCH API key configuration and permissions",
+                    f"🌐 Verify network connectivity to 1INCH API",
+                    f"💰 Ensure ETH amount is sufficient (try 0.01+ ETH)",
+                    f"🔄 Try alternative DEX or manual token acquisition"
+                ]
+                analysis['severity'] = 'critical'
+                
+            else:
+                analysis['failure_type'] = 'general_quote_failure'
+                analysis['suggested_actions'] = [
+                    f"📊 Verify {to_token} is actively traded on DEXs",
+                    f"🔍 Check token contract address in registry",
+                    f"💰 Increase ETH amount for better liquidity",
+                    f"🔧 Verify 1INCH API configuration"
+                ]
+                
+            # Add general diagnostics
+            analysis['diagnostics'] = {
+                'attempted_amounts_eth': attempted_amounts,
+                'min_attempted': min(attempted_amounts),
+                'max_attempted': max(attempted_amounts),
+                'token_pair': f"{from_token} → {to_token}",
+                'chain_id': self.chain_id,
+                'api_endpoint': self.quote_endpoint
+            }
+            
+            # Log the analysis
+            print(f"🔍 [ANALYSIS] Quote failure analysis:")
+            print(f"  📋 Failure type: {analysis['failure_type']}")
+            print(f"  ⚠️ Severity: {analysis['severity']}")
+            print(f"  💡 Suggestions:")
+            for action in analysis['suggested_actions']:
+                print(f"    {action}")
+                
+        except Exception as e:
+            print(f"❌ [ERROR] Error analysis failed: {e}")
+            analysis['failure_type'] = 'analysis_error'
+            analysis['suggested_actions'] = [
+                "🔧 Check system configuration and try again",
+                "💰 Ensure sufficient ETH balance for swapping",
+                "📞 Contact support if issues persist"
+            ]
+            
+        return analysis
+
+    def _try_progressive_quotes(self, from_token: str, to_token: str, quote_amounts_eth: list) -> Dict[str, Any]:
+        """
+        Try multiple quote amounts progressively with retry logic until we get a valid quote.
+        
+        Args:
+            from_token: Source token symbol
+            to_token: Target token symbol  
+            quote_amounts_eth: List of ETH amounts to try (in descending order)
+            
+        Returns:
+            Dictionary with quote result or failure
+        """
+        print(f"🔄 [INFO] Attempting progressive quotes for {from_token} → {to_token}")
+        
+        for i, eth_amount in enumerate(quote_amounts_eth):
+            try:
+                eth_wei = self.w3.to_wei(eth_amount, 'ether')
+                print(f"🔍 [INFO] Quote attempt {i+1}/{len(quote_amounts_eth)}: {eth_amount:.6f} ETH")
+                
+                # Use retry logic for each amount
+                quote_result = self._get_quote_with_retry(from_token, to_token, eth_wei, max_retries=2)
+                
+                if quote_result['success'] and quote_result['to_amount_wei'] > 0:
+                    print(f"✅ [SUCCESS] Quote successful with {eth_amount:.6f} ETH")
+                    return quote_result
+                else:
+                    print(f"⚠️ [WARNING] Quote attempt {i+1} failed or returned zero tokens")
+                    if quote_result.get('error'):
+                        print(f"🔍 [DEBUG] Error: {quote_result['error']}")
+                        
+            except Exception as e:
+                print(f"❌ [ERROR] Quote attempt {i+1} exception: {e}")
+                continue
+        
+        # Provide comprehensive error analysis and suggestions
+        error_analysis = self._analyze_quote_failures(from_token, to_token, quote_amounts_eth)
+        
+        return {
+            'success': False,
+            'error': f'All progressive quote attempts with retries failed for {from_token} → {to_token}',
+            'error_analysis': error_analysis
+        }
+    
     def calculate_eth_needed_for_tokens(self, token_symbol: str, token_amount: float) -> Dict[str, Any]:
         """
         Calculate how much ETH is needed to acquire a specific amount of tokens.
+        Enhanced with progressive quote attempts and better validation.
         
         Args:
             token_symbol: Target token symbol
@@ -265,33 +452,70 @@ class DEXSwapper:
                     'error': f'Token {token_symbol} not supported on chain {self.chain_id}'
                 }
             
+            print(f"🎯 [INFO] Calculating ETH needed for {token_amount:.6f} {token_symbol}")
+            
             # Convert token amount to Wei (smallest unit)
             token_amount_wei = int(token_amount * (10 ** token_info.decimals))
             
-            # Start with an initial ETH estimate (we'll iterate to find the right amount)
-            # Use 0.001 ETH as starting point for quote
-            initial_eth_wei = self.w3.to_wei(0.001, 'ether')
+            # Validate we have minimum ETH for meaningful quotes
+            min_eth_for_quotes = 0.002  # Minimum 0.002 ETH (~$5) for meaningful quotes
+            if hasattr(self, 'w3'):
+                try:
+                    # Try to get current ETH balance for validation context
+                    # Note: This requires access to wallet manager which might not be available here
+                    # We'll add this as a suggestion in the error message
+                    pass
+                except:
+                    pass
             
-            # Get initial quote to understand the rate
-            quote_result = self.get_swap_quote("ETH", token_symbol, initial_eth_wei)
+            print(f"💡 [INFO] Minimum ETH recommended for {token_symbol} quotes: {min_eth_for_quotes:.3f} ETH")
+            
+            # Progressive quote amounts - start higher to get better liquidity
+            # Try multiple amounts in case smaller amounts have poor liquidity
+            quote_amounts_eth = [0.01, 0.005, 0.002]  # Start with 0.01 ETH (~$25), then smaller
+            
+            print(f"📊 [INFO] Will attempt quotes with amounts: {[f'{amt:.3f} ETH' for amt in quote_amounts_eth]}")
+            
+            # Try progressive quote amounts to find working liquidity
+            quote_result = self._try_progressive_quotes("ETH", token_symbol, quote_amounts_eth)
             
             if not quote_result['success']:
-                return quote_result
+                print(f"❌ [ERROR] All quote attempts failed for {token_symbol}")
+                return {
+                    'success': False,
+                    'error': f'Unable to get valid quote for ETH → {token_symbol}: {quote_result.get("error", "Unknown error")}'
+                }
             
             # Calculate approximate ETH needed based on the rate
             initial_token_wei = quote_result['to_amount_wei']
+            initial_eth_wei = quote_result['from_amount_wei']
+            
             if initial_token_wei == 0:
+                print(f"❌ [ERROR] Even progressive quotes returned zero tokens for {token_symbol}")
                 return {
                     'success': False,
-                    'error': 'Quote returned zero tokens'
+                    'error': f'All quote attempts returned zero {token_symbol} tokens - possible liquidity or API issues'
                 }
             
-            # Estimate ETH needed with slippage buffer
-            estimated_eth_wei = int((token_amount_wei * initial_eth_wei) / initial_token_wei)
+            # Calculate rate and estimate ETH needed
+            rate_tokens_per_eth = initial_token_wei / initial_eth_wei
+            estimated_eth_wei = int(token_amount_wei / rate_tokens_per_eth)
+            
+            print(f"📊 [INFO] Rate calculation: {rate_tokens_per_eth:.2f} {token_symbol} per ETH")
+            print(f"💰 [INFO] Estimated ETH needed: {float(self.w3.from_wei(estimated_eth_wei, 'ether')):.6f} ETH")
+            
+            # Add slippage buffer and ensure minimum viable amount
             slippage_buffer = 1 + (self.config.max_slippage_percent / 100)
             eth_needed_wei = int(estimated_eth_wei * slippage_buffer)
             
+            # Ensure we're not going below minimum viable swap amount (0.002 ETH)
+            min_swap_wei = self.w3.to_wei(0.002, 'ether')
+            if eth_needed_wei < min_swap_wei:
+                print(f"⚠️ [WARNING] Calculated ETH amount too small, using minimum: 0.002 ETH")
+                eth_needed_wei = min_swap_wei
+            
             # Get more accurate quote with estimated amount
+            print(f"🔍 [INFO] Getting final quote with {float(self.w3.from_wei(eth_needed_wei, 'ether')):.6f} ETH")
             final_quote = self.get_swap_quote("ETH", token_symbol, eth_needed_wei)
             
             if final_quote['success']:
@@ -303,6 +527,12 @@ class DEXSwapper:
                 
                 print(f"💱 [INFO] ETH needed calculation: {eth_needed_eth:.6f} ETH → {tokens_received:.6f} {token_symbol}")
                 print(f"🎯 [INFO] Target: {token_amount:.6f} {token_symbol}, Will receive: {tokens_received:.6f}")
+                
+                # Check if we'll receive sufficient tokens
+                sufficient_tokens = tokens_received >= token_amount
+                if not sufficient_tokens:
+                    shortage = token_amount - tokens_received
+                    print(f"⚠️ [WARNING] Token shortage: will receive {tokens_received:.6f} but need {token_amount:.6f} (short {shortage:.6f})")
                 
                 # Log validation result
                 if rate_validation['validated']:
@@ -322,11 +552,17 @@ class DEXSwapper:
                     'expected_tokens_received': tokens_received,
                     'tokens_received_wei': final_quote['to_amount_wei'],
                     'gas_estimate': final_quote['gas_estimate'],
-                    'sufficient_output': tokens_received >= token_amount,
-                    'rate_validation': rate_validation
+                    'sufficient_output': sufficient_tokens,
+                    'rate_validation': rate_validation,
+                    'initial_quote_eth': float(self.w3.from_wei(initial_eth_wei, 'ether')),
+                    'rate_tokens_per_eth': rate_tokens_per_eth
                 }
             else:
-                return final_quote
+                print(f"❌ [ERROR] Final quote failed for {eth_needed_eth:.6f} ETH")
+                return {
+                    'success': False,
+                    'error': f'Final quote failed: {final_quote.get("error", "Unknown error")}'
+                }
                 
         except Exception as e:
             error_msg = f"ETH calculation failed: {str(e)}"

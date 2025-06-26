@@ -334,6 +334,24 @@ def process_payment():
                     elif "swapping is disabled" in error_details.lower():
                         print(f"💡 [SUGGESTION] {request_id}: Enable auto-swapping or manually add {client_payout_currency} tokens")
                         print(f"🔧 [FIX] {request_id}: Set environment variable ENABLE_AUTO_SWAPPING=true")
+                    elif "quote returned zero tokens" in error_details.lower() or "all progressive quote attempts" in error_details.lower():
+                        print(f"🔄 [SUGGESTION] {request_id}: 1INCH quote issues - try these solutions:")
+                        print(f"    💰 Increase ETH balance above 0.01 ETH for better liquidity")
+                        print(f"    🔄 Retry the payment in a few minutes (temporary API/liquidity issue)")
+                        print(f"    💱 Consider switching to a more liquid token (USDT/USDC)")
+                        print(f"    🔧 Check 1INCH API key configuration and rate limits")
+                        
+                        # Check if we have error analysis from DEX swapper
+                        swap_result = ensure_result.get('swap_result', {})
+                        if 'error_analysis' in swap_result:
+                            error_analysis = swap_result['error_analysis']
+                            print(f"🔍 [ANALYSIS] {request_id}: Detailed failure analysis:")
+                            print(f"    📋 Issue type: {error_analysis.get('failure_type', 'unknown')}")
+                            print(f"    ⚠️ Severity: {error_analysis.get('severity', 'unknown')}")
+                            print(f"    💡 Recommended actions:")
+                            for action in error_analysis.get('suggested_actions', []):
+                                print(f"      {action}")
+                        
                     else:
                         print(f"💡 [SUGGESTION] {request_id}: Ensure host wallet has sufficient ETH for swapping or manually add {client_payout_currency} tokens")
                         print(f"🔧 [ALTERNATIVES] {request_id}: 1) Add ETH to wallet, 2) Add {client_payout_currency} tokens directly, 3) Adjust SWAP_MIN_ETH_RESERVE")
