@@ -52,10 +52,11 @@ class DEXSwapper:
         self.quote_endpoint = f"{self.swap_api_base}/quote"
         self.swap_endpoint = f"{self.swap_api_base}/swap"
         
-        # Enhanced rate limiting for 1INCH API to avoid 429 errors
+        # Strict rate limiting for 1INCH API (1 RPS limit)
         self.last_api_call_time = 0
-        self.min_request_interval = 1.0  # 1000ms between requests (max ~60 req/min)
-        self.rate_limit_delay = 3.0  # 3 second delay after 429 errors
+        self.last_api_response_time = 0  # Track when API response was received
+        self.min_request_interval = 1.2  # 1200ms buffer above 1s limit (50 req/min max)
+        self.rate_limit_delay = 2.0  # 2 second base delay after 429 errors
         self.consecutive_429_count = 0  # Track consecutive 429 errors for exponential backoff
         
         print(f"🔄 [INFO] DEX Swapper initialized for chain {self.chain_id} with rate validation")
@@ -214,15 +215,22 @@ class DEXSwapper:
             print(f"🔗 [DEBUG] Quote endpoint: {self.quote_endpoint}")
             print(f"📝 [DEBUG] Quote params: src={from_address[:10]}..., dst={to_address[:10]}..., amount={amount_wei}")
             
-            # Implement rate limiting to avoid 429 errors
+            # Strict rate limiting to avoid 429 errors (1 RPS limit)
             current_time = time.time()
-            time_since_last_call = current_time - self.last_api_call_time
             
-            if time_since_last_call < self.min_request_interval:
-                sleep_time = self.min_request_interval - time_since_last_call
-                print(f"🚦 [INFO] Rate limiting: waiting {sleep_time:.2f}s before API call")
+            # Calculate time since last API call AND response to ensure proper spacing
+            time_since_last_call = current_time - self.last_api_call_time
+            time_since_last_response = current_time - self.last_api_response_time
+            
+            # Use the more restrictive of call time or response time
+            time_since_last_activity = min(time_since_last_call, time_since_last_response)
+            
+            if time_since_last_activity < self.min_request_interval:
+                sleep_time = self.min_request_interval - time_since_last_activity
+                print(f"🚦 [INFO] Rate limiting: waiting {sleep_time:.2f}s before API call (1 RPS limit)")
                 time.sleep(sleep_time)
             
+            # Record when we start the API call
             self.last_api_call_time = time.time()
             
             response = requests.get(
@@ -231,6 +239,9 @@ class DEXSwapper:
                 headers=self._get_headers(),
                 timeout=self.config.swap_timeout_seconds
             )
+            
+            # Record when we received the API response for rate limiting
+            self.last_api_response_time = time.time()
             
             print(f"📡 [DEBUG] 1INCH API response status: {response.status_code}")
             
@@ -322,6 +333,64 @@ class DEXSwapper:
                 'success': False,
                 'error': error_msg
             }
+    
+    def _get_quote_with_429_retry(self, from_token: str, to_token: str, amount_wei: int, max_retries: int = 3) -> Dict[str, Any]:
+        """
+        Get a quote with specific retry logic for 429 rate limit errors.
+        
+        Args:
+            from_token: Source token symbol
+            to_token: Target token symbol  
+            amount_wei: Amount in Wei
+            max_retries: Maximum number of retry attempts
+            
+        Returns:
+            Dictionary with quote result
+        """
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # For 429 retries, use escalating delays
+                    base_delay = self.rate_limit_delay  # 2.0s base
+                    wait_time = base_delay * (2 ** (attempt - 1))  # 2s, 4s, 8s
+                    print(f"🔄 [INFO] 429 retry attempt {attempt + 1}/{max_retries} after {wait_time:.1f}s delay")
+                    time.sleep(wait_time)
+                
+                quote_result = self.get_swap_quote(from_token, to_token, amount_wei)
+                
+                if quote_result['success']:
+                    if attempt > 0:
+                        print(f"✅ [SUCCESS] Quote succeeded on 429 retry attempt {attempt + 1}")
+                    return quote_result
+                else:
+                    # Check if this is a 429 error specifically
+                    is_rate_limit = quote_result.get('is_rate_limit', False)
+                    error_msg = quote_result.get('error', 'Unknown error')
+                    
+                    if is_rate_limit and attempt < max_retries - 1:
+                        print(f"🚦 [WARNING] 429 rate limit on attempt {attempt + 1}, will retry...")
+                        continue
+                    else:
+                        # Non-429 error or final attempt - return the error
+                        print(f"❌ [ERROR] Quote failed on attempt {attempt + 1}: {error_msg}")
+                        return quote_result
+                        
+            except Exception as e:
+                print(f"❌ [ERROR] Quote attempt {attempt + 1} exception: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1.0)  # Brief delay before retry
+                    continue
+                else:
+                    return {
+                        'success': False,
+                        'error': f'All quote attempts failed: {str(e)}'
+                    }
+        
+        # If we get here, all retries failed
+        return {
+            'success': False,
+            'error': f'Quote failed after {max_retries} attempts due to persistent 429 rate limits'
+        }
     
     def _get_quote_with_retry(self, from_token: str, to_token: str, amount_wei: int, max_retries: int = 3) -> Dict[str, Any]:
         """
@@ -691,9 +760,37 @@ class DEXSwapper:
             # Calculate eth_needed_eth outside the success block to avoid scope issues
             eth_needed_eth = float(self.w3.from_wei(eth_needed_wei, 'ether'))
             
-            # Get more accurate quote with estimated amount
-            print(f"🔍 [INFO] Getting final quote with {eth_needed_eth:.6f} ETH")
-            final_quote = self.get_swap_quote("ETH", token_symbol, eth_needed_wei)
+            # Optimization: Check if we can reuse the initial quote to avoid second API call
+            initial_eth_amount = initial_eth_wei / (10 ** 18)
+            difference_ratio = abs(eth_needed_eth - initial_eth_amount) / initial_eth_amount
+            
+            # If the needed amount is within 20% of our initial quote, reuse it to avoid 429 errors
+            reuse_threshold = 0.20  # 20% difference threshold
+            
+            if difference_ratio <= reuse_threshold:
+                print(f"🎯 [OPTIMIZATION] Reusing initial quote: needed {eth_needed_eth:.6f} ETH vs quoted {initial_eth_amount:.6f} ETH (diff: {difference_ratio:.1%})")
+                print(f"🚀 [INFO] Avoiding second API call to prevent 429 rate limits")
+                
+                # Create final_quote from initial quote result, scaled proportionally
+                scale_factor = eth_needed_wei / initial_eth_wei
+                scaled_token_amount = int(initial_token_wei * scale_factor)
+                
+                final_quote = {
+                    'success': True,
+                    'from_token': "ETH",
+                    'to_token': token_symbol,
+                    'from_amount_wei': eth_needed_wei,
+                    'to_amount_wei': scaled_token_amount,
+                    'from_amount_eth': eth_needed_eth,
+                    'gas_estimate': quote_result.get('gas_estimate', 175000),  # Use estimate from initial
+                    'quote_data': {'reused_from_initial': True},
+                    'validation': {'valid': True}
+                }
+                print(f"📊 [SCALED] Estimated {scaled_token_amount} Wei → {scaled_token_amount / (10 ** token_info.decimals):.6f} {token_symbol}")
+            else:
+                # Get more accurate quote with estimated amount (with 429 retry logic)
+                print(f"🔍 [INFO] Getting final quote with {eth_needed_eth:.6f} ETH (diff: {difference_ratio:.1%} > {reuse_threshold:.1%})")
+                final_quote = self._get_quote_with_429_retry("ETH", token_symbol, eth_needed_wei, max_retries=3)
             
             if final_quote['success']:
                 tokens_received = final_quote['to_amount_wei'] / (10 ** token_info.decimals)
