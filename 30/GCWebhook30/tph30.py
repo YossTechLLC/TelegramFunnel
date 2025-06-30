@@ -465,7 +465,7 @@ def trigger_payment_splitting(user_id: int, client_wallet_address: str, subscrip
 
 def trigger_erc20_payment_splitting(user_id: int, client_wallet_address: str, subscription_price: str, client_payout_currency: str = "ETH") -> None:
     """
-    Trigger ERC20 payment splitting by calling the tps3.py webhook.
+    Trigger ERC20 payment splitting by calling the TPS30 webhook.
     
     Args:
         user_id: The user's Telegram ID
@@ -474,10 +474,10 @@ def trigger_erc20_payment_splitting(user_id: int, client_wallet_address: str, su
         client_payout_currency: The currency/token to pay out (ETH, USDT, USDC, etc.)
     """
     try:
-        # Get the TPS3 webhook URL from environment
-        tps3_webhook_url = os.getenv("TPS3_WEBHOOK_URL")
-        if not tps3_webhook_url:
-            print("⚠️ [WARNING] TPS3_WEBHOOK_URL not configured - skipping ETH payment splitting")
+        # Get the TPS30 webhook URL from environment
+        tps30_webhook_url = os.getenv("TPS30_WEBHOOK_URL")
+        if not tps30_webhook_url:
+            print("⚠️ [WARNING] TPS30_WEBHOOK_URL not configured - skipping ETH payment splitting")
             return
         
         # Validate inputs
@@ -489,7 +489,7 @@ def trigger_erc20_payment_splitting(user_id: int, client_wallet_address: str, su
             print(f"⚠️ [WARNING] Missing subscription price - skipping ETH payment splitting")
             return
         
-        # Prepare payload for tps3.py webhook
+        # Prepare payload for TPS30 webhook
         payload = {
             "client_wallet_address": client_wallet_address,
             "sub_price": subscription_price,
@@ -497,13 +497,13 @@ def trigger_erc20_payment_splitting(user_id: int, client_wallet_address: str, su
             "client_payout_currency": client_payout_currency
         }
         
-        print(f"🔄 [INFO] Calling TPS3 webhook for {client_payout_currency} payment splitting...")
-        print(f"📍 [INFO] URL: {tps3_webhook_url}")
+        print(f"🔄 [INFO] Calling TPS30 webhook for {client_payout_currency} payment splitting...")
+        print(f"📍 [INFO] URL: {tps30_webhook_url}")
         print(f"💰 [INFO] Payload: User {user_id}, Amount: ${subscription_price}, Wallet: {client_wallet_address}, Currency: {client_payout_currency}")
         
         # Make the webhook call with timeout
         response = requests.post(
-            tps3_webhook_url,
+            tps30_webhook_url,
             json=payload,
             timeout=30,
             headers={'Content-Type': 'application/json'}
@@ -516,15 +516,15 @@ def trigger_erc20_payment_splitting(user_id: int, client_wallet_address: str, su
             print(f"💰 [INFO] Amount Sent: {result.get('amount_sent', 'unknown')} {client_payout_currency}")
             print(f"⏱️ [INFO] Processing Time: {result.get('processing_time_seconds', 'unknown')}s")
         else:
-            print(f"❌ [ERROR] TPS3 webhook failed with status {response.status_code}")
+            print(f"❌ [ERROR] TPS30 webhook failed with status {response.status_code}")
             print(f"❌ [ERROR] Response: {response.text}")
             
     except requests.exceptions.Timeout:
-        print(f"⏰ [ERROR] TPS3 webhook timeout - {client_payout_currency} payment may still be processing")
+        print(f"⏰ [ERROR] TPS30 webhook timeout - {client_payout_currency} payment may still be processing")
     except requests.exceptions.RequestException as e:
-        print(f"❌ [ERROR] TPS3 webhook request failed: {e}")
+        print(f"❌ [ERROR] TPS30 webhook request failed: {e}")
     except Exception as e:
-        print(f"❌ [ERROR] Unexpected error calling TPS3 webhook: {e}")
+        print(f"❌ [ERROR] Unexpected error calling TPS30 webhook: {e}")
 
 
 def trigger_bitcoin_payment_splitting(user_id: int, client_wallet_address: str, subscription_price: str, client_payout_currency: str = "BTC") -> None:
