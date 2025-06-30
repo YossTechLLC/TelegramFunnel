@@ -21,7 +21,7 @@ When a user pays for a subscription via NowPayments:
 
 ### Integration Points
 
-- **`GCWebhook30/tph6.py`** - Modified to trigger ChangeNOW swaps after payment confirmation
+- **`GCWebhook30/tph30.py`** - Modified to trigger ChangeNOW swaps after payment confirmation
 - **`TelePay30/config_manager.py`** - Updated to fetch ChangeNOW and ETH wallet secrets
 - **`GCWebhook30/requirements.txt`** - Added new dependencies (web3, eth-account, httpx)
 
@@ -45,7 +45,7 @@ Get your API key from: https://changenow.io/affiliate
 ## Workflow
 
 1. **User Payment**: User pays via NowPayments → ETH deposited to host wallet
-2. **Webhook Trigger**: `tph6.py` processes payment confirmation
+2. **Webhook Trigger**: `tph30.py` processes payment confirmation
 3. **Channel Access**: User receives Telegram channel invite
 4. **Payment Splitting**: Existing payment splitting to multiple wallets continues
 5. **NEW - ChangeNOW Swap**: 
