@@ -6,17 +6,7 @@ from google.cloud import secretmanager
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
-# Import token registry for validation
-try:
-    import sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'GCSplit30'))
-    from token_registry import TokenRegistry
-    TOKEN_REGISTRY_AVAILABLE = True
-    print("✅ [INFO] Token Registry imported successfully for database validation")
-except ImportError as e:
-    print(f"⚠️ [WARNING] Token Registry import failed: {e}")
-    TOKEN_REGISTRY_AVAILABLE = False
-    TokenRegistry = None
+# Token registry functionality removed - using simplified validation
 
 def fetch_database_host() -> str:
     """Fetch database host from Secret Manager."""
@@ -85,14 +75,7 @@ class DatabaseManager:
         self.user = DB_USER
         self.password = DB_PASSWORD
         
-        # Initialize token registry for validation
-        self.token_registry = None
-        if TOKEN_REGISTRY_AVAILABLE:
-            try:
-                self.token_registry = TokenRegistry()
-                print("✅ [INFO] DatabaseManager: Token Registry initialized for validation")
-            except Exception as e:
-                print(f"⚠️ [WARNING] DatabaseManager: Failed to initialize Token Registry: {e}")
+        # Token registry functionality removed - using simplified validation
         
         # Validate that critical credentials are available
         if not self.password:
@@ -260,22 +243,14 @@ class DatabaseManager:
         # Clean and standardize the currency symbol
         payout_currency = payout_currency.strip().upper()
         
-        # If token registry is not available, allow ETH as fallback
-        if not self.token_registry:
-            if payout_currency == "ETH":
-                return True, ""
-            else:
-                return False, f"Token registry not available - only ETH is supported as fallback"
+        # Simplified validation - support common cryptocurrencies
+        supported_currencies = ["ETH", "BTC", "USDT", "USDC", "LTC", "BCH", "XRP", "ADA", "DOT", "LINK"]
         
-        # Check if token is supported on Ethereum Mainnet (Chain ID 1)
-        if payout_currency == "ETH" or self.token_registry.is_token_supported(1, payout_currency):
+        if payout_currency in supported_currencies:
             return True, ""
         
-        # Get list of supported tokens for error message
-        supported_tokens = ["ETH"] + self.token_registry.get_supported_tokens(1)
-        supported_tokens_str = ", ".join(supported_tokens)
-        
-        return False, f"Unsupported token '{payout_currency}'. Supported tokens: {supported_tokens_str}"
+        supported_currencies_str = ", ".join(supported_currencies)
+        return False, f"Unsupported currency '{payout_currency}'. Supported currencies: {supported_currencies_str}"
     
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """

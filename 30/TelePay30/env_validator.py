@@ -41,8 +41,8 @@ def main():
         "DATABASE_USER_SECRET",
         "DATABASE_PASSWORD_SECRET",
         "CHANGENOW_API_KEY",
-        "HOST_WALLET_ETH_ADDRESS",
-        "HOST_WALLET_PRIVATE_KEY"
+        "HOST_WALLET_ETH_ADDRESS_SECRET",
+        "HOST_WALLET_PRIVATE_KEY_SECRET"
     ]
     
     # Required environment variables for tph30.py
@@ -55,8 +55,8 @@ def main():
         "CLOUD_SQL_CONNECTION_NAME",
         "TPS30_WEBHOOK_URL",
         "CHANGENOW_API_KEY",
-        "HOST_WALLET_ETH_ADDRESS",
-        "HOST_WALLET_PRIVATE_KEY"
+        "HOST_WALLET_ETH_ADDRESS_SECRET",
+        "HOST_WALLET_PRIVATE_KEY_SECRET"
     ]
     
     # Check telepay30.py environment variables

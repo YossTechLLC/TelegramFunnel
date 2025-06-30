@@ -57,9 +57,9 @@ class ConfigManager:
         """Fetch the host wallet ETH address from Secret Manager."""
         try:
             client = secretmanager.SecretManagerServiceClient()
-            secret_path = os.getenv("HOST_WALLET_ETH_ADDRESS")
+            secret_path = os.getenv("HOST_WALLET_ETH_ADDRESS_SECRET")
             if not secret_path:
-                raise ValueError("Environment variable HOST_WALLET_ETH_ADDRESS is not set.")
+                raise ValueError("Environment variable HOST_WALLET_ETH_ADDRESS_SECRET is not set.")
             response = client.access_secret_version(request={"name": secret_path})
             return response.payload.data.decode("UTF-8")
         except Exception as e:
@@ -70,9 +70,9 @@ class ConfigManager:
         """Fetch the host wallet private key from Secret Manager."""
         try:
             client = secretmanager.SecretManagerServiceClient()
-            secret_path = os.getenv("HOST_WALLET_PRIVATE_KEY")
+            secret_path = os.getenv("HOST_WALLET_PRIVATE_KEY_SECRET")
             if not secret_path:
-                raise ValueError("Environment variable HOST_WALLET_PRIVATE_KEY is not set.")
+                raise ValueError("Environment variable HOST_WALLET_PRIVATE_KEY_SECRET is not set.")
             response = client.access_secret_version(request={"name": secret_path})
             return response.payload.data.decode("UTF-8")
         except Exception as e:
@@ -109,9 +109,9 @@ class ConfigManager:
         if not self.changenow_api_key:
             missing_optional.append("CHANGENOW_API_KEY")
         if not self.host_wallet_eth_address:
-            missing_optional.append("HOST_WALLET_ETH_ADDRESS")
+            missing_optional.append("HOST_WALLET_ETH_ADDRESS_SECRET")
         if not self.host_wallet_private_key:
-            missing_optional.append("HOST_WALLET_PRIVATE_KEY")
+            missing_optional.append("HOST_WALLET_PRIVATE_KEY_SECRET")
             
         if missing_optional:
             print(f"⚠️ [WARNING] Optional configuration missing: {', '.join(missing_optional)}")
