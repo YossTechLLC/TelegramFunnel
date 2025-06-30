@@ -53,8 +53,8 @@ export TPS1_WEBHOOK_URL="https://tps1-291176869049.us-central1.run.app"
 export TPS2_WEBHOOK_URL="https://tps2-291176869049.us-central1.run.app"
 export TPS3_WEBHOOK_URL="https://tps3-291176869049.us-central1.run.app"
 
-# Optional/Legacy Configuration
-export WEBHOOK_BASE_URL="https://tph5-291176869049.us-central1.run.app"
+# Payment Splitting Webhook Configuration  
+export WEBHOOK_BASE_URL="https://tph30-291176869049.us-central1.run.app"
 export ONEINCH_API_KEY_SECRET="projects/291176869049/secrets/YOUR_1INCH_API_KEY/versions/latest"
 export ETHEREUM_RPC_URL_SECRET="projects/291176869049/secrets/ETHEREUM_RPC_URL_SECRET/versions/latest"
 export HOST_WALLET_ADDRESS="0xcf1D64999FBf19CAde605d219B219F63a7E74E89"

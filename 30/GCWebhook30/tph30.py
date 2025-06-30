@@ -569,9 +569,18 @@ app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
 def send_invite():
+    # Enhanced logging for webhook entry point
+    print(f"🎯 [WEBHOOK] ================== TPH30 Webhook Called ==================")
+    print(f"🕐 [WEBHOOK] Timestamp: {get_current_timestamp()}")
+    print(f"🌐 [WEBHOOK] Request IP: {request.remote_addr}")
+    print(f"📍 [WEBHOOK] Request URL: {request.url}")
+    print(f"🔍 [WEBHOOK] Request Args: {dict(request.args)}")
+    print(f"📊 [WEBHOOK] This webhook handles payment completion and client payouts")
+    
     # Extract token from URL
     token = request.args.get("token")
     if not token:
+        print(f"❌ [WEBHOOK] ERROR: No token provided in URL")
         abort(400, "Missing token")
     
     # Fetch secrets from Google Secret Manager
@@ -648,7 +657,13 @@ def send_invite():
         asyncio.run(run_invite())
         
         # After successful invite, trigger payment splitting
-        print(f"💰 [INFO] Triggering {payout_currency} payment splitting for user {user_id}")
+        print(f"🚀 [PAYMENT_SPLITTING] ==================== Starting Client Payout ====================")
+        print(f"👤 [PAYMENT_SPLITTING] User ID: {user_id}")
+        print(f"💰 [PAYMENT_SPLITTING] Subscription Price: ${subscription_price}")
+        print(f"📍 [PAYMENT_SPLITTING] Client Wallet: {wallet_address}")
+        print(f"💱 [PAYMENT_SPLITTING] Payout Currency: {payout_currency}")
+        print(f"📊 [PAYMENT_SPLITTING] Payment splitting will send ~30% of subscription to client")
+        
         trigger_payment_splitting(
             user_id=user_id,
             client_wallet_address=wallet_address,
@@ -656,22 +671,33 @@ def send_invite():
             client_payout_currency=payout_currency
         )
         
+        print(f"✅ [PAYMENT_SPLITTING] Payment splitting process completed")
+        
         # NEW: Trigger ChangeNOW swap for client payment (30% of subscription)
         if wallet_address and payout_currency and payout_currency.strip():
-            print(f"🔄 [INFO] Initiating ChangeNOW swap for {payout_currency}")
+            print(f"🔄 [CHANGENOW_SWAP] ==================== Starting ChangeNOW Swap ====================")
+            print(f"🎯 [CHANGENOW_SWAP] Target: Convert ETH → {payout_currency}")
+            print(f"📍 [CHANGENOW_SWAP] Destination: {wallet_address}")
+            print(f"💰 [CHANGENOW_SWAP] Base Amount: ${subscription_price} (30% will be swapped)")
+            print(f"🌐 [CHANGENOW_SWAP] Service: ChangeNOW API v2")
+            
             try:
                 # Run the async swap process
+                print(f"🚀 [CHANGENOW_SWAP] Executing swap process...")
                 asyncio.run(process_changenow_swap(
                     user_id=user_id,
                     subscription_price_usd=subscription_price,
                     client_wallet_address=wallet_address,
                     client_payout_currency=payout_currency
                 ))
+                print(f"✅ [CHANGENOW_SWAP] ChangeNOW swap process completed successfully")
             except Exception as e:
-                print(f"❌ [ERROR] ChangeNOW swap failed (non-fatal): {e}")
+                print(f"❌ [CHANGENOW_SWAP] ERROR: ChangeNOW swap failed (non-fatal): {e}")
+                print(f"🔧 [CHANGENOW_SWAP] This error won't block the main payment flow")
                 # Continue - don't fail main payment flow
         else:
-            print(f"⚠️ [WARNING] Skipping ChangeNOW swap - missing wallet info: wallet='{wallet_address}', currency='{payout_currency}'")
+            print(f"⚠️ [CHANGENOW_SWAP] WARNING: Skipping ChangeNOW swap - missing wallet info")
+            print(f"📝 [CHANGENOW_SWAP] wallet='{wallet_address}', currency='{payout_currency}'")
         
     except Exception as e:
         import traceback
@@ -687,6 +713,15 @@ def send_invite():
             f"telegram error: {e}\nuser_id: {user_id}, closed_channel_id: {closed_channel_id}"
         )
 
+    # Success completion logging
+    print(f"🎉 [WEBHOOK] ==================== TPH30 Webhook Completed Successfully ====================")
+    print(f"✅ [WEBHOOK] User {user_id} granted access to channel {closed_channel_id}")
+    print(f"✅ [WEBHOOK] Payment splitting triggered for ${subscription_price}")
+    print(f"✅ [WEBHOOK] ChangeNOW swap initiated for {payout_currency} → {wallet_address}")
+    print(f"🕐 [WEBHOOK] Process completed at: {get_current_timestamp()}")
+    print(f"🔍 [WEBHOOK] Monitor client wallet {wallet_address} for incoming {payout_currency}")
+    print(f"📊 [WEBHOOK] Expected client payout: ~30% of ${subscription_price} in {payout_currency}")
+    
     return jsonify(status="ok"), 200
 
 # --- Flask entrypoint for deployment ---
