@@ -95,9 +95,26 @@ async def test_currency_validation():
     if trx_result.get("async_supported") or trx_result.get("sync_supported"):
         print("   ✅ SUCCESS: TRX is now supported!")
         print("   🎉 This should resolve the payment flow issue.")
+        print("   💡 Note: Temporarily unavailable currencies are now accepted with warnings")
     else:
         print("   ❌ FAILED: TRX is still not supported")
         print("   🔧 Check ChangeNOW API connectivity and fallback list")
+    
+    # Network selection test
+    print(f"\n🌐 [NETWORK_TEST] Testing network priority selection:")
+    if cache_status['initialized']:
+        print("   📊 Testing network priority logic...")
+        network_test_currencies = ["TRX", "ETH", "USDT"]
+        
+        for curr in network_test_currencies:
+            if currency_manager.cache_initialized:
+                variant = currency_manager._find_best_currency_variant(curr)
+                if variant:
+                    print(f"   🔸 {curr}: Selected {variant.get('name', 'unknown')} on {variant.get('network', 'unknown')}")
+                else:
+                    print(f"   🔸 {curr}: No variants found in cache")
+            else:
+                print(f"   🔸 {curr}: Cache not available for variant testing")
 
 
 def test_database_integration():

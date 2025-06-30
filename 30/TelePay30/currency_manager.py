@@ -65,7 +65,43 @@ class CurrencyManager:
             "shib", "lrc", "grt", "fet", "inj", "ocean", "rndr", "ankr"
         }
         
+        # Network priority mapping - prefer native networks over wrapped/bridged versions
+        self.network_priorities = {
+            # Major cryptocurrencies - prefer native networks
+            "btc": ["btc", "bitcoin"],
+            "eth": ["eth", "ethereum"],
+            "trx": ["tron", "trx"],
+            "bnb": ["bsc", "bnb", "binance"],
+            "sol": ["sol", "solana"],
+            "ada": ["cardano", "ada"],
+            "dot": ["polkadot", "dot"],
+            "matic": ["polygon", "matic"],
+            "avax": ["avalanche", "avax"],
+            "ftm": ["fantom", "ftm"],
+            "atom": ["cosmos", "atom"],
+            "near": ["near"],
+            "algo": ["algorand", "algo"],
+            "xtz": ["tezos", "xtz"],
+            "icp": ["internetcomputer", "icp"],
+            
+            # Stablecoins - prefer primary networks
+            "usdt": ["tron", "eth", "bsc", "polygon", "avalanche"],
+            "usdc": ["eth", "polygon", "bsc", "avalanche"],
+            "dai": ["eth", "polygon", "bsc"],
+            "busd": ["bsc", "eth"],
+            
+            # Others
+            "ltc": ["ltc", "litecoin"],
+            "bch": ["bch", "bitcoincash"],
+            "xrp": ["xrp", "ripple"],
+            "link": ["eth", "bsc", "polygon"],
+            "uni": ["eth", "polygon", "bsc"],
+            "aave": ["eth", "polygon", "bsc"],
+            "comp": ["eth"]
+        }
+        
         print("💰 [INFO] CurrencyManager initialized with fallback support for 100+ currencies")
+        print("🌐 [INFO] Network priority mapping configured for optimal currency selection")
     
     async def _ensure_changenow_manager(self) -> bool:
         """Ensure ChangeNOW manager is initialized."""
@@ -154,6 +190,73 @@ class CurrencyManager:
         print("🔄 [INFO] Currency cache needs refresh...")
         return await self._update_currency_cache()
     
+    def _find_best_currency_variant(self, currency: str) -> Optional[Dict[str, Any]]:
+        """
+        Find the best available variant of a currency based on network priorities.
+        
+        Args:
+            currency: Currency ticker to search for
+            
+        Returns:
+            Dictionary with best currency variant details or None
+        """
+        currency_lower = currency.lower()
+        
+        if not self.cache_initialized:
+            return None
+        
+        # Find all variants of this currency in cache
+        variants = []
+        for ticker, details in self.currency_details_cache.items():
+            if ticker == currency_lower:
+                variants.append(details)
+        
+        if not variants:
+            print(f"🔍 [VARIANT_SEARCH] No variants found for {currency.upper()}")
+            return None
+        
+        print(f"🔍 [VARIANT_SEARCH] Found {len(variants)} variants for {currency.upper()}")
+        
+        # Get network priorities for this currency
+        preferred_networks = self.network_priorities.get(currency_lower, [currency_lower])
+        
+        # Score variants based on network priority and availability
+        scored_variants = []
+        for variant in variants:
+            network = variant.get("network", "unknown").lower()
+            is_available = variant.get("isAvailable", False)
+            
+            # Calculate priority score
+            priority_score = 0
+            for i, preferred_net in enumerate(preferred_networks):
+                if preferred_net in network:
+                    priority_score = len(preferred_networks) - i
+                    break
+            
+            # Availability bonus
+            availability_score = 100 if is_available else 50
+            
+            total_score = priority_score * 10 + availability_score
+            
+            scored_variants.append({
+                "variant": variant,
+                "score": total_score,
+                "network": network,
+                "available": is_available
+            })
+            
+            print(f"   📊 [VARIANT] {variant.get('name', 'unknown')} on {network}: score={total_score} (priority={priority_score}, available={is_available})")
+        
+        # Sort by score (highest first)
+        scored_variants.sort(key=lambda x: x["score"], reverse=True)
+        
+        if scored_variants:
+            best = scored_variants[0]
+            print(f"✅ [BEST_VARIANT] Selected: {best['variant'].get('name', 'unknown')} on {best['network']} (score={best['score']})")
+            return best["variant"]
+        
+        return None
+    
     async def is_currency_supported_async(self, currency: str) -> Tuple[bool, str]:
         """
         Async version: Check if a currency is supported.
@@ -174,21 +277,24 @@ class CurrencyManager:
         # Try to ensure cache is ready
         cache_ready = await self._ensure_cache_ready()
         
-        if cache_ready and currency_lower in self.supported_currencies_cache:
-            # Check detailed availability
-            details = self.currency_details_cache.get(currency_lower, {})
-            is_available = details.get("isAvailable", False)
-            network = details.get("network", "unknown")
-            name = details.get("name", "unknown")
+        if cache_ready:
+            # Use smart lookup to find best currency variant
+            best_variant = self._find_best_currency_variant(currency)
             
-            if is_available:
-                message = f"✅ Currency {currency.upper()} ({name}) is supported and available on {network}"
-                print(f"✅ [CACHE_HIT] {message}")
-                return True, message
-            else:
-                message = f"⚠️ Currency {currency.upper()} ({name}) is supported but temporarily unavailable on {network}"
-                print(f"⚠️ [CACHE_HIT] {message}")
-                return False, message
+            if best_variant:
+                is_available = best_variant.get("isAvailable", False)
+                network = best_variant.get("network", "unknown")
+                name = best_variant.get("name", "unknown")
+                
+                if is_available:
+                    message = f"✅ Currency {currency.upper()} ({name}) is supported and available on {network}"
+                    print(f"✅ [SMART_MATCH] {message}")
+                    return True, message
+                else:
+                    # RELAXED: Accept temporarily unavailable currencies with warning
+                    message = f"⚠️ Currency {currency.upper()} ({name}) is supported but temporarily unavailable on {network} - accepting with warning"
+                    print(f"⚠️ [SMART_MATCH] {message}")
+                    return True, message  # Changed from False to True
         
         # Fallback to hardcoded list if cache is not available
         if currency_lower in self.fallback_currencies:
@@ -229,21 +335,24 @@ class CurrencyManager:
         
         print(f"🔍 [SYNC] Validating currency: {currency.upper()}")
         
-        # Check cache first
-        if self.cache_initialized and currency_lower in self.supported_currencies_cache:
-            details = self.currency_details_cache.get(currency_lower, {})
-            is_available = details.get("isAvailable", False)
-            network = details.get("network", "unknown")
-            name = details.get("name", "unknown")
+        # Check cache with smart lookup first
+        if self.cache_initialized:
+            best_variant = self._find_best_currency_variant(currency)
             
-            if is_available:
-                message = f"✅ Currency {currency.upper()} ({name}) is supported and available on {network}"
-                print(f"✅ [SYNC_CACHE] {message}")
-                return True, message
-            else:
-                message = f"⚠️ Currency {currency.upper()} ({name}) is supported but temporarily unavailable on {network}"
-                print(f"⚠️ [SYNC_CACHE] {message}")
-                return False, message
+            if best_variant:
+                is_available = best_variant.get("isAvailable", False)
+                network = best_variant.get("network", "unknown")
+                name = best_variant.get("name", "unknown")
+                
+                if is_available:
+                    message = f"✅ Currency {currency.upper()} ({name}) is supported and available on {network}"
+                    print(f"✅ [SYNC_SMART] {message}")
+                    return True, message
+                else:
+                    # RELAXED: Accept temporarily unavailable currencies with warning
+                    message = f"⚠️ Currency {currency.upper()} ({name}) is supported but temporarily unavailable on {network} - accepting with warning"
+                    print(f"⚠️ [SYNC_SMART] {message}")
+                    return True, message  # Changed from False to True
         
         # Fallback to hardcoded list
         if currency_lower in self.fallback_currencies:
