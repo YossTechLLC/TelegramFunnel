@@ -81,11 +81,43 @@ class ConfigManager:
     
     def initialize_config(self) -> dict:
         """Initialize and return all configuration values."""
+        print("🔧 [INFO] Initializing configuration from Secret Manager...")
+        
+        # Fetch core configuration
         self.bot_token = self.fetch_telegram_token()
         self.webhook_key = self.fetch_now_webhook_key()
+        
+        # Fetch ChangeNOW configuration
         self.changenow_api_key = self.fetch_changenow_api_key()
         self.host_wallet_eth_address = self.fetch_host_wallet_eth_address()
         self.host_wallet_private_key = self.fetch_host_wallet_private_key()
+        
+        # Validate critical configuration
+        missing_critical = []
+        if not self.bot_token:
+            missing_critical.append("TELEGRAM_BOT_TOKEN")
+        if not self.bot_username:
+            missing_critical.append("TELEGRAM_BOT_USERNAME")
+            
+        if missing_critical:
+            raise RuntimeError(f"❌ Critical configuration missing: {', '.join(missing_critical)}")
+        
+        # Warn about optional configuration
+        missing_optional = []
+        if not self.webhook_key:
+            missing_optional.append("NOWPAYMENT_WEBHOOK_KEY")
+        if not self.changenow_api_key:
+            missing_optional.append("CHANGENOW_API_KEY")
+        if not self.host_wallet_eth_address:
+            missing_optional.append("HOST_WALLET_ETH_ADDRESS")
+        if not self.host_wallet_private_key:
+            missing_optional.append("HOST_WALLET_PRIVATE_KEY")
+            
+        if missing_optional:
+            print(f"⚠️ [WARNING] Optional configuration missing: {', '.join(missing_optional)}")
+            print("⚠️ [WARNING] Some features may not work properly")
+        
+        print("✅ [INFO] Configuration initialization completed")
         
         return {
             'bot_token': self.bot_token,

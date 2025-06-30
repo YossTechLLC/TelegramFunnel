@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 # Import token registry for validation
 try:
     import sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'GCSplit25'))
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'GCSplit30'))
     from token_registry import TokenRegistry
     TOKEN_REGISTRY_AVAILABLE = True
     print("✅ [INFO] Token Registry imported successfully for database validation")
