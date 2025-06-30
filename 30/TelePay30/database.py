@@ -6,7 +6,8 @@ from google.cloud import secretmanager
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
-# Token registry functionality removed - using simplified validation
+# Import dynamic currency validation
+from currency_manager import CurrencyManager
 
 def fetch_database_host() -> str:
     """Fetch database host from Secret Manager."""
@@ -75,7 +76,9 @@ class DatabaseManager:
         self.user = DB_USER
         self.password = DB_PASSWORD
         
-        # Token registry functionality removed - using simplified validation
+        # Initialize dynamic currency validation manager
+        self.currency_manager = CurrencyManager()
+        print("✅ [INFO] DatabaseManager: Currency validation manager initialized")
         
         # Validate that critical credentials are available
         if not self.password:
@@ -243,14 +246,20 @@ class DatabaseManager:
         # Clean and standardize the currency symbol
         payout_currency = payout_currency.strip().upper()
         
-        # Simplified validation - support common cryptocurrencies
-        supported_currencies = ["ETH", "BTC", "USDT", "USDC", "LTC", "BCH", "XRP", "ADA", "DOT", "LINK"]
-        
-        if payout_currency in supported_currencies:
-            return True, ""
-        
-        supported_currencies_str = ", ".join(supported_currencies)
-        return False, f"Unsupported currency '{payout_currency}'. Supported currencies: {supported_currencies_str}"
+        # Use dynamic currency validation with ChangeNOW API integration
+        try:
+            is_supported, message = self.currency_manager.is_currency_supported_sync(payout_currency)
+            return is_supported, message
+        except Exception as e:
+            # Fallback to basic validation if currency manager fails
+            print(f"⚠️ [WARNING] Currency validation error: {e}")
+            print("🔄 [FALLBACK] Using basic currency validation")
+            
+            basic_supported = {"ETH", "BTC", "USDT", "USDC", "TRX", "LTC", "BCH", "XRP", "ADA", "DOT", "LINK", "BNB", "SOL", "MATIC"}
+            if payout_currency in basic_supported:
+                return True, f"Currency {payout_currency} supported (basic validation)"
+            else:
+                return False, f"Currency {payout_currency} not supported (basic validation)"
     
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """

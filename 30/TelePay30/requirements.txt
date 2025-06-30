@@ -1,0 +1,16 @@
+# TelePay30 Requirements
+# Core dependencies for Telegram bot and database operations
+python-telegram-bot==20.7
+psycopg2-binary>=2.9.0
+Flask==3.0.3
+google-cloud-secret-manager==2.16.3
+cloud-sql-python-connector==1.4.3
+sqlalchemy==2.0.23
+requests==2.31.0
+nest-asyncio>=1.5.0
+
+# ChangeNOW API integration dependencies
+httpx>=0.24.0
+
+# Utility dependencies
+python-dateutil>=2.8.0
