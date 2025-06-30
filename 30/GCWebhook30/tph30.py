@@ -16,7 +16,6 @@ from google.cloud import secretmanager
 
 # Import ChangeNOW swap functionality
 try:
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'GCSplit30'))
     from swap_processor import SwapProcessor
     CHANGENOW_AVAILABLE = True
     print("✅ [INFO] ChangeNOW swap processor imported successfully")

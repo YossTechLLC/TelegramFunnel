@@ -4,6 +4,7 @@ google-cloud-secret-manager==2.16.3
 cloud-sql-python-connector==1.4.3
 sqlalchemy==2.0.23
 pg8000==1.30.3
+psycopg2-binary>=2.9.0
 requests==2.31.0
 web3>=6.0.0
 eth-account>=0.8.0
