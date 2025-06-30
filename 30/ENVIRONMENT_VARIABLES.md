@@ -4,6 +4,9 @@
 
 Based on your current setup and the application requirements, here are the **corrected** environment variables for your `~/.profile` file:
 
+## ⚠️ **DEPRECATED: Bitcoin Payment Service**
+**Note**: The TPBTCS1 Bitcoin payment splitting service has been deprecated and removed. All payments (including BTC/WBTC) now route through the TPS30 service.
+
 ### **Critical Fix Needed**
 
 **❌ PROBLEM IDENTIFIED**: Your current `.profile` has this line:
@@ -44,7 +47,6 @@ export HOST_WALLET_PRIVATE_KEY="projects/291176869049/secrets/HOST_WALLET_PRIVAT
 
 # Webhook URLs
 export TPS30_WEBHOOK_URL="https://tph30-291176869049.us-central1.run.app"
-export TPBTCS1_WEBHOOK_URL="https://tpbtcs1-291176869049.us-central1.run.app"
 
 # Legacy Webhook URLs (if still needed)
 export TPS1_WEBHOOK_URL="https://tps1-291176869049.us-central1.run.app"

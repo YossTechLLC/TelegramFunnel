@@ -54,7 +54,6 @@ def main():
         "DATABASE_PASSWORD_SECRET",
         "CLOUD_SQL_CONNECTION_NAME",
         "TPS30_WEBHOOK_URL",
-        "TPBTCS1_WEBHOOK_URL",
         "CHANGENOW_API_KEY",
         "HOST_WALLET_ETH_ADDRESS",
         "HOST_WALLET_PRIVATE_KEY"
@@ -70,7 +69,7 @@ def main():
         print(message)
         if not is_set:
             all_telepay_good = False
-        elif var not in ["CLOUD_SQL_CONNECTION_NAME", "TPS30_WEBHOOK_URL", "TPBTCS1_WEBHOOK_URL"]:
+        elif var not in ["CLOUD_SQL_CONNECTION_NAME", "TPS30_WEBHOOK_URL"]:
             # Test secret access for Secret Manager variables
             secret_path = os.getenv(var)
             if secret_path and secret_path.startswith("projects/"):
@@ -89,7 +88,7 @@ def main():
         print(message)
         if not is_set:
             all_webhook_good = False
-        elif var not in ["CLOUD_SQL_CONNECTION_NAME", "TPS30_WEBHOOK_URL", "TPBTCS1_WEBHOOK_URL"]:
+        elif var not in ["CLOUD_SQL_CONNECTION_NAME", "TPS30_WEBHOOK_URL"]:
             # Test secret access for Secret Manager variables
             secret_path = os.getenv(var)
             if secret_path and secret_path.startswith("projects/"):

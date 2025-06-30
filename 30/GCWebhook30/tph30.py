@@ -35,24 +35,6 @@ except ImportError as e:
     CLOUD_SQL_AVAILABLE = False
     Connector = None
 
-def validate_bitcoin_address(address: str) -> bool:
-    """
-    Validate Bitcoin address format using regex.
-    
-    Args:
-        address: Bitcoin address to validate
-        
-    Returns:
-        True if valid Bitcoin address format, False otherwise
-    """
-    if not address or not isinstance(address, str):
-        return False
-    
-    # Bitcoin address regex: starts with bc1, 1, or 3, contains valid characters, proper length
-    btc_regex = r'^(bc1|[13])[a-km-zA-HJ-NP-Z1-9]{25,62}$'
-    
-    return bool(re.match(btc_regex, address))
-
 
 def get_current_timestamp() -> str:
     """
@@ -439,25 +421,20 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
 
 def trigger_payment_splitting(user_id: int, client_wallet_address: str, subscription_price: str, client_payout_currency: str = "ETH") -> None:
     """
-    Route payment splitting to appropriate service based on currency type.
+    Trigger payment splitting by calling the TPS30 webhook service.
     
     Args:
         user_id: The user's Telegram ID
-        client_wallet_address: The client's wallet address to receive tokens/coins
+        client_wallet_address: The client's wallet address to receive tokens
         subscription_price: The subscription price in USD as string
-        client_payout_currency: The currency/token to pay out (ETH, USDT, USDC, BTC, WBTC, etc.)
+        client_payout_currency: The currency/token to pay out (ETH, USDT, USDC, etc.)
     """
     try:
         payout_currency = client_payout_currency.strip().upper()
         
-        # Route to Bitcoin service for BTC/WBTC
-        if payout_currency in ["BTC", "WBTC"]:
-            print(f"₿ [INFO] Routing {payout_currency} payment to Bitcoin service...")
-            trigger_bitcoin_payment_splitting(user_id, client_wallet_address, subscription_price, payout_currency)
-        else:
-            # Route to ERC20 service for all other tokens
-            print(f"🪙 [INFO] Routing {payout_currency} payment to ERC20 service...")
-            trigger_erc20_payment_splitting(user_id, client_wallet_address, subscription_price, payout_currency)
+        # Route all payments to TPS30 service
+        print(f"🪙 [INFO] Routing {payout_currency} payment to TPS30 service...")
+        trigger_erc20_payment_splitting(user_id, client_wallet_address, subscription_price, payout_currency)
     
     except Exception as e:
         print(f"❌ [ERROR] Payment routing failed: {e}")
@@ -527,94 +504,6 @@ def trigger_erc20_payment_splitting(user_id: int, client_wallet_address: str, su
         print(f"❌ [ERROR] Unexpected error calling TPS30 webhook: {e}")
 
 
-def trigger_bitcoin_payment_splitting(user_id: int, client_wallet_address: str, subscription_price: str, client_payout_currency: str = "BTC") -> None:
-    """
-    Trigger Bitcoin payment splitting by calling the tpbtcs1.py webhook.
-    
-    Args:
-        user_id: The user's Telegram ID
-        client_wallet_address: The client's wallet address (Bitcoin or Ethereum format)
-        subscription_price: The subscription price in USD as string
-        client_payout_currency: The currency to pay out (BTC or WBTC)
-    """
-    try:
-        # Get the TPBTCS1 webhook URL from environment
-        tpbtcs1_webhook_url = os.getenv("TPBTCS1_WEBHOOK_URL")
-        if not tpbtcs1_webhook_url:
-            print("⚠️ [WARNING] TPBTCS1_WEBHOOK_URL not configured - skipping Bitcoin payment splitting")
-            return
-        
-        # Validate inputs
-        if not client_wallet_address:
-            print(f"⚠️ [WARNING] Missing wallet address - skipping Bitcoin payment splitting")
-            return
-        
-        if not subscription_price:
-            print(f"⚠️ [WARNING] Missing subscription price - skipping Bitcoin payment splitting")
-            return
-        
-        # Validate wallet address format based on currency
-        if client_payout_currency == "WBTC":
-            # WBTC requires Ethereum address
-            if not client_wallet_address.startswith('0x') or len(client_wallet_address) != 42:
-                print(f"⚠️ [WARNING] WBTC requires Ethereum address format - invalid address: {client_wallet_address}")
-                return
-        elif client_payout_currency == "BTC":
-            # Accept both Bitcoin and Ethereum addresses for BTC
-            if client_wallet_address.startswith('0x'):
-                # Ethereum address - validate length
-                if len(client_wallet_address) != 42:
-                    print(f"⚠️ [WARNING] Invalid Ethereum address format: {client_wallet_address}")
-                    return
-            else:
-                # Bitcoin address - validate format
-                if not validate_bitcoin_address(client_wallet_address):
-                    print(f"⚠️ [WARNING] Invalid Bitcoin address format: {client_wallet_address}")
-                    return
-        
-        # Prepare payload for tpbtcs1.py webhook
-        payload = {
-            "client_wallet_address": client_wallet_address,
-            "sub_price": subscription_price,
-            "user_id": user_id,
-            "client_payout_currency": client_payout_currency
-        }
-        
-        print(f"₿ [INFO] Calling TPBTCS1 webhook for {client_payout_currency} payment splitting...")
-        print(f"📍 [INFO] URL: {tpbtcs1_webhook_url}")
-        print(f"💰 [INFO] Payload: User {user_id}, Amount: ${subscription_price}, Wallet: {client_wallet_address}, Currency: {client_payout_currency}")
-        
-        # Make the webhook call with timeout
-        response = requests.post(
-            tpbtcs1_webhook_url,
-            json=payload,
-            timeout=60,  # Bitcoin transactions may take longer
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            print(f"✅ [SUCCESS] {client_payout_currency} payment splitting completed successfully")
-            print(f"🔗 [INFO] Transaction Hash: {result.get('transaction_hash', 'unknown')}")
-            print(f"₿ [INFO] Amount Sent: {result.get('amount_sent', 'unknown')} {result.get('payout_currency', client_payout_currency)}")
-            print(f"⏱️ [INFO] Processing Time: {result.get('processing_time_seconds', 'unknown')}s")
-            
-            # Log additional Bitcoin-specific info
-            if 'usd_per_btc' in result:
-                print(f"📊 [INFO] BTC Price: ${result['usd_per_btc']:.2f}/BTC")
-            if 'chain_id' in result:
-                print(f"🔗 [INFO] Chain ID: {result['chain_id']}")
-                
-        else:
-            print(f"❌ [ERROR] TPBTCS1 webhook failed with status {response.status_code}")
-            print(f"❌ [ERROR] Response: {response.text}")
-            
-    except requests.exceptions.Timeout:
-        print(f"⏰ [ERROR] TPBTCS1 webhook timeout - {client_payout_currency} payment may still be processing")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ [ERROR] TPBTCS1 webhook request failed: {e}")
-    except Exception as e:
-        print(f"❌ [ERROR] Unexpected error calling TPBTCS1 webhook: {e}")
 
 
 async def process_changenow_swap(user_id: int, subscription_price_usd: str, 
