@@ -6,6 +6,7 @@ import hmac
 import hashlib
 import asyncio
 import requests
+import json
 from datetime import datetime
 from typing import Tuple, Optional
 from flask import Flask, request, abort, jsonify
@@ -405,6 +406,88 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         if conn:
             conn.close()
 
+def trigger_payment_split_webhook(user_id: int, wallet_address: str, payout_currency: str, subscription_price: str) -> bool:
+    """
+    Trigger the TPS7-14 payment splitting webhook after successful invite.
+    
+    Args:
+        user_id: User's Telegram ID
+        wallet_address: Client's wallet address
+        payout_currency: Client's preferred payout currency
+        subscription_price: Subscription price as string
+        
+    Returns:
+        True if webhook triggered successfully, False otherwise
+    """
+    try:
+        # Get webhook URL from environment
+        webhook_url = os.getenv("TPS_WEBHOOK_URL")
+        if not webhook_url:
+            print(f"⚠️ [PAYMENT_SPLITTING] TPS_WEBHOOK_URL not configured, skipping payment split")
+            return False
+        
+        # Get signing key for webhook authentication
+        signing_key = fetch_success_url_signing_key()
+        
+        # Prepare webhook payload
+        webhook_data = {
+            "user_id": user_id,
+            "wallet_address": wallet_address,
+            "payout_currency": payout_currency,
+            "sub_price": subscription_price,
+            "timestamp": int(time.time())
+        }
+        
+        print(f"🔄 [PAYMENT_SPLITTING] Triggering TPS7-14 webhook")
+        print(f"📦 [PAYMENT_SPLITTING] Payload: user_id={user_id}, amount={subscription_price} ETH → {payout_currency}")
+        
+        # Prepare request
+        payload_json = json.dumps(webhook_data)
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        # Add signature if signing key is available
+        if signing_key:
+            signature = hmac.new(
+                signing_key.encode(),
+                payload_json.encode(),
+                hashlib.sha256
+            ).hexdigest()
+            headers['X-Webhook-Signature'] = signature
+            print(f"🔐 [PAYMENT_SPLITTING] Added webhook signature")
+        
+        # Send webhook request
+        response = requests.post(
+            webhook_url,
+            data=payload_json,
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ [PAYMENT_SPLITTING] Webhook triggered successfully")
+            response_data = response.json()
+            if response_data.get("status") == "success":
+                print(f"🎯 [PAYMENT_SPLITTING] Payment split initiated successfully")
+                return True
+            else:
+                print(f"⚠️ [PAYMENT_SPLITTING] Webhook responded but split failed: {response_data.get('message')}")
+                return False
+        else:
+            print(f"❌ [PAYMENT_SPLITTING] Webhook failed with status {response.status_code}: {response.text}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        print(f"❌ [PAYMENT_SPLITTING] Webhook request timeout")
+        return False
+    except requests.exceptions.ConnectionError:
+        print(f"❌ [PAYMENT_SPLITTING] Webhook connection error")
+        return False
+    except Exception as e:
+        print(f"❌ [PAYMENT_SPLITTING] Error triggering webhook: {e}")
+        return False
+
 # --- Flask app and webhook handler ---
 app = Flask(__name__)
 
@@ -487,6 +570,23 @@ def send_invite():
                 disable_web_page_preview=True
             )
         asyncio.run(run_invite())
+        
+        # Trigger payment splitting webhook after successful invite
+        print(f"🚀 [PAYMENT_SPLITTING] Starting Client Payout")
+        try:
+            webhook_success = trigger_payment_split_webhook(
+                user_id=user_id,
+                wallet_address=wallet_address,
+                payout_currency=payout_currency,
+                subscription_price=subscription_price
+            )
+            if webhook_success:
+                print(f"✅ [PAYMENT_SPLITTING] Payment splitting webhook completed successfully")
+            else:
+                print(f"⚠️ [PAYMENT_SPLITTING] Payment splitting webhook failed (non-fatal)")
+        except Exception as webhook_error:
+            print(f"❌ [PAYMENT_SPLITTING] Error in payment splitting webhook: {webhook_error}")
+            # Don't fail the main process if webhook fails
         
     except Exception as e:
         import traceback

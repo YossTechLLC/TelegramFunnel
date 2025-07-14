@@ -14,7 +14,8 @@
       "WebFetch(domain:help.1inch.io)",
       "WebFetch(domain:docs.1inch.io)",
       "WebFetch(domain:documenter.getpostman.com)",
-      "WebFetch(domain:api.changenow.io)"
+      "WebFetch(domain:api.changenow.io)",
+      "WebFetch(domain:changenow.io)"
     ],
     "deny": []
   }
