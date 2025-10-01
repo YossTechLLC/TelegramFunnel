@@ -13,6 +13,12 @@ from flask import Flask, request, abort, jsonify
 from telegram import Bot
 from google.cloud import secretmanager
 
+#LIST OF ENVIRONMENT VARIABLES
+# CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
+# WEBHOOK_SIGNING_KEY: Path to webhook signing key in Secret Manager
+# TPS_WEBHOOK_URL: URL for the TPS webhook endpoint
+
+
 # Import Cloud SQL Connector for database functionality
 try:
     from google.cloud.sql.connector import Connector

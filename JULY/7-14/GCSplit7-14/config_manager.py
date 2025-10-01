@@ -7,6 +7,11 @@ import os
 from google.cloud import secretmanager
 from typing import Optional
 
+#LIST OF ENVIORNMENT VARIABLES
+# CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
+# WEBHOOK_SIGNING_KEY: Path to webhook signing key in Secret Manager    
+# TPS_WEBHOOK_URL: URL for the TPS webhook endpoint
+
 class ConfigManager:
     """
     Manages configuration and secrets for the TPS7-14 service.

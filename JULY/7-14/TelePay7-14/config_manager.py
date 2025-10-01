@@ -3,6 +3,13 @@ import os
 from google.cloud import secretmanager
 from typing import Optional
 
+#LIST OF ENVIRONMENT VARIABLES
+# TELEGRAM_BOT_SECRET_NAME: Path to Telegram bot token in Secret Manager
+# NOWPAYMENT_WEBHOOK_KEY: Path to NowPayments webhook key in Secret Manager 
+# TELEGRAM_BOT_USERNAME: Path to Telegram bot username in Secret Manager
+# TELEGRAM_BOT_WEBHOOK_URL: URL for the Telegram bot webhook endpoint
+
+
 class ConfigManager:
     def __init__(self):
         self.bot_token = None
