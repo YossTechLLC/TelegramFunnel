@@ -102,9 +102,9 @@ curl https://[REGION]-291176869049.cloudfunctions.net/tps7-14/health
 
 ### Manual Webhook Test
 ```bash
-curl -X POST https://[REGION]-291176869049.cloudfunctions.net/tps7-14 \
+curl -X POST https://us-central1-291176869049.cloudfunctions.net/tps7-14 \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Signature: [SIGNATURE]" \
+  -H "X-Webhook-Signature:  " \
   -d '{
     "user_id": 123456789,
     "wallet_address": "0x1234567890abcdef",
