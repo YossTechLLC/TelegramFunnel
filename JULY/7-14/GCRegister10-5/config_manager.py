@@ -12,7 +12,7 @@ from typing import Optional
 # DATABASE_NAME_SECRET: Path to database name in Secret Manager
 # DATABASE_USER_SECRET: Path to database user in Secret Manager
 # DATABASE_PASSWORD_SECRET: Path to database password in Secret Manager
-# SECRET_KEY: Flask secret key for sessions (can be direct value or Secret Manager path)
+# DATABASE_SECRET_KEY: Path to Flask secret key in Secret Manager
 
 class ConfigManager:
     """
@@ -94,29 +94,12 @@ class ConfigManager:
 
     def get_secret_key(self) -> str:
         """
-        Get the Flask secret key from environment variable.
-        Can be either a direct value or a Secret Manager path.
+        Get the Flask secret key from Secret Manager.
 
         Returns:
             Flask secret key
         """
-        secret_key = os.getenv("SECRET_KEY")
-        if not secret_key:
-            print(f"⚠️ [CONFIG] SECRET_KEY not set, using default (INSECURE for production!)")
-            return "dev-secret-key-change-in-production"
-
-        # Check if it's a Secret Manager path (starts with "projects/")
-        if secret_key.startswith("projects/"):
-            print(f"🔐 [CONFIG] Fetching SECRET_KEY from Secret Manager")
-            try:
-                response = self.client.access_secret_version(request={"name": secret_key})
-                return response.payload.data.decode("UTF-8")
-            except Exception as e:
-                print(f"❌ [CONFIG] Error fetching SECRET_KEY from Secret Manager: {e}")
-                return "fallback-secret-key-insecure"
-        else:
-            print(f"🔑 [CONFIG] Using SECRET_KEY from environment variable")
-            return secret_key
+        return self.fetch_secret("DATABASE_SECRET_KEY", "Flask secret key")
 
     def initialize_config(self) -> dict:
         """

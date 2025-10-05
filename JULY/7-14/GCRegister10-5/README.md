@@ -68,24 +68,31 @@ The application inserts data into the `main_clients_database` table with the fol
 3. **Docker** (for containerized deployment)
 
 ### Required Secrets in Google Cloud Secret Manager
+
+**Note:** If you already have DATABASE_HOST_SECRET, DATABASE_NAME_SECRET, DATABASE_USER_SECRET, and DATABASE_PASSWORD_SECRET created and exported, you only need to create the DATABASE_SECRET_KEY secret.
+
 Create the following secrets in your Google Cloud project:
 
 ```bash
-# Database Host
+# Database Host (skip if already exists)
 gcloud secrets create DATABASE_HOST_SECRET --data-file=<host_file>
 
-# Database Name
+# Database Name (skip if already exists)
 gcloud secrets create DATABASE_NAME_SECRET --data-file=<name_file>
 
-# Database User
+# Database User (skip if already exists)
 gcloud secrets create DATABASE_USER_SECRET --data-file=<user_file>
 
-# Database Password
+# Database Password (skip if already exists)
 gcloud secrets create DATABASE_PASSWORD_SECRET --data-file=<password_file>
 
-# Optional: Flask Secret Key (or use direct value in .env)
-gcloud secrets create FLASK_SECRET_KEY --data-file=<secret_key_file>
+# Flask Secret Key (REQUIRED - create this new secret)
+echo "y764wg_-y2PHggbnl_BPfUiZhxOhTZhXadhCkNMl3LM" | gcloud secrets create DATABASE_SECRET_KEY --data-file=-
 ```
+
+**Generated Flask Secret Key:** `y764wg_-y2PHggbnl_BPfUiZhxOhTZhXadhCkNMl3LM`
+
+Use this exact value when creating the DATABASE_SECRET_KEY secret in Google Cloud Secret Manager.
 
 ## ⚙️ Environment Variables
 
@@ -98,9 +105,11 @@ DATABASE_NAME_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_NAME_SECRET/versi
 DATABASE_USER_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest
 DATABASE_PASSWORD_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest
 
-# Flask secret key (direct value or Secret Manager path)
-SECRET_KEY=your-secret-key-change-in-production
+# Flask secret key (Secret Manager path)
+DATABASE_SECRET_KEY=projects/YOUR_PROJECT_ID/secrets/DATABASE_SECRET_KEY/versions/latest
 ```
+
+**Note:** The database port is hardcoded to 5432 (standard PostgreSQL port) and does not need to be configured via environment variables.
 
 ## 🚀 Deployment
 
@@ -139,7 +148,7 @@ docker run -p 8080:8080 \
   -e DATABASE_NAME_SECRET="projects/PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest" \
   -e DATABASE_USER_SECRET="projects/PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest" \
   -e DATABASE_PASSWORD_SECRET="projects/PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest" \
-  -e SECRET_KEY="your-flask-secret-key" \
+  -e DATABASE_SECRET_KEY="projects/PROJECT_ID/secrets/DATABASE_SECRET_KEY/versions/latest" \
   gcregister10-5
 ```
 
@@ -156,7 +165,7 @@ gcloud run deploy gcregister10-5 \
   --set-env-vars DATABASE_NAME_SECRET="projects/PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest" \
   --set-env-vars DATABASE_USER_SECRET="projects/PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest" \
   --set-env-vars DATABASE_PASSWORD_SECRET="projects/PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest" \
-  --set-env-vars SECRET_KEY="projects/PROJECT_ID/secrets/FLASK_SECRET_KEY/versions/latest"
+  --set-env-vars DATABASE_SECRET_KEY="projects/PROJECT_ID/secrets/DATABASE_SECRET_KEY/versions/latest"
 ```
 
 ## 📝 Usage Guide
