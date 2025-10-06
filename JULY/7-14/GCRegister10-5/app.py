@@ -4,8 +4,8 @@ GCRegister10-5: Channel Registration Service
 Flask web application for registering Telegram channels into the payment system.
 """
 from flask import Flask, render_template, redirect, url_for, flash, session, request
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+# from flask_limiter import Limiter
+# from flask_limiter.util import get_remote_address
 import random
 from config_manager import ConfigManager
 from database_manager import DatabaseManager
@@ -31,15 +31,23 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize database manager: {e}")
     db_manager = None
 
+# ============================================================================
+# RATE LIMITING - TEMPORARILY DISABLED FOR TESTING
+# ============================================================================
+# NOTE: Rate limiting is commented out to allow unlimited testing.
+# Uncomment the code below to re-enable rate limiting in production.
+#
 # Initialize rate limiter (5 registrations per hour per IP)
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
+# limiter = Limiter(
+#     app=app,
+#     key_func=get_remote_address,
+#     default_limits=["200 per day", "50 per hour"],
+#     storage_uri="memory://"
+# )
+# print("🔒 [APP] Rate limiter initialized")
+# ============================================================================
 
-print("🔒 [APP] Rate limiter initialized")
+print("⚠️ [APP] Rate limiting is DISABLED for testing purposes")
 
 
 def generate_captcha():
@@ -57,7 +65,7 @@ def generate_captcha():
 
 
 @app.route('/', methods=['GET', 'POST'])
-@limiter.limit("5 per hour")
+# @limiter.limit("5 per hour")  # DISABLED FOR TESTING
 def register():
     """
     Main registration page route.
@@ -221,14 +229,18 @@ def health():
         }, 503
 
 
-@app.errorhandler(429)
-def ratelimit_handler(e):
-    """
-    Handle rate limit exceeded errors.
-    """
-    print(f"⚠️ [APP] Rate limit exceeded: {get_remote_address()}")
-    flash('⚠️ Too many registration attempts. Please try again later.', 'warning')
-    return render_template('error.html', error="Rate limit exceeded"), 429
+# ============================================================================
+# RATE LIMIT ERROR HANDLER - DISABLED FOR TESTING
+# ============================================================================
+# @app.errorhandler(429)
+# def ratelimit_handler(e):
+#     """
+#     Handle rate limit exceeded errors.
+#     """
+#     print(f"⚠️ [APP] Rate limit exceeded: {get_remote_address()}")
+#     flash('⚠️ Too many registration attempts. Please try again later.', 'warning')
+#     return render_template('error.html', error="Rate limit exceeded"), 429
+# ============================================================================
 
 
 @app.errorhandler(500)
