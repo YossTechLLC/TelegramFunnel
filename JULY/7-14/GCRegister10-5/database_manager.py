@@ -71,13 +71,16 @@ class DatabaseManager:
         """
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cur:
+                cur = conn.cursor()
+                try:
                     cur.execute("SELECT 1")
                     result = cur.fetchone()
                     if result and result[0] == 1:
                         print(f"✅ [DATABASE] Connection test successful")
                         return True
-            return False
+                    return False
+                finally:
+                    cur.close()
         except Exception as e:
             print(f"❌ [DATABASE] Connection test failed: {e}")
             return False
@@ -94,7 +97,8 @@ class DatabaseManager:
         """
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cur:
+                cur = conn.cursor()
+                try:
                     print(f"🔍 [DATABASE] Checking uniqueness for open_channel_id: {open_channel_id}")
                     cur.execute(
                         "SELECT COUNT(*) FROM main_clients_database WHERE open_channel_id = %s",
@@ -108,6 +112,8 @@ class DatabaseManager:
                     else:
                         print(f"✅ [DATABASE] Channel ID {open_channel_id} is unique")
                         return True
+                finally:
+                    cur.close()
 
         except Exception as e:
             print(f"❌ [DATABASE] Error checking channel ID uniqueness: {e}")
@@ -131,7 +137,8 @@ class DatabaseManager:
                 return False
 
             with self.get_connection() as conn:
-                with conn.cursor() as cur:
+                cur = conn.cursor()
+                try:
                     print(f"📝 [DATABASE] Inserting new registration for channel: {data['open_channel_id']}")
 
                     # Prepare the insertion query
@@ -171,6 +178,8 @@ class DatabaseManager:
                     print(f"🏦 [DATABASE] Wallet: {data['client_wallet_address'][:20]}... ({data['client_payout_currency']})")
 
                     return True
+                finally:
+                    cur.close()
 
         except Exception as e:
             if conn:
@@ -191,11 +200,14 @@ class DatabaseManager:
         """
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cur:
+                cur = conn.cursor()
+                try:
                     cur.execute("SELECT COUNT(*) FROM main_clients_database")
                     count = cur.fetchone()[0]
                     print(f"📊 [DATABASE] Total registered channels: {count}")
                     return count
+                finally:
+                    cur.close()
         except Exception as e:
             print(f"❌ [DATABASE] Error getting registration count: {e}")
             return 0
