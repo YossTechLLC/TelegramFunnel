@@ -8,11 +8,11 @@ from google.cloud import secretmanager
 from typing import Optional
 
 # LIST OF ENVIRONMENT VARIABLES
-# DATABASE_HOST_SECRET: Path to database host in Secret Manager
 # DATABASE_NAME_SECRET: Path to database name in Secret Manager
 # DATABASE_USER_SECRET: Path to database user in Secret Manager
 # DATABASE_PASSWORD_SECRET: Path to database password in Secret Manager
 # DATABASE_SECRET_KEY: Path to Flask secret key in Secret Manager
+# INSTANCE_CONNECTION_NAME: Cloud SQL instance connection name (direct value, not Secret Manager)
 
 class ConfigManager:
     """
@@ -22,11 +22,11 @@ class ConfigManager:
     def __init__(self):
         """Initialize the ConfigManager."""
         self.client = secretmanager.SecretManagerServiceClient()
-        self.db_host = None
         self.db_name = None
         self.db_user = None
         self.db_password = None
         self.secret_key = None
+        self.instance_connection_name = None
 
     def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
         """
@@ -55,15 +55,6 @@ class ConfigManager:
         except Exception as e:
             print(f"❌ [CONFIG] Error fetching {description or secret_name_env}: {e}")
             return None
-
-    def fetch_database_host(self) -> Optional[str]:
-        """
-        Fetch the database host from Secret Manager.
-
-        Returns:
-            Database host or None if failed
-        """
-        return self.fetch_secret("DATABASE_HOST_SECRET", "database host")
 
     def fetch_database_name(self) -> Optional[str]:
         """
@@ -101,6 +92,21 @@ class ConfigManager:
         """
         return self.fetch_secret("DATABASE_SECRET_KEY", "Flask secret key")
 
+    def get_instance_connection_name(self) -> Optional[str]:
+        """
+        Get the Cloud SQL instance connection name from environment variable.
+
+        Returns:
+            Instance connection name (e.g., project:region:instance)
+        """
+        instance_name = os.getenv("INSTANCE_CONNECTION_NAME")
+        if instance_name:
+            print(f"🔗 [CONFIG] Cloud SQL Instance: {instance_name}")
+            return instance_name
+        else:
+            print(f"❌ [CONFIG] INSTANCE_CONNECTION_NAME environment variable not set")
+            return None
+
     def initialize_config(self) -> dict:
         """
         Initialize and return all configuration values.
@@ -110,39 +116,38 @@ class ConfigManager:
         """
         print(f"⚙️ [CONFIG] Initializing GCRegister10-5 configuration")
 
-        # Fetch all secrets
-        self.db_host = self.fetch_database_host()
+        # Fetch all secrets and environment variables
         self.db_name = self.fetch_database_name()
         self.db_user = self.fetch_database_user()
         self.db_password = self.fetch_database_password()
         self.secret_key = self.get_secret_key()
+        self.instance_connection_name = self.get_instance_connection_name()
 
         # Validate critical configurations
         missing_configs = []
-        if not self.db_host:
-            missing_configs.append("Database Host")
         if not self.db_name:
             missing_configs.append("Database Name")
         if not self.db_user:
             missing_configs.append("Database User")
         if not self.db_password:
             missing_configs.append("Database Password")
+        if not self.instance_connection_name:
+            missing_configs.append("Instance Connection Name")
 
         if missing_configs:
             print(f"❌ [CONFIG] Missing critical configuration: {', '.join(missing_configs)}")
 
         config = {
-            'db_host': self.db_host,
             'db_name': self.db_name,
             'db_user': self.db_user,
             'db_password': self.db_password,
             'secret_key': self.secret_key,
-            'db_port': 5432  # Standard PostgreSQL port
+            'instance_connection_name': self.instance_connection_name
         }
 
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
-        print(f"   Database Host: {'✅' if config['db_host'] else '❌'}")
+        print(f"   Cloud SQL Instance: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   Database Name: {'✅' if config['db_name'] else '❌'}")
         print(f"   Database User: {'✅' if config['db_user'] else '❌'}")
         print(f"   Database Password: {'✅' if config['db_password'] else '❌'}")
@@ -158,9 +163,9 @@ class ConfigManager:
             Dictionary containing current configuration
         """
         return {
-            'db_host': self.db_host,
             'db_name': self.db_name,
             'db_user': self.db_user,
             'db_password': self.db_password,
-            'secret_key': self.secret_key
+            'secret_key': self.secret_key,
+            'instance_connection_name': self.instance_connection_name
         }

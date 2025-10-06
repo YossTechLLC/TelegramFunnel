@@ -69,14 +69,11 @@ The application inserts data into the `main_clients_database` table with the fol
 
 ### Required Secrets in Google Cloud Secret Manager
 
-**Note:** If you already have DATABASE_HOST_SECRET, DATABASE_NAME_SECRET, DATABASE_USER_SECRET, and DATABASE_PASSWORD_SECRET created and exported, you only need to create the DATABASE_SECRET_KEY secret.
+**Note:** This application uses **Cloud SQL Connector** for database connections. You don't need DATABASE_HOST_SECRET anymore.
 
 Create the following secrets in your Google Cloud project:
 
 ```bash
-# Database Host (skip if already exists)
-gcloud secrets create DATABASE_HOST_SECRET --data-file=<host_file>
-
 # Database Name (skip if already exists)
 gcloud secrets create DATABASE_NAME_SECRET --data-file=<name_file>
 
@@ -94,13 +91,24 @@ echo "y764wg_-y2PHggbnl_BPfUiZhxOhTZhXadhCkNMl3LM" | gcloud secrets create DATAB
 
 Use this exact value when creating the DATABASE_SECRET_KEY secret in Google Cloud Secret Manager.
 
+### Cloud SQL Instance Connection Name
+
+**Important:** Set the `INSTANCE_CONNECTION_NAME` environment variable to your Cloud SQL instance connection string:
+```
+INSTANCE_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+```
+
+This is a direct environment variable value (not from Secret Manager).
+
 ## ⚙️ Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
 ```bash
+# Cloud SQL instance connection name (direct value)
+INSTANCE_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+
 # Database credentials (Secret Manager paths)
-DATABASE_HOST_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_HOST_SECRET/versions/latest
 DATABASE_NAME_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest
 DATABASE_USER_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest
 DATABASE_PASSWORD_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest
@@ -109,7 +117,7 @@ DATABASE_PASSWORD_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_PASSWORD_SECR
 DATABASE_SECRET_KEY=projects/YOUR_PROJECT_ID/secrets/DATABASE_SECRET_KEY/versions/latest
 ```
 
-**Note:** The database port is hardcoded to 5432 (standard PostgreSQL port) and does not need to be configured via environment variables.
+**Note:** The application uses Cloud SQL Connector for database connections. No host, port, or VPC configuration is needed.
 
 ## 🚀 Deployment
 
@@ -144,7 +152,7 @@ docker build -t gcregister10-5 .
 
 # Run the container
 docker run -p 8080:8080 \
-  -e DATABASE_HOST_SECRET="projects/PROJECT_ID/secrets/DATABASE_HOST_SECRET/versions/latest" \
+  -e INSTANCE_CONNECTION_NAME="telepay-459221:us-central1:telepaypsql" \
   -e DATABASE_NAME_SECRET="projects/PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest" \
   -e DATABASE_USER_SECRET="projects/PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest" \
   -e DATABASE_PASSWORD_SECRET="projects/PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest" \
@@ -155,18 +163,25 @@ docker run -p 8080:8080 \
 ### Google Cloud Run Deployment
 
 ```bash
-# Deploy to Cloud Run
+# Deploy to Cloud Run with Cloud SQL Connector
 gcloud run deploy gcregister10-5 \
   --source . \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars DATABASE_HOST_SECRET="projects/PROJECT_ID/secrets/DATABASE_HOST_SECRET/versions/latest" \
+  --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
+  --set-env-vars INSTANCE_CONNECTION_NAME="telepay-459221:us-central1:telepaypsql" \
   --set-env-vars DATABASE_NAME_SECRET="projects/PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest" \
   --set-env-vars DATABASE_USER_SECRET="projects/PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest" \
   --set-env-vars DATABASE_PASSWORD_SECRET="projects/PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest" \
   --set-env-vars DATABASE_SECRET_KEY="projects/PROJECT_ID/secrets/DATABASE_SECRET_KEY/versions/latest"
 ```
+
+**Important Notes:**
+- The `--add-cloudsql-instances` flag connects Cloud Run to your Cloud SQL instance
+- INSTANCE_CONNECTION_NAME must match your Cloud SQL instance connection string
+- No VPC connector is needed when using Cloud SQL Connector
+- Replace `PROJECT_ID` with your actual Google Cloud project ID (e.g., 291176869049)
 
 ## 📝 Usage Guide
 

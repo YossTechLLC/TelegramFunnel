@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """
 Database Manager for GCRegister10-5 Channel Registration Service.
-Handles PostgreSQL connections and data operations.
+Handles PostgreSQL connections and data operations using Cloud SQL Connector.
 """
-import psycopg2
+from google.cloud.sql.connector import Connector
 from typing import Optional, Dict, Any
 from contextlib import contextmanager
 
@@ -14,41 +14,43 @@ class DatabaseManager:
 
     def __init__(self, config: Dict[str, Any]):
         """
-        Initialize the DatabaseManager.
+        Initialize the DatabaseManager with Cloud SQL Connector.
 
         Args:
             config: Configuration dictionary containing database credentials
         """
-        self.host = config.get('db_host')
-        self.port = config.get('db_port', 5432)
+        self.instance_connection_name = config.get('instance_connection_name')
         self.dbname = config.get('db_name')
         self.user = config.get('db_user')
         self.password = config.get('db_password')
+        self.connector = Connector()
 
         # Validate that critical credentials are available
         if not self.password:
             raise RuntimeError("Database password not available. Cannot initialize DatabaseManager.")
-        if not self.host or not self.dbname or not self.user:
+        if not self.instance_connection_name or not self.dbname or not self.user:
             raise RuntimeError("Critical database configuration missing.")
 
-        print(f"🔗 [DATABASE] DatabaseManager initialized for {self.dbname}@{self.host}")
+        print(f"🔗 [DATABASE] DatabaseManager initialized with Cloud SQL Connector")
+        print(f"🔗 [DATABASE] Instance: {self.instance_connection_name}")
+        print(f"🔗 [DATABASE] Database: {self.dbname}")
 
     @contextmanager
     def get_connection(self):
         """
-        Create and return a database connection using context manager.
+        Create and return a database connection using Cloud SQL Connector.
 
         Yields:
-            psycopg2 connection object
+            pg8000 connection object
         """
         conn = None
         try:
-            conn = psycopg2.connect(
-                dbname=self.dbname,
+            conn = self.connector.connect(
+                self.instance_connection_name,
+                "pg8000",
                 user=self.user,
                 password=self.password,
-                host=self.host,
-                port=self.port
+                db=self.dbname
             )
             print(f"✅ [DATABASE] Connection established")
             yield conn
@@ -170,15 +172,14 @@ class DatabaseManager:
 
                     return True
 
-        except psycopg2.IntegrityError as e:
-            if conn:
-                conn.rollback()
-            print(f"❌ [DATABASE] Integrity error (duplicate or constraint violation): {e}")
-            return False
         except Exception as e:
             if conn:
                 conn.rollback()
-            print(f"❌ [DATABASE] Error inserting registration: {e}")
+            # Check if it's an integrity error (duplicate key, constraint violation)
+            if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+                print(f"❌ [DATABASE] Integrity error (duplicate or constraint violation): {e}")
+            else:
+                print(f"❌ [DATABASE] Error inserting registration: {e}")
             return False
 
     def get_registration_count(self) -> int:
