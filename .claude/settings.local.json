@@ -15,7 +15,10 @@
       "WebFetch(domain:docs.1inch.io)",
       "WebFetch(domain:documenter.getpostman.com)",
       "WebFetch(domain:api.changenow.io)",
-      "WebFetch(domain:changenow.io)"
+      "WebFetch(domain:changenow.io)",
+      "Bash(tree:*)",
+      "Read(//mnt/c/Users/YossTech/Desktop/2025/**)",
+      "Read(//mnt/c/Users/YossTech/Desktop/**)"
     ],
     "deny": []
   }
