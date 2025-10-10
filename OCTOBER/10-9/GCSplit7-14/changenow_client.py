@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-ChangeNow API Client for TPS7-14 Payment Splitting Service.
+ChangeNow API Client for TPS10-9 Payment Splitting Service.
 Handles all interactions with the ChangeNow cryptocurrency exchange API.
 """
 import requests

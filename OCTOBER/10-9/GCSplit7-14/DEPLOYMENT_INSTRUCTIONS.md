@@ -22,14 +22,14 @@ Set these environment variables for the Cloud Function:
 ```bash
 CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest
 WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest
-TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps7-14
+TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9
 ```
 
 ### 3. Update tph7-14.py Environment
 Add this environment variable to tph7-14.py:
 
 ```bash
-TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps7-14
+TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9
 ```
 
 ## 🔧 Deployment Steps
@@ -40,34 +40,34 @@ TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps7-14
 cd GCSplit7-14
 
 # Deploy using gcloud
-gcloud functions deploy tps7-14 \
+gcloud functions deploy tps10-9 \
     --runtime python311 \
     --trigger-http \
     --allow-unauthenticated \
     --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps7-14 \
+    --set-env-vars TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9 \
     --source .
 ```
 
 ### 2. Alternative: Docker Deployment
 ```bash
 # Build the Docker image
-docker build -t tps7-14 .
+docker build -t tps10-9 .
 
 # Run locally for testing
 docker run -p 8080:8080 \
     -e CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     -e WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
-    tps7-14
+    tps10-9
 ```
 
 ## 🔗 Integration Flow
 
 1. **Payment Success** → `tph7-14.py` processes payment and creates user subscription
 2. **Invite Sent** → `tph7-14.py` sends Telegram invite to user
-3. **Webhook Trigger** → `tph7-14.py` calls `tps7-14.py` webhook with payment data
-4. **ChangeNow Integration** → `tps7-14.py` processes payment splitting:
+3. **Webhook Trigger** → `tph7-14.py` calls `tps10-9.py` webhook with payment data
+4. **ChangeNow Integration** → `tps10-9.py` processes payment splitting:
    - Validates ETH → client_currency pair
    - Checks amount limits
    - Creates fixed-rate transaction
@@ -78,14 +78,14 @@ docker run -p 8080:8080 \
 ### tph7-14.py Logs:
 ```
 🚀 [PAYMENT_SPLITTING] Starting Client Payout
-🔄 [PAYMENT_SPLITTING] Triggering TPS7-14 webhook
+🔄 [PAYMENT_SPLITTING] Triggering TPS10-9 webhook
 📦 [PAYMENT_SPLITTING] Payload: user_id=123, amount=0.05 ETH → USDT
 ✅ [PAYMENT_SPLITTING] Payment splitting webhook completed successfully
 ```
 
-### tps7-14.py Logs:
+### tps10-9.py Logs:
 ```
-🎯 [WEBHOOK] TPS7-14 Webhook Called
+🎯 [WEBHOOK] TPS10-9 Webhook Called
 🔍 [CHANGENOW_PAIR_CHECK] Validating ETH → USDT
 💰 [CHANGENOW_LIMITS] Checking limits for 0.05 ETH → USDT
 🚀 [CHANGENOW_SWAP] Starting fixed-rate transaction
@@ -97,12 +97,12 @@ docker run -p 8080:8080 \
 
 ### Health Check
 ```bash
-curl https://[REGION]-291176869049.cloudfunctions.net/tps7-14/health
+curl https://[REGION]-291176869049.cloudfunctions.net/tps10-9/health
 ```
 
 ### Manual Webhook Test
 ```bash
-curl -X POST https://us-central1-291176869049.cloudfunctions.net/tps7-14 \
+curl -X POST https://us-central1-291176869049.cloudfunctions.net/tps10-9 \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Signature:  " \
   -d '{

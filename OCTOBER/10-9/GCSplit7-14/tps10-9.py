@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-TPS7-14: ChangeNow Payment Splitting Service
+TPS10-9: ChangeNow Payment Splitting Service
 Google Cloud Function for automated cryptocurrency payment splitting using ChangeNow API.
 Converts ETH payments to client payout currencies after successful subscription payments.
 """
@@ -314,7 +314,7 @@ def payment_split_webhook():
         payload = request.get_data()
         signature = request.headers.get('X-Webhook-Signature', '')
         
-        print(f"🎯 [WEBHOOK] TPS7-14 Webhook Called")
+        print(f"🎯 [WEBHOOK] TPS10-9 Webhook Called")
         print(f"📦 [WEBHOOK] Payload size: {len(payload)} bytes")
         
         # Verify webhook signature if signing key is available
@@ -364,7 +364,7 @@ def health_check():
     """Health check endpoint for monitoring."""
     return jsonify({
         "status": "healthy",
-        "service": "TPS7-14 Payment Splitting",
+        "service": "TPS10-9 Payment Splitting",
         "timestamp": int(time.time())
     }), 200
 

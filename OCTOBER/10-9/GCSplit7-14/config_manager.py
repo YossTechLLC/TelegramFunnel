@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for TPS7-14 Payment Splitting Service.
+Configuration Manager for TPS10-9 Payment Splitting Service.
 Handles fetching configuration values from Google Cloud Secret Manager.
 """
 import os
@@ -15,7 +15,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the TPS7-14 service.
+    Manages configuration and secrets for the TPS10-9 service.
     """
     
     def __init__(self):
@@ -111,7 +111,7 @@ class ConfigManager:
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing TPS7-14 configuration")
+        print(f"⚙️ [CONFIG] Initializing TPS10-9 configuration")
 
         # Fetch all secrets
         self.changenow_api_key = self.fetch_changenow_api_key()

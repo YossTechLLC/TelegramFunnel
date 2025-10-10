@@ -19,7 +19,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code
-COPY tps7-14.py .
+COPY tps10-9.py .
 COPY config_manager.py .
 COPY changenow_client.py .
 
@@ -27,4 +27,4 @@ COPY changenow_client.py .
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tps7-14.py"]
+CMD ["python", "tps10-9.py"]
