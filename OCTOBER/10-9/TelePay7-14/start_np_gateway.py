@@ -46,6 +46,9 @@ class PaymentGatewayManager:
         if not self.payment_token:
             return {"error": "Payment provider token not available"}
         
+        # Get HPW10-9 IPN callback URL from environment
+        ipn_callback_url = os.getenv("HPW_IPN_CALLBACK_URL")
+
         invoice_payload = {
             "price_amount": amount,
             "price_currency": "USD",
@@ -55,6 +58,11 @@ class PaymentGatewayManager:
             "is_fixed_rate": False,
             "is_fee_paid_by_user": False
         }
+
+        # Add IPN callback URL if configured
+        if ipn_callback_url:
+            invoice_payload["ipn_callback_url"] = ipn_callback_url
+            print(f"🔔 [DEBUG] IPN callback configured: {ipn_callback_url}")
         
         headers = {
             "x-api-key": self.payment_token,

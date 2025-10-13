@@ -18,7 +18,8 @@
       "WebFetch(domain:changenow.io)",
       "Bash(tree:*)",
       "Read(//mnt/c/Users/YossTech/Desktop/2025/**)",
-      "Read(//mnt/c/Users/YossTech/Desktop/**)"
+      "Read(//mnt/c/Users/YossTech/Desktop/**)",
+      "WebSearch"
     ],
     "deny": []
   }

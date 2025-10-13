@@ -1,0 +1,28 @@
+# HPW10-9 Host Payment Wallet Service Requirements
+
+# Web Framework
+flask==3.0.0
+werkzeug==3.0.1
+
+# Ethereum Blockchain Interaction
+web3==6.12.0
+eth-account==0.10.0
+eth-utils==2.3.1
+
+# HTTP Requests
+requests==2.31.0
+
+# Google Cloud
+google-cloud-secret-manager==2.16.4
+
+# PostgreSQL Database
+psycopg2-binary==2.9.9
+
+# Async Support
+asyncio==3.4.3
+
+# Decimal precision
+# (built-in, no install needed)
+
+# Environment Variables
+python-decouple==3.8

@@ -22,7 +22,9 @@ Set these environment variables for the Cloud Function:
 ```bash
 CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest
 WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest
+TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest
 TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9
+HPW_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/hpw10-9/gcsplit
 ```
 
 ### 3. Update tph7-14.py Environment
@@ -46,7 +48,10 @@ gcloud functions deploy tps10-9 \
     --allow-unauthenticated \
     --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9 \
+    --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest \
+    --set-env-vars TPS_WEBHOOK_URL=https://us-central1-291176869049.cloudfunctions.net/tps10-9 \
+    --set-env-vars HPW_WEBHOOK_URL=https://us-central1-291176869049.cloudfunctions.net/hpw10-9/gcsplit \
+    --region us-central1 \
     --source .
 ```
 

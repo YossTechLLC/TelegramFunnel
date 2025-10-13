@@ -283,6 +283,41 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 print(f"⚠️ [TELEGRAM] Bot token not configured, skipping notification")
 
+            # Step 5: Notify HPW10-9 (Host Payment Wallet) to queue payment
+            try:
+                import requests
+                hpw_webhook_url = os.getenv("HPW_WEBHOOK_URL")
+
+                if hpw_webhook_url:
+                    print(f"🔔 [HPW_NOTIFICATION] Notifying HPW10-9 to queue payment")
+
+                    hpw_payload = {
+                        "transaction_id": transaction.get('id'),
+                        "payin_address": transaction.get('payinAddress'),
+                        "expected_amount": str(transaction.get('fromAmount')),
+                        "order_id": f"PGP-{user_id}",  # Construct order_id from user_id
+                        "user_id": user_id,
+                        "payout_address": wallet_address,
+                        "payout_currency": payout_currency
+                    }
+
+                    hpw_response = requests.post(
+                        hpw_webhook_url,
+                        json=hpw_payload,
+                        timeout=10
+                    )
+
+                    if hpw_response.status_code == 200:
+                        print(f"✅ [HPW_NOTIFICATION] HPW10-9 successfully notified")
+                        print(f"   Payment queued for: {transaction.get('payinAddress')}")
+                    else:
+                        print(f"⚠️ [HPW_NOTIFICATION] HPW10-9 notification failed: {hpw_response.status_code}")
+                else:
+                    print(f"⚠️ [HPW_NOTIFICATION] HPW_WEBHOOK_URL not configured, skipping")
+
+            except Exception as hpw_error:
+                print(f"⚠️ [HPW_NOTIFICATION] Error notifying HPW10-9 (non-fatal): {hpw_error}")
+
             return {
                 "success": True,
                 "transaction_id": transaction.get('id'),
