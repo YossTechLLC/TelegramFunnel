@@ -27,9 +27,9 @@ app = Flask(__name__)
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
-# Initialize database and create tables
+# Initialize database manager
+# Note: host_payment_queue table should already exist in the database
 db_manager = DatabaseManager()
-db_manager.create_payment_queue_table()
 
 # Initialize Ethereum wallet manager
 eth_wallet = EthWalletManager(
@@ -364,7 +364,9 @@ dispatcher_thread.start()
 print(f"✅ [HPW10-9] Background dispatcher thread started")
 
 
-# --- Flask entrypoint for deployment ---
+# --- Flask entrypoint for Cloud Run deployment ---
 if __name__ == "__main__":
-    print(f"🚀 [HPW10-9] Starting Host Payment Wallet Service")
-    app.run(host="0.0.0.0", port=8080)
+    # Cloud Run sets the PORT environment variable
+    port = int(os.environ.get("PORT", 8080))
+    print(f"🚀 [HPW10-9] Starting Host Payment Wallet Service on port {port}")
+    app.run(host="0.0.0.0", port=port)

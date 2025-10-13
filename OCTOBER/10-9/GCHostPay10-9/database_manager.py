@@ -102,55 +102,6 @@ class DatabaseManager:
             port=self.port
         )
 
-    def create_payment_queue_table(self) -> bool:
-        """
-        Create the host_payment_queue table if it doesn't exist.
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            conn = self.get_connection()
-            cur = conn.cursor()
-
-            create_table_query = """
-                CREATE TABLE IF NOT EXISTS host_payment_queue (
-                    id SERIAL PRIMARY KEY,
-                    payment_id VARCHAR(255) UNIQUE NOT NULL,
-                    order_id VARCHAR(255) NOT NULL,
-                    changenow_tx_id VARCHAR(255),
-                    payin_address VARCHAR(255) NOT NULL,
-                    expected_amount_eth NUMERIC(18, 8) NOT NULL,
-                    actual_amount_received NUMERIC(18, 8),
-                    status VARCHAR(50) DEFAULT 'pending',
-                    tx_hash VARCHAR(255),
-                    gas_price_gwei NUMERIC(18, 8),
-                    gas_used INTEGER,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW(),
-                    error_message TEXT,
-                    retry_count INTEGER DEFAULT 0,
-                    user_id BIGINT,
-                    CONSTRAINT valid_status CHECK (status IN ('pending', 'waiting_funds', 'processing', 'sent', 'completed', 'failed', 'expired'))
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_payment_id ON host_payment_queue(payment_id);
-                CREATE INDEX IF NOT EXISTS idx_status ON host_payment_queue(status);
-                CREATE INDEX IF NOT EXISTS idx_created_at ON host_payment_queue(created_at);
-            """
-
-            cur.execute(create_table_query)
-            conn.commit()
-            cur.close()
-            conn.close()
-
-            print(f"✅ [DATABASE] host_payment_queue table created/verified")
-            return True
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Error creating host_payment_queue table: {e}")
-            return False
-
     def insert_payment(self, payment_data: Dict[str, Any]) -> bool:
         """
         Insert a new payment into the queue.

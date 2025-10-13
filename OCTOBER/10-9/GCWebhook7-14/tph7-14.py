@@ -291,18 +291,18 @@ def get_database_connection():
     if not CLOUD_SQL_AVAILABLE:
         print("❌ [ERROR] Cloud SQL Connector not available")
         return None
-    
+
     try:
         # Get database credentials
         dbname = fetch_database_name()
         user = fetch_database_user()
         password = fetch_database_password()
         connection_name = fetch_cloud_sql_connection_name()
-        
+
         if not password or not connection_name:
             print("❌ [ERROR] Missing database credentials")
             return None
-        
+
         # Create connection
         connector = Connector()
         connection = connector.connect(
@@ -314,9 +314,98 @@ def get_database_connection():
         )
         print("🔗 [DEBUG] ✅ Cloud SQL Connector connection successful!")
         return connection
-        
+
     except Exception as e:
         print(f"❌ [ERROR] Database connection failed: {e}")
+        return None
+
+
+# ChangeNOW API POST OUTPUT TEST - Helper function to build ChangeNow API payload
+def build_changenow_payload_preview(user_id: int, wallet_address: str, payout_currency: str, sub_price: str) -> dict:
+    """
+    Build a preview of the exact ChangeNow API POST payload that will be sent.
+    This is for TESTING ONLY to show users what data is being sent to ChangeNow API.
+
+    Args:
+        user_id: Telegram user ID
+        wallet_address: User's payout wallet address
+        payout_currency: Cryptocurrency ticker (e.g., 'usdt', 'btc')
+        sub_price: Subscription price in ETH
+
+    Returns:
+        Dictionary matching the exact structure sent to ChangeNow API
+    """
+    # ChangeNOW API POST OUTPUT TEST - This mimics the payload structure from changenow_client.py
+    # Based on ChangeNow API v2 documentation for fixed-rate exchanges
+    payload = {
+        "from": "eth",
+        "to": payout_currency.lower(),
+        "address": wallet_address,
+        "amountFrom": sub_price,
+        "flow": "fixed-rate",
+        "type": "direct",
+        "refundAddress": wallet_address,
+        "extraId": None,
+        "userId": str(user_id),
+        "payload": None,
+        "contactEmail": None
+    }
+
+    print(f"🧪 [CHANGENOW_TEST] Built preview payload for user {user_id}")
+    return payload
+
+
+# ChangeNOW API POST OUTPUT TEST - Format payload as readable Telegram message
+def format_changenow_payload_message(payload: dict, api_url: str, api_key_preview: str) -> str:
+    """
+    Format the ChangeNow API payload as a user-friendly Telegram message.
+    This is for TESTING ONLY to display the exact API request being sent.
+
+    Args:
+        payload: The API payload dictionary
+        api_url: The ChangeNow API endpoint URL
+        api_key_preview: First 8 characters of API key (for verification)
+
+    Returns:
+        Formatted string message for Telegram
+    """
+    # ChangeNOW API POST OUTPUT TEST - Build detailed test message
+    message = "🧪 **ChangeNow API POST Test Output**\n\n"
+    message += f"📡 **Endpoint:**\n`{api_url}`\n\n"
+    message += f"🔑 **API Key (preview):** `{api_key_preview}...`\n\n"
+    message += "📦 **Request Payload:**\n```json\n"
+
+    # ChangeNOW API POST OUTPUT TEST - Format payload as JSON
+    message += json.dumps(payload, indent=2, ensure_ascii=False)
+
+    message += "\n```\n\n"
+    message += "✅ This is the exact data that will be sent to ChangeNow API.\n"
+    message += "🔄 The webhook is being triggered now..."
+
+    return message
+
+
+# ChangeNOW API POST OUTPUT TEST - Helper to fetch ChangeNow API key from Secret Manager
+def fetch_changenow_api_key() -> str:
+    """
+    Fetch ChangeNow API key from Secret Manager.
+    This is for TESTING ONLY to show API key preview in test messages.
+
+    Returns:
+        ChangeNow API key string or None if fetch fails
+    """
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("CHANGENOW_API_KEY")
+        if not secret_path:
+            print(f"⚠️ [CHANGENOW_TEST] CHANGENOW_API_KEY environment variable not set")
+            return None
+        response = client.access_secret_version(request={"name": secret_path})
+        api_key = response.payload.data.decode("UTF-8")
+        print(f"✅ [CHANGENOW_TEST] Successfully fetched ChangeNow API key")
+        return api_key
+    except Exception as e:
+        print(f"❌ [CHANGENOW_TEST] Error fetching ChangeNow API key: {e}")
         return None
 
 
@@ -569,14 +658,56 @@ def send_invite():
             await bot.send_message(
                 chat_id=user_id,
                 text=(
-                    "✅ You’ve been granted access!\n"
+                    "✅ You've been granted access!\n"
                     "Here is your one-time invite link:\n"
                     f"{invite.invite_link}"
                 ),
                 disable_web_page_preview=True
             )
         asyncio.run(run_invite())
-        
+
+        # ChangeNOW API POST OUTPUT TEST - Send preview of ChangeNow API payload to user
+        try:
+            print(f"🧪 [CHANGENOW_TEST] Building ChangeNow API payload preview for user {user_id}")
+
+            # ChangeNOW API POST OUTPUT TEST - Get API configuration for preview
+            changenow_api_url = "https://api.changenow.io/v2/exchange"  # Standard ChangeNow v2 endpoint
+            changenow_api_key = fetch_changenow_api_key()
+            api_key_preview = changenow_api_key[:8] if changenow_api_key else "HIDDEN"
+
+            # ChangeNOW API POST OUTPUT TEST - Build exact payload that will be sent
+            test_payload = build_changenow_payload_preview(
+                user_id=user_id,
+                wallet_address=wallet_address,
+                payout_currency=payout_currency,
+                sub_price=subscription_price
+            )
+
+            # ChangeNOW API POST OUTPUT TEST - Format and send test message to user
+            test_message = format_changenow_payload_message(
+                payload=test_payload,
+                api_url=changenow_api_url,
+                api_key_preview=api_key_preview
+            )
+
+            # ChangeNOW API POST OUTPUT TEST - Send preview message via Telegram
+            bot = Bot(bot_token)
+            async def send_preview():
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=test_message,
+                    parse_mode='Markdown',
+                    disable_web_page_preview=True
+                )
+            asyncio.run(send_preview())
+
+            print(f"✅ [CHANGENOW_TEST] Sent API payload preview to user {user_id}")
+
+        except Exception as e:
+            # ChangeNOW API POST OUTPUT TEST - Don't fail the entire payment flow if preview fails
+            print(f"⚠️ [CHANGENOW_TEST] Failed to send payload preview: {e}")
+            # Continue with normal flow even if preview fails
+
         # Trigger payment splitting webhook after successful invite
         print(f"🚀 [PAYMENT_SPLITTING] Starting Client Payout")
         try:

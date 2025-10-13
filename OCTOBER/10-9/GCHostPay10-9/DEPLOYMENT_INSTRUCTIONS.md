@@ -40,7 +40,30 @@ Infura: https://mainnet.infura.io/v3/YOUR_PROJECT_ID
 
 ### 2. Database Setup
 
-The `host_payment_queue` table will be created automatically on first run. Ensure your database credentials are configured:
+The `host_payment_queue` table must be created manually in pgAdmin before deploying. Run this SQL script:
+
+```sql
+CREATE TABLE host_payment_queue (
+    id SERIAL PRIMARY KEY,
+    payment_id VARCHAR(255) UNIQUE NOT NULL,
+    order_id VARCHAR(255) NOT NULL,
+    changenow_tx_id VARCHAR(255),
+    payin_address VARCHAR(255) NOT NULL,
+    expected_amount_eth NUMERIC(18, 8) NOT NULL,
+    actual_amount_received NUMERIC(18, 8),
+    status VARCHAR(50) DEFAULT 'pending',
+    tx_hash VARCHAR(255),
+    gas_price_gwei NUMERIC(18, 8),
+    gas_used INTEGER,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    error_message TEXT,
+    retry_count INTEGER DEFAULT 0,
+    user_id BIGINT
+);
+```
+
+Ensure your database credentials are configured:
 
 ```bash
 DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest
@@ -76,19 +99,18 @@ POLLING_INTERVAL_SECONDS=30            # Wallet balance polling interval
 
 ## 🔧 Deployment Steps
 
-### 1. Deploy the Cloud Function
+### 1. Deploy to Cloud Run
 
 ```bash
 # Navigate to GCHostPay10-9 directory
 cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-9/GCHostPay10-9
 
-# Deploy using gcloud
-gcloud functions deploy hpw10-9 \
-    --runtime python311 \
-    --trigger-http \
-    --allow-unauthenticated \
-    --entry-point app \
+# Deploy using gcloud run deploy
+gcloud run deploy hpw10-9 \
+    --source . \
     --region us-central1 \
+    --allow-unauthenticated \
+    --service-account=291176869049-compute@developer.gserviceaccount.com \
     --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
     --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
     --set-env-vars NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest \
@@ -101,11 +123,10 @@ gcloud functions deploy hpw10-9 \
     --set-env-vars ETH_NETWORK=mainnet \
     --set-env-vars PAYMENT_TIMEOUT_MINUTES=120 \
     --set-env-vars MAX_RETRY_ATTEMPTS=5 \
-    --set-env-vars POLLING_INTERVAL_SECONDS=30 \
-    --source . \
-    --timeout 540s \
-    --memory 512MB \
-    --max-instances 10
+    --set-env-vars POLLING_INTERVAL_SECONDS=30
+
+# Note: Cloud Run will automatically detect the Flask app and set the PORT environment variable
+# The service will be available at: https://hpw10-9-291176869049.us-central1.run.app
 ```
 
 ### 2. Alternative: Docker Deployment
@@ -147,22 +168,22 @@ docker run -p 8080:8080 \
 
 #### 1. NowPayments IPN Webhook:
 ```
-POST https://us-central1-291176869049.cloudfunctions.net/hpw10-9/nowpayments
+POST https://hpw10-9-291176869049.us-central1.run.app/nowpayments
 ```
 
 #### 2. GCSplit7-14 Notification Webhook:
 ```
-POST https://us-central1-291176869049.cloudfunctions.net/hpw10-9/gcsplit
+POST https://hpw10-9-291176869049.us-central1.run.app/gcsplit
 ```
 
 #### 3. Health Check:
 ```
-GET https://us-central1-291176869049.cloudfunctions.net/hpw10-9/health
+GET https://hpw10-9-291176869049.us-central1.run.app/health
 ```
 
 #### 4. Payment Status:
 ```
-GET https://us-central1-291176869049.cloudfunctions.net/hpw10-9/status/<payment_id>
+GET https://hpw10-9-291176869049.us-central1.run.app/status/<payment_id>
 ```
 
 ## 📊 Expected Logs
@@ -219,7 +240,7 @@ GET https://us-central1-291176869049.cloudfunctions.net/hpw10-9/status/<payment_
 
 ### 1. Health Check
 ```bash
-curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/health
+curl https://hpw10-9-291176869049.us-central1.run.app/health
 ```
 
 **Expected Response:**
@@ -240,7 +261,7 @@ curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/health
 
 ### 2. Test GCSplit Webhook
 ```bash
-curl -X POST https://us-central1-291176869049.cloudfunctions.net/hpw10-9/gcsplit \
+curl -X POST https://hpw10-9-291176869049.us-central1.run.app/gcsplit \
   -H "Content-Type: application/json" \
   -d '{
     "transaction_id": "test_tx_123",
@@ -255,7 +276,7 @@ curl -X POST https://us-central1-291176869049.cloudfunctions.net/hpw10-9/gcsplit
 
 ### 3. Check Payment Status
 ```bash
-curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/status/CHANGENOW_test_tx_123
+curl https://hpw10-9-291176869049.us-central1.run.app/status/CHANGENOW_test_tx_123
 ```
 
 ## 🔐 Security Notes

@@ -115,12 +115,11 @@ Infura Mainnet: https://mainnet.infura.io/v3/YOUR_PROJECT_ID
 ```bash
 cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-9/GCHostPay10-9
 
-gcloud functions deploy hpw10-9 \
-    --runtime python311 \
-    --trigger-http \
-    --allow-unauthenticated \
-    --entry-point app \
+gcloud run deploy hpw10-9 \
+    --source . \
     --region us-central1 \
+    --allow-unauthenticated \
+    --service-account=291176869049-compute@developer.gserviceaccount.com \
     --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
     --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
     --set-env-vars NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest \
@@ -133,41 +132,37 @@ gcloud functions deploy hpw10-9 \
     --set-env-vars ETH_NETWORK=mainnet \
     --set-env-vars PAYMENT_TIMEOUT_MINUTES=120 \
     --set-env-vars MAX_RETRY_ATTEMPTS=5 \
-    --set-env-vars POLLING_INTERVAL_SECONDS=30 \
-    --source . \
-    --timeout 540s \
-    --memory 512MB \
-    --max-instances 10
+    --set-env-vars POLLING_INTERVAL_SECONDS=30
 ```
 
 ### 2. Update GCSplit7-14:
 ```bash
 cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-9/GCSplit7-14
 
-gcloud functions deploy tps10-9 \
-    --runtime python311 \
-    --trigger-http \
+gcloud run deploy tps10-9 \
+    --source . \
+    --region us-central1 \
+    --port 8080 \
     --allow-unauthenticated \
+    --service-account=291176869049-compute@developer.gserviceaccount.com \
     --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
     --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://us-central1-291176869049.cloudfunctions.net/tps10-9 \
-    --set-env-vars HPW_WEBHOOK_URL=https://us-central1-291176869049.cloudfunctions.net/hpw10-9/gcsplit \
-    --region us-central1 \
-    --source .
+    --set-env-vars TPS_WEBHOOK_URL=https://tps7-14-291176869049.us-central1.run.app \
+    --set-env-vars HPW_WEBHOOK_URL=https://hpw10-9-291176869049.us-central1.run.app/gcsplit
 ```
 
 ### 3. Update TelePay7-14 Environment:
 Add this environment variable to your TelePay7-14 deployment:
 ```bash
-HPW_IPN_CALLBACK_URL=https://us-central1-291176869049.cloudfunctions.net/hpw10-9/nowpayments
+HPW_IPN_CALLBACK_URL=https://hpw10-9-291176869049.us-central1.run.app/nowpayments
 ```
 
 ---
 
 ## 📊 Database Schema
 
-The system automatically creates the `host_payment_queue` table on first run:
+The `host_payment_queue` table must be created manually in pgAdmin before deployment:
 
 ```sql
 CREATE TABLE host_payment_queue (
@@ -199,7 +194,7 @@ CREATE TABLE host_payment_queue (
 
 ### Health Check Endpoint:
 ```bash
-curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/health
+curl https://hpw10-9-291176869049.us-central1.run.app/health
 ```
 
 **Response:**
@@ -220,7 +215,7 @@ curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/health
 
 ### Payment Status Check:
 ```bash
-curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/status/CHANGENOW_tx_123
+curl https://hpw10-9-291176869049.us-central1.run.app/status/CHANGENOW_tx_123
 ```
 
 ### Key Metrics to Monitor:

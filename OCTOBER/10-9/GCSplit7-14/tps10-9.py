@@ -403,6 +403,9 @@ def health_check():
         "timestamp": int(time.time())
     }), 200
 
-# --- Flask entrypoint for deployment ---
+# --- Flask entrypoint for Cloud Run deployment ---
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    # Cloud Run sets the PORT environment variable
+    port = int(os.environ.get("PORT", 8080))
+    print(f"🚀 [TPS10-9] Starting Payment Splitting Service on port {port}")
+    app.run(host="0.0.0.0", port=port)

@@ -36,23 +36,26 @@ TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9
 
 ## 🔧 Deployment Steps
 
-### 1. Deploy the Cloud Function
+### 1. Deploy to Cloud Run
 ```bash
 # Navigate to GCSplit7-14 directory
 cd GCSplit7-14
 
-# Deploy using gcloud
-gcloud functions deploy tps10-9 \
-    --runtime python311 \
-    --trigger-http \
+# Deploy using gcloud run deploy
+gcloud run deploy tps10-9 \
+    --source . \
+    --region us-central1 \
+    --port 8080 \
     --allow-unauthenticated \
+    --service-account=291176869049-compute@developer.gserviceaccount.com \
     --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
     --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://us-central1-291176869049.cloudfunctions.net/tps10-9 \
-    --set-env-vars HPW_WEBHOOK_URL=https://us-central1-291176869049.cloudfunctions.net/hpw10-9/gcsplit \
-    --region us-central1 \
-    --source .
+    --set-env-vars TPS_WEBHOOK_URL=https://tps7-14-291176869049.us-central1.run.app \
+    --set-env-vars HPW_WEBHOOK_URL=https://hpw10-9-291176869049.us-central1.run.app/gcsplit
+
+# Note: Cloud Run will automatically detect the Flask app and set the PORT environment variable
+# The service will be available at: https://tps10-9-291176869049.us-central1.run.app
 ```
 
 ### 2. Alternative: Docker Deployment
@@ -102,12 +105,12 @@ docker run -p 8080:8080 \
 
 ### Health Check
 ```bash
-curl https://[REGION]-291176869049.cloudfunctions.net/tps10-9/health
+curl https://tps10-9-291176869049.us-central1.run.app/health
 ```
 
 ### Manual Webhook Test
 ```bash
-curl -X POST https://us-central1-291176869049.cloudfunctions.net/tps10-9 \
+curl -X POST https://tps10-9-291176869049.us-central1.run.app \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Signature:  " \
   -d '{
