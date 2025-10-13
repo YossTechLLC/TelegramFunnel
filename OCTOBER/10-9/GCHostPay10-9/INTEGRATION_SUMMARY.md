@@ -29,8 +29,8 @@ GCSplit7-14/
 ├── tps10-9.py                      # Added HPW10-9 webhook notification
 └── DEPLOYMENT_INSTRUCTIONS.md      # Updated with HPW_WEBHOOK_URL
 
-TelePay7-14/
-└── start_np_gateway.py             # Added NowPayments IPN callback URL
+GCWebhook10-13/
+└── tph10-13.py                     # Added NowPayments IPN callback URL
 ```
 
 ---
@@ -39,7 +39,7 @@ TelePay7-14/
 
 ### Step-by-Step Process:
 
-1. **User Initiates Payment** (TelePay7-14)
+1. **User Initiates Payment** (GCWebhook10-13)
    - User selects subscription tier
    - NowPayments invoice created with IPN callback
    - User pays via NowPayments gateway
@@ -49,7 +49,7 @@ TelePay7-14/
    - ETH deposited into custodial HOST wallet
    - NowPayments sends IPN webhook to HPW10-9
 
-3. **Payment Split Setup** (GCWebhook7-14 → GCSplit7-14)
+3. **Payment Split Setup** (GCWebhook10-13 → GCSplit7-14)
    - User receives Telegram invite to channel
    - GCSplit7-14 creates ChangeNow transaction
    - ChangeNow provides `payinAddress` for ETH deposit
@@ -152,8 +152,8 @@ gcloud run deploy tps10-9 \
     --set-env-vars HPW_WEBHOOK_URL=https://hpw10-9-291176869049.us-central1.run.app/gcsplit
 ```
 
-### 3. Update TelePay7-14 Environment:
-Add this environment variable to your TelePay7-14 deployment:
+### 3. Update GCWebhook10-13 Environment:
+Add this environment variable to your GCWebhook10-13 deployment:
 ```bash
 HPW_IPN_CALLBACK_URL=https://hpw10-9-291176869049.us-central1.run.app/nowpayments
 ```

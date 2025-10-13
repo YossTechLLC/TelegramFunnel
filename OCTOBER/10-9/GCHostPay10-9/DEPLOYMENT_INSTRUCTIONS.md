@@ -154,7 +154,7 @@ docker run -p 8080:8080 \
 
 ### Complete Payment Pipeline:
 
-1. **User Payment** → NowPayments invoice created via TelePay7-14
+1. **User Payment** → NowPayments invoice created via GCWebhook10-13
 2. **Payment Confirmation** → NowPayments converts payment to ETH in HOST wallet
 3. **IPN Webhook** → NowPayments sends IPN to HPW10-9 `/nowpayments` endpoint
 4. **ChangeNow Setup** → GCSplit7-14 creates ChangeNow transaction and notifies HPW10-9

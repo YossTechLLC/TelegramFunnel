@@ -12,7 +12,7 @@ Create the following secrets in Google Cloud Secret Manager:
 # ChangeNow API Key
 gcloud secrets create CHANGENOW_API_KEY --data-file=<api_key_file>
 
-# Webhook Signing Key (shared with tph7-14.py)
+# Webhook Signing Key (shared with tph10-13.py)
 gcloud secrets create WEBHOOK_SIGNING_KEY --data-file=<signing_key_file>
 ```
 
@@ -27,8 +27,8 @@ TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9
 HPW_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/hpw10-9/gcsplit
 ```
 
-### 3. Update tph7-14.py Environment
-Add this environment variable to tph7-14.py:
+### 3. Update tph10-13.py Environment
+Add this environment variable to tph10-13.py:
 
 ```bash
 TPS_WEBHOOK_URL=https://[REGION]-291176869049.cloudfunctions.net/tps10-9
@@ -72,9 +72,9 @@ docker run -p 8080:8080 \
 
 ## 🔗 Integration Flow
 
-1. **Payment Success** → `tph7-14.py` processes payment and creates user subscription
-2. **Invite Sent** → `tph7-14.py` sends Telegram invite to user
-3. **Webhook Trigger** → `tph7-14.py` calls `tps10-9.py` webhook with payment data
+1. **Payment Success** → `tph10-13.py` processes payment and creates user subscription
+2. **Invite Sent** → `tph10-13.py` sends Telegram invite to user
+3. **Webhook Trigger** → `tph10-13.py` calls `tps10-9.py` webhook with payment data
 4. **ChangeNow Integration** → `tps10-9.py` processes payment splitting:
    - Validates ETH → client_currency pair
    - Checks amount limits
@@ -83,7 +83,7 @@ docker run -p 8080:8080 \
 
 ## 📊 Expected Logs
 
-### tph7-14.py Logs:
+### tph10-13.py Logs:
 ```
 🚀 [PAYMENT_SPLITTING] Starting Client Payout
 🔄 [PAYMENT_SPLITTING] Triggering TPS10-9 webhook

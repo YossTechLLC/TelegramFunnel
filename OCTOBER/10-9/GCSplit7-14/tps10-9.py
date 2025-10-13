@@ -26,13 +26,13 @@ changenow_client = ChangeNowClient(config.get('changenow_api_key'))
 
 def verify_webhook_signature(payload: bytes, signature: str, signing_key: str) -> bool:
     """
-    Verify webhook signature from tph7-14.py to ensure authentic requests.
-    
+    Verify webhook signature from tph10-13.py to ensure authentic requests.
+
     Args:
         payload: Raw request payload
         signature: Provided signature
         signing_key: Secret signing key
-        
+
     Returns:
         True if signature is valid, False otherwise
     """
@@ -201,10 +201,10 @@ def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_cur
 def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Main processing function for payment splitting workflow.
-    
+
     Args:
-        webhook_data: Data received from tph7-14.py webhook
-        
+        webhook_data: Data received from tph10-13.py webhook
+
     Returns:
         Processing result dictionary
     """
@@ -342,7 +342,7 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
 @app.route("/", methods=["POST"])
 def payment_split_webhook():
     """
-    Main webhook endpoint for receiving payment split requests from tph7-14.py.
+    Main webhook endpoint for receiving payment split requests from tph10-13.py.
     """
     try:
         # Get raw payload for signature verification

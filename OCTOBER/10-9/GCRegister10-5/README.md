@@ -313,9 +313,9 @@ The application uses emoji-based logging following the codebase convention:
 This service integrates with the existing TelegramFunnel payment system:
 
 1. **Database**: Populates `main_clients_database` table
-2. **TelePay7-14**: Uses registered channels for subscription management
-3. **GCWebhook7-14**: Processes payments for registered channels
-4. **GCSplit7-14**: Handles crypto conversions to registered wallets
+2. **GCWebhook10-13**: Uses registered channels for subscription management and payment processing
+3. **GCSplit7-14**: Handles crypto conversions to registered wallets
+4. **GCHostPay10-9**: Manages ETH payment dispatching from custodial wallet
 
 ## 📄 License
 
