@@ -63,14 +63,19 @@ CREATE TABLE host_payment_queue (
 );
 ```
 
-Ensure your database credentials are configured:
+Ensure your database credentials and connection are configured:
 
 ```bash
-DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest
+# Cloud SQL Connection (direct environment variable)
+CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+
+# Database Credentials (Secret Manager)
 DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest
 DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest
 DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest
 ```
+
+**Note:** This application uses **Cloud SQL Connector** for database connections. No host or port configuration is needed.
 
 ### 3. Environment Variables
 
@@ -84,8 +89,10 @@ NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/vers
 ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest
 ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest
 
-# Database Credentials
-DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest
+# Cloud SQL Connection (direct value)
+CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+
+# Database Credentials (Secret Manager)
 DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest
 DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest
 DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest
@@ -111,12 +118,13 @@ gcloud run deploy hpw10-9 \
     --region us-central1 \
     --allow-unauthenticated \
     --service-account=291176869049-compute@developer.gserviceaccount.com \
+    --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
     --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
     --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
     --set-env-vars NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest \
     --set-env-vars ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest \
     --set-env-vars ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest \
-    --set-env-vars DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql \
     --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
     --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
     --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
@@ -126,6 +134,7 @@ gcloud run deploy hpw10-9 \
     --set-env-vars POLLING_INTERVAL_SECONDS=30
 
 # Note: Cloud Run will automatically detect the Flask app and set the PORT environment variable
+# The --add-cloudsql-instances flag connects Cloud Run to your Cloud SQL instance
 # The service will be available at: https://hpw10-9-291176869049.us-central1.run.app
 ```
 
@@ -142,7 +151,7 @@ docker run -p 8080:8080 \
     -e NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest \
     -e ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest \
     -e ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest \
-    -e DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest \
+    -e CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql \
     -e DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
     -e DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
     -e DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \

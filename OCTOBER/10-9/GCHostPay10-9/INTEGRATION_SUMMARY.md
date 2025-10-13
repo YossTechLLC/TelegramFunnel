@@ -107,6 +107,14 @@ Alchemy Mainnet: https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
 Infura Mainnet: https://mainnet.infura.io/v3/YOUR_PROJECT_ID
 ```
 
+### Cloud SQL Connection:
+```bash
+# Cloud SQL Connection Name (direct environment variable)
+CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+```
+
+**Note:** This application uses **Cloud SQL Connector** for database connections. No host IP or port configuration is needed.
+
 ---
 
 ## 🚀 Deployment Commands
@@ -120,12 +128,13 @@ gcloud run deploy hpw10-9 \
     --region us-central1 \
     --allow-unauthenticated \
     --service-account=291176869049-compute@developer.gserviceaccount.com \
+    --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
     --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
     --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
     --set-env-vars NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest \
     --set-env-vars ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest \
     --set-env-vars ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest \
-    --set-env-vars DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql \
     --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
     --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
     --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \

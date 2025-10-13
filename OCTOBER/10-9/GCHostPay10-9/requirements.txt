@@ -14,9 +14,10 @@ requests==2.31.0
 
 # Google Cloud
 google-cloud-secret-manager==2.16.4
+cloud-sql-python-connector[pg8000]==1.4.3
 
 # PostgreSQL Database
-psycopg2-binary==2.9.9
+pg8000==1.30.3
 
 # Async Support
 asyncio==3.4.3

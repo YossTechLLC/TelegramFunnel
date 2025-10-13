@@ -4,24 +4,10 @@ Database Manager for HPW10-9 Host Payment Wallet Service.
 Handles all PostgreSQL database operations for payment queue management.
 """
 import os
-import psycopg2
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from google.cloud import secretmanager
-
-
-def fetch_database_host() -> str:
-    """Fetch database host from Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_path = os.getenv("DATABASE_HOST_SECRET")
-        if not secret_path:
-            raise ValueError("Environment variable DATABASE_HOST_SECRET is not set.")
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"❌ [DATABASE] Error fetching DATABASE_HOST_SECRET: {e}")
-        raise
+from google.cloud.sql.connector import Connector
 
 
 def fetch_database_name() -> str:
@@ -66,9 +52,20 @@ def fetch_database_password() -> str:
         return None
 
 
-# Database configuration - using Secret Manager
-DB_HOST = fetch_database_host()
-DB_PORT = 5432
+def fetch_cloud_sql_connection_name() -> str:
+    """Fetch Cloud SQL connection name from environment variable."""
+    try:
+        connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not connection_name:
+            raise ValueError("Environment variable CLOUD_SQL_CONNECTION_NAME is not set.")
+        return connection_name
+    except Exception as e:
+        print(f"❌ [DATABASE] Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
+        raise
+
+
+# Database configuration - using Secret Manager and environment variables
+DB_CONNECTION_NAME = fetch_cloud_sql_connection_name()
 DB_NAME = fetch_database_name()
 DB_USER = fetch_database_user()
 DB_PASSWORD = fetch_database_password()
@@ -77,11 +74,11 @@ DB_PASSWORD = fetch_database_password()
 class DatabaseManager:
     """
     Manages database operations for the host payment queue.
+    Uses Cloud SQL Connector for secure database connections.
     """
 
     def __init__(self):
-        self.host = DB_HOST
-        self.port = DB_PORT
+        self.connection_name = DB_CONNECTION_NAME
         self.dbname = DB_NAME
         self.user = DB_USER
         self.password = DB_PASSWORD
@@ -89,18 +86,20 @@ class DatabaseManager:
         # Validate critical credentials
         if not self.password:
             raise RuntimeError("Database password not available from Secret Manager.")
-        if not self.host or not self.dbname or not self.user:
-            raise RuntimeError("Critical database configuration missing from Secret Manager.")
+        if not self.connection_name or not self.dbname or not self.user:
+            raise RuntimeError("Critical database configuration missing from Secret Manager or environment.")
 
     def get_connection(self):
-        """Create and return a database connection."""
-        return psycopg2.connect(
-            dbname=self.dbname,
+        """Create and return a database connection using Cloud SQL Connector."""
+        connector = Connector()
+        connection = connector.connect(
+            self.connection_name,
+            "pg8000",
             user=self.user,
             password=self.password,
-            host=self.host,
-            port=self.port
+            db=self.dbname
         )
+        return connection
 
     def insert_payment(self, payment_data: Dict[str, Any]) -> bool:
         """
