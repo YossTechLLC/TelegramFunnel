@@ -224,7 +224,7 @@ class ChangeNowClient:
                 "fromCurrency": from_currency.lower(),
                 "toCurrency": to_currency.lower(),
                 "fromNetwork": from_currency.lower(),
-                "toNetwork": to_currency.lower(),
+                "toNetwork": from_currency.lower(),
                 "fromAmount": str(from_amount),
                 "toAmount": "",
                 "address": address,
