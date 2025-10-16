@@ -10,10 +10,12 @@ import time
 import hmac
 import hashlib
 import asyncio
+from decimal import Decimal
 from typing import Dict, Any, Optional, Tuple
 from flask import Flask, request, abort, jsonify
 from config_manager import ConfigManager
 from changenow_client import ChangeNowClient
+from database_manager import DatabaseManager
 
 app = Flask(__name__)
 
@@ -23,6 +25,9 @@ config = config_manager.initialize_config()
 
 # Initialize ChangeNow client
 changenow_client = ChangeNowClient(config.get('changenow_api_key'))
+
+# Initialize Database manager
+database_manager = DatabaseManager()
 
 def verify_webhook_signature(payload: bytes, signature: str, signing_key: str) -> bool:
     """
@@ -198,6 +203,140 @@ def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_cur
         print(f"❌ [CHANGENOW_SWAP] Error creating transaction: {e}")
         return None
 
+def calculate_adjusted_amount(subscription_price: str, tp_flat_fee: str) -> Tuple[float, float]:
+    """
+    Calculate the adjusted amount after removing TP flat fee.
+
+    Args:
+        subscription_price: Original subscription price as string (e.g., "15.00")
+        tp_flat_fee: TP flat fee percentage as string (e.g., "3" for 3%)
+
+    Returns:
+        Tuple of (original_amount, adjusted_amount)
+    """
+    try:
+        # Convert to Decimal for precise calculation
+        original_amount = Decimal(subscription_price)
+        fee_percentage = Decimal(tp_flat_fee if tp_flat_fee else "3")  # Default to 3%
+
+        # Calculate fee amount
+        fee_amount = original_amount * (fee_percentage / Decimal("100"))
+
+        # Calculate adjusted amount
+        adjusted_amount = original_amount - fee_amount
+
+        print(f"💰 [FEE_CALCULATION] Original amount: ${original_amount}")
+        print(f"📊 [FEE_CALCULATION] TP flat fee: {fee_percentage}%")
+        print(f"💸 [FEE_CALCULATION] Fee amount: ${fee_amount}")
+        print(f"✅ [FEE_CALCULATION] Adjusted amount: ${adjusted_amount}")
+
+        return (float(original_amount), float(adjusted_amount))
+
+    except Exception as e:
+        print(f"❌ [FEE_CALCULATION] Error calculating adjusted amount: {e}")
+        # Return original amount if calculation fails
+        return (float(subscription_price), float(subscription_price))
+
+def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
+                                     wallet_address: str, payout_currency: str,
+                                     subscription_price: str) -> Optional[Dict[str, Any]]:
+    """
+    Get estimated conversion from ChangeNow API and save to database.
+
+    Flow:
+    1. Calculate adjusted amount (subscription_price - TP_FLAT_FEE)
+    2. Call ChangeNow API v2 estimated-amount endpoint
+    3. Extract toAmount from response
+    4. Insert record into split_payout_request table
+
+    Args:
+        user_id: User ID from webhook
+        closed_channel_id: Channel ID from webhook
+        wallet_address: Client wallet address from webhook
+        payout_currency: Client payout currency from webhook
+        subscription_price: Subscription price from webhook
+
+    Returns:
+        Dictionary with estimate data and unique_id, or None if failed
+    """
+    try:
+        print(f"🔄 [ESTIMATE_AND_SAVE] Starting conversion estimate workflow")
+
+        # Step 1: Calculate adjusted amount after TP flat fee
+        tp_flat_fee = config.get('tp_flat_fee')
+        original_amount, adjusted_amount = calculate_adjusted_amount(subscription_price, tp_flat_fee)
+
+        # Step 2: Call ChangeNow API v2 for estimated amount
+        print(f"🌐 [ESTIMATE_AND_SAVE] Calling ChangeNow API for estimate")
+
+        estimate_response = changenow_client.get_estimated_amount_v2(
+            from_currency="usdt",
+            to_currency=payout_currency.lower(),
+            from_network="eth",
+            to_network="eth",
+            from_amount=str(adjusted_amount),
+            flow="standard",
+            type_="direct"
+        )
+
+        if not estimate_response:
+            print(f"❌ [ESTIMATE_AND_SAVE] Failed to get estimate from ChangeNow API")
+            return None
+
+        # Step 3: Extract data from response
+        to_amount = estimate_response.get('toAmount')
+        from_amount = estimate_response.get('fromAmount')
+        deposit_fee = estimate_response.get('depositFee', 0)
+        withdrawal_fee = estimate_response.get('withdrawalFee', 0)
+
+        print(f"📊 [ESTIMATE_AND_SAVE] Estimate details:")
+        print(f"   From Amount: {from_amount} USDT")
+        print(f"   To Amount: {to_amount} {payout_currency.upper()}")
+        print(f"   Deposit Fee: {deposit_fee}")
+        print(f"   Withdrawal Fee: {withdrawal_fee}")
+
+        # Step 4: Insert into split_payout_request table
+        print(f"💾 [ESTIMATE_AND_SAVE] Inserting into database")
+
+        unique_id = database_manager.insert_split_payout_request(
+            user_id=user_id,
+            closed_channel_id=str(closed_channel_id),
+            from_currency="usdt",
+            to_currency=payout_currency.lower(),
+            from_network="eth",
+            to_network="eth",
+            from_amount=float(from_amount),
+            client_wallet_address=wallet_address,
+            refund_address="",  # Empty for now as specified
+            flow="standard",
+            type_="direct"
+        )
+
+        if not unique_id:
+            print(f"❌ [ESTIMATE_AND_SAVE] Failed to insert into database")
+            return None
+
+        print(f"✅ [ESTIMATE_AND_SAVE] Successfully completed workflow")
+        print(f"🆔 [ESTIMATE_AND_SAVE] Unique ID: {unique_id}")
+
+        return {
+            "unique_id": unique_id,
+            "original_subscription_price": original_amount,
+            "adjusted_amount": adjusted_amount,
+            "tp_flat_fee_percentage": tp_flat_fee,
+            "from_amount": from_amount,
+            "to_amount": to_amount,
+            "from_currency": "usdt",
+            "to_currency": payout_currency.lower(),
+            "deposit_fee": deposit_fee,
+            "withdrawal_fee": withdrawal_fee,
+            "wallet_address": wallet_address
+        }
+
+    except Exception as e:
+        print(f"❌ [ESTIMATE_AND_SAVE] Error in workflow: {e}")
+        return None
+
 def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Main processing function for payment splitting workflow.
@@ -211,22 +350,25 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         # Extract required data
         user_id = webhook_data.get('user_id')
+        closed_channel_id = webhook_data.get('closed_channel_id')
         wallet_address = webhook_data.get('wallet_address', '').strip()
         payout_currency = webhook_data.get('payout_currency', '').strip().lower()
-        sub_price = webhook_data.get('sub_price')
-        
+        sub_price = webhook_data.get('subscription_price') or webhook_data.get('sub_price')
+
         print(f"🔄 [PAYMENT_SPLITTING] Starting Client Payout")
         print(f"👤 [PAYMENT_SPLITTING] User ID: {user_id}")
-        print(f"💰 [PAYMENT_SPLITTING] Amount: {sub_price} ETH")
+        print(f"🏢 [PAYMENT_SPLITTING] Channel ID: {closed_channel_id}")
+        print(f"💰 [PAYMENT_SPLITTING] Subscription Price: ${sub_price}")
         print(f"🏦 [PAYMENT_SPLITTING] Target: {wallet_address} ({payout_currency.upper()})")
         
         # Validate required fields
-        if not all([user_id, wallet_address, payout_currency, sub_price]):
+        if not all([user_id, closed_channel_id, wallet_address, payout_currency, sub_price]):
             return {
                 "success": False,
                 "error": "Missing required fields",
                 "details": {
                     "user_id": bool(user_id),
+                    "closed_channel_id": bool(closed_channel_id),
                     "wallet_address": bool(wallet_address),
                     "payout_currency": bool(payout_currency),
                     "sub_price": bool(sub_price)
@@ -234,32 +376,53 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
             }
         
         try:
-            sub_price = float(sub_price)
+            sub_price_float = float(sub_price)
         except (ValueError, TypeError):
             return {
                 "success": False,
                 "error": "Invalid subscription price format"
             }
-        
-        # Step 1: Validate currency pair
+
+        # Step 1: Get estimated conversion and save to database
+        print(f"📊 [PAYMENT_SPLITTING] Step 1: Getting estimate and saving to database")
+        estimate_data = get_estimated_conversion_and_save(
+            user_id=user_id,
+            closed_channel_id=closed_channel_id,
+            wallet_address=wallet_address,
+            payout_currency=payout_currency,
+            subscription_price=str(sub_price)
+        )
+
+        if not estimate_data:
+            return {
+                "success": False,
+                "error": "Failed to get conversion estimate or save to database"
+            }
+
+        print(f"✅ [PAYMENT_SPLITTING] Estimate saved with unique_id: {estimate_data['unique_id']}")
+        print(f"💰 [PAYMENT_SPLITTING] Will convert {estimate_data['from_amount']} USDT → {estimate_data['to_amount']} {payout_currency.upper()}")
+
+        # Step 2: Validate currency pair
         if not validate_changenow_pair("eth", payout_currency):
             return {
                 "success": False,
-                "error": f"Currency pair ETH → {payout_currency.upper()} not supported by ChangeNow"
+                "error": f"Currency pair ETH → {payout_currency.upper()} not supported by ChangeNow",
+                "estimate_data": estimate_data
             }
-        
-        # Step 2: Check amount limits
-        amount_valid, limits_info = check_amount_limits("eth", payout_currency, sub_price)
+
+        # Step 3: Check amount limits
+        amount_valid, limits_info = check_amount_limits("eth", payout_currency, sub_price_float)
         if not amount_valid:
             return {
                 "success": False,
                 "error": "Amount outside acceptable limits",
-                "limits": limits_info
+                "limits": limits_info,
+                "estimate_data": estimate_data
             }
-        
-        # Step 3: Create fixed-rate transaction
+
+        # Step 4: Create fixed-rate transaction
         transaction = create_fixed_rate_transaction(
-            from_amount=sub_price,
+            from_amount=sub_price_float,
             from_currency="eth",
             to_currency=payout_currency,
             wallet_address=wallet_address,
@@ -269,7 +432,7 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
         if transaction:
             print(f"✅ [PAYMENT_SPLITTING] Completed successfully")
 
-            # Step 4: Send Telegram notification
+            # Step 5: Send Telegram notification
             telegram_bot_token = config.get('telegram_bot_token')
             if telegram_bot_token:
                 try:
@@ -289,12 +452,14 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
                 "payin_address": transaction.get('payinAddress'),
                 "payin_extra_id": transaction.get('payinExtraId'),
                 "expected_amount": transaction.get('fromAmount'),
-                "currency": "ETH"
+                "currency": "ETH",
+                "estimate_data": estimate_data  # Include estimate data in response
             }
         else:
             return {
                 "success": False,
-                "error": "Failed to create ChangeNow transaction"
+                "error": "Failed to create ChangeNow transaction",
+                "estimate_data": estimate_data  # Include estimate data even if transaction failed
             }
             
     except Exception as e:

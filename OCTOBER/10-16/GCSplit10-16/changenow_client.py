@@ -165,27 +165,27 @@ class ChangeNowClient:
             print(f"❌ [CHANGENOW_LIMITS] Error getting limits: {e}")
             return None
     
-    def get_estimated_exchange_amount(self, amount: float, from_currency: str, 
+    def get_estimated_exchange_amount(self, amount: float, from_currency: str,
                                     to_currency: str) -> Optional[Dict]:
         """
         Get estimated exchange amount for a transaction.
-        
+
         Args:
             amount: Amount to exchange
             from_currency: Source currency
             to_currency: Target currency
-            
+
         Returns:
             Estimated exchange data or None if failed
         """
         try:
             print(f"📈 [CHANGENOW_ESTIMATE] Getting estimate for {amount} {from_currency.upper()}")
-            
+
             response = self._make_request(
-                'GET', 
+                'GET',
                 f'/exchange-amount/{amount}/{from_currency.lower()}_{to_currency.lower()}'
             )
-            
+
             if response:
                 estimated_amount = response.get('toAmount', 0)
                 print(f"📊 [CHANGENOW_ESTIMATE] Estimated receive: {estimated_amount} {to_currency.upper()}")
@@ -193,9 +193,90 @@ class ChangeNowClient:
             else:
                 print(f"❌ [CHANGENOW_ESTIMATE] Failed to get estimate")
                 return None
-                
+
         except Exception as e:
             print(f"❌ [CHANGENOW_ESTIMATE] Error getting estimate: {e}")
+            return None
+
+    def get_estimated_amount_v2(self, from_currency: str, to_currency: str, from_network: str,
+                               to_network: str, from_amount: str, flow: str = "standard",
+                               type_: str = "direct") -> Optional[Dict]:
+        """
+        Get estimated exchange amount using ChangeNow API v2 (for detailed estimates with fees).
+
+        API Endpoint: GET /v2/exchange/estimated-amount
+
+        Args:
+            from_currency: Source currency (e.g., "usdt")
+            to_currency: Target currency (e.g., "eth")
+            from_network: Source network (e.g., "eth")
+            to_network: Target network (e.g., "eth")
+            from_amount: Amount to exchange as string (e.g., "1.99")
+            flow: Exchange flow type, default "standard"
+            type_: Exchange type, default "direct"
+
+        Returns:
+            Estimated exchange data with toAmount, fees, etc. or None if failed
+
+        Example Response:
+        {
+            "fromCurrency": "usdt",
+            "fromNetwork": "eth",
+            "toCurrency": "eth",
+            "toNetwork": "eth",
+            "flow": "standard",
+            "type": "direct",
+            "rateId": null,
+            "validUntil": null,
+            "transactionSpeedForecast": "10-60",
+            "warningMessage": null,
+            "depositFee": 0.6247193,
+            "withdrawalFee": 0.000037,
+            "userId": null,
+            "fromAmount": 1.99,
+            "toAmount": 0.0003019
+        }
+        """
+        try:
+            print(f"📈 [CHANGENOW_ESTIMATE_V2] Getting estimate for {from_amount} {from_currency.upper()} → {to_currency.upper()}")
+
+            params = {
+                "fromCurrency": from_currency.lower(),
+                "toCurrency": to_currency.lower(),
+                "fromNetwork": from_network.lower(),
+                "toNetwork": to_network.lower(),
+                "fromAmount": from_amount,
+                "toAmount": "",  # Empty for fromAmount-based estimates
+                "flow": flow,
+                "type": type_
+            }
+
+            print(f"📦 [CHANGENOW_ESTIMATE_V2] Request params: {params}")
+
+            response = self._make_request(
+                'GET',
+                '/exchange/estimated-amount',
+                params=params,
+                use_v2=True
+            )
+
+            if response:
+                to_amount = response.get('toAmount', 0)
+                deposit_fee = response.get('depositFee', 0)
+                withdrawal_fee = response.get('withdrawalFee', 0)
+
+                print(f"💰 [CHANGENOW_ESTIMATE_V2] Estimated receive: {to_amount} {to_currency.upper()}")
+                print(f"📊 [CHANGENOW_ESTIMATE_V2] Deposit fee: {deposit_fee}")
+                print(f"📊 [CHANGENOW_ESTIMATE_V2] Withdrawal fee: {withdrawal_fee}")
+                print(f"✅ [CHANGENOW_ESTIMATE_V2] Estimate successful")
+
+                return response
+            else:
+                print(f"❌ [CHANGENOW_ESTIMATE_V2] Failed to get estimate")
+                return None
+
+        except Exception as e:
+            print(f"❌ [CHANGENOW_ESTIMATE_V2] Error getting estimate: {e}")
             return None
     
     def create_fixed_rate_transaction(self, from_currency: str, to_currency: str,

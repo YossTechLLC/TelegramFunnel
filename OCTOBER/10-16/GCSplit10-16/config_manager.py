@@ -12,6 +12,7 @@ from typing import Optional
 # WEBHOOK_SIGNING_KEY: Path to webhook signing key in Secret Manager
 # TPS_WEBHOOK_URL: Path to TPS webhook URL in Secret Manager
 # TELEGRAM_BOT_USERNAME: Path to Telegram bot token in Secret Manager (shared with main app)
+# TP_FLAT_FEE: Path to TelePay flat fee percentage in Secret Manager
 
 class ConfigManager:
     """
@@ -24,6 +25,7 @@ class ConfigManager:
         self.changenow_api_key = None
         self.webhook_signing_key = None
         self.telegram_bot_token = None
+        self.tp_flat_fee = None
     
     def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
         """
@@ -88,6 +90,18 @@ class ConfigManager:
             "TELEGRAM_BOT_USERNAME",
             "Telegram bot token"
         )
+
+    def fetch_tp_flat_fee(self) -> Optional[str]:
+        """
+        Fetch the TelePay flat fee percentage from Secret Manager.
+
+        Returns:
+            TelePay flat fee as string (e.g., "3" for 3%) or None if failed
+        """
+        return self.fetch_secret(
+            "TP_FLAT_FEE",
+            "TelePay flat fee percentage"
+        )
     
     def get_tps_webhook_url(self) -> Optional[str]:
         """
@@ -114,6 +128,7 @@ class ConfigManager:
         self.changenow_api_key = self.fetch_changenow_api_key()
         self.webhook_signing_key = self.fetch_webhook_signing_key()
         self.telegram_bot_token = self.fetch_telegram_bot_token()
+        self.tp_flat_fee = self.fetch_tp_flat_fee()
 
         # Get environment variables
         tps_webhook_url = self.get_tps_webhook_url()
@@ -121,12 +136,15 @@ class ConfigManager:
         # Validate critical configurations
         if not self.changenow_api_key:
             print(f"⚠️ [CONFIG] Warning: ChangeNow API key not available")
+        if not self.tp_flat_fee:
+            print(f"⚠️ [CONFIG] Warning: TP flat fee not available, will default to 3%")
 
         config = {
             'changenow_api_key': self.changenow_api_key,
             'webhook_signing_key': self.webhook_signing_key,
             'tps_webhook_url': tps_webhook_url,
-            'telegram_bot_token': self.telegram_bot_token
+            'telegram_bot_token': self.telegram_bot_token,
+            'tp_flat_fee': self.tp_flat_fee
         }
 
         # Log configuration status
@@ -135,17 +153,19 @@ class ConfigManager:
         print(f"   Webhook Signing Key: {'✅' if config['webhook_signing_key'] else '❌'}")
         print(f"   TPS Webhook URL: {'✅' if config['tps_webhook_url'] else '❌'}")
         print(f"   Telegram Bot Token: {'✅' if config['telegram_bot_token'] else '❌'}")
+        print(f"   TP Flat Fee: {'✅' if config['tp_flat_fee'] else '❌'}")
 
         return config
     
     def get_config(self) -> dict:
         """
         Get current configuration values.
-        
+
         Returns:
             Dictionary containing current configuration
         """
         return {
             'changenow_api_key': self.changenow_api_key,
-            'webhook_signing_key': self.webhook_signing_key
+            'webhook_signing_key': self.webhook_signing_key,
+            'tp_flat_fee': self.tp_flat_fee
         }
