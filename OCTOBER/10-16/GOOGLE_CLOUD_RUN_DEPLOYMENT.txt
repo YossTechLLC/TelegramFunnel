@@ -1,0 +1,369 @@
+================================================================================
+GOOGLE CLOUD RUN DEPLOYMENT COMMANDS
+TelegramFunnel Payment System - October 2025
+================================================================================
+
+This document contains the complete Google Cloud Run deployment commands for:
+1. tps10-16.py - Payment Splitting Service (GCSplit10-16)
+2. tph10-16.py - Webhook Handler Service (GCWebhook10-16)
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. Prerequisites
+2. Secret Manager Setup
+3. TPS10-16 Deployment (Payment Splitting Service)
+4. TPH10-16 Deployment (Webhook Handler Service)
+5. Verification Commands
+6. Environment Variables Reference
+
+================================================================================
+1. PREREQUISITES
+================================================================================
+
+Before deploying, ensure you have:
+- Google Cloud SDK (gcloud) installed and configured
+- Project ID set: gcloud config set project YOUR_PROJECT_ID
+- Enabled APIs:
+  * Cloud Run API
+  * Secret Manager API
+  * Cloud SQL Admin API
+- Docker images built (or deploy from source)
+- All secrets created in Secret Manager
+
+================================================================================
+2. SECRET MANAGER SETUP
+================================================================================
+
+Create the following secrets in Google Cloud Secret Manager:
+
+# ChangeNow API Key (for tps10-16)
+gcloud secrets create CHANGENOW_API_KEY \
+    --data-file=./changenow_api_key.txt
+
+# Webhook Signing Key (shared between tps10-16 and tph10-16)
+gcloud secrets create WEBHOOK_SIGNING_KEY \
+    --data-file=./webhook_signing_key.txt
+
+# Telegram Bot Token (shared with main app)
+gcloud secrets create TELEGRAM_BOT_TOKEN \
+    --data-file=./telegram_bot_token.txt
+
+# Database Credentials (for tph10-16)
+gcloud secrets create DATABASE_NAME \
+    --data-file=./database_name.txt
+
+gcloud secrets create DATABASE_USER \
+    --data-file=./database_user.txt
+
+gcloud secrets create DATABASE_PASSWORD \
+    --data-file=./database_password.txt
+
+# Cloud SQL Connection Name (for tph10-16)
+gcloud secrets create CLOUD_SQL_CONNECTION_NAME \
+    --data-file=./cloud_sql_connection_name.txt
+
+# Get Secret Paths (for environment variables)
+# Format: projects/PROJECT_ID/secrets/SECRET_NAME/versions/latest
+# Replace PROJECT_ID with your actual project ID (e.g., 291176869049)
+
+================================================================================
+3. TPS10-16 DEPLOYMENT (Payment Splitting Service)
+================================================================================
+
+SERVICE NAME: tps10-16
+LOCATION: GCSplit10-16/
+PURPOSE: Handles cryptocurrency payment splitting via ChangeNow API
+
+--- REQUIRED ENVIRONMENT VARIABLES ---
+
+1. CHANGENOW_API_KEY (Secret Manager path)
+   Purpose: API key for ChangeNow cryptocurrency exchange
+   Example: projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest
+
+2. WEBHOOK_SIGNING_KEY (Secret Manager path)
+   Purpose: HMAC signing key for webhook authentication from tph10-16
+   Example: projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest
+
+3. TELEGRAM_BOT_USERNAME (Secret Manager path)
+   Purpose: Telegram bot token for sending transaction notifications
+   Example: projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest
+
+4. TPS_WEBHOOK_URL (Direct value - Optional)
+   Purpose: Self-reference URL for configuration logging
+   Example: https://tps10-16-HASH-uc.a.run.app
+   Note: Not critical for operation, only used for logging
+
+--- DEPLOYMENT COMMAND ---
+
+# Navigate to the service directory
+cd GCSplit10-16
+
+# Deploy to Cloud Run
+gcloud run deploy tps10-16 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 512Mi \
+    --cpu 1 \
+    --timeout 300 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
+    --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
+    --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest \
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+
+# Alternative: Deploy from Docker image
+gcloud run deploy tps10-16 \
+    --image gcr.io/PROJECT_ID/tps10-16:latest \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 512Mi \
+    --cpu 1 \
+    --timeout 300 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
+    --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
+    --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest \
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+
+--- POST-DEPLOYMENT ---
+
+After deployment, note the service URL (e.g., https://tps10-16-HASH-uc.a.run.app)
+You will need this URL for the tph10-16 TPS_WEBHOOK_URL environment variable.
+
+================================================================================
+4. TPH10-16 DEPLOYMENT (Webhook Handler Service)
+================================================================================
+
+SERVICE NAME: tph10-16
+LOCATION: GCWebhook10-16/
+PURPOSE: Processes payment success webhooks, sends Telegram invites, triggers payment splitting
+
+--- REQUIRED ENVIRONMENT VARIABLES ---
+
+1. TELEGRAM_BOT_SECRET_NAME (Secret Manager path)
+   Purpose: Telegram bot token for sending channel invites
+   Example: projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest
+
+2. SUCCESS_URL_SIGNING_KEY (Secret Manager path)
+   Purpose: HMAC signing key for verifying success URL tokens
+   Example: projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest
+
+3. DATABASE_NAME_SECRET (Secret Manager path)
+   Purpose: PostgreSQL database name
+   Example: projects/291176869049/secrets/DATABASE_NAME/versions/latest
+
+4. DATABASE_USER_SECRET (Secret Manager path)
+   Purpose: PostgreSQL database user
+   Example: projects/291176869049/secrets/DATABASE_USER/versions/latest
+
+5. DATABASE_PASSWORD_SECRET (Secret Manager path)
+   Purpose: PostgreSQL database password
+   Example: projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest
+
+6. CLOUD_SQL_CONNECTION_NAME (Secret Manager path)
+   Purpose: Cloud SQL instance connection name
+   Format: PROJECT_ID:REGION:INSTANCE_NAME
+   Example: projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+   Secret Value: my-project:us-central1:telegram-db
+
+7. TPS_WEBHOOK_URL (Direct value)
+   Purpose: URL of tps10-16 service for payment splitting
+   Example: https://tps10-16-HASH-uc.a.run.app
+   Note: Use the URL from tps10-16 deployment above
+
+--- DEPLOYMENT COMMAND ---
+
+# Navigate to the service directory
+cd GCWebhook10-16
+
+# Deploy to Cloud Run with Cloud SQL
+gcloud run deploy tph10-16 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 1Gi \
+    --cpu 1 \
+    --timeout 300 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --add-cloudsql-instances PROJECT_ID:REGION:INSTANCE_NAME \
+    --set-env-vars TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest \
+    --set-env-vars SUCCESS_URL_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
+    --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME/versions/latest \
+    --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER/versions/latest \
+    --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest \
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+
+# Alternative: Deploy from Docker image
+gcloud run deploy tph10-16 \
+    --image gcr.io/PROJECT_ID/tph10-16:latest \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 1Gi \
+    --cpu 1 \
+    --timeout 300 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --add-cloudsql-instances PROJECT_ID:REGION:INSTANCE_NAME \
+    --set-env-vars TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest \
+    --set-env-vars SUCCESS_URL_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
+    --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME/versions/latest \
+    --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER/versions/latest \
+    --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest \
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+
+--- POST-DEPLOYMENT ---
+
+After deployment, note the service URL (e.g., https://tph10-16-HASH-uc.a.run.app)
+This URL should be used in the payment gateway success redirect configuration.
+
+================================================================================
+5. VERIFICATION COMMANDS
+================================================================================
+
+--- Check Service Status ---
+
+# TPS10-16 Health Check
+curl https://TPS10-16_SERVICE_URL/health
+
+Expected Response:
+{
+  "status": "healthy",
+  "service": "TPS10-16 Payment Splitting",
+  "timestamp": 1234567890
+}
+
+# TPH10-16 Test (requires valid token parameter)
+curl "https://TPH10-16_SERVICE_URL/?token=VALID_TOKEN"
+
+--- View Service Logs ---
+
+# TPS10-16 Logs
+gcloud run services logs read tps10-16 \
+    --region us-central1 \
+    --limit 50
+
+# TPH10-16 Logs
+gcloud run services logs read tph10-16 \
+    --region us-central1 \
+    --limit 50
+
+--- Update Environment Variables ---
+
+# Update TPS10-16 environment variable
+gcloud run services update tps10-16 \
+    --region us-central1 \
+    --update-env-vars KEY=VALUE
+
+# Update TPH10-16 environment variable
+gcloud run services update tph10-16 \
+    --region us-central1 \
+    --update-env-vars KEY=VALUE
+
+--- Service Information ---
+
+# Get TPS10-16 service details
+gcloud run services describe tps10-16 \
+    --region us-central1 \
+    --format json
+
+# Get TPH10-16 service details
+gcloud run services describe tph10-16 \
+    --region us-central1 \
+    --format json
+
+================================================================================
+6. ENVIRONMENT VARIABLES REFERENCE
+================================================================================
+
+--- TPS10-16 ENVIRONMENT VARIABLES ---
+
+Variable Name              | Type           | Required | Purpose
+---------------------------|----------------|----------|---------------------------
+CHANGENOW_API_KEY          | Secret Path    | Yes      | ChangeNow API authentication
+WEBHOOK_SIGNING_KEY        | Secret Path    | Yes      | Webhook signature verification
+TELEGRAM_BOT_USERNAME      | Secret Path    | Optional | Transaction notifications
+TPS_WEBHOOK_URL            | Direct Value   | Optional | Self-reference for logging
+
+--- TPH10-16 ENVIRONMENT VARIABLES ---
+
+Variable Name              | Type           | Required | Purpose
+---------------------------|----------------|----------|---------------------------
+TELEGRAM_BOT_SECRET_NAME   | Secret Path    | Yes      | Telegram bot for invites
+SUCCESS_URL_SIGNING_KEY    | Secret Path    | Yes      | Token signature verification
+DATABASE_NAME_SECRET       | Secret Path    | Yes      | PostgreSQL database name
+DATABASE_USER_SECRET       | Secret Path    | Yes      | PostgreSQL username
+DATABASE_PASSWORD_SECRET   | Secret Path    | Yes      | PostgreSQL password
+CLOUD_SQL_CONNECTION_NAME  | Secret Path    | Yes      | Cloud SQL instance connection
+TPS_WEBHOOK_URL            | Direct Value   | Yes      | Payment splitting service URL
+
+================================================================================
+7. INTEGRATION FLOW
+================================================================================
+
+1. Payment Success → TelePay10-16 generates signed success URL token
+2. User Redirected → Browser calls tph10-16 with token parameter
+3. Token Verified → tph10-16 decodes and verifies token signature
+4. Database Record → tph10-16 records subscription in private_channel_users_database
+5. Telegram Invite → tph10-16 sends one-time invite link to user
+6. Payment Split → tph10-16 triggers tps10-16 webhook with payment data
+7. ChangeNow Transaction → tps10-16 creates crypto conversion transaction
+8. Notification → tps10-16 sends transaction details via Telegram
+
+================================================================================
+8. IMPORTANT NOTES
+================================================================================
+
+🔒 SECURITY:
+- Never commit secrets to version control
+- All secrets stored in Google Cloud Secret Manager
+- Webhook signatures verified using HMAC-SHA256
+- Tokens have 2-hour expiration window
+
+📊 MONITORING:
+- Check Cloud Run logs for debugging
+- Monitor ChangeNow API rate limits
+- Track database connection pool usage
+- Set up alerting for service failures
+
+🔧 MAINTENANCE:
+- Update secrets using: gcloud secrets versions add SECRET_NAME --data-file=NEW_FILE
+- Rotate webhook signing keys regularly
+- Monitor Cloud SQL connection limits
+- Review and optimize Cloud Run instance scaling
+
+💰 COSTS:
+- Cloud Run charges per request and compute time
+- Minimize cold starts with min-instances (set to 0 for cost optimization)
+- Monitor ChangeNow transaction fees
+- Cloud SQL billed for instance uptime
+
+================================================================================
+END OF DEPLOYMENT GUIDE
+================================================================================
+
+Generated: October 2025
+Version: 10-16
+Services: tps10-16, tph10-16
+Platform: Google Cloud Run
+
+For support or questions, refer to:
+- GCSplit10-16/DEPLOYMENT_INSTRUCTIONS.md
+- GCRegister10-5/README.md
+- Internal documentation
+
+================================================================================

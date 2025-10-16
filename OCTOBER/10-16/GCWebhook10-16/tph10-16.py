@@ -14,9 +14,13 @@ from telegram import Bot
 from google.cloud import secretmanager
 
 #LIST OF ENVIRONMENT VARIABLES
-# CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
-# WEBHOOK_SIGNING_KEY: Path to webhook signing key in Secret Manager
-# TPS_WEBHOOK_URL: URL for the TPS webhook endpoint
+# TELEGRAM_BOT_SECRET_NAME: Path to Telegram bot token in Secret Manager
+# SUCCESS_URL_SIGNING_KEY: Path to success URL signing key in Secret Manager
+# DATABASE_NAME_SECRET: Path to database name in Secret Manager
+# DATABASE_USER_SECRET: Path to database user in Secret Manager
+# DATABASE_PASSWORD_SECRET: Path to database password in Secret Manager
+# CLOUD_SQL_CONNECTION_NAME: Path to Cloud SQL connection name in Secret Manager
+# TPS_WEBHOOK_URL: URL for the TPS webhook endpoint (direct value)
 
 
 # Import Cloud SQL Connector for database functionality
@@ -276,12 +280,14 @@ def fetch_database_password() -> str:
         return None
 
 def fetch_cloud_sql_connection_name() -> str:
-    """Get Cloud SQL connection name from environment (direct value)."""
+    """Get Cloud SQL connection name from Secret Manager."""
     try:
-        connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
-        if not connection_name:
-            return None
-        return connection_name
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_path:
+            raise ValueError("Environment variable CLOUD_SQL_CONNECTION_NAME is not set.")
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"❌ Error fetching Cloud SQL connection name: {e}")
         return None
