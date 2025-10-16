@@ -52,10 +52,21 @@ class ChangeNowClient:
         """
         base_url = self.base_url_v2 if use_v2 else self.base_url_v1
         url = f"{base_url}{endpoint}"
-        
+
         try:
-            print(f"🌐 [CHANGENOW_API] {method} {endpoint}")
-            
+            print(f"🌐 [CHANGENOW_API] >>> ENTERING _make_request <<<")
+            print(f"🌐 [CHANGENOW_API] {method} {url}")
+            print(f"🌐 [CHANGENOW_API] API Key (first 8 chars): {self.api_key[:8] if self.api_key else 'NONE'}")
+
+            if data:
+                import json as json_lib
+                print(f"📦 [CHANGENOW_API] Request body: {json_lib.dumps(data, indent=2)}")
+
+            if params:
+                print(f"📦 [CHANGENOW_API] Request params: {params}")
+
+            print(f"🔄 [CHANGENOW_API] Sending HTTP request...")
+
             response = self.session.request(
                 method=method,
                 url=url,
@@ -63,8 +74,16 @@ class ChangeNowClient:
                 params=params,
                 timeout=30
             )
-            
+
+            print(f"📊 [CHANGENOW_API] Response received!")
             print(f"📊 [CHANGENOW_API] Response status: {response.status_code}")
+            print(f"📊 [CHANGENOW_API] Response headers: {dict(response.headers)}")
+
+            try:
+                response_text = response.text
+                print(f"📊 [CHANGENOW_API] Response body: {response_text[:500]}")  # First 500 chars
+            except Exception as e:
+                print(f"⚠️ [CHANGENOW_API] Could not log response body: {e}")
             
             # Handle rate limiting
             if response.status_code == 429:
@@ -92,14 +111,23 @@ class ChangeNowClient:
                     print(f"❌ [CHANGENOW_API] HTTP error {response.status_code}: {response.text}")
                 return None
                 
-        except requests.exceptions.Timeout:
-            print(f"❌ [CHANGENOW_API] Request timeout")
+        except requests.exceptions.Timeout as e:
+            print(f"❌ [CHANGENOW_API] Request timeout after 30s")
+            print(f"❌ [CHANGENOW_API] Timeout error details: {str(e)}")
+            import traceback
+            print(f"❌ [CHANGENOW_API] Stack trace: {traceback.format_exc()}")
             return None
-        except requests.exceptions.ConnectionError:
-            print(f"❌ [CHANGENOW_API] Connection error")
+        except requests.exceptions.ConnectionError as e:
+            print(f"❌ [CHANGENOW_API] Connection error - cannot reach ChangeNow server")
+            print(f"❌ [CHANGENOW_API] Connection error details: {str(e)}")
+            import traceback
+            print(f"❌ [CHANGENOW_API] Stack trace: {traceback.format_exc()}")
             return None
         except Exception as e:
             print(f"❌ [CHANGENOW_API] Unexpected error: {e}")
+            print(f"❌ [CHANGENOW_API] Error type: {type(e).__name__}")
+            import traceback
+            print(f"❌ [CHANGENOW_API] Stack trace: {traceback.format_exc()}")
             return None
     
     def get_available_pairs(self) -> Optional[List[str]]:
@@ -216,8 +244,13 @@ class ChangeNowClient:
             Transaction data or None if failed
         """
         try:
+            print(f"\n{'='*80}")
+            print(f"🚀 [CHANGENOW_TRANSACTION] >>> STARTING ChangeNow API Transaction <<<")
             print(f"🚀 [CHANGENOW_TRANSACTION] Creating transaction via API v2")
             print(f"💱 [CHANGENOW_TRANSACTION] {from_amount} {from_currency.upper()} → {to_currency.upper()}")
+            print(f"🏦 [CHANGENOW_TRANSACTION] Destination address: {address}")
+            print(f"👤 [CHANGENOW_TRANSACTION] User ID: {user_id}")
+            print(f"{'='*80}\n")
 
             # Prepare transaction data for v2 API
             transaction_data = {
@@ -240,30 +273,48 @@ class ChangeNowClient:
                 "rateId": rate_id if rate_id else ""
             }
 
-            print(f"📦 [CHANGENOW_TRANSACTION] Payload: {transaction_data}")
+            import json as json_lib
+            print(f"📦 [CHANGENOW_TRANSACTION] Complete payload:")
+            print(json_lib.dumps(transaction_data, indent=2))
+            print(f"\n🔄 [CHANGENOW_TRANSACTION] Calling _make_request with POST /exchange...")
 
             # Create the transaction using v2 API
             response = self._make_request('POST', '/exchange', data=transaction_data, use_v2=True)
 
+            print(f"🔄 [CHANGENOW_TRANSACTION] _make_request returned, analyzing response...")
+
             if response:
+                print(f"\n✅ [CHANGENOW_TRANSACTION] SUCCESS! Response received from ChangeNow")
+
                 transaction_id = response.get('id', 'Unknown')
                 payin_address = response.get('payinAddress', 'Unknown')
                 to_amount = response.get('toAmount', 'Unknown')
                 from_curr = response.get('fromCurrency', from_currency).upper()
                 to_curr = response.get('toCurrency', to_currency).upper()
 
-                print(f"✅ [CHANGENOW_TRANSACTION] Transaction created successfully")
-                print(f"🆔 [CHANGENOW_TRANSACTION] ID: {transaction_id}")
+                print(f"✅ [CHANGENOW_TRANSACTION] Transaction created successfully!")
+                print(f"🆔 [CHANGENOW_TRANSACTION] Transaction ID: {transaction_id}")
                 print(f"🏦 [CHANGENOW_TRANSACTION] Deposit address: {payin_address}")
                 print(f"💰 [CHANGENOW_TRANSACTION] Will receive: {to_amount} {to_curr}")
+                print(f"✅ [CHANGENOW_TRANSACTION] Full response: {response}")
+                print(f"\n{'='*80}\n")
 
                 return response
             else:
-                print(f"❌ [CHANGENOW_TRANSACTION] Failed to create transaction")
+                print(f"\n❌ [CHANGENOW_TRANSACTION] FAILURE! _make_request returned None")
+                print(f"❌ [CHANGENOW_TRANSACTION] This means the HTTP request failed")
+                print(f"❌ [CHANGENOW_TRANSACTION] Check logs above for error details")
+                print(f"\n{'='*80}\n")
                 return None
 
         except Exception as e:
-            print(f"❌ [CHANGENOW_TRANSACTION] Error creating transaction: {e}")
+            print(f"\n❌ [CHANGENOW_TRANSACTION] EXCEPTION! Error creating transaction")
+            print(f"❌ [CHANGENOW_TRANSACTION] Exception type: {type(e).__name__}")
+            print(f"❌ [CHANGENOW_TRANSACTION] Exception message: {str(e)}")
+            import traceback
+            print(f"❌ [CHANGENOW_TRANSACTION] Stack trace:")
+            print(traceback.format_exc())
+            print(f"\n{'='*80}\n")
             return None
     
     def get_transaction_status(self, transaction_id: str) -> Optional[Dict]:

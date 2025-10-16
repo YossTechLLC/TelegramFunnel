@@ -130,32 +130,42 @@ def check_amount_limits(from_currency: str, to_currency: str, amount: float) -> 
         print(f"❌ [CHANGENOW_LIMITS] Error checking limits: {e}")
         return False, None
 
-def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_currency: str, 
+def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_currency: str,
                                 wallet_address: str, user_id: int) -> Optional[Dict]:
     """
     Create a fixed-rate transaction with ChangeNow.
-    
+
     Args:
         from_amount: Amount to exchange
         from_currency: Source currency
         to_currency: Target currency
         wallet_address: Recipient wallet address
         user_id: User ID for tracking
-        
+
     Returns:
         Transaction data or None if failed
     """
     try:
+        print(f"\n{'='*80}")
+        print(f"🚀 [CHANGENOW_SWAP] >>> ENTERING create_fixed_rate_transaction <<<")
         print(f"🚀 [CHANGENOW_SWAP] Starting fixed-rate transaction")
         print(f"💰 [CHANGENOW_SWAP] {from_amount} {from_currency.upper()} → {to_currency.upper()}")
         print(f"🏦 [CHANGENOW_SWAP] Target wallet: {wallet_address}")
-        
+        print(f"👤 [CHANGENOW_SWAP] User ID: {user_id}")
+        print(f"{'='*80}\n")
+
         # Get estimated exchange amount first
+        print(f"📈 [CHANGENOW_SWAP] Step 1: Getting exchange estimate...")
         estimated = changenow_client.get_estimated_exchange_amount(from_amount, from_currency, to_currency)
         if estimated:
-            print(f"📈 [CHANGENOW_SWAP] Estimated receive: {estimated.get('toAmount', 'Unknown')} {to_currency.upper()}")
-        
+            print(f"📈 [CHANGENOW_SWAP] ✅ Estimate received: {estimated.get('toAmount', 'Unknown')} {to_currency.upper()}")
+        else:
+            print(f"⚠️ [CHANGENOW_SWAP] ⚠️  Could not get estimate (non-fatal, continuing)")
+
         # Create the fixed-rate transaction
+        print(f"\n🔄 [CHANGENOW_SWAP] Step 2: Creating ChangeNow transaction...")
+        print(f"🔄 [CHANGENOW_SWAP] Calling changenow_client.create_fixed_rate_transaction()...")
+
         transaction = changenow_client.create_fixed_rate_transaction(
             from_currency=from_currency,
             to_currency=to_currency,
@@ -163,21 +173,25 @@ def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_cur
             address=wallet_address,
             user_id=str(user_id)
         )
+
+        print(f"🔄 [CHANGENOW_SWAP] create_fixed_rate_transaction() returned")
         
         if transaction:
+            print(f"\n✅ [CHANGENOW_SWAP] SUCCESS! Transaction object received")
+
             transaction_id = transaction.get('id', 'Unknown')
             payin_address = transaction.get('payinAddress', 'Unknown')
             payin_extra_id = transaction.get('payinExtraId', '')
             expected_amount = transaction.get('fromAmount', from_amount)
-            
-            print(f"✅ [CHANGENOW_SWAP] Transaction created successfully")
+
+            print(f"✅ [CHANGENOW_SWAP] Transaction created successfully!")
             print(f"🆔 [CHANGENOW_SWAP] Transaction ID: {transaction_id}")
             print(f"🏦 [CHANGENOW_SWAP] Deposit Address: {payin_address}")
             if payin_extra_id:
                 print(f"🔖 [CHANGENOW_SWAP] Extra ID: {payin_extra_id}")
             print(f"💰 [CHANGENOW_SWAP] Required Deposit: {expected_amount} {from_currency.upper()}")
             print(f"🎯 [CHANGENOW_SWAP] Destination: {wallet_address} ({to_currency.upper()})")
-            
+
             # Log deposit information for customer funding
             print(f"\n" + "="*60)
             print(f"📋 [CUSTOMER_FUNDING_INFO] Payment Split Instructions")
@@ -185,17 +199,28 @@ def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_cur
             if payin_extra_id:
                 print(f"🔖 Include Extra ID: {payin_extra_id}")
             print(f"🎯 Funds will be converted and sent to: {wallet_address}")
-            print(f"💰 You will receive approximately {estimated.get('toAmount', 'TBD')} {to_currency.upper()}")
+            if estimated:
+                print(f"💰 You will receive approximately {estimated.get('toAmount', 'TBD')} {to_currency.upper()}")
             print(f"⏰ Transaction ID: {transaction_id}")
             print(f"="*60 + "\n")
-            
+
             return transaction
         else:
-            print(f"❌ [CHANGENOW_SWAP] Failed to create transaction")
+            print(f"\n❌ [CHANGENOW_SWAP] FAILURE! Transaction object is None")
+            print(f"❌ [CHANGENOW_SWAP] changenow_client.create_fixed_rate_transaction() returned None")
+            print(f"❌ [CHANGENOW_SWAP] This means the ChangeNow API call failed")
+            print(f"❌ [CHANGENOW_SWAP] Check changenow_client logs above for details")
+            print(f"{'='*80}\n")
             return None
-            
+
     except Exception as e:
-        print(f"❌ [CHANGENOW_SWAP] Error creating transaction: {e}")
+        print(f"\n❌ [CHANGENOW_SWAP] EXCEPTION in create_fixed_rate_transaction")
+        print(f"❌ [CHANGENOW_SWAP] Exception type: {type(e).__name__}")
+        print(f"❌ [CHANGENOW_SWAP] Exception message: {str(e)}")
+        import traceback
+        print(f"❌ [CHANGENOW_SWAP] Stack trace:")
+        print(traceback.format_exc())
+        print(f"{'='*80}\n")
         return None
 
 def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -209,19 +234,31 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
         Processing result dictionary
     """
     try:
+        print(f"\n{'='*80}")
+        print(f"🔄 [PAYMENT_SPLITTING] >>> ENTERING process_payment_split <<<")
+        print(f"🔄 [PAYMENT_SPLITTING] Starting Client Payout")
+        print(f"{'='*80}\n")
+
         # Extract required data
+        print(f"📦 [PAYMENT_SPLITTING] Extracting data from webhook payload...")
         user_id = webhook_data.get('user_id')
         wallet_address = webhook_data.get('wallet_address', '').strip()
         payout_currency = webhook_data.get('payout_currency', '').strip().lower()
         sub_price = webhook_data.get('sub_price')
-        
-        print(f"🔄 [PAYMENT_SPLITTING] Starting Client Payout")
+
         print(f"👤 [PAYMENT_SPLITTING] User ID: {user_id}")
         print(f"💰 [PAYMENT_SPLITTING] Amount: {sub_price} ETH")
-        print(f"🏦 [PAYMENT_SPLITTING] Target: {wallet_address} ({payout_currency.upper()})")
+        print(f"🏦 [PAYMENT_SPLITTING] Target wallet: {wallet_address}")
+        print(f"💱 [PAYMENT_SPLITTING] Payout currency: {payout_currency.upper()}")
         
         # Validate required fields
+        print(f"\n🔍 [PAYMENT_SPLITTING] Step 1: Validating required fields...")
         if not all([user_id, wallet_address, payout_currency, sub_price]):
+            print(f"❌ [PAYMENT_SPLITTING] VALIDATION FAILED! Missing required fields")
+            print(f"   user_id: {bool(user_id)}")
+            print(f"   wallet_address: {bool(wallet_address)}")
+            print(f"   payout_currency: {bool(payout_currency)}")
+            print(f"   sub_price: {bool(sub_price)}")
             return {
                 "success": False,
                 "error": "Missing required fields",
@@ -232,32 +269,48 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
                     "sub_price": bool(sub_price)
                 }
             }
-        
+
+        print(f"✅ [PAYMENT_SPLITTING] All required fields present")
+
+        print(f"\n🔍 [PAYMENT_SPLITTING] Step 2: Converting sub_price to float...")
         try:
             sub_price = float(sub_price)
-        except (ValueError, TypeError):
+            print(f"✅ [PAYMENT_SPLITTING] Price converted: {sub_price} ETH")
+        except (ValueError, TypeError) as e:
+            print(f"❌ [PAYMENT_SPLITTING] CONVERSION FAILED! Invalid price format: {e}")
             return {
                 "success": False,
                 "error": "Invalid subscription price format"
             }
-        
+
         # Step 1: Validate currency pair
+        print(f"\n🔍 [PAYMENT_SPLITTING] Step 3: Validating currency pair...")
         if not validate_changenow_pair("eth", payout_currency):
+            print(f"❌ [PAYMENT_SPLITTING] VALIDATION FAILED! Currency pair not supported")
             return {
                 "success": False,
                 "error": f"Currency pair ETH → {payout_currency.upper()} not supported by ChangeNow"
             }
-        
+
+        print(f"✅ [PAYMENT_SPLITTING] Currency pair validated")
+
         # Step 2: Check amount limits
+        print(f"\n🔍 [PAYMENT_SPLITTING] Step 4: Checking amount limits...")
         amount_valid, limits_info = check_amount_limits("eth", payout_currency, sub_price)
         if not amount_valid:
+            print(f"❌ [PAYMENT_SPLITTING] VALIDATION FAILED! Amount outside limits")
             return {
                 "success": False,
                 "error": "Amount outside acceptable limits",
                 "limits": limits_info
             }
-        
+
+        print(f"✅ [PAYMENT_SPLITTING] Amount within valid limits")
+
         # Step 3: Create fixed-rate transaction
+        print(f"\n🚀 [PAYMENT_SPLITTING] Step 5: Creating ChangeNow transaction...")
+        print(f"🚀 [PAYMENT_SPLITTING] Calling create_fixed_rate_transaction()...")
+
         transaction = create_fixed_rate_transaction(
             from_amount=sub_price,
             from_currency="eth",
@@ -265,6 +318,8 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
             wallet_address=wallet_address,
             user_id=user_id
         )
+
+        print(f"🚀 [PAYMENT_SPLITTING] create_fixed_rate_transaction() returned")
 
         if transaction:
             print(f"✅ [PAYMENT_SPLITTING] Completed successfully")
