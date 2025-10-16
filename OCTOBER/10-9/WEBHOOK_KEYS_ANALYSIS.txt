@@ -1,0 +1,706 @@
+================================================================================
+WEBHOOK KEYS DETAILED ANALYSIS
+OCTOBER/10-9 - Deep Dive into Signing Keys Usage
+================================================================================
+
+This document provides an exhaustive analysis of the three webhook-related keys:
+1. NOWPAYMENT_WEBHOOK_KEY
+2. SUCCESS_URL_SIGNING_KEY
+3. WEBHOOK_SIGNING_KEY
+
+Purpose: Identify redundancies and clarify exact usage patterns.
+
+================================================================================
+🔍 EXECUTIVE SUMMARY
+================================================================================
+
+CRITICAL FINDING: There are TWO COMPLETELY DIFFERENT purposes for these keys:
+
+1. NOWPAYMENT_WEBHOOK_KEY
+   - Purpose: Verify webhooks FROM NowPayments API
+   - Usage: CURRENTLY FETCHED BUT NEVER USED (DEAD CODE)
+   - Location: TelePay7-14 only
+   - Status: ⚠️ UNUSED - Can be removed
+
+2. SUCCESS_URL_SIGNING_KEY / WEBHOOK_SIGNING_KEY
+   - Purpose: Sign/verify webhooks BETWEEN our own services
+   - Usage: ACTIVELY USED for payment flow security
+   - Location: TelePay7-14, GCWebhook7-14, GCSplit7-14
+   - Status: ✅ ESSENTIAL - These are the SAME key with different names
+
+REDUNDANCY CONFIRMED:
+  - SUCCESS_URL_SIGNING_KEY (TelePay7-14, GCWebhook7-14)
+  - WEBHOOK_SIGNING_KEY (GCSplit7-14)
+  → These MUST point to the same secret value
+
+DEAD CODE CONFIRMED:
+  - NOWPAYMENT_WEBHOOK_KEY is fetched but never used anywhere
+
+================================================================================
+📋 KEY #1: NOWPAYMENT_WEBHOOK_KEY
+================================================================================
+
+Environment Variable: NOWPAYMENT_WEBHOOK_KEY
+Type: Google Cloud Secret Manager path
+Purpose (INTENDED): Verify webhooks from NowPayments payment processor
+Purpose (ACTUAL): NONE - Never used in code
+
+--------------------------------------------------------------------------------
+LOCATION #1: TelePay7-14/config_manager.py
+--------------------------------------------------------------------------------
+
+Line 8: Comment declaration
+```python
+# NOWPAYMENT_WEBHOOK_KEY: Path to NowPayments webhook key in Secret Manager
+```
+
+Lines 33-44: Fetch function
+```python
+def fetch_now_webhook_key(self) -> Optional[str]:
+    """Fetch the NowPayments webhook key from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("NOWPAYMENT_WEBHOOK_KEY")
+        if not secret_path:
+            raise ValueError("Environment variable NOWPAYMENT_WEBHOOK_KEY is not set.")
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"❌ Error fetching the NOWPAYMENT_WEBHOOK_KEY: {e}")
+        return None
+```
+
+Line 49: Called during initialization
+```python
+self.webhook_key = self.fetch_now_webhook_key()
+```
+
+Lines 53, 74: Returned in config dictionaries
+```python
+return {
+    'bot_token': self.bot_token,
+    'webhook_key': self.webhook_key,  # ← Stored but never used
+    'bot_username': self.bot_username
+}
+```
+
+--------------------------------------------------------------------------------
+USAGE ANALYSIS: NOWPAYMENT_WEBHOOK_KEY
+--------------------------------------------------------------------------------
+
+Where it's FETCHED:
+  ✓ TelePay7-14/config_manager.py (fetch_now_webhook_key)
+
+Where it's STORED:
+  ✓ TelePay7-14/config_manager.py (self.webhook_key)
+  ✓ Returned in config dictionary as 'webhook_key'
+
+Where it's USED:
+  ❌ NOWHERE - No code uses config['webhook_key']
+  ❌ NOWHERE - No code verifies NowPayments webhooks
+
+Search results for any usage:
+  - Searched for: config['webhook_key'] → No results
+  - Searched for: .webhook_key → Only found in config_manager.py
+  - Searched for: NowPayments verification → No implementation found
+
+--------------------------------------------------------------------------------
+CONCLUSION: NOWPAYMENT_WEBHOOK_KEY
+--------------------------------------------------------------------------------
+
+🚨 STATUS: DEAD CODE - This key is fetched but NEVER used anywhere
+
+REASON: The system uses NowPayments API to CREATE invoices, but does NOT
+        implement webhook callbacks FROM NowPayments. Instead, payment
+        confirmation happens via signed redirect URLs.
+
+RECOMMENDATION:
+  ❌ Remove NOWPAYMENT_WEBHOOK_KEY from environment variables
+  ❌ Remove fetch_now_webhook_key() from config_manager.py
+  ❌ Remove self.webhook_key from ConfigManager class
+  ❌ Remove 'webhook_key' from config dictionaries
+
+IMPACT: Zero - Removing this will have NO effect on system functionality
+
+================================================================================
+📋 KEY #2: SUCCESS_URL_SIGNING_KEY
+================================================================================
+
+Environment Variable: SUCCESS_URL_SIGNING_KEY
+Type: Google Cloud Secret Manager path
+Purpose: Sign and verify success URLs for payment flow security
+Algorithm: HMAC-SHA256 (16-byte truncated signature)
+
+This is the MAIN signing key used throughout the payment system.
+
+--------------------------------------------------------------------------------
+LOCATION #1: TelePay7-14/secure_webhook.py
+--------------------------------------------------------------------------------
+
+Lines 25-36: Fetch function
+```python
+def fetch_success_url_signing_key(self) -> str:
+    """Fetch the signing key from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("SUCCESS_URL_SIGNING_KEY")
+        if not secret_path:
+            raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set.")
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"❌ Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
+        return None
+```
+
+Line 19: Stored in SecureWebhookManager
+```python
+self.signing_key = signing_key or self.fetch_success_url_signing_key()
+```
+
+Lines 75-76: Validation before use
+```python
+if not self.signing_key:
+    raise ValueError("Signing key is not available")
+```
+
+Line 138: ACTUAL USAGE - Creating HMAC signature
+```python
+full_signature = hmac.new(self.signing_key.encode(), packed, hashlib.sha256).digest()
+signature = full_signature[:16]  # Truncate to 16 bytes
+```
+
+Usage Context (secure_webhook.py:58-154):
+  Function: build_signed_success_url()
+  Purpose: Create cryptographically signed payment success URLs
+  Flow:
+    1. Pack user data: user_id, channel_id, wallet, currency, price, time
+    2. Create HMAC-SHA256 signature using self.signing_key
+    3. Truncate signature to 16 bytes for compactness
+    4. Combine data + signature into URL token
+    5. Return signed URL to webhook endpoint
+
+--------------------------------------------------------------------------------
+LOCATION #2: GCWebhook7-14/tph7-14.py
+--------------------------------------------------------------------------------
+
+Lines 226-237: Fetch function (duplicate implementation)
+```python
+def fetch_success_url_signing_key() -> str:
+    """Get success URL signing key from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("SUCCESS_URL_SIGNING_KEY")
+        if not secret_path:
+            raise ValueError("Environment variable SUCCESS_URL_SIGNING_KEY is not set")
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"❌ Error fetching signing key: {e}")
+        return None
+```
+
+Line 509: Fetched at webhook entry point
+```python
+signing_key = fetch_success_url_signing_key()
+```
+
+Lines 511-512: Validation
+```python
+if not bot_token or not signing_key:
+    abort(500, "Missing credentials - unable to fetch from Secret Manager")
+```
+
+Line 523: ACTUAL USAGE #1 - Verifying token
+```python
+user_id, closed_channel_id, wallet_address, payout_currency, subscription_time_days, subscription_price = decode_and_verify_token(token, signing_key)
+```
+
+Lines 82-201: ACTUAL USAGE #2 - Token verification function
+```python
+def decode_and_verify_token(token: str, signing_key: str) -> Tuple[...]:
+    # ... decode token data ...
+
+    # Line 162: Verify signature
+    expected_full_sig = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()
+    expected_sig = expected_full_sig[:16]  # Compare only first 16 bytes
+    if not hmac.compare_digest(sig, expected_sig):
+        raise ValueError("Signature mismatch")
+```
+
+Line 436: Fetched for webhook signing (to TPS)
+```python
+signing_key = fetch_success_url_signing_key()
+```
+
+Lines 457-463: ACTUAL USAGE #3 - Sign webhook to TPS
+```python
+if signing_key:
+    signature = hmac.new(
+        signing_key.encode(),
+        payload_json.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    headers['X-Webhook-Signature'] = signature
+```
+
+Usage Context (tph7-14.py):
+  1. Verify incoming payment success token (lines 82-201, 523)
+  2. Sign outgoing webhook to TPS10-9 (lines 436, 457-463)
+
+--------------------------------------------------------------------------------
+USAGE ANALYSIS: SUCCESS_URL_SIGNING_KEY
+--------------------------------------------------------------------------------
+
+Purpose #1: CREATE signed URLs (TelePay7-14)
+  File: secure_webhook.py
+  Function: build_signed_success_url()
+  When: After NowPayments invoice creation
+  How: HMAC-SHA256 signature of packed user/payment data
+
+Purpose #2: VERIFY signed URLs (GCWebhook7-14)
+  File: tph7-14.py
+  Function: decode_and_verify_token()
+  When: Payment success redirect arrives
+  How: Recompute HMAC-SHA256 and compare with token signature
+
+Purpose #3: SIGN webhooks to TPS (GCWebhook7-14)
+  File: tph7-14.py
+  Function: trigger_payment_split_webhook()
+  When: After user gets channel invite
+  How: HMAC-SHA256 signature of JSON payload
+
+--------------------------------------------------------------------------------
+DATA FLOW: SUCCESS_URL_SIGNING_KEY
+--------------------------------------------------------------------------------
+
+STEP 1: User clicks subscription button
+  ↓
+STEP 2: TelePay7-14 creates payment
+  - File: start_np_gateway.py
+  - Calls: webhook_manager.build_signed_success_url()
+  - Uses: SUCCESS_URL_SIGNING_KEY to sign data
+  - Creates: Token with user_id, channel_id, wallet, price, time + HMAC
+  - Returns: https://webhook-url?token=ABC123...
+  ↓
+STEP 3: User pays via NowPayments
+  ↓
+STEP 4: NowPayments redirects to success URL
+  ↓
+STEP 5: GCWebhook7-14 receives request
+  - File: tph7-14.py
+  - Extracts: token from URL
+  - Fetches: SUCCESS_URL_SIGNING_KEY
+  - Calls: decode_and_verify_token(token, signing_key)
+  - Verifies: HMAC signature matches
+  - Extracts: user_id, channel_id, wallet, price, time
+  ↓
+STEP 6: GCWebhook7-14 sends invite to user
+  ↓
+STEP 7: GCWebhook7-14 triggers payment split
+  - Function: trigger_payment_split_webhook()
+  - Fetches: SUCCESS_URL_SIGNING_KEY (again)
+  - Creates: JSON payload with payment details
+  - Signs: HMAC-SHA256 of JSON
+  - Sends: POST to TPS_WEBHOOK_URL with X-Webhook-Signature header
+
+--------------------------------------------------------------------------------
+CONCLUSION: SUCCESS_URL_SIGNING_KEY
+--------------------------------------------------------------------------------
+
+✅ STATUS: ACTIVELY USED - Critical security component
+
+SECURITY MODEL: Shared secret authentication
+  - TelePay7-14 signs URLs → GCWebhook7-14 verifies URLs
+  - GCWebhook7-14 signs webhooks → GCSplit7-14 verifies webhooks
+
+CRYPTOGRAPHY:
+  - Algorithm: HMAC-SHA256
+  - For URLs: 16-byte truncated signature (space optimization)
+  - For webhooks: Full 64-character hex signature
+
+CRITICAL SECURITY FUNCTIONS:
+  1. Prevents URL tampering (user can't modify price/time/wallet)
+  2. Authenticates webhook requests between services
+  3. Ensures payment data integrity throughout flow
+
+================================================================================
+📋 KEY #3: WEBHOOK_SIGNING_KEY
+================================================================================
+
+Environment Variable: WEBHOOK_SIGNING_KEY
+Type: Google Cloud Secret Manager path
+Purpose: Verify webhook signatures from GCWebhook7-14
+Algorithm: HMAC-SHA256 (full hex signature)
+
+⚠️ THIS IS THE SAME KEY AS SUCCESS_URL_SIGNING_KEY - Just different name!
+
+--------------------------------------------------------------------------------
+LOCATION #1: GCSplit7-14/config_manager.py
+--------------------------------------------------------------------------------
+
+Line 12: Comment declaration
+```python
+# WEBHOOK_SIGNING_KEY: Path to webhook signing key in Secret Manager
+```
+
+Lines 68-78: Fetch function
+```python
+def fetch_webhook_signing_key(self) -> Optional[str]:
+    """
+    Fetch the webhook signing key from Secret Manager.
+
+    Returns:
+        Webhook signing key or None if failed
+    """
+    return self.fetch_secret(
+        "WEBHOOK_SIGNING_KEY",
+        "webhook signing key"
+    )
+```
+
+Line 118: Called during initialization
+```python
+self.webhook_signing_key = self.fetch_webhook_signing_key()
+```
+
+Line 130: Returned in config dictionary
+```python
+config = {
+    'changenow_api_key': self.changenow_api_key,
+    'webhook_signing_key': self.webhook_signing_key,
+    'tps_webhook_url': tps_webhook_url,
+    'telegram_bot_token': self.telegram_bot_token
+}
+```
+
+--------------------------------------------------------------------------------
+LOCATION #2: GCSplit7-14/tps10-9.py
+--------------------------------------------------------------------------------
+
+Line 321: Retrieved from config
+```python
+signing_key = config.get('webhook_signing_key')
+```
+
+Line 322: ACTUAL USAGE - Verify webhook signature
+```python
+if signing_key and not verify_webhook_signature(payload, signature, signing_key):
+    print(f"❌ [TPS_WEBHOOK] Signature verification failed")
+    return jsonify({"status": "error", "message": "Invalid signature"}), 403
+```
+
+Lines 27-52: Verification function
+```python
+def verify_webhook_signature(payload: bytes, signature: str, signing_key: str) -> bool:
+    """
+    Verify webhook signature using HMAC-SHA256.
+
+    Args:
+        payload: Raw request body as bytes
+        signature: Signature from X-Webhook-Signature header
+        signing_key: Secret signing key
+
+    Returns:
+        True if signature is valid, False otherwise
+    """
+    if not signing_key or not signature:
+        return False
+
+    try:
+        expected_signature = hmac.new(
+            signing_key.encode(),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+
+        return hmac.compare_digest(signature, expected_signature)
+    except Exception as e:
+        print(f"❌ [WEBHOOK_VERIFY] Signature verification error: {e}")
+        return False
+```
+
+--------------------------------------------------------------------------------
+USAGE ANALYSIS: WEBHOOK_SIGNING_KEY
+--------------------------------------------------------------------------------
+
+Purpose: Verify incoming webhook requests from GCWebhook7-14
+
+Flow:
+  1. GCWebhook7-14 sends POST to TPS_WEBHOOK_URL
+  2. Request includes X-Webhook-Signature header
+  3. GCSplit7-14 receives request
+  4. Extracts signature from header
+  5. Fetches WEBHOOK_SIGNING_KEY from config
+  6. Recomputes HMAC-SHA256 of request body
+  7. Compares computed signature with header signature
+  8. Rejects request if mismatch (403 Forbidden)
+
+--------------------------------------------------------------------------------
+DATA FLOW: WEBHOOK_SIGNING_KEY
+--------------------------------------------------------------------------------
+
+SENDER: GCWebhook7-14 (tph7-14.py)
+  - Fetches: SUCCESS_URL_SIGNING_KEY
+  - Signs: JSON payload with HMAC-SHA256
+  - Sends: X-Webhook-Signature: <hex_signature>
+
+RECEIVER: GCSplit7-14 (tps10-9.py)
+  - Fetches: WEBHOOK_SIGNING_KEY
+  - Receives: X-Webhook-Signature header
+  - Verifies: Recomputes HMAC and compares
+
+⚠️ BOTH MUST USE THE SAME SECRET VALUE!
+
+--------------------------------------------------------------------------------
+CONCLUSION: WEBHOOK_SIGNING_KEY
+--------------------------------------------------------------------------------
+
+✅ STATUS: ACTIVELY USED - Essential for webhook security
+
+⚠️ CRITICAL REDUNDANCY:
+  - GCWebhook7-14 uses SUCCESS_URL_SIGNING_KEY to SIGN
+  - GCSplit7-14 uses WEBHOOK_SIGNING_KEY to VERIFY
+  - These MUST point to the SAME secret in Secret Manager!
+
+SECURITY MODEL: Prevents unauthorized webhook calls
+  - Only GCWebhook7-14 (with valid key) can trigger TPS10-9
+  - Protects against replay attacks and spoofed requests
+
+================================================================================
+🔗 CROSS-REFERENCE: How Keys Work Together
+================================================================================
+
+FLOW DIAGRAM:
+
+1. Payment Creation (TelePay7-14)
+   ├─ Uses: SUCCESS_URL_SIGNING_KEY
+   ├─ Action: Signs payment data into URL token
+   └─ Output: https://webhook?token=<signed_data>
+
+2. Payment Verification (GCWebhook7-14)
+   ├─ Uses: SUCCESS_URL_SIGNING_KEY (same key as step 1)
+   ├─ Action: Verifies URL token signature
+   └─ Output: Decoded user_id, channel_id, wallet, price
+
+3. Webhook Creation (GCWebhook7-14)
+   ├─ Uses: SUCCESS_URL_SIGNING_KEY (same key again!)
+   ├─ Action: Signs webhook payload to TPS
+   └─ Output: POST with X-Webhook-Signature header
+
+4. Webhook Verification (GCSplit7-14)
+   ├─ Uses: WEBHOOK_SIGNING_KEY (MUST be same as step 3!)
+   ├─ Action: Verifies webhook signature
+   └─ Output: Processes payment split or rejects
+
+UNUSED:
+5. NowPayments Webhooks (Never Implemented)
+   ├─ Would Use: NOWPAYMENT_WEBHOOK_KEY
+   ├─ Would Action: Verify webhooks FROM NowPayments
+   └─ Status: ❌ NOT IMPLEMENTED - Dead code
+
+================================================================================
+⚠️ IDENTIFIED ISSUES & RECOMMENDATIONS
+================================================================================
+
+ISSUE #1: NOWPAYMENT_WEBHOOK_KEY is Dead Code
+─────────────────────────────────────────────────────────────────────────────
+Problem:
+  - Environment variable defined
+  - Fetch function implemented
+  - Value stored in config
+  - BUT: Never actually used anywhere
+
+Root Cause:
+  - System uses NowPayments for invoice CREATION, not webhook RECEPTION
+  - Payment confirmation via signed redirect URLs (SUCCESS_URL_SIGNING_KEY)
+  - No webhook listener for NowPayments callbacks exists
+
+Recommendation:
+  ❌ DELETE: NOWPAYMENT_WEBHOOK_KEY environment variable
+  ❌ DELETE: fetch_now_webhook_key() function
+  ❌ DELETE: self.webhook_key class attribute
+  ❌ DELETE: 'webhook_key' from config dictionaries
+
+Impact: ZERO - Removing this has no effect on functionality
+
+Files to Modify:
+  - TelePay7-14/config_manager.py (lines 8, 16, 33-44, 49, 53, 74)
+
+
+ISSUE #2: SUCCESS_URL_SIGNING_KEY vs WEBHOOK_SIGNING_KEY Redundancy
+─────────────────────────────────────────────────────────────────────────────
+Problem:
+  - Two different environment variable names
+  - Both point to the SAME secret value
+  - Confusing naming creates deployment risk
+
+Current State:
+  - SUCCESS_URL_SIGNING_KEY: Used by TelePay7-14, GCWebhook7-14
+  - WEBHOOK_SIGNING_KEY: Used by GCSplit7-14
+  - Both MUST have identical secret values or system breaks
+
+Root Cause:
+  - Inconsistent naming convention across services
+  - GCSplit7-14 developed separately with different naming
+
+Recommendation:
+  ✅ STANDARDIZE: Use SUCCESS_URL_SIGNING_KEY everywhere
+  ✅ UPDATE: GCSplit7-14 to use SUCCESS_URL_SIGNING_KEY
+  ✅ DELETE: All references to WEBHOOK_SIGNING_KEY
+
+Rationale:
+  - SUCCESS_URL_SIGNING_KEY is more descriptive
+  - Already used by 2 of 3 services
+  - Reduces confusion about "which webhook key?"
+
+Files to Modify:
+  - GCSplit7-14/config_manager.py:
+      Line 12: Update comment
+      Line 68: Rename function to fetch_success_url_signing_key()
+      Line 76: Change "WEBHOOK_SIGNING_KEY" → "SUCCESS_URL_SIGNING_KEY"
+      Line 77: Update description text
+      Line 118: Update variable name
+      Line 130: Update dictionary key
+  - GCSplit7-14/tps10-9.py:
+      Line 321: Update config key name
+
+
+ISSUE #3: Duplicate fetch_success_url_signing_key() Implementations
+─────────────────────────────────────────────────────────────────────────────
+Problem:
+  - Same function implemented in 2 places
+  - TelePay7-14/secure_webhook.py (lines 25-36)
+  - GCWebhook7-14/tph7-14.py (lines 226-237)
+  - Code duplication increases maintenance burden
+
+Recommendation:
+  Option A: Keep as-is (services are independent)
+  Option B: Create shared utilities module
+
+  ✅ RECOMMEND: Keep as-is
+  - Each service is independently deployable
+  - Function is small and simple
+  - Shared module adds coupling
+
+Impact: Low priority - no functional issue
+
+
+ISSUE #4: Multiple Fetches of Same Key
+─────────────────────────────────────────────────────────────────────────────
+Problem:
+  In GCWebhook7-14/tph7-14.py, SUCCESS_URL_SIGNING_KEY is fetched TWICE:
+  - Line 509: For token verification
+  - Line 436: For webhook signing
+
+Optimization:
+  Fetch once, reuse the value
+
+Recommendation:
+  ✅ OPTIMIZE: Fetch key once at start of send_invite() function
+  ✅ REUSE: Pass key to trigger_payment_split_webhook()
+
+Impact: Minimal - reduces Secret Manager API calls
+
+Files to Modify:
+  - GCWebhook7-14/tph7-14.py:
+      Line 509: Keep this fetch
+      Line 436: Remove this fetch
+      Line 415: Add signing_key parameter
+      Line 583: Pass signing_key when calling
+
+
+ISSUE #5: Comment in tph7-14.py Lists Unused Variable
+─────────────────────────────────────────────────────────────────────────────
+Problem:
+  Line 17: # CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
+
+  This variable is:
+  - Listed in comments
+  - NOT used anywhere in tph7-14.py
+  - Only used in GCSplit7-14
+
+Recommendation:
+  ❌ DELETE: Line 17-18 comment from tph7-14.py
+
+Impact: Documentation cleanup only
+
+Files to Modify:
+  - GCWebhook7-14/tph7-14.py (lines 17-18)
+
+================================================================================
+📊 SUMMARY TABLE
+================================================================================
+
+┌─────────────────────────┬──────────────┬──────────────┬──────────────┐
+│ Key Name                │ TelePay7-14  │ GCWebhook    │ GCSplit7-14  │
+├─────────────────────────┼──────────────┼──────────────┼──────────────┤
+│ NOWPAYMENT_WEBHOOK_KEY  │ Fetched      │ Not used     │ Not used     │
+│                         │ ❌ NEVER USED│              │              │
+├─────────────────────────┼──────────────┼──────────────┼──────────────┤
+│ SUCCESS_URL_SIGNING_KEY │ ✅ Used      │ ✅ Used      │ Not used     │
+│                         │ (Sign URLs)  │ (Verify URLs)│              │
+│                         │              │ (Sign WHooks)│              │
+├─────────────────────────┼──────────────┼──────────────┼──────────────┤
+│ WEBHOOK_SIGNING_KEY     │ Not used     │ Not used     │ ✅ Used      │
+│                         │              │              │ (Verify WHks)│
+│                         │              │              │ ⚠️ DUPLICATE │
+└─────────────────────────┴──────────────┴──────────────┴──────────────┘
+
+USAGE SUMMARY:
+  - NOWPAYMENT_WEBHOOK_KEY: 0 actual uses (dead code)
+  - SUCCESS_URL_SIGNING_KEY: 3 actual uses (URL sign, URL verify, webhook sign)
+  - WEBHOOK_SIGNING_KEY: 1 actual use (webhook verify) - SAME as SUCCESS_URL_SIGNING_KEY
+
+SECRET VALUES NEEDED:
+  - Current: 3 environment variables
+  - Actual: 1 secret value (SUCCESS_URL_SIGNING_KEY)
+  - Recommended: 1 environment variable
+
+================================================================================
+✅ ACTION PLAN
+================================================================================
+
+PRIORITY 1: Remove Dead Code (NOWPAYMENT_WEBHOOK_KEY)
+  1. Remove from environment variables
+  2. Delete fetch_now_webhook_key() from TelePay7-14/config_manager.py
+  3. Delete self.webhook_key attribute
+  4. Remove 'webhook_key' from config returns
+
+PRIORITY 2: Standardize Signing Key Names
+  1. Rename WEBHOOK_SIGNING_KEY → SUCCESS_URL_SIGNING_KEY in:
+     - GCSplit7-14/config_manager.py
+     - GCSplit7-14/tps10-9.py
+  2. Update all variable names and function names
+  3. Update comments and documentation
+
+PRIORITY 3: Optimize Key Fetching
+  1. In GCWebhook7-14/tph7-14.py:
+     - Fetch signing_key once in send_invite()
+     - Pass to trigger_payment_split_webhook()
+  2. Remove duplicate Secret Manager calls
+
+PRIORITY 4: Clean Up Documentation
+  1. Remove CHANGENOW_API_KEY comment from GCWebhook7-14/tph7-14.py
+  2. Update all environment variable documentation
+  3. Update deployment guides
+
+TESTING REQUIREMENTS:
+  After changes, verify:
+  ✓ Payment URL signing works (TelePay7-14)
+  ✓ Payment URL verification works (GCWebhook7-14)
+  ✓ Webhook signing works (GCWebhook7-14 → GCSplit7-14)
+  ✓ Webhook verification works (GCSplit7-14)
+  ✓ No secret manager errors in logs
+
+DEPLOYMENT NOTES:
+  - No secret values need to change
+  - Only environment variable NAMES change
+  - Update all deployment configs simultaneously
+  - Backward compatible: old names can coexist during transition
+
+================================================================================
+Generated: 2025-10-15
+Last Updated: 2025-10-15
+Codebase: TelegramFunnel/OCTOBER/10-9
+================================================================================
