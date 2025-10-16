@@ -22,6 +22,7 @@ RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 COPY tps10-16.py .
 COPY config_manager.py .
 COPY changenow_client.py .
+COPY database_manager.py .
 
 # Expose the port
 EXPOSE 8080
