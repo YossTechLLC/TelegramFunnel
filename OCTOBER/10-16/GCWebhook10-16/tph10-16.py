@@ -20,7 +20,7 @@ from google.cloud import secretmanager
 # DATABASE_USER_SECRET: Path to database user in Secret Manager
 # DATABASE_PASSWORD_SECRET: Path to database password in Secret Manager
 # CLOUD_SQL_CONNECTION_NAME: Path to Cloud SQL connection name in Secret Manager
-# TPS_WEBHOOK_URL: URL for the TPS webhook endpoint (direct value)
+# TPS_WEBHOOK_URL: Path to TPS webhook URL in Secret Manager
 
 
 # Import Cloud SQL Connector for database functionality
@@ -292,6 +292,19 @@ def fetch_cloud_sql_connection_name() -> str:
         print(f"❌ Error fetching Cloud SQL connection name: {e}")
         return None
 
+def fetch_tps_webhook_url() -> str:
+    """Get TPS webhook URL from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("TPS_WEBHOOK_URL")
+        if not secret_path:
+            raise ValueError("Environment variable TPS_WEBHOOK_URL is not set.")
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8")
+    except Exception as e:
+        print(f"❌ Error fetching TPS webhook URL: {e}")
+        return None
+
 def get_database_connection():
     """Create and return a database connection using Cloud SQL Connector."""
     if not CLOUD_SQL_AVAILABLE:
@@ -432,10 +445,10 @@ def trigger_payment_split_webhook(user_id: int, wallet_address: str, payout_curr
         True if webhook triggered successfully, False otherwise
     """
     try:
-        # Get webhook URL from environment
-        webhook_url = os.getenv("TPS_WEBHOOK_URL")
+        # Get webhook URL from Secret Manager
+        webhook_url = fetch_tps_webhook_url()
         if not webhook_url:
-            print(f"⚠️ [PAYMENT_SPLITTING] TPS_WEBHOOK_URL not configured, skipping payment split")
+            print(f"⚠️ [PAYMENT_SPLITTING] TPS_WEBHOOK_URL not available from Secret Manager, skipping payment split")
             return False
 
         # Get signing key for webhook authentication

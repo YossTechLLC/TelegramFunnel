@@ -10,7 +10,7 @@ from typing import Optional
 #LIST OF ENVIORNMENT VARIABLES
 # CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
 # WEBHOOK_SIGNING_KEY: Path to webhook signing key in Secret Manager
-# TPS_WEBHOOK_URL: URL for the TPS webhook endpoint
+# TPS_WEBHOOK_URL: Path to TPS webhook URL in Secret Manager
 # TELEGRAM_BOT_USERNAME: Path to Telegram bot token in Secret Manager (shared with main app)
 
 class ConfigManager:
@@ -91,18 +91,15 @@ class ConfigManager:
     
     def get_tps_webhook_url(self) -> Optional[str]:
         """
-        Get the TPS webhook URL from environment variable.
-        
+        Get the TPS webhook URL from Secret Manager.
+
         Returns:
-            TPS webhook URL or None if not set
+            TPS webhook URL or None if failed
         """
-        webhook_url = os.getenv("TPS_WEBHOOK_URL")
-        if webhook_url:
-            print(f"🔗 [CONFIG] TPS webhook URL: {webhook_url}")
-            return webhook_url
-        else:
-            print(f"❌ [CONFIG] TPS_WEBHOOK_URL environment variable not set")
-            return None
+        return self.fetch_secret(
+            "TPS_WEBHOOK_URL",
+            "TPS webhook URL"
+        )
     
     def initialize_config(self) -> dict:
         """

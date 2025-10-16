@@ -11,17 +11,17 @@ class SecureWebhookManager:
     def __init__(self, signing_key: str = None, base_url: str = None):
         """
         Initialize the SecureWebhookManager.
-        
+
         Args:
             signing_key: The HMAC signing key for URLs. If None, will fetch from secrets
-            base_url: The base URL for the webhook service. If None, will use environment variable
+            base_url: The base URL for the webhook service. If None, will fetch from Secret Manager
         """
         self.signing_key = signing_key or self.fetch_success_url_signing_key()
-        # Get base URL from environment variable
-        self.base_url = base_url or os.getenv("WEBHOOK_BASE_URL")
+        # Get base URL from Secret Manager
+        self.base_url = base_url or self.fetch_webhook_base_url()
         if not self.base_url:
-            raise ValueError("Environment variable WEBHOOK_BASE_URL is not set.")
-    
+            raise ValueError("Webhook base URL is not available from Secret Manager")
+
     def fetch_success_url_signing_key(self) -> str:
         """Fetch the signing key from Secret Manager."""
         try:
@@ -33,6 +33,19 @@ class SecureWebhookManager:
             return response.payload.data.decode("UTF-8")
         except Exception as e:
             print(f"❌ Error fetching the SUCCESS_URL_SIGNING_KEY: {e}")
+            return None
+
+    def fetch_webhook_base_url(self) -> str:
+        """Fetch the webhook base URL from Secret Manager."""
+        try:
+            client = secretmanager.SecretManagerServiceClient()
+            secret_path = os.getenv("WEBHOOK_BASE_URL")
+            if not secret_path:
+                raise ValueError("Environment variable WEBHOOK_BASE_URL is not set.")
+            response = client.access_secret_version(request={"name": secret_path})
+            return response.payload.data.decode("UTF-8")
+        except Exception as e:
+            print(f"❌ Error fetching the WEBHOOK_BASE_URL: {e}")
             return None
     
     def safe_int48(self, val) -> int:

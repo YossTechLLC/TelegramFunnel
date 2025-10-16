@@ -12,7 +12,7 @@ from typing import Optional
 # DATABASE_USER_SECRET: Path to database user in Secret Manager
 # DATABASE_PASSWORD_SECRET: Path to database password in Secret Manager
 # DATABASE_SECRET_KEY: Path to Flask secret key in Secret Manager
-# INSTANCE_CONNECTION_NAME: Cloud SQL instance connection name (direct value, not Secret Manager)
+# CLOUD_SQL_CONNECTION_NAME: Path to Cloud SQL instance connection name in Secret Manager
 
 class ConfigManager:
     """
@@ -26,7 +26,7 @@ class ConfigManager:
         self.db_user = None
         self.db_password = None
         self.secret_key = None
-        self.instance_connection_name = None
+        self.cloud_sql_connection_name = None
 
     def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
         """
@@ -92,20 +92,17 @@ class ConfigManager:
         """
         return self.fetch_secret("DATABASE_SECRET_KEY", "Flask secret key")
 
-    def get_instance_connection_name(self) -> Optional[str]:
+    def get_cloud_sql_connection_name(self) -> Optional[str]:
         """
-        Get the Cloud SQL instance connection name from environment variable.
+        Get the Cloud SQL instance connection name from Secret Manager.
 
         Returns:
             Instance connection name (e.g., project:region:instance)
         """
-        instance_name = os.getenv("INSTANCE_CONNECTION_NAME")
-        if instance_name:
-            print(f"🔗 [CONFIG] Cloud SQL Instance: {instance_name}")
-            return instance_name
-        else:
-            print(f"❌ [CONFIG] INSTANCE_CONNECTION_NAME environment variable not set")
-            return None
+        return self.fetch_secret(
+            "CLOUD_SQL_CONNECTION_NAME",
+            "Cloud SQL connection name"
+        )
 
     def initialize_config(self) -> dict:
         """
@@ -121,7 +118,7 @@ class ConfigManager:
         self.db_user = self.fetch_database_user()
         self.db_password = self.fetch_database_password()
         self.secret_key = self.get_secret_key()
-        self.instance_connection_name = self.get_instance_connection_name()
+        self.cloud_sql_connection_name = self.get_cloud_sql_connection_name()
 
         # Validate critical configurations
         missing_configs = []
@@ -131,8 +128,8 @@ class ConfigManager:
             missing_configs.append("Database User")
         if not self.db_password:
             missing_configs.append("Database Password")
-        if not self.instance_connection_name:
-            missing_configs.append("Instance Connection Name")
+        if not self.cloud_sql_connection_name:
+            missing_configs.append("Cloud SQL Connection Name")
 
         if missing_configs:
             print(f"❌ [CONFIG] Missing critical configuration: {', '.join(missing_configs)}")
@@ -142,12 +139,12 @@ class ConfigManager:
             'db_user': self.db_user,
             'db_password': self.db_password,
             'secret_key': self.secret_key,
-            'instance_connection_name': self.instance_connection_name
+            'cloud_sql_connection_name': self.cloud_sql_connection_name
         }
 
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
-        print(f"   Cloud SQL Instance: {'✅' if config['instance_connection_name'] else '❌'}")
+        print(f"   Cloud SQL Instance: {'✅' if config['cloud_sql_connection_name'] else '❌'}")
         print(f"   Database Name: {'✅' if config['db_name'] else '❌'}")
         print(f"   Database User: {'✅' if config['db_user'] else '❌'}")
         print(f"   Database Password: {'✅' if config['db_password'] else '❌'}")
@@ -167,5 +164,5 @@ class ConfigManager:
             'db_user': self.db_user,
             'db_password': self.db_password,
             'secret_key': self.secret_key,
-            'instance_connection_name': self.instance_connection_name
+            'cloud_sql_connection_name': self.cloud_sql_connection_name
         }

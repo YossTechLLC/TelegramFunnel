@@ -18,7 +18,13 @@
       "WebFetch(domain:changenow.io)",
       "Bash(tree:*)",
       "Read(//mnt/c/Users/YossTech/Desktop/2025/**)",
-      "Read(//mnt/c/Users/YossTech/Desktop/**)"
+      "Read(//mnt/c/Users/YossTech/Desktop/**)",
+      "Bash(gcloud run services describe:*)",
+      "Bash(gcloud run services get-iam-policy:*)",
+      "Bash(env)",
+      "Bash(gcloud run services list:*)",
+      "Bash(cd:*)",
+      "Bash(echo:*)"
     ],
     "deny": []
   }

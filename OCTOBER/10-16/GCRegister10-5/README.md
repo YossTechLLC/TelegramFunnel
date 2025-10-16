@@ -93,20 +93,20 @@ Use this exact value when creating the DATABASE_SECRET_KEY secret in Google Clou
 
 ### Cloud SQL Instance Connection Name
 
-**Important:** Set the `INSTANCE_CONNECTION_NAME` environment variable to your Cloud SQL instance connection string:
+**Important:** Set the `CLOUD_SQL_CONNECTION_NAME` environment variable to your Cloud SQL instance connection string:
 ```
-INSTANCE_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+CLOUD_SQL_CONNECTION_NAME=projects/YOUR_PROJECT_ID/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
 ```
 
-This is a direct environment variable value (not from Secret Manager).
+This is now stored in Secret Manager for consistency with other configuration values.
 
 ## ⚙️ Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-# Cloud SQL instance connection name (direct value)
-INSTANCE_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+# Cloud SQL instance connection name (Secret Manager path)
+CLOUD_SQL_CONNECTION_NAME=projects/YOUR_PROJECT_ID/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
 
 # Database credentials (Secret Manager paths)
 DATABASE_NAME_SECRET=projects/YOUR_PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest
@@ -152,7 +152,7 @@ docker build -t gcregister10-5 .
 
 # Run the container
 docker run -p 8080:8080 \
-  -e INSTANCE_CONNECTION_NAME="telepay-459221:us-central1:telepaypsql" \
+  -e CLOUD_SQL_CONNECTION_NAME="projects/PROJECT_ID/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest" \
   -e DATABASE_NAME_SECRET="projects/PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest" \
   -e DATABASE_USER_SECRET="projects/PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest" \
   -e DATABASE_PASSWORD_SECRET="projects/PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest" \
@@ -170,7 +170,7 @@ gcloud run deploy gcregister10-5 \
   --region us-central1 \
   --allow-unauthenticated \
   --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
-  --set-env-vars INSTANCE_CONNECTION_NAME="telepay-459221:us-central1:telepaypsql" \
+  --set-env-vars CLOUD_SQL_CONNECTION_NAME="projects/PROJECT_ID/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest" \
   --set-env-vars DATABASE_NAME_SECRET="projects/PROJECT_ID/secrets/DATABASE_NAME_SECRET/versions/latest" \
   --set-env-vars DATABASE_USER_SECRET="projects/PROJECT_ID/secrets/DATABASE_USER_SECRET/versions/latest" \
   --set-env-vars DATABASE_PASSWORD_SECRET="projects/PROJECT_ID/secrets/DATABASE_PASSWORD_SECRET/versions/latest" \
@@ -179,7 +179,7 @@ gcloud run deploy gcregister10-5 \
 
 **Important Notes:**
 - The `--add-cloudsql-instances` flag connects Cloud Run to your Cloud SQL instance
-- INSTANCE_CONNECTION_NAME must match your Cloud SQL instance connection string
+- CLOUD_SQL_CONNECTION_NAME is now stored in Secret Manager
 - No VPC connector is needed when using Cloud SQL Connector
 - Replace `PROJECT_ID` with your actual Google Cloud project ID (e.g., 291176869049)
 
