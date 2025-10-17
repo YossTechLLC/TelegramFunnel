@@ -2,32 +2,41 @@
 """
 Database Manager for TPS10-16 Payment Splitting Service.
 Handles database operations for the split_payout_request table.
+Uses Google Cloud SQL Connector (mirroring tph10-16.py pattern).
 """
 import os
 import random
 import string
-import psycopg2
-from psycopg2 import pool
 from google.cloud import secretmanager
 from typing import Optional, Dict, Any
 from contextlib import contextmanager
+
+# Import Cloud SQL Connector for database functionality
+try:
+    from google.cloud.sql.connector import Connector
+    CLOUD_SQL_AVAILABLE = True
+    print("✅ [INFO] Cloud SQL Connector imported successfully")
+except ImportError as e:
+    print(f"❌ [ERROR] Cloud SQL Connector import failed: {e}")
+    CLOUD_SQL_AVAILABLE = False
+    Connector = None
 
 class DatabaseManager:
     """
     Manages database connections and operations for TPS10-16 service.
     Uses the same database as the main TelePay application.
+    Uses Google Cloud SQL Connector (no connection pooling).
     """
 
     def __init__(self):
-        """Initialize the DatabaseManager with connection pooling."""
-        self.connection_pool = None
-        self.db_host = None
+        """Initialize the DatabaseManager."""
         self.db_name = None
         self.db_user = None
         self.db_password = None
+        self.connection_name = None
 
-        # Initialize database connection
-        self._initialize_database()
+        # Fetch database credentials
+        self._initialize_credentials()
 
     def _fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
         """
@@ -58,64 +67,103 @@ class DatabaseManager:
             print(f"❌ [DB_CONFIG] Error fetching {description or secret_name_env}: {e}")
             return None
 
-    def _initialize_database(self):
-        """Initialize database connection pool."""
+    def _initialize_credentials(self):
+        """Initialize database credentials from Secret Manager."""
         try:
-            print(f"🔄 [DATABASE] Initializing database connection")
+            print(f"🔄 [DATABASE] Initializing database credentials")
 
             # Fetch database credentials from Secret Manager
-            # Using the same credentials as main TelePay application
-            self.db_host = self._fetch_secret("DATABASE_HOST_SECRET", "database host") or "127.0.0.1"
             self.db_name = self._fetch_secret("DATABASE_NAME_SECRET", "database name")
             self.db_user = self._fetch_secret("DATABASE_USER_SECRET", "database user")
             self.db_password = self._fetch_secret("DATABASE_PASSWORD_SECRET", "database password")
+            self.connection_name = self._fetch_secret("CLOUD_SQL_CONNECTION_NAME", "Cloud SQL connection name")
 
-            if not all([self.db_name, self.db_user, self.db_password]):
+            if not all([self.db_name, self.db_user, self.db_password, self.connection_name]):
                 print(f"❌ [DATABASE] Missing required database credentials")
+                print(f"   Database Name: {'✅' if self.db_name else '❌'}")
+                print(f"   Database User: {'✅' if self.db_user else '❌'}")
+                print(f"   Database Password: {'✅' if self.db_password else '❌'}")
+                print(f"   Cloud SQL Connection Name: {'✅' if self.connection_name else '❌'}")
                 return
 
-            # Create connection pool
-            self.connection_pool = psycopg2.pool.SimpleConnectionPool(
-                1, 10,  # min and max connections
-                host=self.db_host,
-                database=self.db_name,
-                user=self.db_user,
-                password=self.db_password,
-                port=5432
-            )
-
-            print(f"✅ [DATABASE] Database connection pool initialized")
-            print(f"📊 [DATABASE] Host: {self.db_host}")
+            print(f"✅ [DATABASE] Database credentials initialized")
             print(f"📊 [DATABASE] Database: {self.db_name}")
+            print(f"📊 [DATABASE] User: {self.db_user}")
+            print(f"☁️ [DATABASE] Connection: {self.connection_name}")
 
         except Exception as e:
-            print(f"❌ [DATABASE] Error initializing database: {e}")
-            self.connection_pool = None
+            print(f"❌ [DATABASE] Error initializing credentials: {e}")
+
+    def get_database_connection(self):
+        """
+        Create and return a database connection using Cloud SQL Connector.
+        This mirrors the pattern from tph10-16.py.
+
+        Returns:
+            Database connection or None if failed
+        """
+        if not CLOUD_SQL_AVAILABLE:
+            print("❌ [ERROR] Cloud SQL Connector not available")
+            return None
+
+        try:
+            if not all([self.db_name, self.db_user, self.db_password, self.connection_name]):
+                print("❌ [ERROR] Missing database credentials")
+                return None
+
+            # Create connection using Cloud SQL Connector
+            connector = Connector()
+            connection = connector.connect(
+                self.connection_name,
+                "pg8000",
+                user=self.db_user,
+                password=self.db_password,
+                db=self.db_name
+            )
+            print("🔗 [DATABASE] ✅ Cloud SQL Connector connection successful!")
+            return connection
+
+        except Exception as e:
+            print(f"❌ [ERROR] Database connection failed: {e}")
+            print(f"💡 [DATABASE] Troubleshooting tips:")
+            print(f"   - Verify all DATABASE_*_SECRET environment variables are set")
+            print(f"   - Check Secret Manager permissions for the service account")
+            print(f"   - Verify CLOUD_SQL_CONNECTION_NAME is correct")
+            print(f"   - Ensure Cloud SQL instance is running")
+            print(f"   - Grant roles/cloudsql.client to service account")
+            return None
 
     @contextmanager
     def get_connection(self):
         """
         Context manager for database connections.
+        Creates a new connection for each operation and closes it when done.
 
         Yields:
-            Database connection from pool
+            Database connection
         """
         connection = None
         try:
-            if not self.connection_pool:
-                raise Exception("Database connection pool not initialized")
+            connection = self.get_database_connection()
+            if not connection:
+                raise Exception("Failed to create database connection")
 
-            connection = self.connection_pool.getconn()
             yield connection
             connection.commit()
         except Exception as e:
             if connection:
-                connection.rollback()
+                try:
+                    connection.rollback()
+                except Exception:
+                    pass
             print(f"❌ [DATABASE] Connection error: {e}")
             raise
         finally:
             if connection:
-                self.connection_pool.putconn(connection)
+                try:
+                    connection.close()
+                except Exception:
+                    pass
 
     def generate_unique_id(self) -> str:
         """
@@ -157,6 +205,12 @@ class DatabaseManager:
         Returns:
             Generated unique_id if successful, None otherwise
         """
+        if not CLOUD_SQL_AVAILABLE:
+            print("❌ [ERROR] Cloud SQL Connector not available - cannot insert record")
+            return None
+
+        conn = None
+        cur = None
         try:
             print(f"📝 [DB_INSERT] Preparing split payout request insertion")
             print(f"👤 [DB_INSERT] User ID: {user_id}")
@@ -189,31 +243,69 @@ class DatabaseManager:
             )
 
             # Execute insertion
-            with self.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(insert_query, params)
-                    rows_affected = cursor.rowcount
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [DB_INSERT] Could not establish database connection")
+                return None
 
-                    if rows_affected > 0:
-                        print(f"✅ [DB_INSERT] Successfully inserted split payout request")
-                        print(f"🆔 [DB_INSERT] Unique ID: {unique_id}")
-                        return unique_id
-                    else:
-                        print(f"❌ [DB_INSERT] No rows affected")
-                        return None
+            cur = conn.cursor()
+            cur.execute(insert_query, params)
+            rows_affected = cur.rowcount
 
-        except psycopg2.IntegrityError as e:
-            print(f"❌ [DB_INSERT] Integrity error (possible duplicate unique_id): {e}")
-            # Retry with new unique ID
-            print(f"🔄 [DB_INSERT] Retrying with new unique ID...")
-            return self.insert_split_payout_request(
-                user_id, closed_channel_id, from_currency, to_currency,
-                from_network, to_network, from_amount, client_wallet_address,
-                refund_address, flow, type_
-            )
+            if rows_affected > 0:
+                conn.commit()
+                print(f"✅ [DB_INSERT] Successfully inserted split payout request")
+                print(f"🆔 [DB_INSERT] Unique ID: {unique_id}")
+                return unique_id
+            else:
+                print(f"❌ [DB_INSERT] No rows affected")
+                return None
+
         except Exception as e:
-            print(f"❌ [DB_INSERT] Error inserting split payout request: {e}")
-            return None
+            # Check if it's an integrity error (duplicate unique_id)
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                print(f"❌ [DB_INSERT] Integrity error (possible duplicate unique_id): {e}")
+                # Retry with new unique ID
+                print(f"🔄 [DB_INSERT] Retrying with new unique ID...")
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                if cur:
+                    try:
+                        cur.close()
+                    except Exception:
+                        pass
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                return self.insert_split_payout_request(
+                    user_id, closed_channel_id, from_currency, to_currency,
+                    from_network, to_network, from_amount, client_wallet_address,
+                    refund_address, flow, type_
+                )
+            else:
+                print(f"❌ [DB_INSERT] Error inserting split payout request: {e}")
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                return None
+        finally:
+            if cur:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def get_split_payout_request(self, unique_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -225,6 +317,12 @@ class DatabaseManager:
         Returns:
             Dictionary containing request data or None if not found
         """
+        if not CLOUD_SQL_AVAILABLE:
+            print("❌ [ERROR] Cloud SQL Connector not available - cannot query record")
+            return None
+
+        conn = None
+        cur = None
         try:
             print(f"🔍 [DB_QUERY] Fetching split payout request: {unique_id}")
 
@@ -238,26 +336,35 @@ class DatabaseManager:
                 WHERE unique_id = %s
             """
 
-            with self.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(select_query, (unique_id,))
-                    row = cursor.fetchone()
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [DB_QUERY] Could not establish database connection")
+                return None
 
-                    if row:
-                        columns = [desc[0] for desc in cursor.description]
-                        result = dict(zip(columns, row))
-                        print(f"✅ [DB_QUERY] Found request: {unique_id}")
-                        return result
-                    else:
-                        print(f"❌ [DB_QUERY] Request not found: {unique_id}")
-                        return None
+            cur = conn.cursor()
+            cur.execute(select_query, (unique_id,))
+            row = cur.fetchone()
+
+            if row:
+                columns = [desc[0] for desc in cur.description]
+                result = dict(zip(columns, row))
+                print(f"✅ [DB_QUERY] Found request: {unique_id}")
+                return result
+            else:
+                print(f"❌ [DB_QUERY] Request not found: {unique_id}")
+                return None
 
         except Exception as e:
             print(f"❌ [DB_QUERY] Error fetching split payout request: {e}")
             return None
-
-    def close(self):
-        """Close all database connections in the pool."""
-        if self.connection_pool:
-            self.connection_pool.closeall()
-            print(f"✅ [DATABASE] Connection pool closed")
+        finally:
+            if cur:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass

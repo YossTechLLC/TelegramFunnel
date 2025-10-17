@@ -2,4 +2,5 @@ Flask==3.0.3
 requests==2.31.0
 google-cloud-secret-manager==2.16.3
 python-telegram-bot==20.7
-psycopg2-binary==2.9.9
+cloud-sql-python-connector==1.4.3
+pg8000==1.30.3
