@@ -457,6 +457,7 @@ def trigger_payment_split_webhook(user_id: int, wallet_address: str, payout_curr
         # Prepare webhook payload
         webhook_data = {
             "user_id": user_id,
+            "closed_channel_id": closed_channel_id,
             "wallet_address": wallet_address,
             "payout_currency": payout_currency,
             "sub_price": subscription_price,
