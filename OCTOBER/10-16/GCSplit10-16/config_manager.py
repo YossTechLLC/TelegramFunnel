@@ -9,7 +9,7 @@ from typing import Optional
 
 #LIST OF ENVIORNMENT VARIABLES
 # CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
-# WEBHOOK_SIGNING_KEY: Path to webhook signing key in Secret Manager
+# SUCCESS_URL_SIGNING_KEY: Path to success URL signing key in Secret Manager (shared with tph10-16)
 # TPS_WEBHOOK_URL: Path to TPS webhook URL in Secret Manager
 # TELEGRAM_BOT_USERNAME: Path to Telegram bot token in Secret Manager (shared with main app)
 # TP_FLAT_FEE: Path to TelePay flat fee percentage in Secret Manager
@@ -23,7 +23,7 @@ class ConfigManager:
         """Initialize the ConfigManager."""
         self.client = secretmanager.SecretManagerServiceClient()
         self.changenow_api_key = None
-        self.webhook_signing_key = None
+        self.success_url_signing_key = None
         self.telegram_bot_token = None
         self.tp_flat_fee = None
     
@@ -67,16 +67,17 @@ class ConfigManager:
             "ChangeNow API key"
         )
     
-    def fetch_webhook_signing_key(self) -> Optional[str]:
+    def fetch_success_url_signing_key(self) -> Optional[str]:
         """
-        Fetch the webhook signing key from Secret Manager.
+        Fetch the success URL signing key from Secret Manager.
+        This key is shared with tph10-16 for webhook signature verification.
 
         Returns:
-            Webhook signing key or None if failed
+            Success URL signing key or None if failed
         """
         return self.fetch_secret(
-            "WEBHOOK_SIGNING_KEY",
-            "webhook signing key"
+            "SUCCESS_URL_SIGNING_KEY",
+            "success URL signing key"
         )
 
     def fetch_telegram_bot_token(self) -> Optional[str]:
@@ -126,7 +127,7 @@ class ConfigManager:
 
         # Fetch all secrets
         self.changenow_api_key = self.fetch_changenow_api_key()
-        self.webhook_signing_key = self.fetch_webhook_signing_key()
+        self.success_url_signing_key = self.fetch_success_url_signing_key()
         self.telegram_bot_token = self.fetch_telegram_bot_token()
         self.tp_flat_fee = self.fetch_tp_flat_fee()
 
@@ -141,7 +142,7 @@ class ConfigManager:
 
         config = {
             'changenow_api_key': self.changenow_api_key,
-            'webhook_signing_key': self.webhook_signing_key,
+            'success_url_signing_key': self.success_url_signing_key,
             'tps_webhook_url': tps_webhook_url,
             'telegram_bot_token': self.telegram_bot_token,
             'tp_flat_fee': self.tp_flat_fee
@@ -150,7 +151,7 @@ class ConfigManager:
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
         print(f"   ChangeNow API Key: {'✅' if config['changenow_api_key'] else '❌'}")
-        print(f"   Webhook Signing Key: {'✅' if config['webhook_signing_key'] else '❌'}")
+        print(f"   Success URL Signing Key: {'✅' if config['success_url_signing_key'] else '❌'}")
         print(f"   TPS Webhook URL: {'✅' if config['tps_webhook_url'] else '❌'}")
         print(f"   Telegram Bot Token: {'✅' if config['telegram_bot_token'] else '❌'}")
         print(f"   TP Flat Fee: {'✅' if config['tp_flat_fee'] else '❌'}")
@@ -166,6 +167,6 @@ class ConfigManager:
         """
         return {
             'changenow_api_key': self.changenow_api_key,
-            'webhook_signing_key': self.webhook_signing_key,
+            'success_url_signing_key': self.success_url_signing_key,
             'tp_flat_fee': self.tp_flat_fee
         }

@@ -32,12 +32,13 @@ database_manager = DatabaseManager()
 def verify_webhook_signature(payload: bytes, signature: str, signing_key: str) -> bool:
     """
     Verify webhook signature from tph10-16.py to ensure authentic requests.
-    
+    Uses SUCCESS_URL_SIGNING_KEY (shared with tph10-16) for signature verification.
+
     Args:
         payload: Raw request payload
-        signature: Provided signature
-        signing_key: Secret signing key
-        
+        signature: Provided signature (HMAC-SHA256 hexdigest)
+        signing_key: Secret signing key (SUCCESS_URL_SIGNING_KEY)
+
     Returns:
         True if signature is valid, False otherwise
     """
@@ -483,7 +484,7 @@ def payment_split_webhook():
         print(f"📦 [WEBHOOK] Payload size: {len(payload)} bytes")
         
         # Verify webhook signature if signing key is available
-        signing_key = config.get('webhook_signing_key')
+        signing_key = config.get('success_url_signing_key')
         if signing_key and not verify_webhook_signature(payload, signature, signing_key):
             print(f"❌ [WEBHOOK] Invalid signature")
             abort(401, "Invalid webhook signature")
