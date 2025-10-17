@@ -165,6 +165,63 @@ class DatabaseManager:
                 except Exception:
                     pass
 
+    def get_network_for_currency(self, to_currency: str) -> Optional[str]:
+        """
+        Get the network for a given currency from to_currency_to_network table.
+
+        Args:
+            to_currency: Target currency (e.g., "LINK", "ETH", "USDT")
+
+        Returns:
+            Network name (e.g., "eth", "bsc", "polygon") or None if not found
+        """
+        if not CLOUD_SQL_AVAILABLE:
+            print("❌ [ERROR] Cloud SQL Connector not available - cannot lookup network")
+            return None
+
+        conn = None
+        cur = None
+        try:
+            print(f"🔍 [NETWORK_LOOKUP] Looking up network for currency: {to_currency}")
+
+            select_query = """
+                SELECT to_network
+                FROM to_currency_to_network
+                WHERE to_currency = %s
+            """
+
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [NETWORK_LOOKUP] Could not establish database connection")
+                return None
+
+            cur = conn.cursor()
+            cur.execute(select_query, (to_currency.upper(),))
+            row = cur.fetchone()
+
+            if row:
+                network = row[0]
+                print(f"✅ [NETWORK_LOOKUP] Found network '{network}' for currency '{to_currency}'")
+                return network
+            else:
+                print(f"❌ [NETWORK_LOOKUP] No network found for currency '{to_currency}'")
+                return None
+
+        except Exception as e:
+            print(f"❌ [NETWORK_LOOKUP] Error looking up network: {e}")
+            return None
+        finally:
+            if cur:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     def generate_unique_id(self) -> str:
         """
         Generate a unique 16-digit alphanumeric ID for split_payout_request.

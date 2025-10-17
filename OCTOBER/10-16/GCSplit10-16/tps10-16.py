@@ -267,6 +267,15 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
         tp_flat_fee = config.get('tp_flat_fee')
         original_amount, adjusted_amount = calculate_adjusted_amount(subscription_price, tp_flat_fee)
 
+        # Step 1.5: Look up the network for the target currency from database
+        to_network = database_manager.get_network_for_currency(payout_currency.upper())
+        if not to_network:
+            print(f"❌ [ESTIMATE_AND_SAVE] Failed to lookup network for currency {payout_currency}")
+            print(f"💡 [ESTIMATE_AND_SAVE] Ensure to_currency_to_network table has entry for '{payout_currency.upper()}'")
+            return None
+
+        print(f"🌐 [ESTIMATE_AND_SAVE] Using network '{to_network}' for currency '{payout_currency.upper()}'")
+
         # Step 2: Call ChangeNow API v2 for estimated amount
         print(f"🌐 [ESTIMATE_AND_SAVE] Calling ChangeNow API for estimate")
 
@@ -274,7 +283,7 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
             from_currency="usdt",
             to_currency=payout_currency.lower(),
             from_network="eth",
-            to_network="eth",
+            to_network=to_network.lower(),  # Dynamic from database
             from_amount=str(adjusted_amount),
             flow="standard",
             type_="direct"
@@ -305,7 +314,7 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
             from_currency="usdt",
             to_currency=payout_currency.lower(),
             from_network="eth",
-            to_network="eth",
+            to_network=to_network.lower(),  # Dynamic from database lookup
             from_amount=float(from_amount),
             client_wallet_address=wallet_address,
             refund_address="",  # Empty for now as specified

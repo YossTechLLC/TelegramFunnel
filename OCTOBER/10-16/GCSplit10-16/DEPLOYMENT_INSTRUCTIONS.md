@@ -147,10 +147,48 @@ docker run -p 8080:8080 \
 2. **Invite Sent** → `tph10-16.py` sends Telegram invite to user
 3. **Webhook Trigger** → `tph10-16.py` calls `tps10-16.py` webhook with payment data
 4. **ChangeNow Integration** → `tps10-16.py` processes payment splitting:
+   - **Looks up network from database** → Queries `to_currency_to_network` table
    - Validates ETH → client_currency pair
    - Checks amount limits
    - Creates fixed-rate transaction
    - Returns deposit address for funding
+
+## 📊 Database Requirements
+
+### **Required Tables**
+
+#### **1. split_payout_request** (Created automatically by service)
+Stores conversion estimates and payout requests.
+
+#### **2. to_currency_to_network** (Must be created manually)
+Maps currencies to their blockchain networks.
+
+**Schema:**
+```sql
+CREATE TABLE IF NOT EXISTS to_currency_to_network (
+    to_currency VARCHAR(10) PRIMARY KEY,
+    to_network VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Example Data:**
+```sql
+INSERT INTO to_currency_to_network (to_currency, to_network) VALUES
+    ('LINK', 'eth'),
+    ('ETH', 'eth'),
+    ('USDT', 'eth'),
+    ('USDC', 'eth'),
+    ('BTC', 'btc'),
+    ('BNB', 'bsc'),
+    ('MATIC', 'polygon');
+```
+
+**Important Notes:**
+- `to_currency` must be **UPPERCASE** (e.g., 'LINK', not 'link')
+- `to_network` should be **lowercase** (e.g., 'eth', not 'ETH')
+- Add entries for ALL currencies you plan to support
+- If a currency is not in this table, payment splitting will fail
 
 ## 📊 Expected Logs
 
@@ -219,6 +257,10 @@ The service now uses **Google Cloud SQL Connector** (same as tph10-16.py):
 📊 [FEE_CALCULATION] TP flat fee: 3%
 💸 [FEE_CALCULATION] Fee amount: $0.099
 ✅ [FEE_CALCULATION] Adjusted amount: $3.201
+🔍 [NETWORK_LOOKUP] Looking up network for currency: LINK
+🔗 [DATABASE] ✅ Cloud SQL Connector connection successful!
+✅ [NETWORK_LOOKUP] Found network 'eth' for currency 'LINK'
+🌐 [ESTIMATE_AND_SAVE] Using network 'eth' for currency 'LINK'
 🌐 [ESTIMATE_AND_SAVE] Calling ChangeNow API for estimate
 📈 [CHANGENOW_ESTIMATE_V2] Getting estimate for 3.201 USDT → LINK
 ✅ [CHANGENOW_ESTIMATE_V2] Estimate successful
@@ -364,6 +406,40 @@ gcloud projects get-iam-policy telepay-459221 \
     --filter="bindings.members:serviceAccount:291176869049-compute@developer.gserviceaccount.com"
 ```
 
+### Network Lookup Issues
+
+**Error**: `Failed to lookup network for currency [CURRENCY]`
+
+**Cause**: The `to_currency_to_network` table doesn't have an entry for the requested currency.
+
+**Solutions**:
+1. Connect to the database and check if the currency exists:
+   ```sql
+   SELECT * FROM to_currency_to_network WHERE to_currency = 'LINK';
+   ```
+
+2. Add the missing currency to the table:
+   ```sql
+   INSERT INTO to_currency_to_network (to_currency, to_network)
+   VALUES ('LINK', 'eth');
+   ```
+
+3. Verify the currency is in UPPERCASE:
+   ```sql
+   -- Wrong (will not be found):
+   INSERT INTO to_currency_to_network (to_currency, to_network)
+   VALUES ('link', 'eth');  -- ❌ lowercase
+
+   -- Correct:
+   INSERT INTO to_currency_to_network (to_currency, to_network)
+   VALUES ('LINK', 'eth');  -- ✅ UPPERCASE
+   ```
+
+4. View all supported currencies:
+   ```sql
+   SELECT * FROM to_currency_to_network ORDER BY to_currency;
+   ```
+
 ### ChangeNow API Issues
 
 **Error**: `Failed to get estimate from ChangeNow API`
@@ -373,6 +449,7 @@ gcloud projects get-iam-policy telepay-459221 \
 2. Check supported currency pairs: https://changenow.io/currencies
 3. Verify amount is within min/max limits for the pair
 4. Check ChangeNow API status: https://status.changenow.io
+5. Ensure the network from database matches ChangeNow's expected network
 
 ## 📝 Important Notes
 
@@ -406,8 +483,11 @@ gcloud projects get-iam-policy telepay-459221 \
 
 9. **Error Handling**: Failed database operations are logged with detailed troubleshooting information
 
-10. **Removed Dependencies**: The following have been REMOVED from this service:
+10. **Dynamic Network Lookup**: The service dynamically looks up the blockchain network for each currency from the `to_currency_to_network` database table. This allows supporting multiple networks (eth, bsc, polygon, etc.) without code changes.
+
+11. **Removed Dependencies**: The following have been REMOVED from this service:
     - `psycopg2-binary` - Replaced with `pg8000`
     - `psycopg2.pool.SimpleConnectionPool` - No connection pooling
     - Unix socket path logic - Handled by Cloud SQL Connector
     - `DATABASE_HOST_SECRET` - No longer needed (Cloud SQL Connector manages connection)
+    - Hardcoded `to_network="eth"` - Now dynamic from database
