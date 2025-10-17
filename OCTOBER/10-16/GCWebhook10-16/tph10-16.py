@@ -431,7 +431,7 @@ def record_private_channel_user(user_id: int, private_channel_id: int, sub_time:
         if conn:
             conn.close()
 
-def trigger_payment_split_webhook(user_id: int, wallet_address: str, payout_currency: str, subscription_price: str) -> bool:
+def trigger_payment_split_webhook(user_id: int, closed_channel_id: int, wallet_address: str, payout_currency: str, subscription_price: str) -> bool:
     """
     Trigger the TPS10-16 payment splitting webhook after successful invite.
 
@@ -602,6 +602,7 @@ def send_invite():
         try:
             webhook_success = trigger_payment_split_webhook(
                 user_id=user_id,
+                closed_channel_id=closed_channel_id,
                 wallet_address=wallet_address,
                 payout_currency=payout_currency,
                 subscription_price=subscription_price
