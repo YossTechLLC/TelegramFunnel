@@ -237,7 +237,7 @@ class DatabaseManager:
 
             params = (
                 unique_id, user_id, closed_channel_id,
-                from_currency.lower(), to_currency.lower(), from_network.lower(), to_network.lower(),
+                from_currency.upper(), to_currency.upper(), from_network.upper(), to_network.upper(),
                 from_amount, client_wallet_address, refund_address,
                 flow, type_
             )
