@@ -276,9 +276,11 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
 
         estimate_response = changenow_client.get_estimated_amount_v2(
             from_currency="usdt",
-            to_currency=payout_currency.lower(),
+            ### to_currency=payout_currency.lower(),
+            to_currency="eth",
             from_network="eth",
-            to_network=to_network.lower(),  # Dynamic from database
+            ### to_network=to_network.lower(),  # Dynamic from database
+            to_network="eth",
             from_amount=str(adjusted_amount),
             flow="standard",
             type_="direct"
