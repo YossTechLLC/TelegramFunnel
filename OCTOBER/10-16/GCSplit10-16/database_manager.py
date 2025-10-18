@@ -240,7 +240,8 @@ class DatabaseManager:
     def insert_split_payout_request(self, user_id: int, closed_channel_id: str,
                                    from_currency: str, to_currency: str,
                                    from_network: str, to_network: str,
-                                   from_amount: float, client_wallet_address: str,
+                                   from_amount: float, to_amount: float,
+                                   client_wallet_address: str,
                                    refund_address: str = "", flow: str = "standard",
                                    type_: str = "direct") -> Optional[str]:
         """
@@ -254,6 +255,7 @@ class DatabaseManager:
             from_network: Source network (e.g., "eth")
             to_network: Target network (e.g., "eth")
             from_amount: Amount from ChangeNow estimate response (fromAmount field)
+            to_amount: Amount from ChangeNow estimate response (toAmount field)
             client_wallet_address: Client's wallet address
             refund_address: Refund address (optional, empty string if not provided)
             flow: Exchange flow type (default "standard")
@@ -272,7 +274,8 @@ class DatabaseManager:
             print(f"📝 [DB_INSERT] Preparing split payout request insertion")
             print(f"👤 [DB_INSERT] User ID: {user_id}")
             print(f"🏦 [DB_INSERT] Wallet: {client_wallet_address}")
-            print(f"💰 [DB_INSERT] Amount: {from_amount} {from_currency.upper()}")
+            print(f"💰 [DB_INSERT] From Amount: {from_amount} {from_currency.upper()}")
+            print(f"💰 [DB_INSERT] To Amount: {to_amount} {to_currency.upper()}")
 
             # Generate unique ID
             unique_id = self.generate_unique_id()
@@ -282,12 +285,12 @@ class DatabaseManager:
                 INSERT INTO split_payout_request (
                     unique_id, user_id, closed_channel_id,
                     from_currency, to_currency, from_network, to_network,
-                    from_amount, client_wallet_address, refund_address,
+                    from_amount, to_amount, client_wallet_address, refund_address,
                     flow, type
                 ) VALUES (
                     %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s, %s, %s,
+                    %s, %s, %s, %s,
                     %s, %s
                 )
             """
@@ -295,7 +298,7 @@ class DatabaseManager:
             params = (
                 unique_id, user_id, closed_channel_id,
                 from_currency.upper(), to_currency.upper(), from_network.upper(), to_network.upper(),
-                from_amount, client_wallet_address, refund_address,
+                from_amount, to_amount, client_wallet_address, refund_address,
                 flow, type_
             )
 
@@ -341,8 +344,8 @@ class DatabaseManager:
                         pass
                 return self.insert_split_payout_request(
                     user_id, closed_channel_id, from_currency, to_currency,
-                    from_network, to_network, from_amount, client_wallet_address,
-                    refund_address, flow, type_
+                    from_network, to_network, from_amount, to_amount,
+                    client_wallet_address, refund_address, flow, type_
                 )
             else:
                 print(f"❌ [DB_INSERT] Error inserting split payout request: {e}")

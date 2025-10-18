@@ -136,36 +136,31 @@ def check_amount_limits(from_currency: str, to_currency: str, amount: float) -> 
         print(f"❌ [CHANGENOW_LIMITS] Error checking limits: {e}")
         return False, None
 
-def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_currency: str, 
+def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_currency: str,
                                 wallet_address: str, user_id: int) -> Optional[Dict]:
     """
     Create a fixed-rate transaction with ChangeNow.
-    
+
     Args:
-        from_amount: Amount to exchange
+        to_amount: Expected amount to receive (from ChangeNow estimate)
         from_currency: Source currency
         to_currency: Target currency
         wallet_address: Recipient wallet address
         user_id: User ID for tracking
-        
+
     Returns:
         Transaction data or None if failed
     """
     try:
         print(f"🚀 [CHANGENOW_SWAP] Starting fixed-rate transaction")
-        print(f"💰 [CHANGENOW_SWAP] {from_amount} {from_currency.upper()} → {to_currency.upper()}")
+        print(f"💰 [CHANGENOW_SWAP] Expected to receive: {to_amount} {to_currency.upper()}")
         print(f"🏦 [CHANGENOW_SWAP] Target wallet: {wallet_address}")
-        
-        # Get estimated exchange amount first
-        estimated = changenow_client.get_estimated_exchange_amount(from_amount, from_currency, to_currency)
-        if estimated:
-            print(f"📈 [CHANGENOW_SWAP] Estimated receive: {estimated.get('toAmount', 'Unknown')} {to_currency.upper()}")
-        
-        # Create the fixed-rate transaction
+
+        # Create the fixed-rate transaction using to_amount from estimate
         transaction = changenow_client.create_fixed_rate_transaction(
             from_currency=from_currency,
             to_currency=to_currency,
-            from_amount=from_amount,
+            from_amount=to_amount,
             address=wallet_address,
             user_id=str(user_id)
         )
@@ -191,7 +186,7 @@ def create_fixed_rate_transaction(from_amount: float, from_currency: str, to_cur
             if payin_extra_id:
                 print(f"🔖 Include Extra ID: {payin_extra_id}")
             print(f"🎯 Funds will be converted and sent to: {wallet_address}")
-            print(f"💰 You will receive approximately {estimated.get('toAmount', 'TBD')} {to_currency.upper()}")
+            print(f"💰 You will receive approximately {to_amount} {to_currency.upper()}")
             print(f"⏰ Transaction ID: {transaction_id}")
             print(f"="*60 + "\n")
             
@@ -316,6 +311,7 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
             from_network="eth",
             to_network=to_network.lower(),  # Dynamic from database lookup
             from_amount=float(from_amount),
+            to_amount=float(to_amount),
             client_wallet_address=wallet_address,
             refund_address="",  # Empty for now as specified
             flow="standard",
@@ -430,9 +426,9 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
                 "estimate_data": estimate_data
             }
 
-        # Step 4: Create fixed-rate transaction
+        # Step 4: Create fixed-rate transaction using to_amount from estimate
         transaction = create_fixed_rate_transaction(
-            from_amount=sub_price_float,
+            to_amount=float(estimate_data['to_amount']),
             from_currency="eth",
             to_currency=payout_currency,
             wallet_address=wallet_address,
