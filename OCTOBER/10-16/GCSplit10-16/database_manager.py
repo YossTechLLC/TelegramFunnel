@@ -428,3 +428,112 @@ class DatabaseManager:
                     conn.close()
                 except Exception:
                     pass
+
+    def insert_split_payout_que(self, unique_id: str, user_id: int, closed_channel_id: str,
+                                from_currency: str, to_currency: str,
+                                from_network: str, to_network: str,
+                                from_amount: float, to_amount: float,
+                                payin_address: str, payout_address: str,
+                                refund_address: str = "", flow: str = "standard",
+                                type_: str = "direct") -> bool:
+        """
+        Insert a new record into the split_payout_que table after ChangeNow transaction creation.
+
+        This method is called after create_fixed_rate_transaction API call succeeds.
+        It uses the SAME unique_id as the split_payout_request table to maintain consistency.
+
+        Args:
+            unique_id: The SAME unique_id from split_payout_request table
+            user_id: User ID from webhook
+            closed_channel_id: Channel ID from webhook
+            from_currency: Source currency (e.g., "eth")
+            to_currency: Target currency (e.g., "link")
+            from_network: Source network (e.g., "eth")
+            to_network: Target network (e.g., "eth")
+            from_amount: Amount from ChangeNow API response (fromAmount field)
+            to_amount: Amount from ChangeNow API response (toAmount field)
+            payin_address: ChangeNow deposit address (payinAddress field)
+            payout_address: Client's wallet address (payoutAddress field)
+            refund_address: Refund address (refundAddress field, optional)
+            flow: Exchange flow type (default "standard")
+            type_: Exchange type (default "direct")
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not CLOUD_SQL_AVAILABLE:
+            print("❌ [ERROR] Cloud SQL Connector not available - cannot insert into split_payout_que")
+            return False
+
+        conn = None
+        cur = None
+        try:
+            print(f"📝 [DB_INSERT_QUE] Preparing split payout que insertion")
+            print(f"🆔 [DB_INSERT_QUE] Unique ID: {unique_id}")
+            print(f"👤 [DB_INSERT_QUE] User ID: {user_id}")
+            print(f"🏦 [DB_INSERT_QUE] Payin Address: {payin_address}")
+            print(f"🏦 [DB_INSERT_QUE] Payout Address: {payout_address}")
+            print(f"💰 [DB_INSERT_QUE] From Amount: {from_amount} {from_currency.upper()}")
+            print(f"💰 [DB_INSERT_QUE] To Amount: {to_amount} {to_currency.upper()}")
+
+            # SQL INSERT statement for split_payout_que table
+            insert_query = """
+                INSERT INTO split_payout_que (
+                    unique_id, user_id, closed_channel_id,
+                    from_currency, to_currency, from_network, to_network,
+                    from_amount, to_amount, payin_address, payout_address, refund_address,
+                    flow, type
+                ) VALUES (
+                    %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s
+                )
+            """
+
+            params = (
+                unique_id, user_id, closed_channel_id,
+                from_currency.upper(), to_currency.upper(), from_network.upper(), to_network.upper(),
+                from_amount, to_amount, payin_address, payout_address, refund_address,
+                flow, type_
+            )
+
+            # Execute insertion
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [DB_INSERT_QUE] Could not establish database connection")
+                return False
+
+            cur = conn.cursor()
+            cur.execute(insert_query, params)
+            rows_affected = cur.rowcount
+
+            if rows_affected > 0:
+                conn.commit()
+                print(f"✅ [DB_INSERT_QUE] Successfully inserted into split_payout_que")
+                print(f"🆔 [DB_INSERT_QUE] Unique ID: {unique_id}")
+                print(f"🔗 [DB_INSERT_QUE] Linked to split_payout_request with same unique_id")
+                return True
+            else:
+                print(f"❌ [DB_INSERT_QUE] No rows affected")
+                return False
+
+        except Exception as e:
+            print(f"❌ [DB_INSERT_QUE] Error inserting into split_payout_que: {e}")
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            return False
+        finally:
+            if cur:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass

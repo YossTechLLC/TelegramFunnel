@@ -137,9 +137,11 @@ def check_amount_limits(from_currency: str, to_currency: str, amount: float) -> 
         return False, None
 
 def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_currency: str,
-                                wallet_address: str, user_id: int) -> Optional[Dict]:
+                                wallet_address: str, user_id: int, unique_id: str = None,
+                                closed_channel_id: str = None, from_network: str = "eth",
+                                to_network: str = "eth") -> Optional[Dict]:
     """
-    Create a fixed-rate transaction with ChangeNow.
+    Create a fixed-rate transaction with ChangeNow and save to split_payout_que table.
 
     Args:
         to_amount: Expected amount to receive (from ChangeNow estimate)
@@ -147,6 +149,10 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
         to_currency: Target currency
         wallet_address: Recipient wallet address
         user_id: User ID for tracking
+        unique_id: Unique ID from split_payout_request (for linking tables)
+        closed_channel_id: Channel ID from webhook
+        from_network: Source network (default "eth")
+        to_network: Target network (default "eth")
 
     Returns:
         Transaction data or None if failed
@@ -155,6 +161,8 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
         print(f"🚀 [CHANGENOW_SWAP] Starting fixed-rate transaction")
         print(f"💰 [CHANGENOW_SWAP] Expected to receive: {to_amount} {to_currency.upper()}")
         print(f"🏦 [CHANGENOW_SWAP] Target wallet: {wallet_address}")
+        if unique_id:
+            print(f"🆔 [CHANGENOW_SWAP] Unique ID (for linking): {unique_id}")
 
         # Create the fixed-rate transaction using to_amount from estimate
         transaction = changenow_client.create_fixed_rate_transaction(
@@ -164,13 +172,13 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
             address=wallet_address,
             user_id=str(user_id)
         )
-        
+
         if transaction:
             transaction_id = transaction.get('id', 'Unknown')
             payin_address = transaction.get('payinAddress', 'Unknown')
             payin_extra_id = transaction.get('payinExtraId', '')
             expected_amount = transaction.get('fromAmount', '')
-            
+
             print(f"✅ [CHANGENOW_SWAP] Transaction created successfully")
             print(f"🆔 [CHANGENOW_SWAP] Transaction ID: {transaction_id}")
             print(f"🏦 [CHANGENOW_SWAP] Deposit Address: {payin_address}")
@@ -178,7 +186,7 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
                 print(f"🔖 [CHANGENOW_SWAP] Extra ID: {payin_extra_id}")
             print(f"💰 [CHANGENOW_SWAP] Required Deposit: {expected_amount} {from_currency.upper()}")
             print(f"🎯 [CHANGENOW_SWAP] Destination: {wallet_address} ({to_currency.upper()})")
-            
+
             # Log deposit information for customer funding
             print(f"\n" + "="*60)
             print(f"📋 [CUSTOMER_FUNDING_INFO] Payment Split Instructions")
@@ -189,12 +197,60 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
             print(f"💰 You will receive approximately {to_amount} {to_currency.upper()}")
             print(f"⏰ Transaction ID: {transaction_id}")
             print(f"="*60 + "\n")
-            
+
+            # Save to split_payout_que table if unique_id is provided
+            if unique_id and user_id and closed_channel_id:
+                print(f"💾 [CHANGENOW_SWAP] Saving transaction to split_payout_que table")
+
+                try:
+                    # Extract data from API response
+                    api_from_amount = float(transaction.get('fromAmount', 0))
+                    api_to_amount = float(transaction.get('toAmount', 0))
+                    api_from_currency = transaction.get('fromCurrency', from_currency)
+                    api_to_currency = transaction.get('toCurrency', to_currency)
+                    api_from_network = transaction.get('fromNetwork', from_network)
+                    api_to_network = transaction.get('toNetwork', to_network)
+                    api_payin_address = transaction.get('payinAddress', '')
+                    api_payout_address = transaction.get('payoutAddress', wallet_address)
+                    api_refund_address = transaction.get('refundAddress', '')
+                    api_flow = transaction.get('flow', 'standard')
+                    api_type = transaction.get('type', 'direct')
+
+                    # Insert into split_payout_que table
+                    que_success = database_manager.insert_split_payout_que(
+                        unique_id=unique_id,
+                        user_id=user_id,
+                        closed_channel_id=closed_channel_id,
+                        from_currency=api_from_currency,
+                        to_currency=api_to_currency,
+                        from_network=api_from_network,
+                        to_network=api_to_network,
+                        from_amount=api_from_amount,
+                        to_amount=api_to_amount,
+                        payin_address=api_payin_address,
+                        payout_address=api_payout_address,
+                        refund_address=api_refund_address,
+                        flow=api_flow,
+                        type_=api_type
+                    )
+
+                    if que_success:
+                        print(f"✅ [CHANGENOW_SWAP] Successfully saved to split_payout_que")
+                        print(f"🔗 [CHANGENOW_SWAP] Both tables linked with unique_id: {unique_id}")
+                    else:
+                        print(f"⚠️ [CHANGENOW_SWAP] Failed to save to split_payout_que (non-fatal)")
+
+                except Exception as db_error:
+                    print(f"❌ [CHANGENOW_SWAP] Database error saving to split_payout_que: {db_error}")
+                    print(f"⚠️ [CHANGENOW_SWAP] Transaction created but not saved to que table (non-fatal)")
+            else:
+                print(f"⚠️ [CHANGENOW_SWAP] Skipping split_payout_que insertion - missing unique_id or user_id or closed_channel_id")
+
             return transaction
         else:
             print(f"❌ [CHANGENOW_SWAP] Failed to create transaction")
             return None
-            
+
     except Exception as e:
         print(f"❌ [CHANGENOW_SWAP] Error creating transaction: {e}")
         return None
@@ -428,13 +484,18 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
                 "estimate_data": estimate_data
             }
 
-        # Step 4: Create fixed-rate transaction using to_amount from estimate
+        # Step 4: Create fixed-rate transaction using to_amount from estimate and pass unique_id for linking
+        print(f"🔗 [PAYMENT_SPLITTING] Passing unique_id '{estimate_data['unique_id']}' to transaction creation")
         transaction = create_fixed_rate_transaction(
             to_amount=float(estimate_data['to_amount']),
             from_currency="eth",
             to_currency=payout_currency,
             wallet_address=wallet_address,
-            user_id=user_id
+            user_id=user_id,
+            unique_id=estimate_data['unique_id'],  # Pass unique_id for linking tables
+            closed_channel_id=str(closed_channel_id),  # Pass closed_channel_id for database
+            from_network="eth",
+            to_network="eth"
         )
 
         if transaction:
