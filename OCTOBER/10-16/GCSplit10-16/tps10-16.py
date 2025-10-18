@@ -169,7 +169,7 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
             transaction_id = transaction.get('id', 'Unknown')
             payin_address = transaction.get('payinAddress', 'Unknown')
             payin_extra_id = transaction.get('payinExtraId', '')
-            expected_amount = transaction.get('fromAmount', from_amount)
+            expected_amount = transaction.get('fromAmount', '')
             
             print(f"✅ [CHANGENOW_SWAP] Transaction created successfully")
             print(f"🆔 [CHANGENOW_SWAP] Transaction ID: {transaction_id}")
