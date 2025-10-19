@@ -163,14 +163,16 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
         print(f"🏦 [CHANGENOW_SWAP] Target wallet: {wallet_address}")
         if unique_id:
             print(f"🆔 [CHANGENOW_SWAP] Unique ID (for linking): {unique_id}")
+            print(f"🔗 [CHANGENOW_SWAP] Passing unique_id '{unique_id}' as userId to ChangeNow API")
 
         # Create the fixed-rate transaction using to_amount from estimate
+        # Pass unique_id as userId to ChangeNow API for tracking and linking
         transaction = changenow_client.create_fixed_rate_transaction(
             from_currency=from_currency,
             to_currency=to_currency,
             from_amount=to_amount,
             address=wallet_address,
-            user_id=str(unique_id)
+            user_id=str(unique_id) if unique_id else str(user_id)
         )
 
         if transaction:

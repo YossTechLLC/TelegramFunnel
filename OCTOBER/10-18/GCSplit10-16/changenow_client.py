@@ -322,6 +322,8 @@ class ChangeNowClient:
             }
 
             print(f"📦 [CHANGENOW_TRANSACTION] Payload: {transaction_data}")
+            if user_id:
+                print(f"🆔 [CHANGENOW_TRANSACTION] userId set to: {user_id}")
 
             # Create the transaction using v2 API
             response = self._make_request('POST', '/exchange', data=transaction_data, use_v2=True)
