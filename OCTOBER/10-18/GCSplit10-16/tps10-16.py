@@ -170,7 +170,7 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
             to_currency=to_currency,
             from_amount=to_amount,
             address=wallet_address,
-            user_id=str(user_id)
+            user_id=str(unique_id)
         )
 
         if transaction:
