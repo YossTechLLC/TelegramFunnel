@@ -429,7 +429,7 @@ class DatabaseManager:
                 except Exception:
                     pass
 
-    def insert_split_payout_que(self, unique_id: str, user_id: int, closed_channel_id: str,
+    def insert_split_payout_que(self, unique_id: str, cn_api_id: str, user_id: int, closed_channel_id: str,
                                 from_currency: str, to_currency: str,
                                 from_network: str, to_network: str,
                                 from_amount: float, to_amount: float,
@@ -444,6 +444,7 @@ class DatabaseManager:
 
         Args:
             unique_id: The SAME unique_id from split_payout_request table
+            cn_api_id: ChangeNow transaction ID from API response (id field)
             user_id: User ID from webhook
             closed_channel_id: Channel ID from webhook
             from_currency: Source currency (e.g., "eth")
@@ -470,6 +471,7 @@ class DatabaseManager:
         try:
             print(f"📝 [DB_INSERT_QUE] Preparing split payout que insertion")
             print(f"🆔 [DB_INSERT_QUE] Unique ID: {unique_id}")
+            print(f"🆔 [DB_INSERT_QUE] ChangeNow API ID: {cn_api_id}")
             print(f"👤 [DB_INSERT_QUE] User ID: {user_id}")
             print(f"🏦 [DB_INSERT_QUE] Payin Address: {payin_address}")
             print(f"🏦 [DB_INSERT_QUE] Payout Address: {payout_address}")
@@ -479,12 +481,12 @@ class DatabaseManager:
             # SQL INSERT statement for split_payout_que table
             insert_query = """
                 INSERT INTO split_payout_que (
-                    unique_id, user_id, closed_channel_id,
+                    unique_id, cn_api_id, user_id, closed_channel_id,
                     from_currency, to_currency, from_network, to_network,
                     from_amount, to_amount, payin_address, payout_address, refund_address,
                     flow, type
                 ) VALUES (
-                    %s, %s, %s,
+                    %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
                     %s, %s
@@ -492,7 +494,7 @@ class DatabaseManager:
             """
 
             params = (
-                unique_id, user_id, closed_channel_id,
+                unique_id, cn_api_id, user_id, closed_channel_id,
                 from_currency.upper(), to_currency.upper(), from_network.upper(), to_network.upper(),
                 from_amount, to_amount, payin_address, payout_address, refund_address,
                 flow, type_

@@ -163,16 +163,14 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
         print(f"🏦 [CHANGENOW_SWAP] Target wallet: {wallet_address}")
         if unique_id:
             print(f"🆔 [CHANGENOW_SWAP] Unique ID (for linking): {unique_id}")
-            print(f"🔗 [CHANGENOW_SWAP] Passing unique_id '{unique_id}' as userId to ChangeNow API")
 
         # Create the fixed-rate transaction using to_amount from estimate
-        # Pass unique_id as userId to ChangeNow API for tracking and linking
         transaction = changenow_client.create_fixed_rate_transaction(
             from_currency=from_currency,
             to_currency=to_currency,
             from_amount=to_amount,
             address=wallet_address,
-            user_id=str(unique_id) if unique_id else str(user_id)
+            user_id=str(user_id)
         )
 
         if transaction:
@@ -206,6 +204,7 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
 
                 try:
                     # Extract data from API response
+                    cn_api_id = transaction.get('id', '')
                     api_from_amount = float(transaction.get('fromAmount', 0))
                     api_to_amount = float(transaction.get('toAmount', 0))
                     api_from_currency = transaction.get('fromCurrency', from_currency)
@@ -218,9 +217,12 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
                     api_flow = transaction.get('flow', 'standard')
                     api_type = transaction.get('type', 'direct')
 
+                    print(f"🆔 [CHANGENOW_SWAP] Extracted ChangeNow API ID: {cn_api_id}")
+
                     # Insert into split_payout_que table
                     que_success = database_manager.insert_split_payout_que(
                         unique_id=unique_id,
+                        cn_api_id=cn_api_id,
                         user_id=user_id,
                         closed_channel_id=closed_channel_id,
                         from_currency=api_from_currency,
