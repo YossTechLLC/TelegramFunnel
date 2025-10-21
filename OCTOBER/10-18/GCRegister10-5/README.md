@@ -315,7 +315,7 @@ This service integrates with the existing TelegramFunnel payment system:
 1. **Database**: Populates `main_clients_database` table
 2. **TelePay10-16**: Uses registered channels for subscription management
 3. **GCWebhook10-16**: Processes payments for registered channels
-4. **GCSplit10-16**: Handles crypto conversions to registered wallets
+4. **GCSplit10-21**: Handles crypto conversions to registered wallets
 
 ## 📄 License
 

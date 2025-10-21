@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for TPS10-16 Payment Splitting Service.
+Configuration Manager for TPS10-21 Payment Splitting Service.
 Handles fetching configuration values from Google Cloud Secret Manager.
 """
 import os
@@ -13,10 +13,12 @@ from typing import Optional
 # TPS_WEBHOOK_URL: Path to TPS webhook URL in Secret Manager
 # TELEGRAM_BOT_USERNAME: Path to Telegram bot token in Secret Manager (shared with main app)
 # TP_FLAT_FEE: Path to TelePay flat fee percentage in Secret Manager
+# TPS_HOSTPAY_SIGNING_KEY: Path to HostPay signing key in Secret Manager (shared with GCHostPay10-21)
+# HOSTPAY_WEBHOOK_URL: Path to HostPay webhook URL in Secret Manager
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the TPS10-16 service.
+    Manages configuration and secrets for the TPS10-21 service.
     """
     
     def __init__(self):
@@ -26,6 +28,8 @@ class ConfigManager:
         self.success_url_signing_key = None
         self.telegram_bot_token = None
         self.tp_flat_fee = None
+        self.tps_hostpay_signing_key = None
+        self.hostpay_webhook_url = None
     
     def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
         """
@@ -115,6 +119,31 @@ class ConfigManager:
             "TPS_WEBHOOK_URL",
             "TPS webhook URL"
         )
+
+    def fetch_tps_hostpay_signing_key(self) -> Optional[str]:
+        """
+        Fetch the TPS HostPay signing key from Secret Manager.
+        This key is shared with GCHostPay10-21 for token signature verification.
+
+        Returns:
+            TPS HostPay signing key or None if failed
+        """
+        return self.fetch_secret(
+            "TPS_HOSTPAY_SIGNING_KEY",
+            "TPS HostPay signing key"
+        )
+
+    def fetch_hostpay_webhook_url(self) -> Optional[str]:
+        """
+        Fetch the HostPay webhook URL from Secret Manager.
+
+        Returns:
+            HostPay webhook URL or None if failed
+        """
+        return self.fetch_secret(
+            "HOSTPAY_WEBHOOK_URL",
+            "HostPay webhook URL"
+        )
     
     def initialize_config(self) -> dict:
         """
@@ -123,13 +152,15 @@ class ConfigManager:
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing TPS10-16 configuration")
+        print(f"⚙️ [CONFIG] Initializing TPS10-21 configuration")
 
         # Fetch all secrets
         self.changenow_api_key = self.fetch_changenow_api_key()
         self.success_url_signing_key = self.fetch_success_url_signing_key()
         self.telegram_bot_token = self.fetch_telegram_bot_token()
         self.tp_flat_fee = self.fetch_tp_flat_fee()
+        self.tps_hostpay_signing_key = self.fetch_tps_hostpay_signing_key()
+        self.hostpay_webhook_url = self.fetch_hostpay_webhook_url()
 
         # Get environment variables
         tps_webhook_url = self.get_tps_webhook_url()
@@ -145,7 +176,9 @@ class ConfigManager:
             'success_url_signing_key': self.success_url_signing_key,
             'tps_webhook_url': tps_webhook_url,
             'telegram_bot_token': self.telegram_bot_token,
-            'tp_flat_fee': self.tp_flat_fee
+            'tp_flat_fee': self.tp_flat_fee,
+            'tps_hostpay_signing_key': self.tps_hostpay_signing_key,
+            'hostpay_webhook_url': self.hostpay_webhook_url
         }
 
         # Log configuration status
@@ -155,6 +188,8 @@ class ConfigManager:
         print(f"   TPS Webhook URL: {'✅' if config['tps_webhook_url'] else '❌'}")
         print(f"   Telegram Bot Token: {'✅' if config['telegram_bot_token'] else '❌'}")
         print(f"   TP Flat Fee: {'✅' if config['tp_flat_fee'] else '❌'}")
+        print(f"   TPS HostPay Signing Key: {'✅' if config['tps_hostpay_signing_key'] else '❌'}")
+        print(f"   HostPay Webhook URL: {'✅' if config['hostpay_webhook_url'] else '❌'}")
 
         return config
     

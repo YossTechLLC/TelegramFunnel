@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-TPS10-16: ChangeNow Payment Splitting Service
+TPS10-21: ChangeNow Payment Splitting Service
 Google Cloud Function for automated cryptocurrency payment splitting using ChangeNow API.
 Converts ETH payments to client payout currencies after successful subscription payments.
 """
@@ -10,6 +10,9 @@ import time
 import hmac
 import hashlib
 import asyncio
+import struct
+import base64
+import requests
 from decimal import Decimal
 from typing import Dict, Any, Optional, Tuple
 from flask import Flask, request, abort, jsonify
@@ -100,28 +103,28 @@ def validate_changenow_pair(from_currency: str, to_currency: str) -> bool:
 def check_amount_limits(from_currency: str, to_currency: str, amount: float) -> Tuple[bool, Optional[Dict]]:
     """
     Check if the amount falls within ChangeNow's min/max limits for the pair.
-    
+
     Args:
         from_currency: Source currency
         to_currency: Target currency
         amount: Amount to check
-        
+
     Returns:
         Tuple of (is_valid, limits_info)
     """
     try:
         print(f"💰 [CHANGENOW_LIMITS] Checking limits for {amount} {from_currency.upper()} → {to_currency.upper()}")
-        
+
         limits = changenow_client.get_exchange_limits(from_currency, to_currency)
         if not limits:
             print(f"❌ [CHANGENOW_LIMITS] Failed to fetch limits")
             return False, None
-            
+
         min_amount = limits.get('minAmount', 0)
         max_amount = limits.get('maxAmount', float('inf'))
-        
+
         print(f"📊 [CHANGENOW_LIMITS] Min: {min_amount}, Max: {max_amount}, Amount: {amount}")
-        
+
         if amount < min_amount:
             print(f"❌ [CHANGENOW_LIMITS] Amount {amount} below minimum {min_amount}")
             return False, limits
@@ -131,10 +134,187 @@ def check_amount_limits(from_currency: str, to_currency: str, amount: float) -> 
         else:
             print(f"✅ [CHANGENOW_LIMITS] Amount {amount} within valid range")
             return True, limits
-            
+
     except Exception as e:
         print(f"❌ [CHANGENOW_LIMITS] Error checking limits: {e}")
         return False, None
+
+def build_hostpay_token(unique_id: str, cn_api_id: str, from_currency: str,
+                       from_network: str, from_amount: float, payin_address: str,
+                       signing_key: str) -> Optional[str]:
+    """
+    Build a cryptographically signed token for GCHostPay10-21 webhook.
+    Token is valid for 1 minute from creation.
+
+    Token Format (binary packed):
+    - 16 bytes: unique_id (UTF-8, fixed length, padded with nulls if shorter)
+    - 1 byte: cn_api_id length + variable bytes for cn_api_id
+    - 1 byte: from_currency length + variable bytes for from_currency
+    - 1 byte: from_network length + variable bytes for from_network
+    - 8 bytes: from_amount (double precision float)
+    - 1 byte: payin_address length + variable bytes for payin_address
+    - 4 bytes: timestamp (unix timestamp as uint32)
+    - 16 bytes: HMAC-SHA256 signature (truncated)
+
+    Args:
+        unique_id: Database unique ID (16 chars max)
+        cn_api_id: ChangeNow transaction ID
+        from_currency: Source currency (e.g., "eth")
+        from_network: Source network (e.g., "eth")
+        from_amount: Amount to send
+        payin_address: ChangeNow deposit address
+        signing_key: HMAC signing key
+
+    Returns:
+        Base64 URL-safe encoded token or None if failed
+    """
+    try:
+        print(f"🔐 [HOSTPAY_TOKEN] Building HostPay webhook token")
+
+        # Prepare unique_id (fixed 16 bytes, padded with nulls if shorter)
+        unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
+
+        # Encode string fields to UTF-8
+        cn_api_id_bytes = cn_api_id.encode('utf-8')
+        from_currency_bytes = from_currency.lower().encode('utf-8')
+        from_network_bytes = from_network.lower().encode('utf-8')
+        payin_address_bytes = payin_address.encode('utf-8')
+
+        # Get current timestamp
+        current_timestamp = int(time.time())
+
+        # Build packed data
+        packed_data = bytearray()
+
+        # Fixed 16-byte unique_id
+        packed_data.extend(unique_id_bytes)
+
+        # Variable length fields with 1-byte length prefix
+        packed_data.append(len(cn_api_id_bytes))
+        packed_data.extend(cn_api_id_bytes)
+
+        packed_data.append(len(from_currency_bytes))
+        packed_data.extend(from_currency_bytes)
+
+        packed_data.append(len(from_network_bytes))
+        packed_data.extend(from_network_bytes)
+
+        # 8-byte double for amount
+        packed_data.extend(struct.pack(">d", from_amount))
+
+        # Payin address
+        packed_data.append(len(payin_address_bytes))
+        packed_data.extend(payin_address_bytes)
+
+        # 4-byte timestamp
+        packed_data.extend(struct.pack(">I", current_timestamp))
+
+        # Generate HMAC signature
+        full_signature = hmac.new(signing_key.encode(), bytes(packed_data), hashlib.sha256).digest()
+        truncated_signature = full_signature[:16]  # First 16 bytes
+
+        # Combine data + signature
+        final_data = bytes(packed_data) + truncated_signature
+
+        # Base64 URL-safe encode
+        token = base64.urlsafe_b64encode(final_data).rstrip(b'=').decode('utf-8')
+
+        print(f"✅ [HOSTPAY_TOKEN] Token generated successfully")
+        print(f"🆔 [HOSTPAY_TOKEN] Unique ID: {unique_id}")
+        print(f"🆔 [HOSTPAY_TOKEN] CN API ID: {cn_api_id}")
+        print(f"💰 [HOSTPAY_TOKEN] Amount: {from_amount} {from_currency.upper()}")
+        print(f"🌐 [HOSTPAY_TOKEN] Network: {from_network}")
+        print(f"🏦 [HOSTPAY_TOKEN] Payin Address: {payin_address}")
+        print(f"⏰ [HOSTPAY_TOKEN] Timestamp: {current_timestamp}")
+        print(f"🔐 [HOSTPAY_TOKEN] Token size: {len(token)} chars")
+
+        return token
+
+    except Exception as e:
+        print(f"❌ [HOSTPAY_TOKEN] Error building token: {e}")
+        return None
+
+def trigger_hostpay_webhook(unique_id: str, cn_api_id: str, from_currency: str,
+                           from_network: str, from_amount: float, payin_address: str) -> bool:
+    """
+    Trigger the GCHostPay10-21 webhook with encrypted token.
+
+    Args:
+        unique_id: Database unique ID
+        cn_api_id: ChangeNow transaction ID
+        from_currency: Source currency
+        from_network: Source network
+        from_amount: Amount to send
+        payin_address: ChangeNow deposit address
+
+    Returns:
+        True if webhook triggered successfully, False otherwise
+    """
+    try:
+        # Get configuration
+        hostpay_webhook_url = config.get('hostpay_webhook_url')
+        signing_key = config.get('tps_hostpay_signing_key')
+
+        if not hostpay_webhook_url:
+            print(f"⚠️ [HOSTPAY_WEBHOOK] HostPay webhook URL not configured, skipping")
+            return False
+
+        if not signing_key:
+            print(f"❌ [HOSTPAY_WEBHOOK] TPS HostPay signing key not available")
+            return False
+
+        # Build token
+        token = build_hostpay_token(
+            unique_id=unique_id,
+            cn_api_id=cn_api_id,
+            from_currency=from_currency,
+            from_network=from_network,
+            from_amount=from_amount,
+            payin_address=payin_address,
+            signing_key=signing_key
+        )
+
+        if not token:
+            print(f"❌ [HOSTPAY_WEBHOOK] Failed to build token")
+            return False
+
+        print(f"🚀 [HOSTPAY_WEBHOOK] Triggering GCHostPay10-21 webhook")
+        print(f"🌐 [HOSTPAY_WEBHOOK] URL: {hostpay_webhook_url}")
+
+        # Prepare request payload
+        payload = {
+            "token": token
+        }
+
+        # Send webhook request
+        response = requests.post(
+            hostpay_webhook_url,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            print(f"✅ [HOSTPAY_WEBHOOK] Webhook triggered successfully")
+            try:
+                response_data = response.json()
+                print(f"📦 [HOSTPAY_WEBHOOK] Response: {response_data}")
+            except:
+                pass
+            return True
+        else:
+            print(f"❌ [HOSTPAY_WEBHOOK] Webhook failed with status {response.status_code}: {response.text}")
+            return False
+
+    except requests.exceptions.Timeout:
+        print(f"❌ [HOSTPAY_WEBHOOK] Request timeout")
+        return False
+    except requests.exceptions.ConnectionError:
+        print(f"❌ [HOSTPAY_WEBHOOK] Connection error")
+        return False
+    except Exception as e:
+        print(f"❌ [HOSTPAY_WEBHOOK] Error triggering webhook: {e}")
+        return False
 
 def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_currency: str,
                                 wallet_address: str, user_id: int, unique_id: str = None,
@@ -241,6 +421,24 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
                     if que_success:
                         print(f"✅ [CHANGENOW_SWAP] Successfully saved to split_payout_que")
                         print(f"🔗 [CHANGENOW_SWAP] Both tables linked with unique_id: {unique_id}")
+
+                        # Trigger HostPay webhook for automated payment
+                        print(f"🚀 [CHANGENOW_SWAP] Triggering HostPay webhook for automated ETH transfer")
+                        try:
+                            hostpay_triggered = trigger_hostpay_webhook(
+                                unique_id=unique_id,
+                                cn_api_id=cn_api_id,
+                                from_currency=api_from_currency,
+                                from_network=api_from_network,
+                                from_amount=api_from_amount,
+                                payin_address=api_payin_address
+                            )
+                            if hostpay_triggered:
+                                print(f"✅ [CHANGENOW_SWAP] HostPay webhook triggered successfully")
+                            else:
+                                print(f"⚠️ [CHANGENOW_SWAP] HostPay webhook trigger failed (non-fatal)")
+                        except Exception as webhook_error:
+                            print(f"❌ [CHANGENOW_SWAP] Error triggering HostPay webhook: {webhook_error}")
                     else:
                         print(f"⚠️ [CHANGENOW_SWAP] Failed to save to split_payout_que (non-fatal)")
 
@@ -552,7 +750,7 @@ def payment_split_webhook():
         payload = request.get_data()
         signature = request.headers.get('X-Webhook-Signature', '')
 
-        print(f"🎯 [WEBHOOK] TPS10-16 Webhook Called")
+        print(f"🎯 [WEBHOOK] TPS10-21 Webhook Called")
         print(f"📦 [WEBHOOK] Payload size: {len(payload)} bytes")
         
         # Verify webhook signature if signing key is available
@@ -602,7 +800,7 @@ def health_check():
     """Health check endpoint for monitoring."""
     return jsonify({
         "status": "healthy",
-        "service": "TPS10-16 Payment Splitting",
+        "service": "TPS10-21 Payment Splitting",
         "timestamp": int(time.time())
     }), 200
 

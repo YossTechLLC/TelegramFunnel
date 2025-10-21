@@ -4,7 +4,7 @@ TelegramFunnel Payment System - October 2025
 ================================================================================
 
 This document traces the source and flow of the 'id' parameter that appears in
-ChangeNow API responses throughout the TPS10-16 payment splitting service.
+ChangeNow API responses throughout the TPS10-21 payment splitting service.
 
 ================================================================================
 EXECUTIVE SUMMARY
@@ -57,15 +57,15 @@ Webhook Payload Created (lines 458-465):
 }
 
 HTTP Request (lines 487-492):
-POST to: TPS_WEBHOOK_URL (tps10-16 service)
+POST to: TPS_WEBHOOK_URL (tps10-21 service)
 Headers: Content-Type, X-Webhook-Signature (HMAC-SHA256)
 Body: JSON payload above
 
 CRITICAL NOTE: No 'id' parameter exists in this payload!
 
-STEP 3: TPS10-16 Webhook Receives Request (tps10-16.py)
+STEP 3: TPS10-21 Webhook Receives Request (tps10-21.py)
 --------------------------------------------------------
-Location: GCSplit10-16/tps10-16.py:541-594
+Location: GCSplit10-21/tps10-21.py:541-594
 Function: payment_split_webhook()
 
 Payload Received (lines 548-567):
@@ -77,9 +77,9 @@ Payload Received (lines 548-567):
 Processing Function Called (line 572):
 result = process_payment_split(webhook_data)
 
-STEP 4: Payment Split Processing (tps10-16.py)
+STEP 4: Payment Split Processing (tps10-21.py)
 -----------------------------------------------
-Location: GCSplit10-16/tps10-16.py:404-539
+Location: GCSplit10-21/tps10-21.py:404-539
 Function: process_payment_split()
 
 Data Extraction (lines 416-420):
@@ -124,9 +124,9 @@ transaction = create_fixed_rate_transaction(
 
 CRITICAL: The 'unique_id' passed here is from OUR database, NOT from ChangeNow
 
-STEP 5: Create Fixed-Rate Transaction (tps10-16.py)
+STEP 5: Create Fixed-Rate Transaction (tps10-21.py)
 ----------------------------------------------------
-Location: GCSplit10-16/tps10-16.py:139-256
+Location: GCSplit10-21/tps10-21.py:139-256
 Function: create_fixed_rate_transaction()
 
 Parameters Received:
@@ -151,7 +151,7 @@ transaction = changenow_client.create_fixed_rate_transaction(
 
 STEP 6: ChangeNow Client API Call (changenow_client.py)
 --------------------------------------------------------
-Location: GCSplit10-16/changenow_client.py:282-348
+Location: GCSplit10-21/changenow_client.py:282-348
 Function: create_fixed_rate_transaction()
 
 Parameters Received:
@@ -201,7 +201,7 @@ Body: transaction_data (as shown above)
 🎯 THE CRITICAL MOMENT: WHERE 'ID' IS BORN
 ================================================================================
 
-Location: GCSplit10-16/changenow_client.py:329-341
+Location: GCSplit10-21/changenow_client.py:329-341
 After API Call Response Processing:
 
 if response:
@@ -240,10 +240,10 @@ ChangeNow API Response Structure (Example):
 }
 
 ================================================================================
-STEP 7: Response Processing (tps10-16.py)
+STEP 7: Response Processing (tps10-21.py)
 ================================================================================
 
-Location: GCSplit10-16/tps10-16.py:176-249
+Location: GCSplit10-21/tps10-21.py:176-249
 After create_fixed_rate_transaction() returns:
 
 if transaction:
@@ -271,10 +271,10 @@ NOTE: The ChangeNow transaction 'id' is NOT explicitly saved to the database
       in the current implementation. It's only logged.
 
 ================================================================================
-STEP 8: Final Response (tps10-16.py)
+STEP 8: Final Response (tps10-21.py)
 ================================================================================
 
-Location: GCSplit10-16/tps10-16.py:518-526
+Location: GCSplit10-21/tps10-21.py:518-526
 Function: process_payment_split() return value
 
 return {
@@ -298,9 +298,9 @@ SUMMARY: COMPLETE ID JOURNEY
 │    ↓                                                                    │
 │ 2. Token decoded → Extract user_id (Telegram ID: 1234567890)           │
 │    ↓                                                                    │
-│ 3. Webhook sent to tps10-16 with user_id in payload                    │
+│ 3. Webhook sent to tps10-21 with user_id in payload                    │
 │    ↓                                                                    │
-│ 4. tps10-16 creates estimate → Generates unique_id (ABCD1234...)       │
+│ 4. tps10-21 creates estimate → Generates unique_id (ABCD1234...)       │
 │    ↓                                                                    │
 │ 5. unique_id saved to split_payout_request table                       │
 │    ↓                                                                    │
@@ -334,7 +334,7 @@ KEY FINDINGS
 
 2. TWO DIFFERENT IDs IN PLAY:
 
-   A. Our Database unique_id (Lines tps10-16.py:364, database_manager.py:225-238)
+   A. Our Database unique_id (Lines tps10-21.py:364, database_manager.py:225-238)
       - Format: 16-character alphanumeric (e.g., "ABCD1234EF567890")
       - Generated by: database_manager.generate_unique_id()
       - Purpose: Link split_payout_request and split_payout_que tables
@@ -366,41 +366,41 @@ CODE LOCATIONS REFERENCE
 ================================================================================
 
 'id' First Appearance:
-  File: GCSplit10-16/changenow_client.py
+  File: GCSplit10-21/changenow_client.py
   Line: 330
   Code: transaction_id = response.get('id', 'Unknown')
 
 'id' Extraction Points:
   1. changenow_client.py:330 - In create_fixed_rate_transaction()
-  2. tps10-16.py:177 - In create_fixed_rate_transaction()
-  3. tps10-16.py:520 - In process_payment_split() return
+  2. tps10-21.py:177 - In create_fixed_rate_transaction()
+  3. tps10-21.py:520 - In process_payment_split() return
 
 'id' Logging Points:
   1. changenow_client.py:337 - "Transaction ID: {transaction_id}"
-  2. tps10-16.py:183 - "Transaction ID: {transaction_id}"
-  3. tps10-16.py:198 - "Transaction ID: {transaction_id}"
+  2. tps10-21.py:183 - "Transaction ID: {transaction_id}"
+  3. tps10-21.py:198 - "Transaction ID: {transaction_id}"
 
 API Request Preparation:
-  File: GCSplit10-16/changenow_client.py
+  File: GCSplit10-21/changenow_client.py
   Lines: 304-322
   Note: NO 'id' field in request payload
 
 API Call Execution:
-  File: GCSplit10-16/changenow_client.py
+  File: GCSplit10-21/changenow_client.py
   Line: 327
   Endpoint: POST /v2/exchange
 
 Response Processing:
-  File: GCSplit10-16/changenow_client.py
+  File: GCSplit10-21/changenow_client.py
   Lines: 329-341
 
 Our unique_id Generation:
-  File: GCSplit10-16/database_manager.py
+  File: GCSplit10-21/database_manager.py
   Lines: 225-238
   Function: generate_unique_id()
 
 Our unique_id Usage:
-  File: GCSplit10-16/tps10-16.py
+  File: GCSplit10-21/tps10-21.py
   Line: 364 - Returned from get_estimated_conversion_and_save()
   Line: 495 - Passed to create_fixed_rate_transaction()
   Line: 221 - Passed to database insert
@@ -445,6 +445,6 @@ END OF TRACE
 Generated: October 2025
 Version: 10-18
 Purpose: Trace 'id' parameter source in ChangeNow API integration
-Services: TPS10-16, ChangeNowClient
+Services: TPS10-21, ChangeNowClient
 
 ================================================================================

@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 # Set workdir
 WORKDIR /app
 
-# Install system dependencies for cloud services and build tools
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libc6-dev \
@@ -19,13 +19,10 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code
-COPY tps10-16.py .
-COPY config_manager.py .
-COPY changenow_client.py .
-COPY database_manager.py .
+COPY tphp10-21.py .
 
 # Expose the port
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tps10-16.py"]
+CMD ["python", "tphp10-21.py"]

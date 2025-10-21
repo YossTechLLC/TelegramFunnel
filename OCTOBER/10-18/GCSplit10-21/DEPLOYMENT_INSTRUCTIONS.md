@@ -1,4 +1,4 @@
-# GCSplit10-16 Deployment Instructions
+# GCSplit10-21 Deployment Instructions
 
 ## 🚀 Overview
 This Google Cloud Run service integrates ChangeNow API for automated cryptocurrency payment splitting. After successful subscription payments, it converts USDT to client payout currencies and saves conversion estimates to the database.
@@ -74,11 +74,11 @@ Add the TPS webhook URL environment variable to tph10-16.py after deployment.
 ### Deploy to Google Cloud Run
 
 ```bash
-# Navigate to GCSplit10-16 directory
-cd GCSplit10-16
+# Navigate to GCSplit10-21 directory
+cd GCSplit10-21
 
 # Deploy using gcloud with Cloud SQL connection
-gcloud run deploy tps10-16 \
+gcloud run deploy tps10-21 \
     --source . \
     --region us-central1 \
     --platform managed \
@@ -126,7 +126,7 @@ gcloud run deploy tps10-16 \
 
 ```bash
 # Build the Docker image
-docker build -t tps10-16 .
+docker build -t tps10-21 .
 
 # Run locally for testing (uses Cloud SQL Connector)
 docker run -p 8080:8080 \
@@ -136,7 +136,7 @@ docker run -p 8080:8080 \
     -e DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER/versions/latest \
     -e DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest \
     -e CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest \
-    tps10-16
+    tps10-21
 ```
 
 **Note**: Local testing requires proper GCP credentials and service account permissions to access Secret Manager and Cloud SQL.
@@ -145,8 +145,8 @@ docker run -p 8080:8080 \
 
 1. **Payment Success** → `tph10-16.py` processes payment and creates user subscription
 2. **Invite Sent** → `tph10-16.py` sends Telegram invite to user
-3. **Webhook Trigger** → `tph10-16.py` calls `tps10-16.py` webhook with payment data
-4. **ChangeNow Integration** → `tps10-16.py` processes payment splitting:
+3. **Webhook Trigger** → `tph10-16.py` calls `tps10-21.py` webhook with payment data
+4. **ChangeNow Integration** → `tps10-21.py` processes payment splitting:
    - **Looks up network from database** → Queries `to_currency_to_network` table
    - Validates ETH → client_currency pair
    - Checks amount limits
@@ -194,7 +194,7 @@ INSERT INTO to_currency_to_network (to_currency, to_network) VALUES
 
 ### Startup Logs (Database Connection):
 ```
-⚙️ [CONFIG] Initializing TPS10-16 configuration
+⚙️ [CONFIG] Initializing TPS10-21 configuration
 🔐 [CONFIG] Fetching ChangeNow API key
 ✅ [CONFIG] Successfully fetched ChangeNow API key
 🔐 [CONFIG] Fetching success URL signing key
@@ -236,14 +236,14 @@ The service now uses **Google Cloud SQL Connector** (same as tph10-16.py):
 ### tph10-16.py Logs:
 ```
 🚀 [PAYMENT_SPLITTING] Starting Client Payout
-🔄 [PAYMENT_SPLITTING] Triggering TPS10-16 webhook
+🔄 [PAYMENT_SPLITTING] Triggering TPS10-21 webhook
 📦 [PAYMENT_SPLITTING] Payload: user_id=123, amount=$3.30 → LINK
 ✅ [PAYMENT_SPLITTING] Payment splitting webhook completed successfully
 ```
 
-### tps10-16.py Logs (Webhook Processing):
+### tps10-21.py Logs (Webhook Processing):
 ```
-🎯 [WEBHOOK] TPS10-16 Webhook Called
+🎯 [WEBHOOK] TPS10-21 Webhook Called
 📦 [WEBHOOK] Payload size: 196 bytes
 📝 [WEBHOOK] Processing payment split request
 🔄 [PAYMENT_SPLITTING] Starting Client Payout
@@ -278,16 +278,16 @@ The service now uses **Google Cloud SQL Connector** (same as tph10-16.py):
 ### 1. Health Check
 ```bash
 # Test the health endpoint
-curl https://tps10-16-[YOUR-HASH]-uc.a.run.app/health
+curl https://tps10-21-[YOUR-HASH]-uc.a.run.app/health
 
 # Expected response:
-# {"status":"healthy","service":"TPS10-16 Payment Splitting","timestamp":1234567890}
+# {"status":"healthy","service":"TPS10-21 Payment Splitting","timestamp":1234567890}
 ```
 
 ### 2. View Logs
 ```bash
 # View real-time logs to verify database connection
-gcloud run services logs read tps10-16 \
+gcloud run services logs read tps10-21 \
     --region us-central1 \
     --limit 50 \
     --project telepay-459221
@@ -300,7 +300,7 @@ gcloud run services logs read tps10-16 \
 ### 3. Manual Webhook Test
 ```bash
 # Test the webhook endpoint (requires valid signature)
-curl -X POST https://tps10-16-[YOUR-HASH]-uc.a.run.app \
+curl -X POST https://tps10-21-[YOUR-HASH]-uc.a.run.app \
   -H "Content-Type: application/json" \
   -H "X-Webhook-Signature: [VALID_HMAC_SIGNATURE]" \
   -d '{
@@ -346,7 +346,7 @@ Monitor the following metrics:
 **Solutions**:
 1. Verify all database environment variables are set:
    ```bash
-   gcloud run services describe tps10-16 --region us-central1 --format="value(spec.template.spec.containers[0].env)"
+   gcloud run services describe tps10-21 --region us-central1 --format="value(spec.template.spec.containers[0].env)"
    ```
 
 2. Check Secret Manager permissions:
@@ -369,7 +369,7 @@ Monitor the following metrics:
 
 4. Verify Cloud SQL connection is attached:
    ```bash
-   gcloud run services describe tps10-16 \
+   gcloud run services describe tps10-21 \
        --region us-central1 \
        --format="value(spec.template.metadata.annotations['run.googleapis.com/cloudsql-instances'])"
 

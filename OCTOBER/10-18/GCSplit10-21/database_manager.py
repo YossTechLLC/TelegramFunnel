@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Database Manager for TPS10-16 Payment Splitting Service.
+Database Manager for TPS10-21 Payment Splitting Service.
 Handles database operations for the split_payout_request table.
 Uses Google Cloud SQL Connector (mirroring tph10-16.py pattern).
 """
@@ -23,7 +23,7 @@ except ImportError as e:
 
 class DatabaseManager:
     """
-    Manages database connections and operations for TPS10-16 service.
+    Manages database connections and operations for TPS10-21 service.
     Uses the same database as the main TelePay application.
     Uses Google Cloud SQL Connector (no connection pooling).
     """

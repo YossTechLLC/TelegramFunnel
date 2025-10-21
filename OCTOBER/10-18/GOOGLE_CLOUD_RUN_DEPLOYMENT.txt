@@ -4,7 +4,7 @@ TelegramFunnel Payment System - October 2025
 ================================================================================
 
 This document contains the complete Google Cloud Run deployment commands for:
-1. tps10-16.py - Payment Splitting Service (GCSplit10-16)
+1. tps10-21.py - Payment Splitting Service (GCSplit10-21)
 2. tph10-16.py - Webhook Handler Service (GCWebhook10-16)
 
 ================================================================================
@@ -12,7 +12,7 @@ TABLE OF CONTENTS
 ================================================================================
 1. Prerequisites
 2. Secret Manager Setup
-3. TPS10-16 Deployment (Payment Splitting Service)
+3. TPS10-21 Deployment (Payment Splitting Service)
 4. TPH10-16 Deployment (Webhook Handler Service)
 5. Verification Commands
 6. Environment Variables Reference
@@ -37,11 +37,11 @@ Before deploying, ensure you have:
 
 Create the following secrets in Google Cloud Secret Manager:
 
-# ChangeNow API Key (for tps10-16)
+# ChangeNow API Key (for tps10-21)
 gcloud secrets create CHANGENOW_API_KEY \
     --data-file=./changenow_api_key.txt
 
-# Webhook Signing Key (shared between tps10-16 and tph10-16)
+# Webhook Signing Key (shared between tps10-21 and tph10-16)
 gcloud secrets create WEBHOOK_SIGNING_KEY \
     --data-file=./webhook_signing_key.txt
 
@@ -68,11 +68,11 @@ gcloud secrets create CLOUD_SQL_CONNECTION_NAME \
 # Replace PROJECT_ID with your actual project ID (e.g., 291176869049)
 
 ================================================================================
-3. TPS10-16 DEPLOYMENT (Payment Splitting Service)
+3. TPS10-21 DEPLOYMENT (Payment Splitting Service)
 ================================================================================
 
-SERVICE NAME: tps10-16
-LOCATION: GCSplit10-16/
+SERVICE NAME: tps10-21
+LOCATION: GCSplit10-21/
 PURPOSE: Handles cryptocurrency payment splitting via ChangeNow API
 
 --- REQUIRED ENVIRONMENT VARIABLES ---
@@ -91,16 +91,16 @@ PURPOSE: Handles cryptocurrency payment splitting via ChangeNow API
 
 4. TPS_WEBHOOK_URL (Direct value - Optional)
    Purpose: Self-reference URL for configuration logging
-   Example: https://tps10-16-HASH-uc.a.run.app
+   Example: https://tps10-21-HASH-uc.a.run.app
    Note: Not critical for operation, only used for logging
 
 --- DEPLOYMENT COMMAND ---
 
 # Navigate to the service directory
-cd GCSplit10-16
+cd GCSplit10-21
 
 # Deploy to Cloud Run
-gcloud run deploy tps10-16 \
+gcloud run deploy tps10-21 \
     --source . \
     --region us-central1 \
     --platform managed \
@@ -114,11 +114,11 @@ gcloud run deploy tps10-16 \
     --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
     --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-21-HASH-uc.a.run.app
 
 # Alternative: Deploy from Docker image
-gcloud run deploy tps10-16 \
-    --image gcr.io/PROJECT_ID/tps10-16:latest \
+gcloud run deploy tps10-21 \
+    --image gcr.io/PROJECT_ID/tps10-21:latest \
     --region us-central1 \
     --platform managed \
     --allow-unauthenticated \
@@ -131,11 +131,11 @@ gcloud run deploy tps10-16 \
     --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
     --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-21-HASH-uc.a.run.app
 
 --- POST-DEPLOYMENT ---
 
-After deployment, note the service URL (e.g., https://tps10-16-HASH-uc.a.run.app)
+After deployment, note the service URL (e.g., https://tps10-21-HASH-uc.a.run.app)
 You will need this URL for the tph10-16 TPS_WEBHOOK_URL environment variable.
 
 ================================================================================
@@ -175,9 +175,9 @@ PURPOSE: Processes payment success webhooks, sends Telegram invites, triggers pa
    Secret Value: my-project:us-central1:telegram-db
 
 7. TPS_WEBHOOK_URL (Direct value)
-   Purpose: URL of tps10-16 service for payment splitting
-   Example: https://tps10-16-HASH-uc.a.run.app
-   Note: Use the URL from tps10-16 deployment above
+   Purpose: URL of tps10-21 service for payment splitting
+   Example: https://tps10-21-HASH-uc.a.run.app
+   Note: Use the URL from tps10-21 deployment above
 
 --- DEPLOYMENT COMMAND ---
 
@@ -203,7 +203,7 @@ gcloud run deploy tph10-16 \
     --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER/versions/latest \
     --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest \
     --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-21-HASH-uc.a.run.app
 
 # Alternative: Deploy from Docker image
 gcloud run deploy tph10-16 \
@@ -224,7 +224,7 @@ gcloud run deploy tph10-16 \
     --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER/versions/latest \
     --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest \
     --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://tps10-16-HASH-uc.a.run.app
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-21-HASH-uc.a.run.app
 
 --- POST-DEPLOYMENT ---
 
@@ -237,13 +237,13 @@ This URL should be used in the payment gateway success redirect configuration.
 
 --- Check Service Status ---
 
-# TPS10-16 Health Check
-curl https://TPS10-16_SERVICE_URL/health
+# TPS10-21 Health Check
+curl https://TPS10-21_SERVICE_URL/health
 
 Expected Response:
 {
   "status": "healthy",
-  "service": "TPS10-16 Payment Splitting",
+  "service": "TPS10-21 Payment Splitting",
   "timestamp": 1234567890
 }
 
@@ -252,8 +252,8 @@ curl "https://TPH10-16_SERVICE_URL/?token=VALID_TOKEN"
 
 --- View Service Logs ---
 
-# TPS10-16 Logs
-gcloud run services logs read tps10-16 \
+# TPS10-21 Logs
+gcloud run services logs read tps10-21 \
     --region us-central1 \
     --limit 50
 
@@ -264,8 +264,8 @@ gcloud run services logs read tph10-16 \
 
 --- Update Environment Variables ---
 
-# Update TPS10-16 environment variable
-gcloud run services update tps10-16 \
+# Update TPS10-21 environment variable
+gcloud run services update tps10-21 \
     --region us-central1 \
     --update-env-vars KEY=VALUE
 
@@ -276,8 +276,8 @@ gcloud run services update tph10-16 \
 
 --- Service Information ---
 
-# Get TPS10-16 service details
-gcloud run services describe tps10-16 \
+# Get TPS10-21 service details
+gcloud run services describe tps10-21 \
     --region us-central1 \
     --format json
 
@@ -290,7 +290,7 @@ gcloud run services describe tph10-16 \
 6. ENVIRONMENT VARIABLES REFERENCE
 ================================================================================
 
---- TPS10-16 ENVIRONMENT VARIABLES ---
+--- TPS10-21 ENVIRONMENT VARIABLES ---
 
 Variable Name              | Type           | Required | Purpose
 ---------------------------|----------------|----------|---------------------------
@@ -320,9 +320,9 @@ TPS_WEBHOOK_URL            | Direct Value   | Yes      | Payment splitting servi
 3. Token Verified → tph10-16 decodes and verifies token signature
 4. Database Record → tph10-16 records subscription in private_channel_users_database
 5. Telegram Invite → tph10-16 sends one-time invite link to user
-6. Payment Split → tph10-16 triggers tps10-16 webhook with payment data
-7. ChangeNow Transaction → tps10-16 creates crypto conversion transaction
-8. Notification → tps10-16 sends transaction details via Telegram
+6. Payment Split → tph10-16 triggers tps10-21 webhook with payment data
+7. ChangeNow Transaction → tps10-21 creates crypto conversion transaction
+8. Notification → tps10-21 sends transaction details via Telegram
 
 ================================================================================
 8. IMPORTANT NOTES
@@ -358,11 +358,11 @@ END OF DEPLOYMENT GUIDE
 
 Generated: October 2025
 Version: 10-16
-Services: tps10-16, tph10-16
+Services: tps10-21, tph10-16
 Platform: Google Cloud Run
 
 For support or questions, refer to:
-- GCSplit10-16/DEPLOYMENT_INSTRUCTIONS.md
+- GCSplit10-21/DEPLOYMENT_INSTRUCTIONS.md
 - GCRegister10-5/README.md
 - Internal documentation
 
