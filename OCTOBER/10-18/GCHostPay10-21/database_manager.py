@@ -160,12 +160,13 @@ class DatabaseManager:
             cur = conn.cursor()
 
             # Insert into split_payout_hostpay table
+            # NOTE: Database uses currency_type ENUM which expects UPPERCASE values
             insert_query = """
                 INSERT INTO split_payout_hostpay
                 (unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, is_complete)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            insert_params = (unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, is_complete)
+            insert_params = (unique_id, cn_api_id, from_currency.upper(), from_network.upper(), from_amount, payin_address, is_complete)
 
             print(f"🔄 [HOSTPAY_DB] Executing INSERT query")
             cur.execute(insert_query, insert_params)
@@ -176,6 +177,8 @@ class DatabaseManager:
 
             print(f"🎉 [HOSTPAY_DB] Successfully inserted record for unique_id: {unique_id}")
             print(f"   🆔 CN API ID: {cn_api_id}")
+            print(f"   💰 Currency: {from_currency.upper()}")
+            print(f"   🌐 Network: {from_network.upper()}")
             print(f"   💰 Amount: {from_amount} {from_currency.upper()}")
             print(f"   🏦 Payin Address: {payin_address}")
             print(f"   ✔️ Is Complete: {is_complete}")
