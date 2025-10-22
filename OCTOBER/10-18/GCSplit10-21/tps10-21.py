@@ -491,6 +491,75 @@ def calculate_adjusted_amount(subscription_price: str, tp_flat_fee: str) -> Tupl
         # Return original amount if calculation fails
         return (float(subscription_price), float(subscription_price))
 
+def calculate_pure_market_conversion(estimate_response: Dict[str, Any]) -> float:
+    """
+    Calculate pure market rate conversion from ChangeNow estimate response.
+
+    ChangeNow's toAmount includes fees deducted. This function back-calculates
+    the pure market rate to get the true USDT→ETH conversion value.
+
+    Purpose: split_payout_request should store the MARKET VALUE in ETH
+             (how much ETH is this dollar amount worth at current rates)
+             NOT the post-fee swap amount.
+
+    Formula:
+        1. Actual USDT swapped = fromAmount - depositFee
+        2. ETH before withdrawal = toAmount + withdrawalFee
+        3. Market Rate = ETH_before / USDT_swapped
+        4. Pure Conversion = original_fromAmount * Market_Rate
+
+    Args:
+        estimate_response: Response from ChangeNow API v2 estimated-amount
+
+    Returns:
+        Pure market conversion amount (ETH) without fees
+
+    Example:
+        Input: {fromAmount: 14.55, toAmount: 0.0036158,
+                depositFee: 0.6247193, withdrawalFee: 0.000037}
+        Output: 0.00381558 (pure market value of 14.55 USDT in ETH)
+    """
+    try:
+        from_amount = float(estimate_response.get('fromAmount', 0))
+        to_amount = float(estimate_response.get('toAmount', 0))
+        deposit_fee = float(estimate_response.get('depositFee', 0))
+        withdrawal_fee = float(estimate_response.get('withdrawalFee', 0))
+
+        print(f"🧮 [MARKET_CALC] Calculating pure market conversion")
+        print(f"   From Amount: {from_amount} USDT")
+        print(f"   To Amount (after fees): {to_amount} ETH")
+        print(f"   Deposit Fee: {deposit_fee} USDT")
+        print(f"   Withdrawal Fee: {withdrawal_fee} ETH")
+
+        # Calculate actual amounts that went through the swap
+        usdt_swapped = from_amount - deposit_fee
+        eth_before_withdrawal = to_amount + withdrawal_fee
+
+        print(f"   USDT actually swapped: {usdt_swapped}")
+        print(f"   ETH before withdrawal fee: {eth_before_withdrawal}")
+
+        # Calculate market rate (ETH per USDT)
+        if usdt_swapped <= 0:
+            print(f"❌ [MARKET_CALC] Invalid usdt_swapped value: {usdt_swapped}")
+            return to_amount  # Fallback to toAmount
+
+        market_rate = eth_before_withdrawal / usdt_swapped
+        print(f"   Market Rate: {market_rate} ETH per USDT")
+
+        # Apply market rate to original amount (before deposit fee)
+        pure_market_value = from_amount * market_rate
+
+        print(f"✅ [MARKET_CALC] Pure market conversion: {pure_market_value} ETH")
+        print(f"   (Represents true market value of {from_amount} USDT)")
+        print(f"   Difference from post-fee amount: +{pure_market_value - to_amount} ETH")
+
+        return pure_market_value
+
+    except Exception as e:
+        print(f"❌ [MARKET_CALC] Error calculating pure market conversion: {e}")
+        print(f"⚠️ [MARKET_CALC] Falling back to ChangeNow's toAmount")
+        return float(estimate_response.get('toAmount', 0))
+
 def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
                                      wallet_address: str, payout_currency: str,
                                      subscription_price: str) -> Optional[Dict[str, Any]]:
@@ -549,19 +618,42 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
             return None
 
         # Step 3: Extract data from response
-        to_amount = estimate_response.get('toAmount')
+        to_amount_after_fees = estimate_response.get('toAmount')  # This is POST-FEE amount
         from_amount = estimate_response.get('fromAmount')
         deposit_fee = estimate_response.get('depositFee', 0)
         withdrawal_fee = estimate_response.get('withdrawalFee', 0)
 
-        print(f"📊 [ESTIMATE_AND_SAVE] Estimate details:")
+        # Step 3.5: Calculate PURE market conversion (no fees)
+        # This represents the true USDT→ETH market value for tracking purposes
+        # split_payout_request stores MARKET VALUE, not post-swap amount
+        pure_market_eth_value = calculate_pure_market_conversion(estimate_response)
+
+        print(f"📊 [ESTIMATE_AND_SAVE] Conversion details:")
         print(f"   From Amount: {from_amount} USDT")
-        print(f"   To Amount: {to_amount} {payout_currency.upper()}")
+        print(f"   To Amount (post-fee): {to_amount_after_fees} ETH")
+        print(f"   To Amount (pure market): {pure_market_eth_value} ETH ⭐")
+        print(f"   ^ split_payout_request will store: {pure_market_eth_value} ETH")
+        print(f"   (This is the market value, not swap amount)")
         print(f"   Deposit Fee: {deposit_fee}")
         print(f"   Withdrawal Fee: {withdrawal_fee}")
 
         # Step 4: Insert into split_payout_request table
+        #
+        # TABLE PURPOSE CLARIFICATION:
+        # split_payout_request: Tracks the MARKET VALUE of the subscription in ETH
+        #   - to_amount stores: Pure USDT→ETH market conversion (no fees deducted)
+        #   - Example: $14.55 USDT = 0.00381558 ETH (at current market rate)
+        #   - Use case: Financial reporting, value tracking, tax purposes
+        #
+        # split_payout_que: Tracks the ACTUAL CHANGENOW TRANSACTION details
+        #   - to_amount stores: Actual amount client receives after all swaps/fees
+        #   - Example: ETH swap results in 0.00005123 BTC sent to client
+        #   - Use case: Transaction reconciliation, client payout verification
+        #
         print(f"💾 [ESTIMATE_AND_SAVE] Inserting into database")
+        print(f"   NOTE: to_amount = PURE MARKET VALUE ({pure_market_eth_value} ETH)")
+        print(f"   This represents the market worth of {from_amount} USDT in ETH")
+        print(f"   NOT the post-fee swap amount ({to_amount_after_fees} ETH)")
 
         unique_id = database_manager.insert_split_payout_request(
             user_id=user_id,
@@ -571,7 +663,7 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
             from_network="eth",
             to_network=to_network.lower(),  # Dynamic from database lookup
             from_amount=float(from_amount),
-            to_amount=float(to_amount),
+            to_amount=float(pure_market_eth_value),  # ⭐ Use pure market value (not post-fee)
             client_wallet_address=wallet_address,
             refund_address="",  # Empty for now as specified
             flow="standard",
@@ -591,7 +683,8 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
             "adjusted_amount": adjusted_amount,
             "tp_flat_fee_percentage": tp_flat_fee,
             "from_amount": from_amount,
-            "to_amount": to_amount,
+            "to_amount": pure_market_eth_value,  # ⭐ Pure market value (for split_payout_request)
+            "to_amount_after_fees": to_amount_after_fees,  # Post-fee amount (for reference)
             "from_currency": "usdt",
             "to_currency": payout_currency.lower(),
             "deposit_fee": deposit_fee,
@@ -666,7 +759,11 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
             }
 
         print(f"✅ [PAYMENT_SPLITTING] Estimate saved with unique_id: {estimate_data['unique_id']}")
-        print(f"💰 [PAYMENT_SPLITTING] Will convert {estimate_data['from_amount']} USDT → {estimate_data['to_amount']} {payout_currency.upper()}")
+        print(f"💰 [PAYMENT_SPLITTING] Market value: {estimate_data['from_amount']} USDT = {estimate_data['to_amount']} ETH")
+        print(f"   ^ This is PURE MARKET VALUE (split_payout_request)")
+        print(f"💰 [PAYMENT_SPLITTING] Actual swap amount: {estimate_data['to_amount_after_fees']} ETH after fees")
+        print(f"   ^ This is the post-fee amount (not stored, for reference only)")
+        print(f"💰 [PAYMENT_SPLITTING] Will convert ETH → {payout_currency.upper()} for client payout")
 
         # Step 2: Validate currency pair
         if not validate_changenow_pair("eth", payout_currency):
