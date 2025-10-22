@@ -2,9 +2,9 @@
 
 ## Overview
 
-GCHostPay10-21 is a Google Cloud Run webhook service that receives encrypted, time-sensitive tokens from GCSplit10-21 (TPS10-21) and will execute automated ETH transfers from the host wallet to ChangeNow payin addresses.
+GCHostPay10-21 is a Google Cloud Run webhook service that receives encrypted, time-sensitive tokens from GCSplit10-21 (TPS10-21) and executes automated ETH transfers from the host wallet to ChangeNow payin addresses.
 
-**Current Status**: Phase 1 Complete - Token validation and payload extraction implemented. ETH transfer functionality to be added in Phase 2.
+**Current Status**: Phase 2 Complete - Full implementation with ChangeNow API verification, ETH payment execution via Web3, and database logging.
 
 ## Architecture
 
@@ -18,17 +18,63 @@ GCHostPay10-21 is a Google Cloud Run webhook service that receives encrypted, ti
          │ 2. POST to GCHostPay10-21
          │
          ▼
-┌─────────────────┐
-│ GCHostPay10-21  │
-│   (tphp10-21)   │
-├─────────────────┤
-│ 1. Validate sig │
-│ 2. Check expiry │
-│ 3. Extract data │
-│ 4. [TODO] Send  │
-│    ETH via Web3 │
-└─────────────────┘
+┌─────────────────────────────┐
+│     GCHostPay10-21          │
+│       (tphp10-21)           │
+├─────────────────────────────┤
+│ 1. Validate signature       │
+│ 2. Check token expiry       │
+│ 3. Extract payload data     │
+│ 4. Check for duplicates     │
+│ 5. Verify ChangeNow status  │
+│ 6. Execute ETH payment      │
+│ 7. Log to database          │
+└─────────────────────────────┘
+         │
+         ├─→ wallet_manager.py
+         │   (Web3 ETH transfers)
+         │
+         └─→ database_manager.py
+             (PostgreSQL logging)
 ```
+
+## File Structure
+
+```
+GCHostPay10-21/
+├── tphp10-21.py              # Main Flask webhook application
+├── wallet_manager.py         # Web3 wallet operations & ETH transfers
+├── database_manager.py       # PostgreSQL database operations
+├── requirements.txt          # Python dependencies
+├── Dockerfile               # Docker container configuration
+├── .dockerignore            # Docker build exclusions
+├── README.md                # This file
+└── PHASE2_IMPLEMENTATION.md # Phase 2 technical documentation
+```
+
+### Component Responsibilities
+
+**tphp10-21.py** (Main Application)
+- Flask webhook endpoint `/`
+- Token validation and decoding
+- ChangeNow API status verification
+- Orchestrates workflow between WalletManager and DatabaseManager
+- Health check endpoint `/health`
+
+**wallet_manager.py** (Wallet Operations)
+- WalletManager class for all Web3 operations
+- Secret Manager integration for wallet credentials
+- ETH payment execution via Web3
+- Wallet balance checking
+- ETH address validation
+- Gas cost estimation
+
+**database_manager.py** (Database Operations)
+- DatabaseManager class for PostgreSQL operations
+- Cloud SQL Connector integration
+- Transaction logging to `split_payout_hostpay` table
+- Duplicate transaction checking
+- Mirrors GCSplit10-21 database pattern
 
 ## Token Security
 
@@ -84,14 +130,51 @@ The token contains the following fields extracted from ChangeNow API response:
    - Shared with: GCSplit10-21
    - Path: `projects/291176869049/secrets/TPS_HOSTPAY_SIGNING_KEY/versions/latest`
 
-2. **HOST_WALLET_ETH_ADDRESS** (Future use)
+2. **HOST_WALLET_ETH_ADDRESS** (Required)
    - Purpose: Public ETH address of host wallet
+   - Used by: wallet_manager.py
    - Path: `projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest`
 
-3. **HOST_WALLET_PRIVATE_KEY** (Future use)
+3. **HOST_WALLET_PRIVATE_KEY** (Required)
    - Purpose: Private key for signing ETH transactions
+   - Used by: wallet_manager.py
    - Path: `projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest`
    - **Security**: Never log or expose this value
+
+4. **ETHEREUM_RPC_URL** (Required)
+   - Purpose: Ethereum node provider URL (Infura/Alchemy)
+   - Used by: wallet_manager.py
+   - Example: `https://mainnet.infura.io/v3/YOUR_PROJECT_ID`
+   - Path: `projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest`
+
+5. **CHANGENOW_API_KEY** (Required)
+   - Purpose: ChangeNow API authentication
+   - Used by: tphp10-21.py (status verification)
+   - Path: `projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest`
+
+6. **DATABASE_NAME_SECRET** (Required)
+   - Purpose: PostgreSQL database name
+   - Used by: database_manager.py
+   - Shared with: GCSplit10-21
+   - Path: `projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest`
+
+7. **DATABASE_USER_SECRET** (Required)
+   - Purpose: PostgreSQL database user
+   - Used by: database_manager.py
+   - Shared with: GCSplit10-21
+   - Path: `projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest`
+
+8. **DATABASE_PASSWORD_SECRET** (Required)
+   - Purpose: PostgreSQL database password
+   - Used by: database_manager.py
+   - Shared with: GCSplit10-21
+   - Path: `projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest`
+
+9. **CLOUD_SQL_CONNECTION_NAME** (Required)
+   - Purpose: Cloud SQL instance connection name
+   - Used by: database_manager.py
+   - Shared with: GCSplit10-21
+   - Path: `projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest`
 
 ## Deployment
 
@@ -179,22 +262,27 @@ Main webhook endpoint for receiving payment requests from TPS10-21.
 ```json
 {
   "status": "success",
-  "message": "Token validated and payload extracted successfully",
+  "message": "ETH payment executed and logged successfully",
   "data": {
     "unique_id": "ABCD1234EF567890",
     "cn_api_id": "abc123xyz789",
     "from_currency": "eth",
     "from_network": "eth",
     "from_amount": 0.005,
-    "payin_address": "0x1234567890abcdef..."
-  },
-  "note": "ETH transfer functionality to be implemented"
+    "payin_address": "0x1234567890abcdef...",
+    "changenow_status": "waiting",
+    "tx_hash": "0xabcdef123456...",
+    "gas_used": 21000,
+    "block_number": 18123456,
+    "database_logged": true
+  }
 }
 ```
 
 **Error Responses**:
-- 400: Invalid token, expired token, or malformed payload
-- 500: Configuration error or processing error
+- 200 (already_processed): Transaction already processed (duplicate prevention)
+- 400: Invalid token, expired token, invalid ChangeNow status, or malformed payload
+- 500: Configuration error, payment failed, or processing error
 
 ### GET /health
 
@@ -228,22 +316,40 @@ Health check endpoint for monitoring.
    - POST request with token in JSON body
    - 30-second timeout
 
-4. **Token Validation** (in GCHostPay10-21)
+4. **Token Validation** (in GCHostPay10-21 - tphp10-21.py)
    - Base64 decode
    - Verify HMAC signature
    - Check timestamp expiration (1-minute window)
    - Extract all 6 payload fields
 
-5. **Payload Logging** (in GCHostPay10-21)
-   - All extracted values logged with emoji prefixes
-   - Format: `🆔 unique_id: ABCD1234EF567890`
+5. **Duplicate Check** (in GCHostPay10-21 - database_manager.py)
+   - Query `split_payout_hostpay` table for existing unique_id
+   - If exists: Return "already_processed" (200)
+   - If not exists: Continue to next step
 
-6. **[Future] ETH Transfer** (in GCHostPay10-21)
-   - Connect to Web3 provider
-   - Build ETH transaction
+6. **ChangeNow Status Verification** (in GCHostPay10-21 - tphp10-21.py)
+   - GET request to ChangeNow API
+   - Endpoint: `/v2/exchange/by-id?id={cn_api_id}`
+   - If status == "waiting": Continue
+   - If status != "waiting": Terminate with 400 error
+
+7. **ETH Transfer** (in GCHostPay10-21 - wallet_manager.py)
+   - Connect to Web3 provider (Infura/Alchemy)
+   - Get nonce and gas price
+   - Build transaction (21000 gas, chainId 1)
    - Sign with HOST_WALLET_PRIVATE_KEY
-   - Broadcast to network
-   - Update database with transaction hash
+   - Broadcast to Ethereum mainnet
+   - Wait for confirmation (timeout: 5 minutes)
+
+8. **Database Logging** (in GCHostPay10-21 - database_manager.py)
+   - Insert record to `split_payout_hostpay` table
+   - Fields: unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, is_complete=true
+   - Auto-populated: created_at, updated_at
+
+9. **Success Response** (in GCHostPay10-21 - tphp10-21.py)
+   - Return 200 with transaction details
+   - Include tx_hash, gas_used, block_number
+   - Confirm database logging success
 
 ## Logging
 
@@ -382,28 +488,53 @@ gcloud run services update tphp10-21 \
     --update-env-vars KEY=VALUE
 ```
 
-## Next Steps (Phase 2)
+## Monitoring and Operations
 
-1. **Add Web3 Integration**:
-   - Install `web3.py` package
-   - Connect to Ethereum node (Infura/Alchemy)
-   - Implement ETH transfer function
+### Key Metrics to Monitor
 
-2. **Transaction Management**:
-   - Gas price estimation
-   - Nonce management
-   - Transaction confirmation tracking
-   - Error handling and retries
+1. **Transaction Success Rate**
+   - ETH payment success vs failures
+   - ChangeNow status verification failures
+   - Token validation failures
 
-3. **Database Updates**:
-   - Record transaction hash
-   - Update payment status
-   - Link with unique_id
+2. **Gas Costs**
+   - Average gas price (Gwei)
+   - Total ETH spent on gas fees
+   - Gas cost per transaction
 
-4. **Monitoring**:
-   - Transaction success/failure alerts
-   - Gas cost tracking
-   - Wallet balance monitoring
+3. **Wallet Balance**
+   - Host wallet ETH balance
+   - Alert when balance < threshold
+   - Automatic refill notifications
+
+4. **Database Operations**
+   - Successful inserts to `split_payout_hostpay`
+   - Duplicate transaction detection rate
+   - Database connection health
+
+5. **Response Times**
+   - Token validation latency
+   - ChangeNow API response time
+   - Web3 transaction broadcast time
+   - Overall webhook processing time
+
+### Operational Procedures
+
+**Daily Checks**:
+- Verify host wallet has sufficient ETH balance
+- Review transaction logs for errors
+- Check ChangeNow API status
+
+**Weekly Maintenance**:
+- Analyze gas cost trends
+- Review duplicate transaction patterns
+- Verify database integrity
+
+**Emergency Procedures**:
+- Low wallet balance: Fund host wallet immediately
+- High gas prices: Consider delaying non-critical transactions
+- Web3 provider down: Switch to backup provider
+- Database connection issues: Check Cloud SQL status
 
 ## Support
 
@@ -418,4 +549,5 @@ For issues or questions:
 **Generated**: October 2025
 **Version**: 10-21
 **Service**: GCHostPay10-21 Host Wallet Payment Service
-**Status**: Phase 1 Complete - Token validation working, ETH transfer pending
+**Status**: Phase 2 Complete - Full implementation with Web3 ETH transfers and database logging
+**Architecture**: Modular design with separate wallet_manager.py and database_manager.py

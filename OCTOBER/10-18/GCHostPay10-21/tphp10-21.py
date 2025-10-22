@@ -10,16 +10,37 @@ import struct
 import base64
 import hmac
 import hashlib
-from typing import Tuple, Optional
+import requests
+from typing import Tuple, Optional, Dict, Any
 from flask import Flask, request, abort, jsonify
 from google.cloud import secretmanager
+from database_manager import DatabaseManager
+from wallet_manager import WalletManager
+from alchemy_webhook_handler import AlchemyWebhookHandler
 
 # LIST OF ENVIRONMENT VARIABLES
 # TPS_HOSTPAY_SIGNING_KEY: Path to signing key in Secret Manager (shared with GCSplit10-21)
 # HOST_WALLET_ETH_ADDRESS: Path to host wallet ETH address in Secret Manager
 # HOST_WALLET_PRIVATE_KEY: Path to host wallet private key in Secret Manager
+# ETHEREUM_RPC_URL_API: Path to Ethereum RPC API key in Secret Manager (for gas optimization)
+# ETHEREUM_RPC_WEBHOOK_SECRET: Path to Ethereum RPC webhook signing secret in Secret Manager
+# CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
+# ETHEREUM_RPC_URL: Path to Ethereum RPC provider URL in Secret Manager
+# DATABASE_NAME_SECRET: Path to database name in Secret Manager
+# DATABASE_USER_SECRET: Path to database user in Secret Manager
+# DATABASE_PASSWORD_SECRET: Path to database password in Secret Manager
+# CLOUD_SQL_CONNECTION_NAME: Path to Cloud SQL connection name in Secret Manager
 
 app = Flask(__name__)
+
+# Initialize Database Manager
+db_manager = DatabaseManager()
+
+# Initialize Wallet Manager
+wallet_manager = WalletManager()
+
+# Initialize Alchemy Webhook Handler
+alchemy_webhook_handler = AlchemyWebhookHandler(db_manager)
 
 def fetch_secret(env_var_name: str, description: str = "") -> Optional[str]:
     """
@@ -59,23 +80,65 @@ def fetch_tps_hostpay_signing_key() -> Optional[str]:
     """
     return fetch_secret("TPS_HOSTPAY_SIGNING_KEY", "TPS HostPay signing key")
 
-def fetch_host_wallet_address() -> Optional[str]:
+def fetch_changenow_api_key() -> Optional[str]:
     """
-    Fetch the host wallet ETH address from Secret Manager.
+    Fetch the ChangeNow API key from Secret Manager.
 
     Returns:
-        Host wallet ETH address or None if failed
+        ChangeNow API key or None if failed
     """
-    return fetch_secret("HOST_WALLET_ETH_ADDRESS", "Host wallet ETH address")
+    return fetch_secret("CHANGENOW_API_KEY", "ChangeNow API key")
 
-def fetch_host_wallet_private_key() -> Optional[str]:
+def check_changenow_status(cn_api_id: str) -> Optional[str]:
     """
-    Fetch the host wallet private key from Secret Manager.
+    Check the status of a ChangeNow transaction.
+
+    Args:
+        cn_api_id: ChangeNow transaction ID
 
     Returns:
-        Host wallet private key or None if failed
+        Status string ("waiting", "confirming", "exchanging", "sending", "finished", "failed", "refunded", "expired")
+        or None if request failed
     """
-    return fetch_secret("HOST_WALLET_PRIVATE_KEY", "Host wallet private key")
+    try:
+        # Fetch ChangeNow API key
+        api_key = fetch_changenow_api_key()
+        if not api_key:
+            print(f"❌ [CHANGENOW_STATUS] Failed to fetch ChangeNow API key")
+            return None
+
+        # Build API request
+        url = f"https://api.changenow.io/v2/exchange/by-id?id={cn_api_id}"
+        headers = {"x-changenow-api-key": api_key}
+
+        print(f"🔍 [CHANGENOW_STATUS] Checking status for transaction: {cn_api_id}")
+        print(f"🌐 [CHANGENOW_STATUS] Request URL: {url}")
+
+        # Send GET request
+        response = requests.get(url, headers=headers, timeout=30)
+
+        if response.status_code == 200:
+            data = response.json()
+            status = data.get("status", "")
+
+            print(f"✅ [CHANGENOW_STATUS] API response received")
+            print(f"📊 [CHANGENOW_STATUS] Transaction status: {status}")
+
+            return status
+        else:
+            print(f"❌ [CHANGENOW_STATUS] API request failed with status {response.status_code}")
+            print(f"📄 [CHANGENOW_STATUS] Response: {response.text}")
+            return None
+
+    except requests.exceptions.Timeout:
+        print(f"❌ [CHANGENOW_STATUS] Request timeout")
+        return None
+    except requests.exceptions.ConnectionError:
+        print(f"❌ [CHANGENOW_STATUS] Connection error")
+        return None
+    except Exception as e:
+        print(f"❌ [CHANGENOW_STATUS] Error checking ChangeNow status: {e}")
+        return None
 
 def decode_and_verify_hostpay_token(token: str, signing_key: str) -> Tuple[str, str, str, str, float, str]:
     """
@@ -261,23 +324,93 @@ def hostpay_webhook():
         print(f"   🏦 payin_address: {payin_address}")
         print(f"")
 
-        # TODO: Implement Web3 ETH transfer logic here
-        print(f"⚠️ [HOSTPAY_WEBHOOK] ETH transfer not yet implemented")
-        print(f"💡 [HOSTPAY_WEBHOOK] Next step: Send {from_amount} {from_currency.upper()} to {payin_address}")
+        # Step 1: Check if transaction already processed
+        print(f"🔍 [HOSTPAY_WEBHOOK] Checking if transaction already processed")
+        if db_manager.check_transaction_exists(unique_id):
+            print(f"⚠️ [HOSTPAY_WEBHOOK] Transaction {unique_id} already processed - skipping")
+            return jsonify({
+                "status": "already_processed",
+                "message": "Transaction already processed",
+                "unique_id": unique_id
+            }), 200
+
+        # Step 2: Check ChangeNow transaction status
+        print(f"🔍 [HOSTPAY_WEBHOOK] Checking ChangeNow transaction status")
+        cn_status = check_changenow_status(cn_api_id)
+
+        if not cn_status:
+            print(f"❌ [HOSTPAY_WEBHOOK] Failed to check ChangeNow status")
+            return jsonify({
+                "status": "error",
+                "message": "Failed to check ChangeNow transaction status",
+                "unique_id": unique_id,
+                "cn_api_id": cn_api_id
+            }), 500
+
+        if cn_status != "waiting":
+            print(f"⚠️ [HOSTPAY_WEBHOOK] ChangeNow status is '{cn_status}' - expected 'waiting'")
+            print(f"🛑 [HOSTPAY_WEBHOOK] Terminating execution for unique_id: {unique_id}")
+            return jsonify({
+                "status": "invalid_status",
+                "message": f"ChangeNow status is '{cn_status}', expected 'waiting'",
+                "unique_id": unique_id,
+                "cn_api_id": cn_api_id,
+                "changenow_status": cn_status
+            }), 400
+
+        print(f"✅ [HOSTPAY_WEBHOOK] ChangeNow status confirmed: {cn_status}")
+
+        # Step 3: Execute ETH payment
+        print(f"💰 [HOSTPAY_WEBHOOK] Initiating ETH payment")
+        tx_result = wallet_manager.send_eth_payment(payin_address, from_amount, unique_id)
+
+        if not tx_result:
+            print(f"❌ [HOSTPAY_WEBHOOK] ETH payment failed")
+            return jsonify({
+                "status": "payment_failed",
+                "message": "Failed to send ETH payment",
+                "unique_id": unique_id,
+                "cn_api_id": cn_api_id
+            }), 500
+
+        print(f"✅ [HOSTPAY_WEBHOOK] ETH payment successful")
+        print(f"   TX Hash: {tx_result['tx_hash']}")
+        print(f"   Status: {tx_result['status']}")
+        print(f"   Gas Used: {tx_result['gas_used']}")
+
+        # Step 4: Log to database
+        print(f"💾 [HOSTPAY_WEBHOOK] Logging transaction to database")
+        db_success = db_manager.insert_hostpay_transaction(
+            unique_id=unique_id,
+            cn_api_id=cn_api_id,
+            from_currency=from_currency,
+            from_network=from_network,
+            from_amount=from_amount,
+            payin_address=payin_address,
+            is_complete=True
+        )
+
+        if not db_success:
+            print(f"⚠️ [HOSTPAY_WEBHOOK] Database logging failed (non-fatal)")
 
         # Return success response
+        print(f"🎉 [HOSTPAY_WEBHOOK] Host payment completed successfully!")
         return jsonify({
             "status": "success",
-            "message": "Token validated and payload extracted successfully",
+            "message": "ETH payment executed and logged successfully",
             "data": {
                 "unique_id": unique_id,
                 "cn_api_id": cn_api_id,
                 "from_currency": from_currency,
                 "from_network": from_network,
                 "from_amount": from_amount,
-                "payin_address": payin_address
-            },
-            "note": "ETH transfer functionality to be implemented"
+                "payin_address": payin_address,
+                "changenow_status": cn_status,
+                "tx_hash": tx_result['tx_hash'],
+                "gas_used": tx_result['gas_used'],
+                "block_number": tx_result['block_number'],
+                "database_logged": db_success
+            }
         }), 200
 
     except Exception as e:
@@ -285,6 +418,27 @@ def hostpay_webhook():
         return jsonify({
             "status": "error",
             "message": f"Webhook processing error: {str(e)}"
+        }), 500
+
+@app.route("/alchemy-webhook", methods=["POST"])
+def alchemy_webhook():
+    """
+    Alchemy Notify webhook endpoint for real-time transaction updates.
+    Receives notifications when monitored transactions are mined, dropped, or failed.
+    """
+    try:
+        print(f"🎯 [ALCHEMY_WEBHOOK_ROUTE] Alchemy webhook called")
+
+        # Delegate to AlchemyWebhookHandler
+        response_data, status_code = alchemy_webhook_handler.handle_webhook(request)
+
+        return jsonify(response_data), status_code
+
+    except Exception as e:
+        print(f"❌ [ALCHEMY_WEBHOOK_ROUTE] Unexpected error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Webhook route error: {str(e)}"
         }), 500
 
 @app.route("/health", methods=["GET"])

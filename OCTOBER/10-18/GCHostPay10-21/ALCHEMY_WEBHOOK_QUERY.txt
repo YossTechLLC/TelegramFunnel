@@ -1,0 +1,178 @@
+================================================================================
+  ALCHEMY WEBHOOK CONFIGURATION FOR GCHostPay10-21
+================================================================================
+
+IMPORTANT: Do NOT use Custom GraphQL Webhooks!
+Use "Address Activity" webhook type instead.
+
+================================================================================
+  WEBHOOK TYPE: Address Activity (NOT Custom GraphQL)
+================================================================================
+
+ADDRESS ACTIVITY WEBHOOKS DO NOT REQUIRE A GRAPHQL QUERY.
+They are configured through Alchemy's UI with the following settings:
+
+--------------------------------------------------------------------------------
+  CONFIGURATION SETTINGS
+--------------------------------------------------------------------------------
+
+Webhook Type:       Address Activity
+Network:            Ethereum Mainnet
+Webhook URL:        https://tphp10-21-291176869049.us-central1.run.app/alchemy-webhook
+Address to Monitor: <YOUR_HOST_WALLET_ETH_ADDRESS>
+                    (Replace with your actual host wallet address)
+
+Events to Track:
+  ✅ Mined Transactions
+  ✅ Dropped Transactions
+  ⬜ Internal Transfers (NOT needed)
+
+Webhook Name:       GCHostPay10-21
+
+--------------------------------------------------------------------------------
+  WHY NOT CUSTOM GRAPHQL?
+--------------------------------------------------------------------------------
+
+❌ Custom GraphQL webhooks are for:
+   - Monitoring ALL blocks on the network
+   - Complex log filtering across multiple contracts
+   - Custom data extraction from blocks
+
+✅ Address Activity webhooks are for:
+   - Monitoring transactions from/to specific addresses
+   - Getting MINED_TRANSACTION and DROPPED_TRANSACTION events
+   - Low-volume, targeted notifications
+
+Our use case: Monitor only the host wallet's outgoing ETH payments to ChangeNow.
+
+--------------------------------------------------------------------------------
+  WHAT YOU'LL RECEIVE (Example Payload)
+--------------------------------------------------------------------------------
+
+When the host wallet sends ETH, Alchemy will POST this JSON to /alchemy-webhook:
+
+{
+  "webhookId": "wh_abc123xyz",
+  "id": "whevt_unique_event_id",
+  "createdAt": "2025-10-21T12:34:56.789Z",
+  "type": "MINED_TRANSACTION",
+  "event": {
+    "network": "ETH_MAINNET",
+    "activity": [
+      {
+        "fromAddress": "0xYOUR_HOST_WALLET_ADDRESS",
+        "toAddress": "0xCHANGENOW_PAYIN_ADDRESS",
+        "blockNum": "0x114d2f8",
+        "hash": "0xTRANSACTION_HASH",
+        "value": 0.0059841,
+        "asset": "ETH",
+        "category": "external",
+        "rawContract": {
+          "rawValue": "0x15341f2e98c000",
+          "decimals": 18
+        }
+      }
+    ]
+  }
+}
+
+--------------------------------------------------------------------------------
+  IF YOU MUST USE GRAPHQL (NOT RECOMMENDED)
+--------------------------------------------------------------------------------
+
+If for some reason you need a Custom GraphQL webhook, here's the query:
+
+{
+  block {
+    number
+    timestamp
+    transactions(filter: {
+      from: ["0xYOUR_HOST_WALLET_ADDRESS_HERE"],
+      to: []
+    }) {
+      hash
+      from {
+        address
+      }
+      to {
+        address
+      }
+      value
+      status
+      gasUsed
+      effectiveGasPrice
+      blockNumber: block {
+        number
+      }
+    }
+  }
+}
+
+REPLACE: "0xYOUR_HOST_WALLET_ADDRESS_HERE" with your actual wallet address
+
+WARNING: This will trigger for EVERY block, even if no transactions occur!
+         This is inefficient and not recommended.
+
+--------------------------------------------------------------------------------
+  STEP-BY-STEP ALCHEMY DASHBOARD SETUP
+--------------------------------------------------------------------------------
+
+1. Go to: https://dashboard.alchemy.com
+2. Navigate to: Notify → Webhooks
+3. Click: "Create Webhook"
+4. Select: "Address Activity" (NOT "Custom GraphQL")
+5. Choose Network: Ethereum Mainnet
+6. Enter Webhook URL: https://tphp10-21-291176869049.us-central1.run.app/alchemy-webhook
+7. Enter Address to Monitor: <YOUR_HOST_WALLET_ETH_ADDRESS>
+8. Select Events:
+   - ✅ Mined Transactions
+   - ✅ Dropped Transactions
+9. Click: "Create Webhook"
+10. Copy: The "Signing Secret" (looks like whsec_...)
+11. Save: The signing secret to Google Cloud Secret Manager
+
+--------------------------------------------------------------------------------
+  AFTER CREATING THE WEBHOOK
+--------------------------------------------------------------------------------
+
+Update the Google Cloud secret:
+
+  echo -n "whsec_YOUR_ACTUAL_SIGNING_SECRET" | \
+    gcloud secrets versions add ETHEREUM_RPC_WEBHOOK_SECRET --data-file=-
+
+Test the webhook:
+
+  1. In Alchemy dashboard, find your webhook
+  2. Click "Send Test Event"
+  3. Check Cloud Run logs for:
+     🎯 [ALCHEMY_WEBHOOK_ROUTE] Alchemy webhook called
+     ✅ [ALCHEMY_WEBHOOK] Signature verified
+
+--------------------------------------------------------------------------------
+  TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+If webhook fails:
+
+1. Verify URL ends with /alchemy-webhook
+2. Check webhook type is "Address Activity" not "Custom"
+3. Ensure signing secret is updated in Google Cloud
+4. Verify Cloud Run service is deployed and running
+5. Check Cloud Run logs for error messages
+
+--------------------------------------------------------------------------------
+  SUMMARY
+--------------------------------------------------------------------------------
+
+✅ USE: Address Activity webhook (no GraphQL query needed)
+❌ AVOID: Custom GraphQL webhook (overcomplicated for our use case)
+
+The Address Activity webhook is:
+  - Simpler to configure
+  - More efficient (only triggers on wallet activity)
+  - Provides exactly the data we need
+  - Matches our AlchemyWebhookHandler implementation
+
+================================================================================
+  END OF CONFIGURATION GUIDE
+================================================================================
