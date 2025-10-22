@@ -18,8 +18,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copy the app code
+# Copy the app code and supporting modules
 COPY tphp10-21.py .
+COPY database_manager.py .
+COPY wallet_manager.py .
+COPY alchemy_webhook_handler.py .
 
 # Expose the port
 EXPOSE 8080

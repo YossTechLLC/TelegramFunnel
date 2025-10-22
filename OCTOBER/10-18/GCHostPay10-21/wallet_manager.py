@@ -11,7 +11,6 @@ from google.cloud import secretmanager
 from typing import Optional, Dict, Any
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from alchemy import Alchemy, Network, AlchemyConfig
 
 
 class WalletManager:
@@ -36,9 +35,6 @@ class WalletManager:
 
         # Fetch wallet credentials
         self._initialize_credentials()
-
-        # Initialize Alchemy SDK
-        self._initialize_alchemy()
 
     def _fetch_secret(self, env_var_name: str, description: str = "") -> Optional[str]:
         """
@@ -96,26 +92,6 @@ class WalletManager:
         except Exception as e:
             print(f"❌ [WALLET] Error initializing credentials: {e}")
 
-    def _initialize_alchemy(self):
-        """Initialize Alchemy SDK for enhanced features."""
-        try:
-            if not self.alchemy_api_key:
-                print(f"⚠️ [ALCHEMY] API key not available - Alchemy SDK features disabled")
-                return
-
-            print(f"🔄 [ALCHEMY] Initializing Alchemy SDK")
-
-            # Configure Alchemy with API key
-            config = AlchemyConfig(api_key=self.alchemy_api_key, network=Network.ETH_MAINNET)
-            self.alchemy = Alchemy(config)
-
-            print(f"✅ [ALCHEMY] Alchemy SDK initialized successfully")
-            print(f"🌐 [ALCHEMY] Network: ETH_MAINNET")
-
-        except Exception as e:
-            print(f"❌ [ALCHEMY] Error initializing Alchemy SDK: {e}")
-            print(f"⚠️ [ALCHEMY] Will fall back to standard Web3 features")
-            self.alchemy = None
 
     def _connect_to_web3(self) -> bool:
         """
@@ -160,10 +136,10 @@ class WalletManager:
             }
         """
         try:
-            # Try to get EIP-1559 gas fees from Alchemy
-            if self.alchemy:
+            # Try to get EIP-1559 gas fees using Web3
+            if self.alchemy_api_key:
                 try:
-                    print(f"⛽ [GAS] Fetching optimized gas prices from Alchemy")
+                    print(f"⛽ [GAS] Fetching optimized gas prices using EIP-1559")
 
                     # Use Alchemy's core API for gas prices
                     fee_data = self.w3.eth.fee_history(1, 'latest', [25, 50, 75])

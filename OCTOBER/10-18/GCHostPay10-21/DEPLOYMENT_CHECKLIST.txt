@@ -1,0 +1,356 @@
+================================================================================
+  GCHostPay10-21 DEPLOYMENT CHECKLIST
+  Critical Steps to Deploy Host Wallet Payment Service
+================================================================================
+
+ISSUE RESOLVED: The Dockerfile was only copying tphp10-21.py, causing all
+supporting modules (database_manager.py, wallet_manager.py, alchemy_webhook_
+handler.py) to be missing from the container, resulting in import failures
+and fallback to stub code.
+
+================================================================================
+  PRE-DEPLOYMENT CHECKLIST
+================================================================================
+
+□ 1. VERIFY LOCAL CODE FILES EXIST
+   Location: /OCTOBER/10-18/GCHostPay10-21/
+
+   Required files:
+   ☑ tphp10-21.py (main application)
+   ☑ database_manager.py (PostgreSQL operations)
+   ☑ wallet_manager.py (Web3 ETH transfers)
+   ☑ alchemy_webhook_handler.py (transaction monitoring)
+   ☑ requirements.txt (Python dependencies)
+   ☑ Dockerfile (container configuration)
+   ☑ .dockerignore (optional)
+
+□ 2. VERIFY DOCKERFILE COPIES ALL FILES
+   Check Dockerfile lines 21-25 contain:
+
+   COPY tphp10-21.py .
+   COPY database_manager.py .
+   COPY wallet_manager.py .
+   COPY alchemy_webhook_handler.py .
+
+   ⚠️ CRITICAL: If any file is missing, imports will fail silently!
+
+□ 3. VERIFY REQUIREMENTS.TXT
+   Check requirements.txt contains:
+
+   Flask==3.0.3
+   google-cloud-secret-manager==2.16.3
+   requests==2.31.0
+   web3==6.11.3
+   pg8000==1.30.3
+   cloud-sql-python-connector==1.4.3
+
+   ⚠️ NOTE: alchemy-sdk removed (not actually used in code)
+
+□ 4. VERIFY ALL SECRETS EXIST IN SECRET MANAGER
+   Run these commands to verify:
+
+   gcloud secrets describe TPS_HOSTPAY_SIGNING_KEY
+   gcloud secrets describe HOST_WALLET_ETH_ADDRESS
+   gcloud secrets describe HOST_WALLET_PRIVATE_KEY
+   gcloud secrets describe ETHEREUM_RPC_URL
+   gcloud secrets describe ETHEREUM_RPC_URL_API
+   gcloud secrets describe ETHEREUM_RPC_WEBHOOK_SECRET
+   gcloud secrets describe CHANGENOW_API_KEY
+   gcloud secrets describe DATABASE_NAME_SECRET
+   gcloud secrets describe DATABASE_USER_SECRET
+   gcloud secrets describe DATABASE_PASSWORD_SECRET
+   gcloud secrets describe CLOUD_SQL_CONNECTION_NAME
+
+   Each should return: "name: projects/291176869049/secrets/[SECRET_NAME]"
+
+   If any fail, create them first!
+
+□ 5. VERIFY SERVICE ACCOUNT PERMISSIONS
+   Service account needs these roles:
+
+   ☑ Secret Manager Secret Accessor
+   ☑ Cloud SQL Client
+   ☑ Cloud Run Developer
+
+   Check with:
+   gcloud projects get-iam-policy 291176869049 \
+     --flatten="bindings[].members" \
+     --filter="bindings.members:serviceAccount:*@*.iam.gserviceaccount.com"
+
+
+================================================================================
+  DEPLOYMENT COMMAND
+================================================================================
+
+Navigate to service directory:
+cd /path/to/GCHostPay10-21
+
+Deploy to Cloud Run:
+
+gcloud run deploy tphp10-21 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 1Gi \
+    --cpu 1 \
+    --timeout 600 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --set-env-vars TPS_HOSTPAY_SIGNING_KEY=projects/291176869049/secrets/TPS_HOSTPAY_SIGNING_KEY/versions/latest \
+    --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
+    --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
+    --set-env-vars ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest \
+    --set-env-vars ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest \
+    --set-env-vars ETHEREUM_RPC_WEBHOOK_SECRET=projects/291176869049/secrets/ETHEREUM_RPC_WEBHOOK_SECRET/versions/latest \
+    --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
+    --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
+    --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
+    --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+
+
+================================================================================
+  POST-DEPLOYMENT VERIFICATION
+================================================================================
+
+□ 1. CHECK DEPLOYMENT SUCCEEDED
+   Expected output:
+   "Service [tphp10-21] revision [tphp10-21-XXXXX] has been deployed"
+
+   Note the service URL:
+   https://tphp10-21-291176869049.us-central1.run.app
+
+□ 2. TEST HEALTH ENDPOINT
+   curl https://tphp10-21-291176869049.us-central1.run.app/health
+
+   Expected response:
+   {
+     "status": "healthy",
+     "service": "GCHostPay10-21 Host Wallet Payment Service",
+     "timestamp": 1729567890,
+     "configuration": {
+       "signing_key": "✅"
+     }
+   }
+
+□ 3. CHECK CLOUD RUN LOGS - INITIALIZATION
+   gcloud run services logs read tphp10-21 \
+     --region us-central1 \
+     --limit 50
+
+   Expected logs:
+   ✅ [INFO] Cloud SQL Connector imported successfully
+   🔄 [WALLET] Initializing wallet credentials
+   ✅ [WALLET] Wallet credentials initialized
+   🏦 [WALLET] Host Wallet: 0x...
+   🌐 [WALLET] Provider URL: https://...
+
+   ⚠️ RED FLAGS (should NOT see):
+   ❌ [ERROR] Cloud SQL Connector import failed
+   ❌ [WALLET_CONFIG] Environment variable X is not set
+   ModuleNotFoundError: No module named 'database_manager'
+   ModuleNotFoundError: No module named 'wallet_manager'
+
+□ 4. TRIGGER TEST WEBHOOK (from TPS10-21)
+   This will happen automatically on next payment.
+
+   Expected logs in tphp10-21:
+   🎯 [HOSTPAY_WEBHOOK] Webhook called
+   📦 [HOSTPAY_WEBHOOK] Received token (length: X chars)
+   🔐 [CONFIG] Fetching TPS HostPay signing key
+   ✅ [CONFIG] Successfully fetched TPS HostPay signing key
+   🔓 [TOKEN_VALIDATION] Token validated successfully
+   ✅ [HOSTPAY_WEBHOOK] Token validated and decoded successfully
+   📦 [HOSTPAY_WEBHOOK] Extracted values:
+      🆔 unique_id: XXXXXXXXXXXXXXXX
+      🆔 cn_api_id: xxxxxxxxxxxxxx
+      💰 from_currency: eth
+      🌐 from_network: eth
+      💸 from_amount: 0.XXXXXX
+      🏦 payin_address: 0xXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+   🔍 [HOSTPAY_WEBHOOK] Checking if transaction already processed
+   🔍 [HOSTPAY_WEBHOOK] Checking ChangeNow transaction status
+   🌐 [CHANGENOW_STATUS] Request URL: https://api.changenow.io/v2/exchange/by-id?id=...
+   ✅ [CHANGENOW_STATUS] API response received
+   📊 [CHANGENOW_STATUS] Transaction status: waiting
+   ✅ [HOSTPAY_WEBHOOK] ChangeNow status confirmed: waiting
+   💰 [HOSTPAY_WEBHOOK] Initiating ETH payment
+   🔗 [WALLET] Connecting to Web3 provider
+   ✅ [WALLET] Connected to Web3 provider
+   💰 [ETH_PAYMENT] Initiating ETH payment for transaction: XXXXXXXXXXXXXXXX
+   🔄 [TX_RETRY] Attempt 1/3
+   ⛽ [GAS] Fetching optimized gas prices using EIP-1559
+   ✅ [GAS] EIP-1559 gas prices calculated
+   📝 [TX_RETRY] Transaction built (EIP-1559)
+   🔐 [TX_RETRY] Signing transaction
+   📤 [TX_RETRY] Broadcasting transaction
+   ✅ [TX_RETRY] Transaction broadcasted
+   🆔 [TX_RETRY] TX Hash: 0x...
+   ⏳ [TX_RETRY] Waiting for confirmation (300s timeout)...
+   🎉 [TX_RETRY] Transaction confirmed!
+   ✅ [HOSTPAY_WEBHOOK] ETH payment successful
+   💾 [HOSTPAY_WEBHOOK] Logging transaction to database
+   🎉 [HOSTPAY_WEBHOOK] Host payment completed successfully!
+
+   ⚠️ RED FLAGS (should NOT see):
+   ⚠️ [HOSTPAY_WEBHOOK] ETH transfer not yet implemented
+   ❌ [WALLET] Missing required wallet credentials
+   ModuleNotFoundError: No module named 'wallet_manager'
+
+
+================================================================================
+  TROUBLESHOOTING COMMON ISSUES
+================================================================================
+
+ISSUE: "ETH transfer not yet implemented" message appears
+CAUSE: Dockerfile didn't copy wallet_manager.py and database_manager.py
+FIX:   1. Verify Dockerfile lines 21-25 copy all 4 Python files
+       2. Redeploy with fixed Dockerfile
+       3. Check logs show successful module imports
+
+ISSUE: ModuleNotFoundError: No module named 'database_manager'
+CAUSE: Dockerfile didn't copy database_manager.py
+FIX:   Add "COPY database_manager.py ." to Dockerfile, redeploy
+
+ISSUE: ModuleNotFoundError: No module named 'wallet_manager'
+CAUSE: Dockerfile didn't copy wallet_manager.py
+FIX:   Add "COPY wallet_manager.py ." to Dockerfile, redeploy
+
+ISSUE: ModuleNotFoundError: No module named 'alchemy_webhook_handler'
+CAUSE: Dockerfile didn't copy alchemy_webhook_handler.py
+FIX:   Add "COPY alchemy_webhook_handler.py ." to Dockerfile, redeploy
+
+ISSUE: "❌ [WALLET_CONFIG] Environment variable X is not set"
+CAUSE: Missing --set-env-vars flag in deployment command
+FIX:   Add missing environment variable to deployment command, redeploy
+
+ISSUE: "❌ [CONFIG] Error fetching secret from Secret Manager"
+CAUSE: Secret doesn't exist or service account lacks permissions
+FIX:   1. Verify secret exists: gcloud secrets describe [SECRET_NAME]
+       2. Grant secretAccessor role to service account
+       3. Redeploy
+
+ISSUE: "❌ [WALLET] Error connecting to Web3: HTTPError"
+CAUSE: Invalid ETHEREUM_RPC_URL or API key
+FIX:   1. Verify RPC URL is correct (Alchemy/Infura)
+       2. Test URL manually: curl [RPC_URL]
+       3. Update secret, redeploy
+
+ISSUE: "❌ [ETH_PAYMENT] Insufficient funds"
+CAUSE: Host wallet doesn't have enough ETH
+FIX:   Fund the host wallet with ETH for gas + payment amounts
+
+ISSUE: Transaction gets stuck "⏳ [TX_RETRY] Waiting for confirmation"
+CAUSE: Network congestion or gas price too low
+FIX:   Wait for timeout, system will retry with higher gas price
+
+ISSUE: "❌ [HOSTPAY_DB] Error inserting transaction"
+CAUSE: Database credentials invalid or Cloud SQL unreachable
+FIX:   1. Verify DATABASE_* secrets are correct
+       2. Check Cloud SQL instance is running
+       3. Verify service account has Cloud SQL Client role
+
+
+================================================================================
+  DATABASE TABLE VERIFICATION
+================================================================================
+
+After successful deployment, verify the split_payout_hostpay table exists:
+
+Connect to database:
+gcloud sql connect [INSTANCE_NAME] --user=[DB_USER] --database=[DB_NAME]
+
+Check table structure:
+\d split_payout_hostpay
+
+Expected columns:
+- unique_id (VARCHAR(16), PRIMARY KEY)
+- cn_api_id (VARCHAR(255))
+- from_currency (VARCHAR(10))
+- from_network (VARCHAR(50))
+- from_amount (NUMERIC(20,10))
+- payin_address (VARCHAR(255))
+- is_complete (BOOLEAN)
+- created_at (TIMESTAMP)
+- updated_at (TIMESTAMP)
+
+If table doesn't exist, create it:
+(See database_manager.py for schema or consult README.md)
+
+
+================================================================================
+  UPDATE GCSPLIT10-21 WITH NEW URL
+================================================================================
+
+After successful deployment, update GCSplit10-21 with the HostPay webhook URL:
+
+1. Create/update HOSTPAY_WEBHOOK_URL secret:
+   echo -n "https://tphp10-21-291176869049.us-central1.run.app" | \
+     gcloud secrets versions add HOSTPAY_WEBHOOK_URL --data-file=-
+
+2. Redeploy GCSplit10-21 to pick up new URL:
+   (It should already have HOSTPAY_WEBHOOK_URL in env vars)
+
+
+================================================================================
+  SUCCESS CRITERIA
+================================================================================
+
+Deployment is successful when ALL of these are true:
+
+✅ Health endpoint returns {"status": "healthy"}
+✅ Logs show "✅ [WALLET] Wallet credentials initialized"
+✅ Logs show "✅ [INFO] Cloud SQL Connector imported successfully"
+✅ No ModuleNotFoundError in logs
+✅ Webhook receives token and processes it (not "not yet implemented")
+✅ ETH payment executes successfully
+✅ Transaction logged to split_payout_hostpay table
+✅ Logs show "🎉 [HOSTPAY_WEBHOOK] Host payment completed successfully!"
+
+
+================================================================================
+  ROLLBACK PROCEDURE
+================================================================================
+
+If deployment fails, rollback to previous revision:
+
+1. List revisions:
+   gcloud run revisions list --service tphp10-21 --region us-central1
+
+2. Find last working revision (e.g., tphp10-21-00005-abc)
+
+3. Rollback:
+   gcloud run services update-traffic tphp10-21 \
+     --region us-central1 \
+     --to-revisions tphp10-21-00005-abc=100
+
+4. Verify rollback:
+   curl https://tphp10-21-291176869049.us-central1.run.app/health
+
+
+================================================================================
+  MONITORING & ALERTS
+================================================================================
+
+Set up monitoring for:
+
+□ Health check failures (>2 in 5 minutes)
+□ ETH payment failures (any)
+□ Database insert failures (>3 in 10 minutes)
+□ Gas price spikes (>100 Gwei)
+□ Wallet balance low (<0.1 ETH)
+
+Use Cloud Monitoring:
+gcloud monitoring dashboards create \
+  --config-from-file=monitoring-dashboard.yaml
+
+
+================================================================================
+  END OF DEPLOYMENT CHECKLIST
+================================================================================
+
+Last Updated: 2025-10-22
+Issue: Dockerfile missing supporting module files
+Resolution: Added COPY commands for all required .py files
