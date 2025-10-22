@@ -3,14 +3,32 @@
   Critical Steps to Deploy Host Wallet Payment Service
 ================================================================================
 
-ISSUE RESOLVED: The Dockerfile was only copying tphp10-21.py, causing all
-supporting modules (database_manager.py, wallet_manager.py, alchemy_webhook_
-handler.py) to be missing from the container, resulting in import failures
-and fallback to stub code.
+LATEST UPDATE (2025-10-22):
+✅ Dockerfile fixed (all modules copied)
+✅ Web3 checksum address fix deployed
+✅ Database ENUM + Precision fix READY (pending deployment)
+
+CURRENT ISSUE TO DEPLOY:
+- Database insert failing with ENUM error: currency_type expects "ETH" not "eth"
+- Precision mismatch: NUMERIC(12,8) requires rounding from_amount to 8 decimals
+
+STATUS: Code ready for deployment - see DATABASE_PRECISION_FIX.txt for details
 
 ================================================================================
   PRE-DEPLOYMENT CHECKLIST
 ================================================================================
+
+□ 0. VERIFY DATABASE FIX IS IN CODE (NEW - CRITICAL!)
+   Check database_manager.py line 167:
+   ✅ Must have: from_amount_rounded = round(float(from_amount), 8)
+
+   Check database_manager.py line 179:
+   ✅ Must have: from_currency.upper(), from_network.upper(), from_amount_rounded
+
+   Check database_manager.py lines 181-189:
+   ✅ Must have: Detailed parameter logging block
+
+   This fixes the current production issue preventing database inserts!
 
 □ 1. VERIFY LOCAL CODE FILES EXIST
    Location: /OCTOBER/10-18/GCHostPay10-21/
@@ -192,9 +210,27 @@ gcloud run deploy tphp10-21 \
    🎉 [TX_RETRY] Transaction confirmed!
    ✅ [HOSTPAY_WEBHOOK] ETH payment successful
    💾 [HOSTPAY_WEBHOOK] Logging transaction to database
+   📝 [HOSTPAY_DB] Starting database insert for unique_id: XXXXXXXXXXXXXXXX
+   🔗 [DATABASE] ✅ Cloud SQL Connector connection successful!
+   📋 [HOSTPAY_DB] Insert parameters: (NEW - DETAILED LOGGING)
+      unique_id: XXXXXXXXXXXXXXXX (len: 16)
+      cn_api_id: xxxxxxxxxxxxxx (len: 14)
+      from_currency: ETH (UPPERCASE - FIXED!)
+      from_network: ETH (UPPERCASE - FIXED!)
+      from_amount: 0.00055638 (original: 0.0005563751532725799) (ROUNDED - FIXED!)
+      payin_address: 0x... (len: 42)
+      is_complete: True
+   🔄 [HOSTPAY_DB] Executing INSERT query
+   ✅ [HOSTPAY_DB] Transaction committed successfully (MUST SEE - WAS FAILING BEFORE!)
+   🎉 [HOSTPAY_DB] Successfully inserted record for unique_id: XXXXXXXXXXXXXXXX
+   🔌 [HOSTPAY_DB] Database connection closed
    🎉 [HOSTPAY_WEBHOOK] Host payment completed successfully!
 
-   ⚠️ RED FLAGS (should NOT see):
+   ⚠️ RED FLAGS (should NOT see after fix):
+   ❌ invalid input value for enum currency_type: "eth"
+   🔄 [HOSTPAY_DB] Transaction rolled back due to error
+   ❌ numeric field overflow
+   ⚠️ [HOSTPAY_WEBHOOK] Database logging failed (non-fatal)
    ⚠️ [HOSTPAY_WEBHOOK] ETH transfer not yet implemented
    ❌ [WALLET] Missing required wallet credentials
    ModuleNotFoundError: No module named 'wallet_manager'

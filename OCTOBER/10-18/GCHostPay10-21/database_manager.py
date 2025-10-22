@@ -161,12 +161,32 @@ class DatabaseManager:
 
             # Insert into split_payout_hostpay table
             # NOTE: Database uses currency_type ENUM which expects UPPERCASE values
+            # NOTE: from_amount is NUMERIC(12,8) - round to 8 decimal places to avoid precision errors
+
+            # Round from_amount to 8 decimal places to match NUMERIC(12,8) constraint
+            from_amount_rounded = round(float(from_amount), 8)
+
+            # Validate cn_api_id length (table expects varchar(16))
+            if len(cn_api_id) > 16:
+                print(f"⚠️ [HOSTPAY_DB] cn_api_id too long ({len(cn_api_id)} chars), truncating to 16")
+                cn_api_id = cn_api_id[:16]
+
             insert_query = """
                 INSERT INTO split_payout_hostpay
                 (unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, is_complete)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            insert_params = (unique_id, cn_api_id, from_currency.upper(), from_network.upper(), from_amount, payin_address, is_complete)
+            insert_params = (unique_id, cn_api_id, from_currency.upper(), from_network.upper(), from_amount_rounded, payin_address, is_complete)
+
+            # Log exact values being inserted for debugging
+            print(f"📋 [HOSTPAY_DB] Insert parameters:")
+            print(f"   unique_id: {unique_id} (len: {len(unique_id)})")
+            print(f"   cn_api_id: {cn_api_id} (len: {len(cn_api_id)})")
+            print(f"   from_currency: {from_currency.upper()}")
+            print(f"   from_network: {from_network.upper()}")
+            print(f"   from_amount: {from_amount_rounded} (original: {from_amount})")
+            print(f"   payin_address: {payin_address} (len: {len(payin_address)})")
+            print(f"   is_complete: {is_complete}")
 
             print(f"🔄 [HOSTPAY_DB] Executing INSERT query")
             cur.execute(insert_query, insert_params)
@@ -179,7 +199,7 @@ class DatabaseManager:
             print(f"   🆔 CN API ID: {cn_api_id}")
             print(f"   💰 Currency: {from_currency.upper()}")
             print(f"   🌐 Network: {from_network.upper()}")
-            print(f"   💰 Amount: {from_amount} {from_currency.upper()}")
+            print(f"   💰 Amount: {from_amount_rounded} {from_currency.upper()}")
             print(f"   🏦 Payin Address: {payin_address}")
             print(f"   ✔️ Is Complete: {is_complete}")
 
