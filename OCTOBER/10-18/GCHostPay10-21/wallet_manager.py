@@ -71,10 +71,23 @@ class WalletManager:
             print(f"🔄 [WALLET] Initializing wallet credentials")
 
             # Fetch wallet credentials from Secret Manager
-            self.host_wallet_address = self._fetch_secret("HOST_WALLET_ETH_ADDRESS", "host wallet ETH address")
+            raw_address = self._fetch_secret("HOST_WALLET_ETH_ADDRESS", "host wallet ETH address")
             self.host_wallet_private_key = self._fetch_secret("HOST_WALLET_PRIVATE_KEY", "host wallet private key")
             self.web3_provider_url = self._fetch_secret("ETHEREUM_RPC_URL", "Ethereum RPC URL")
             self.alchemy_api_key = self._fetch_secret("ETHEREUM_RPC_URL_API", "Ethereum RPC URL API key")
+
+            # Convert address to checksum format (required by Web3.py)
+            if raw_address:
+                try:
+                    # Import Web3 for checksum conversion
+                    from web3 import Web3
+                    self.host_wallet_address = Web3.to_checksum_address(raw_address)
+                    print(f"✅ [WALLET] Address converted to checksum format")
+                except Exception as e:
+                    print(f"⚠️ [WALLET] Invalid Ethereum address format: {e}")
+                    self.host_wallet_address = None
+            else:
+                self.host_wallet_address = None
 
             if not all([self.host_wallet_address, self.host_wallet_private_key, self.web3_provider_url]):
                 print(f"❌ [WALLET] Missing required wallet credentials")
@@ -436,9 +449,17 @@ class WalletManager:
                 if not self._connect_to_web3():
                     return None
 
+            # Convert destination address to checksum format (required by Web3.py)
+            try:
+                to_address_checksum = self.w3.to_checksum_address(to_address)
+                print(f"✅ [ETH_PAYMENT] Destination address converted to checksum format")
+            except Exception as e:
+                print(f"❌ [ETH_PAYMENT] Invalid destination address: {e}")
+                return None
+
             print(f"💰 [ETH_PAYMENT] Initiating ETH payment for transaction: {unique_id}")
             print(f"🏦 [ETH_PAYMENT] From: {self.host_wallet_address}")
-            print(f"🏦 [ETH_PAYMENT] To: {to_address}")
+            print(f"🏦 [ETH_PAYMENT] To: {to_address_checksum}")
             print(f"💸 [ETH_PAYMENT] Amount: {amount} ETH")
 
             # Convert ETH amount to Wei
@@ -446,7 +467,7 @@ class WalletManager:
             print(f"💸 [ETH_PAYMENT] Amount in Wei: {amount_wei}")
 
             # Use retry logic for robust transaction execution
-            result = self._send_transaction_with_retry(to_address, amount_wei, unique_id)
+            result = self._send_transaction_with_retry(to_address_checksum, amount_wei, unique_id)
 
             if result:
                 print(f"🎉 [ETH_PAYMENT] Payment completed successfully!")
