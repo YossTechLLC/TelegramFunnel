@@ -387,7 +387,11 @@ def hostpay_webhook():
             from_network=from_network,
             from_amount=from_amount,
             payin_address=payin_address,
-            is_complete=True
+            is_complete=True,
+            tx_hash=tx_result.get('tx_hash'),
+            tx_status=tx_result.get('status'),
+            gas_used=tx_result.get('gas_used'),
+            block_number=tx_result.get('block_number')
         )
 
         if not db_success:
