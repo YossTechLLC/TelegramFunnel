@@ -141,14 +141,14 @@ class DatabaseManager:
                 try:
                     print(f"📝 [DATABASE] Inserting new registration for channel: {data['open_channel_id']}")
 
-                    # Prepare the insertion query
+                    # Prepare the insertion query (now includes client_payout_network)
                     insert_query = """
                         INSERT INTO main_clients_database
                         (open_channel_id, open_channel_title, open_channel_description,
                          closed_channel_id, closed_channel_title, closed_channel_description,
                          sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time,
-                         client_wallet_address, client_payout_currency)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         client_wallet_address, client_payout_currency, client_payout_network)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """
 
                     values = (
@@ -165,7 +165,8 @@ class DatabaseManager:
                         data['sub_3_price'],
                         data['sub_3_time'],
                         data['client_wallet_address'],
-                        data['client_payout_currency']
+                        data['client_payout_currency'],
+                        data['client_payout_network']
                     )
 
                     # Execute the insertion
@@ -175,7 +176,8 @@ class DatabaseManager:
                     print(f"✅ [DATABASE] Successfully inserted registration for channel: {data['open_channel_id']}")
                     print(f"📊 [DATABASE] Details: {data['open_channel_title']} -> {data['closed_channel_title']}")
                     print(f"💰 [DATABASE] Tiers: ${data['sub_1_price']}/{data['sub_1_time']}d, ${data['sub_2_price']}/{data['sub_2_time']}d, ${data['sub_3_price']}/{data['sub_3_time']}d")
-                    print(f"🏦 [DATABASE] Wallet: {data['client_wallet_address'][:20]}... ({data['client_payout_currency']})")
+                    print(f"🏦 [DATABASE] Wallet: {data['client_wallet_address'][:20]}...")
+                    print(f"🌐 [DATABASE] Payout: {data['client_payout_currency']} on {data['client_payout_network']} network")
 
                     return True
                 finally:
@@ -211,3 +213,62 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ [DATABASE] Error getting registration count: {e}")
             return 0
+
+    def get_currency_to_network_mappings(self) -> Dict[str, Any]:
+        """
+        Fetch all currency-to-network mappings from the currency_to_network table.
+        Returns data structured for bidirectional filtering.
+
+        Returns:
+            Dictionary with:
+            - 'mappings': List of {currency, network} pairs
+            - 'network_to_currencies': Dict mapping network -> list of currencies
+            - 'currency_to_networks': Dict mapping currency -> list of networks
+        """
+        try:
+            with self.get_connection() as conn:
+                cur = conn.cursor()
+                try:
+                    print(f"🔍 [DATABASE] Fetching currency-to-network mappings")
+                    cur.execute(
+                        "SELECT currency, network FROM currency_to_network ORDER BY network, currency"
+                    )
+                    rows = cur.fetchall()
+
+                    # Build data structures for bidirectional filtering
+                    mappings = []
+                    network_to_currencies = {}
+                    currency_to_networks = {}
+
+                    for currency, network in rows:
+                        mappings.append({'currency': currency, 'network': network})
+
+                        # Build network -> currencies mapping
+                        if network not in network_to_currencies:
+                            network_to_currencies[network] = []
+                        network_to_currencies[network].append(currency)
+
+                        # Build currency -> networks mapping
+                        if currency not in currency_to_networks:
+                            currency_to_networks[currency] = []
+                        currency_to_networks[currency].append(network)
+
+                    print(f"✅ [DATABASE] Fetched {len(mappings)} currency-network mappings")
+                    print(f"📊 [DATABASE] {len(network_to_currencies)} unique networks")
+                    print(f"📊 [DATABASE] {len(currency_to_networks)} unique currencies")
+
+                    return {
+                        'mappings': mappings,
+                        'network_to_currencies': network_to_currencies,
+                        'currency_to_networks': currency_to_networks
+                    }
+                finally:
+                    cur.close()
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Error fetching currency-network mappings: {e}")
+            return {
+                'mappings': [],
+                'network_to_currencies': {},
+                'currency_to_networks': {}
+            }

@@ -126,7 +126,8 @@ def register():
             'sub_3_price': float(form.sub_3_price.data),
             'sub_3_time': int(form.sub_3_time.data),
             'client_wallet_address': form.client_wallet_address.data.strip(),
-            'client_payout_currency': form.client_payout_currency.data.upper()
+            'client_payout_currency': form.client_payout_currency.data.upper(),
+            'client_payout_network': form.client_payout_network.data.upper()
         }
 
         print(f"📦 [APP] Prepared registration data for channel: {registration_data['open_channel_id']}")
@@ -199,6 +200,47 @@ def success():
         channel_id=channel_id,
         channel_title=channel_title
     )
+
+
+@app.route('/api/currency-network-mappings')
+def get_currency_network_mappings():
+    """
+    API endpoint to retrieve currency-to-network mappings for dynamic form filtering.
+    Returns JSON data for bidirectional filtering between Network Type and Payout Currency.
+    """
+    print(f"🔍 [APP] API request: /api/currency-network-mappings")
+
+    # Check if database manager is available
+    if not db_manager:
+        print(f"❌ [APP] Database manager not available")
+        return {
+            'success': False,
+            'error': 'Database connection unavailable'
+        }, 503
+
+    try:
+        # Fetch mappings from database
+        data = db_manager.get_currency_to_network_mappings()
+
+        if data['mappings']:
+            print(f"✅ [APP] Returning {len(data['mappings'])} currency-network mappings")
+            return {
+                'success': True,
+                'data': data
+            }, 200
+        else:
+            print(f"⚠️ [APP] No currency-network mappings found")
+            return {
+                'success': False,
+                'error': 'No mappings found'
+            }, 404
+
+    except Exception as e:
+        print(f"❌ [APP] Error fetching currency-network mappings: {e}")
+        return {
+            'success': False,
+            'error': str(e)
+        }, 500
 
 
 @app.route('/health')

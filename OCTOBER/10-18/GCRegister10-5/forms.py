@@ -208,6 +208,34 @@ class ChannelRegistrationForm(FlaskForm):
     )
 
     # Client Payment Information
+    client_payout_network = SelectField(
+        'Network Type',
+        validators=[
+            DataRequired(message='❌ Network type is required')
+        ],
+        choices=[
+            ('', '-- Select Network --')
+        ],
+        render_kw={
+            'class': 'form-select',
+            'id': 'client_payout_network'
+        }
+    )
+
+    client_payout_currency = SelectField(
+        'Payout Currency',
+        validators=[
+            DataRequired(message='❌ Payout currency is required')
+        ],
+        choices=[
+            ('', '-- Select Currency --')
+        ],
+        render_kw={
+            'class': 'form-select',
+            'id': 'client_payout_currency'
+        }
+    )
+
     client_wallet_address = StringField(
         'Wallet Address',
         validators=[
@@ -219,31 +247,6 @@ class ChannelRegistrationForm(FlaskForm):
             'placeholder': 'e.g., 0x1234567890abcdef...',
             'class': 'form-control',
             'maxlength': '110'
-        }
-    )
-
-    client_payout_currency = SelectField(
-        'Payout Currency',
-        validators=[
-            DataRequired(message='❌ Payout currency is required')
-        ],
-        choices=[
-            ('', '-- Select Currency --'),
-            ('BTC', 'BTC - Bitcoin'),
-            ('ETH', 'ETH - Ethereum'),
-            ('USDT', 'USDT - Tether'),
-            ('USDC', 'USDC - USD Coin'),
-            ('LTC', 'LTC - Litecoin'),
-            ('XRP', 'XRP - Ripple'),
-            ('TRX', 'TRX - Tron'),
-            ('BNB', 'BNB - Binance Coin'),
-            ('DOGE', 'DOGE - Dogecoin'),
-            ('ADA', 'ADA - Cardano'),
-            ('SOL', 'SOL - Solana'),
-            ('MATIC', 'MATIC - Polygon')
-        ],
-        render_kw={
-            'class': 'form-select'
         }
     )
 

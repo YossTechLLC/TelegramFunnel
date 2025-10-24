@@ -191,12 +191,12 @@
                         <p class="text-muted small">Your cryptocurrency wallet details for receiving payouts</p>
 
                         <div class="mb-3">
-                            {{ form.client_wallet_address.label(class="form-label fw-bold") }}
-                            {{ form.client_wallet_address(class="form-control" + (" is-invalid" if form.client_wallet_address.errors else "")) }}
-                            <div class="form-text">Your cryptocurrency wallet address (max 110 characters)</div>
-                            {% if form.client_wallet_address.errors %}
+                            {{ form.client_payout_network.label(class="form-label fw-bold") }}
+                            {{ form.client_payout_network(class="form-select" + (" is-invalid" if form.client_payout_network.errors else "")) }}
+                            <div class="form-text">Select the blockchain network for your payouts</div>
+                            {% if form.client_payout_network.errors %}
                                 <div class="invalid-feedback d-block">
-                                    {% for error in form.client_wallet_address.errors %}{{ error }}{% endfor %}
+                                    {% for error in form.client_payout_network.errors %}{{ error }}{% endfor %}
                                 </div>
                             {% endif %}
                         </div>
@@ -208,6 +208,17 @@
                             {% if form.client_payout_currency.errors %}
                                 <div class="invalid-feedback d-block">
                                     {% for error in form.client_payout_currency.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            {{ form.client_wallet_address.label(class="form-label fw-bold") }}
+                            {{ form.client_wallet_address(class="form-control" + (" is-invalid" if form.client_wallet_address.errors else "")) }}
+                            <div class="form-text">Your cryptocurrency wallet address (max 110 characters)</div>
+                            {% if form.client_wallet_address.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {% for error in form.client_wallet_address.errors %}{{ error }}{% endfor %}
                                 </div>
                             {% endif %}
                         </div>
@@ -243,8 +254,204 @@
 
 {% block extra_scripts %}
 <script>
-    // Optional: Add client-side validation feedback
+    // Global data storage for currency-network mappings
+    let currencyNetworkData = {
+        network_to_currencies: {},
+        currency_to_networks: {},
+        all_networks: [],
+        all_currencies: []
+    };
+
+    // Fetch currency-network mappings from API
+    async function fetchCurrencyNetworkMappings() {
+        try {
+            console.log('🔍 Fetching currency-network mappings...');
+            const response = await fetch('/api/currency-network-mappings');
+            const result = await response.json();
+
+            if (result.success && result.data) {
+                currencyNetworkData.network_to_currencies = result.data.network_to_currencies;
+                currencyNetworkData.currency_to_networks = result.data.currency_to_networks;
+
+                // Extract unique networks and currencies
+                currencyNetworkData.all_networks = Object.keys(result.data.network_to_currencies).sort();
+                currencyNetworkData.all_currencies = Object.keys(result.data.currency_to_networks).sort();
+
+                console.log(`✅ Loaded ${currencyNetworkData.all_networks.length} networks and ${currencyNetworkData.all_currencies.length} currencies`);
+
+                // Populate initial network dropdown
+                populateNetworkDropdown();
+                populateCurrencyDropdown();
+            } else {
+                console.error('❌ Failed to fetch mappings:', result.error);
+            }
+        } catch (error) {
+            console.error('❌ Error fetching currency-network mappings:', error);
+        }
+    }
+
+    // Populate network dropdown with all available networks
+    function populateNetworkDropdown(selectedNetwork = '') {
+        const networkSelect = document.getElementById('client_payout_network');
+        if (!networkSelect) return;
+
+        // Clear existing options except the first placeholder
+        networkSelect.innerHTML = '<option value="">-- Select Network --</option>';
+
+        // Add all networks
+        currencyNetworkData.all_networks.forEach(network => {
+            const option = document.createElement('option');
+            option.value = network;
+            option.textContent = network;
+            if (network === selectedNetwork) {
+                option.selected = true;
+            }
+            networkSelect.appendChild(option);
+        });
+
+        console.log(`📊 Populated network dropdown with ${currencyNetworkData.all_networks.length} networks`);
+    }
+
+    // Populate currency dropdown with all available currencies
+    function populateCurrencyDropdown(selectedCurrency = '') {
+        const currencySelect = document.getElementById('client_payout_currency');
+        if (!currencySelect) return;
+
+        // Clear existing options except the first placeholder
+        currencySelect.innerHTML = '<option value="">-- Select Currency --</option>';
+
+        // Add all currencies
+        currencyNetworkData.all_currencies.forEach(currency => {
+            const option = document.createElement('option');
+            option.value = currency;
+            option.textContent = currency;
+            if (currency === selectedCurrency) {
+                option.selected = true;
+            }
+            currencySelect.appendChild(option);
+        });
+
+        console.log(`📊 Populated currency dropdown with ${currencyNetworkData.all_currencies.length} currencies`);
+    }
+
+    // Filter currencies based on selected network
+    function filterCurrenciesByNetwork(selectedNetwork) {
+        const currencySelect = document.getElementById('client_payout_currency');
+        if (!currencySelect || !selectedNetwork) {
+            populateCurrencyDropdown();
+            return;
+        }
+
+        // Get currencies available for this network
+        const availableCurrencies = currencyNetworkData.network_to_currencies[selectedNetwork] || [];
+
+        // Store current selection
+        const currentCurrency = currencySelect.value;
+
+        // Clear and repopulate currency dropdown
+        currencySelect.innerHTML = '<option value="">-- Select Currency --</option>';
+
+        availableCurrencies.sort().forEach(currency => {
+            const option = document.createElement('option');
+            option.value = currency;
+            option.textContent = currency;
+            currencySelect.appendChild(option);
+        });
+
+        // Restore selection if still valid
+        if (availableCurrencies.includes(currentCurrency)) {
+            currencySelect.value = currentCurrency;
+        } else {
+            currencySelect.value = '';
+        }
+
+        console.log(`🔽 Filtered to ${availableCurrencies.length} currencies for network: ${selectedNetwork}`);
+    }
+
+    // Filter networks based on selected currency
+    function filterNetworksByCurrency(selectedCurrency) {
+        const networkSelect = document.getElementById('client_payout_network');
+        if (!networkSelect || !selectedCurrency) {
+            populateNetworkDropdown();
+            return;
+        }
+
+        // Get networks available for this currency
+        const availableNetworks = currencyNetworkData.currency_to_networks[selectedCurrency] || [];
+
+        // Store current selection
+        const currentNetwork = networkSelect.value;
+
+        // Clear and repopulate network dropdown
+        networkSelect.innerHTML = '<option value="">-- Select Network --</option>';
+
+        availableNetworks.sort().forEach(network => {
+            const option = document.createElement('option');
+            option.value = network;
+            option.textContent = network;
+            networkSelect.appendChild(option);
+        });
+
+        // Restore selection if still valid
+        if (availableNetworks.includes(currentNetwork)) {
+            networkSelect.value = currentNetwork;
+        } else {
+            networkSelect.value = '';
+        }
+
+        console.log(`🔽 Filtered to ${availableNetworks.length} networks for currency: ${selectedCurrency}`);
+    }
+
+    // Event listener for network selection
+    function onNetworkChange() {
+        const networkSelect = document.getElementById('client_payout_network');
+        const selectedNetwork = networkSelect.value;
+
+        console.log(`🌐 Network selected: ${selectedNetwork}`);
+
+        if (selectedNetwork) {
+            filterCurrenciesByNetwork(selectedNetwork);
+        } else {
+            populateCurrencyDropdown();
+        }
+    }
+
+    // Event listener for currency selection
+    function onCurrencyChange() {
+        const currencySelect = document.getElementById('client_payout_currency');
+        const selectedCurrency = currencySelect.value;
+
+        console.log(`💰 Currency selected: ${selectedCurrency}`);
+
+        if (selectedCurrency) {
+            filterNetworksByCurrency(selectedCurrency);
+        } else {
+            populateNetworkDropdown();
+        }
+    }
+
+    // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 Initializing currency-network dynamic filtering...');
+
+        // Fetch mappings and setup dropdowns
+        fetchCurrencyNetworkMappings();
+
+        // Attach event listeners
+        const networkSelect = document.getElementById('client_payout_network');
+        const currencySelect = document.getElementById('client_payout_currency');
+
+        if (networkSelect) {
+            networkSelect.addEventListener('change', onNetworkChange);
+            console.log('✅ Network dropdown event listener attached');
+        }
+
+        if (currencySelect) {
+            currencySelect.addEventListener('change', onCurrencyChange);
+            console.log('✅ Currency dropdown event listener attached');
+        }
+
+        // Form submission handler
         const form = document.querySelector('form');
         if (form) {
             form.addEventListener('submit', function(e) {
@@ -255,6 +462,8 @@
                 }
             });
         }
+
+        console.log('✅ Dynamic filtering initialized');
     });
 </script>
 {% endblock %}
