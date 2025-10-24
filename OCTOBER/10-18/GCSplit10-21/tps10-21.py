@@ -562,6 +562,7 @@ def calculate_pure_market_conversion(estimate_response: Dict[str, Any]) -> float
 
 def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
                                      wallet_address: str, payout_currency: str,
+                                     payout_network: str,
                                      subscription_price: str) -> Optional[Dict[str, Any]]:
     """
     Get estimated conversion from ChangeNow API and save to database.
@@ -577,6 +578,7 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
         closed_channel_id: Channel ID from webhook
         wallet_address: Client wallet address from webhook
         payout_currency: Client payout currency from webhook
+        payout_network: Client payout network from webhook
         subscription_price: Subscription price from webhook
 
     Returns:
@@ -589,14 +591,8 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
         tp_flat_fee = config.get('tp_flat_fee')
         original_amount, adjusted_amount = calculate_adjusted_amount(subscription_price, tp_flat_fee)
 
-        # Step 1.5: Look up the network for the target currency from database
-        to_network = database_manager.get_network_for_currency(payout_currency.upper())
-        if not to_network:
-            print(f"❌ [ESTIMATE_AND_SAVE] Failed to lookup network for currency {payout_currency}")
-            print(f"💡 [ESTIMATE_AND_SAVE] Ensure to_currency_to_network table has entry for '{payout_currency.upper()}'")
-            return None
-
-        print(f"🌐 [ESTIMATE_AND_SAVE] Using network '{to_network}' for currency '{payout_currency.upper()}'")
+        # Use payout_network directly from webhook (no database lookup needed)
+        print(f"🌐 [ESTIMATE_AND_SAVE] Using network '{payout_network}' for currency '{payout_currency.upper()}' (from webhook)")
 
         # Step 2: Call ChangeNow API v2 for estimated amount
         print(f"🌐 [ESTIMATE_AND_SAVE] Calling ChangeNow API for estimate")
@@ -661,7 +657,7 @@ def get_estimated_conversion_and_save(user_id: int, closed_channel_id: str,
             from_currency="usdt",
             to_currency=payout_currency.lower(),
             from_network="eth",
-            to_network=to_network.lower(),  # Dynamic from database lookup
+            to_network=payout_network.lower(),  # From webhook payload
             from_amount=float(from_amount),
             to_amount=float(pure_market_eth_value),  # ⭐ Use pure market value (not post-fee)
             client_wallet_address=wallet_address,
@@ -712,16 +708,17 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
         closed_channel_id = webhook_data.get('closed_channel_id')
         wallet_address = webhook_data.get('wallet_address', '').strip()
         payout_currency = webhook_data.get('payout_currency', '').strip().lower()
+        payout_network = webhook_data.get('payout_network', '').strip().lower()
         sub_price = webhook_data.get('subscription_price') or webhook_data.get('sub_price')
 
         print(f"🔄 [PAYMENT_SPLITTING] Starting Client Payout")
         print(f"👤 [PAYMENT_SPLITTING] User ID: {user_id}")
         print(f"🏢 [PAYMENT_SPLITTING] Channel ID: {closed_channel_id}")
         print(f"💰 [PAYMENT_SPLITTING] Subscription Price: ${sub_price}")
-        print(f"🏦 [PAYMENT_SPLITTING] Target: {wallet_address} ({payout_currency.upper()})")
-        
+        print(f"🏦 [PAYMENT_SPLITTING] Target: {wallet_address} ({payout_currency.upper()} on {payout_network.upper()})")
+
         # Validate required fields
-        if not all([user_id, closed_channel_id, wallet_address, payout_currency, sub_price]):
+        if not all([user_id, closed_channel_id, wallet_address, payout_currency, payout_network, sub_price]):
             return {
                 "success": False,
                 "error": "Missing required fields",
@@ -730,6 +727,7 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
                     "closed_channel_id": bool(closed_channel_id),
                     "wallet_address": bool(wallet_address),
                     "payout_currency": bool(payout_currency),
+                    "payout_network": bool(payout_network),
                     "sub_price": bool(sub_price)
                 }
             }
@@ -749,6 +747,7 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
             closed_channel_id=closed_channel_id,
             wallet_address=wallet_address,
             payout_currency=payout_currency,
+            payout_network=payout_network,
             subscription_price=str(sub_price)
         )
 

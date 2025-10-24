@@ -96,11 +96,11 @@ class DatabaseManager:
         """
         open_channel_list = []
         open_channel_info_map = {}
-        
+
         try:
             with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT open_channel_id, open_channel_title, open_channel_description, closed_channel_id, closed_channel_title, closed_channel_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency FROM main_clients_database")
-                for (open_channel_id, open_channel_title, open_channel_desc, closed_channel_id, closed_channel_title, closed_channel_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency) in cur.fetchall():
+                cur.execute("SELECT open_channel_id, open_channel_title, open_channel_description, closed_channel_id, closed_channel_title, closed_channel_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency, client_payout_network FROM main_clients_database")
+                for (open_channel_id, open_channel_title, open_channel_desc, closed_channel_id, closed_channel_title, closed_channel_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency, payout_network) in cur.fetchall():
                     open_channel_list.append(open_channel_id)
                     open_channel_info_map[open_channel_id] = {
                         "open_channel_title": open_channel_title,
@@ -116,10 +116,11 @@ class DatabaseManager:
                         "sub_3_time": s3_time,
                         "client_wallet_address": wallet_addr,
                         "client_payout_currency": payout_currency,
+                        "client_payout_network": payout_network,
                     }
         except Exception as e:
             print("❌ db open_channel error:", e)
-        
+
         return open_channel_list, open_channel_info_map
     
     def fetch_closed_channel_id(self, open_channel_id: str) -> Optional[str]:
@@ -150,39 +151,39 @@ class DatabaseManager:
             print(f"❌ Error fetching closed_channel_id: {e}")
             return None
     
-    def fetch_client_wallet_info(self, open_channel_id: str) -> Tuple[Optional[str], Optional[str]]:
+    def fetch_client_wallet_info(self, open_channel_id: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
-        Get the client wallet address and payout currency for a given open_channel_id.
-        
+        Get the client wallet address, payout currency, and payout network for a given open_channel_id.
+
         Args:
             open_channel_id: The open_channel_id to look up
-            
+
         Returns:
-            Tuple of (client_wallet_address, client_payout_currency) if found, (None, None) otherwise
+            Tuple of (client_wallet_address, client_payout_currency, client_payout_network) if found, (None, None, None) otherwise
         """
         try:
             conn = self.get_connection()
             cur = conn.cursor()
             print(f"🔍 [DEBUG] Looking up wallet info for open_channel_id: {str(open_channel_id)}")
             cur.execute(
-                "SELECT client_wallet_address, client_payout_currency FROM main_clients_database WHERE open_channel_id = %s", 
+                "SELECT client_wallet_address, client_payout_currency, client_payout_network FROM main_clients_database WHERE open_channel_id = %s",
                 (str(open_channel_id),)
             )
             result = cur.fetchone()
             print(f"💰 [DEBUG] fetch_client_wallet_info result: {result}")
             cur.close()
             conn.close()
-            
+
             if result:
-                wallet_address, payout_currency = result
-                return wallet_address, payout_currency
+                wallet_address, payout_currency, payout_network = result
+                return wallet_address, payout_currency, payout_network
             else:
                 print("❌ No wallet info found for open_channel_id =", open_channel_id)
-                return None, None
-                
+                return None, None, None
+
         except Exception as e:
             print(f"❌ Error fetching wallet info: {e}")
-            return None, None
+            return None, None, None
     
     def get_default_donation_channel(self) -> Optional[str]:
         """

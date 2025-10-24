@@ -1,0 +1,2248 @@
+================================================================================
+GCSPLIT → GCHOSTPAY WEBHOOK TOKEN FLOW
+Time-Sensitive Token Generation and Verification
+TelegramFunnel Payment System - October 2025
+================================================================================
+
+This document explains in detail how the GCSplit10-21 service builds and sends
+cryptographically signed tokens to the GCHostPay10-21 service, with special
+emphasis on the TIME-SENSITIVE nature of token validation and the security
+mechanisms in place.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Overview
+2. Why Time Sensitivity Matters
+3. Token Structure (Binary Format)
+4. Token Generation Process (GCSplit10-21)
+5. Token Transmission Process
+6. Token Decoding Process (GCHostPay10-21)
+7. Time Window Validation (CRITICAL)
+8. Security Mechanisms
+9. Failure Scenarios
+10. Code References
+11. Timing Diagrams
+12. Best Practices
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+The GCSplit → GCHostPay webhook communication uses TIME-LIMITED cryptographic
+tokens to securely transmit transaction details for automated ETH payments.
+
+Key Characteristics:
+- ⏰ TIME-LIMITED: Token expires 60 seconds after creation
+- 🔐 SIGNED: HMAC-SHA256 signature prevents tampering
+- 📦 COMPACT: Binary packed format for efficiency
+- 🔄 ONE-TIME: Each token is unique and tied to a specific transaction
+- ⚡ IMMEDIATE: Designed for near-instant processing
+
+Token Validity Window: **60 seconds** (with 5-second grace period)
+
+Purpose:
+- Trigger automated ETH payment from host wallet to ChangeNow
+- Ensure payment instructions cannot be replayed or modified
+- Link ETH payment to specific ChangeNow transaction ID
+- Maintain audit trail through unique_id across database tables
+
+================================================================================
+2. WHY TIME SENSITIVITY MATTERS
+================================================================================
+
+SECURITY RATIONALE
+------------------
+
+The 60-second expiration window serves multiple critical security purposes:
+
+1. **Replay Attack Prevention**
+   - Stolen tokens cannot be reused after expiration
+   - Limits window of opportunity for attackers
+   - Each ChangeNow transaction gets a fresh token
+
+2. **Transaction State Synchronization**
+   - ChangeNow transactions have short-lived "waiting" status
+   - Token expiration aligns with ChangeNow's expected payment window
+   - Prevents payments to expired/cancelled ChangeNow transactions
+
+3. **Database Integrity**
+   - Short window reduces chance of duplicate payments
+   - Ensures unique_id hasn't been processed already
+   - Links correct ETH payment to correct ChangeNow transaction
+
+4. **Operational Efficiency**
+   - Forces immediate processing (no queuing old requests)
+   - Reduces server resource allocation for old tokens
+   - Simplifies error handling (expired = rejected)
+
+
+TIMING CONSTRAINTS
+------------------
+
+The 60-second window is carefully chosen based on:
+
+✅ ChangeNow API Response Time: < 5 seconds
+✅ GCSplit Processing Time: < 5 seconds
+✅ Network Latency (GCSplit → GCHostPay): < 1 second
+✅ GCHostPay Token Validation: < 1 second
+✅ ChangeNow Status Check: < 3 seconds
+✅ ETH Transaction Broadcasting: < 5 seconds
+✅ Total Expected Time: ~20 seconds
+
+Buffer Time: 40 seconds (for network issues, retries, delays)
+
+Grace Period: 5 seconds (for clock skew between servers)
+
+
+REAL-WORLD TIMING
+-----------------
+
+Typical workflow timing:
+
+00:00 - GCSplit creates ChangeNow transaction
+00:02 - ChangeNow API responds with transaction ID
+00:03 - GCSplit generates HostPay token (timestamp embedded)
+00:04 - GCSplit sends webhook to GCHostPay
+00:05 - GCHostPay receives webhook request
+00:06 - GCHostPay validates token (checks timestamp: 3 seconds old ✅)
+00:07 - GCHostPay checks ChangeNow status (waiting ✅)
+00:09 - GCHostPay broadcasts ETH transaction
+00:15 - ETH transaction confirmed on blockchain
+
+Total Time from Token Creation to ETH Broadcast: ~6 seconds
+Token Age at Validation: ~3 seconds (well within 60-second window)
+
+
+FAILURE SCENARIOS (Time-Related)
+---------------------------------
+
+Scenario 1: Network Delay (45 seconds)
+- Token created at T+0
+- Network congestion delays webhook delivery
+- Token arrives at GCHostPay at T+45
+- Token age: 45 seconds ✅ VALID (within 60-second window)
+- Processing continues normally
+
+Scenario 2: Service Outage (70 seconds)
+- Token created at T+0
+- GCHostPay service down for maintenance
+- Request retried at T+70
+- Token age: 70 seconds ❌ EXPIRED (exceeds 60-second window)
+- Request rejected with "Token expired" error
+- GCSplit must create new ChangeNow transaction + new token
+
+Scenario 3: Clock Skew (10 seconds)
+- GCSplit server clock: 10:00:00
+- GCHostPay server clock: 10:00:10 (10 seconds ahead)
+- Token created at 10:00:00 (GCSplit time)
+- Token arrives at 10:00:02 (GCSplit time)
+- GCHostPay validates at 10:00:12 (GCHostPay time)
+- Apparent token age: 12 seconds (due to clock skew)
+- Grace period: 5 seconds allows for clock differences
+- Validation: ✅ PASSES (12 seconds within acceptable range)
+
+
+================================================================================
+3. TOKEN STRUCTURE (BINARY FORMAT)
+================================================================================
+
+The token is a BINARY-PACKED data structure, NOT JSON or plain text.
+
+Binary Structure (byte-by-byte):
+---------------------------------
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ FIELD                │ SIZE         │ FORMAT        │ DESCRIPTION    │
+├──────────────────────────────────────────────────────────────────────┤
+│ unique_id            │ 16 bytes     │ UTF-8 fixed   │ Database ID    │
+│ cn_api_id_length     │ 1 byte       │ uint8         │ Length prefix  │
+│ cn_api_id            │ N bytes      │ UTF-8 var     │ ChangeNow ID   │
+│ from_currency_length │ 1 byte       │ uint8         │ Length prefix  │
+│ from_currency        │ M bytes      │ UTF-8 var     │ "eth"          │
+│ from_network_length  │ 1 byte       │ uint8         │ Length prefix  │
+│ from_network         │ P bytes      │ UTF-8 var     │ "eth"          │
+│ from_amount          │ 8 bytes      │ double (>d)   │ ETH amount     │
+│ payin_address_length │ 1 byte       │ uint8         │ Length prefix  │
+│ payin_address        │ Q bytes      │ UTF-8 var     │ ETH address    │
+│ timestamp            │ 4 bytes      │ uint32 (>I)   │ Unix timestamp │
+│ signature            │ 16 bytes     │ HMAC truncat. │ HMAC-SHA256    │
+└──────────────────────────────────────────────────────────────────────┘
+
+Minimum Size: 52 bytes
+Maximum Size: ~350 bytes (depends on variable field lengths)
+Typical Size: ~120 bytes
+
+
+FIELD DETAILS
+-------------
+
+1. unique_id (16 bytes, fixed):
+   - Database linking ID
+   - Generated by GCSplit when inserting to split_payout_request
+   - Format: Alphanumeric string (e.g., "AH7CWKX82NCPIII9")
+   - Padded with null bytes (\x00) if shorter than 16 chars
+   - Purpose: Links split_payout_request, split_payout_que, split_payout_hostpay
+
+2. cn_api_id (variable length):
+   - ChangeNow transaction ID
+   - Format: Alphanumeric (e.g., "ec4b26e3a392e6")
+   - Length: 14-16 characters (typically 14)
+   - Purpose: Identify ChangeNow transaction for status checks
+
+3. from_currency (variable length):
+   - Source cryptocurrency (lowercase)
+   - Format: "eth", "btc", "usdt", etc.
+   - Length: 3-4 characters
+   - Purpose: Specify which cryptocurrency to send
+
+4. from_network (variable length):
+   - Blockchain network (lowercase)
+   - Format: "eth", "bsc", "polygon", etc.
+   - Length: 3-7 characters
+   - Purpose: Specify which network to use
+
+5. from_amount (8 bytes, double precision):
+   - Amount of ETH to send
+   - Format: IEEE 754 double (big-endian)
+   - Range: 0.000001 to 1000000.0 ETH
+   - Precision: ~15 decimal digits
+   - Purpose: Exact amount for wallet manager to send
+
+6. payin_address (variable length):
+   - ChangeNow deposit address
+   - Format: Ethereum address (0x + 40 hex chars = 42 chars)
+   - Example: "0x1D70FD91E955445A2AA09D43a520312b71A6Bf01"
+   - Purpose: Destination for ETH payment
+
+7. timestamp (4 bytes, uint32):
+   - Unix timestamp (seconds since epoch)
+   - Range: 0 to 4,294,967,295 (year 2106)
+   - Purpose: ⏰ TIME VALIDATION (CRITICAL)
+   - Validation: current_time - 60 <= timestamp <= current_time + 5
+
+8. signature (16 bytes, truncated HMAC):
+   - HMAC-SHA256 of all preceding data
+   - Truncated to first 16 bytes (128 bits)
+   - Full signature: 32 bytes, truncated for compactness
+   - Security: 128 bits = 3.4×10³⁸ possible signatures (unbreakable)
+   - Purpose: Verify data integrity and authenticity
+
+
+WHY BINARY FORMAT?
+------------------
+
+Advantages over JSON:
+✅ Smaller size (~120 bytes vs ~300 bytes JSON)
+✅ Faster parsing (no JSON deserialization)
+✅ Fixed-size fields for critical data (timestamp, amount)
+✅ No encoding ambiguity (UTF-8 vs ASCII vs Unicode)
+✅ Signature covers exact bytes (no whitespace variations)
+
+Disadvantages:
+❌ Not human-readable
+❌ Requires careful parsing (offset tracking)
+❌ Version changes require careful migration
+❌ Debugging more difficult (must decode manually)
+
+Decision: Security and performance trump readability
+
+
+EXAMPLE TOKEN (DECODED)
+------------------------
+
+Input Data:
+- unique_id: "AH7CWKX82NCPIII9"
+- cn_api_id: "ec4b26e3a392e6"
+- from_currency: "eth"
+- from_network: "eth"
+- from_amount: 0.0005574
+- payin_address: "0x1D70FD91E955445A2AA09D43a520312b71A6Bf01"
+- timestamp: 1730841645
+- signing_key: "your-secret-signing-key-here"
+
+Binary Packed (hexadecimal):
+41 48 37 43 57 4B 58 38 32 4E 43 50 49 49 49 39  ← unique_id (16 bytes)
+0E                                                ← cn_api_id length (14)
+65 63 34 62 32 36 65 33 61 33 39 32 65 36        ← cn_api_id (14 bytes)
+03                                                ← currency length (3)
+65 74 68                                          ← "eth" (3 bytes)
+03                                                ← network length (3)
+65 74 68                                          ← "eth" (3 bytes)
+3F 42 54 C8 5E F7 A2 9A                          ← amount (8-byte double)
+2A                                                ← address length (42)
+30 78 31 44 37 30 46 44 39 31 45 39 35 35 34 34  ← address part 1
+35 41 32 41 41 30 39 44 34 33 61 35 32 30 33 31  ← address part 2
+32 62 37 31 41 36 42 66 30 31                    ← address part 3
+67 1A 8C 0D                                      ← timestamp (4 bytes)
+[16 bytes of HMAC signature]                     ← signature
+
+Total Size: 110 bytes
+
+Base64 Encoded Token:
+QUg3Q1dLWDgyTkNQSUlJOQ5lYzRiMjZlM2EzOTJlNgNldGgDZXRoP0JUyF73oppv
+MHgxRDcwRkQ5MUU5NTU0NDRBNEFBMDK0M2E1MjAzMTJiNzFBNkJmMDFnGowN
+[signature bytes]
+
+
+================================================================================
+4. TOKEN GENERATION PROCESS (GCSPLIT10-21)
+================================================================================
+
+FUNCTION: build_hostpay_token()
+LOCATION: GCSplit10-21/tps10-21.py:142-235
+CALLED BY: trigger_hostpay_webhook() [Line 267]
+CALLED WHEN: After ChangeNow transaction created successfully
+
+
+STEP-BY-STEP TOKEN GENERATION
+------------------------------
+
+Step 1: Prepare unique_id (Fixed 16 bytes)
+```python
+unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
+```
+- Encode string to UTF-8 bytes
+- Truncate to 16 bytes if longer
+- Pad with null bytes (\x00) if shorter
+- Result: Exactly 16 bytes
+
+Example:
+Input:  "AH7CWKX82NCPIII9" (16 chars)
+Output: b'AH7CWKX82NCPIII9' (16 bytes)
+
+Input:  "ABC123" (6 chars)
+Output: b'ABC123\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' (16 bytes)
+
+
+Step 2: Encode Variable-Length Fields
+```python
+cn_api_id_bytes = cn_api_id.encode('utf-8')
+from_currency_bytes = from_currency.lower().encode('utf-8')
+from_network_bytes = from_network.lower().encode('utf-8')
+payin_address_bytes = payin_address.encode('utf-8')
+```
+- Convert strings to UTF-8 bytes
+- Lowercase currency and network for consistency
+- No padding (variable length)
+
+
+Step 3: Get Current Timestamp ⏰ (CRITICAL)
+```python
+current_timestamp = int(time.time())
+```
+- Unix timestamp (seconds since January 1, 1970)
+- Example: 1730841645 (November 5, 2024, 22:34:05 UTC)
+- ⚠️ This is the CREATION TIME that will be validated later
+- Stored as 4-byte unsigned integer (uint32)
+
+
+Step 4: Build Packed Data Structure
+```python
+packed_data = bytearray()
+
+# Fixed 16-byte unique_id
+packed_data.extend(unique_id_bytes)
+
+# Variable length fields with 1-byte length prefix
+packed_data.append(len(cn_api_id_bytes))
+packed_data.extend(cn_api_id_bytes)
+
+packed_data.append(len(from_currency_bytes))
+packed_data.extend(from_currency_bytes)
+
+packed_data.append(len(from_network_bytes))
+packed_data.extend(from_network_bytes)
+
+# 8-byte double for amount
+packed_data.extend(struct.pack(">d", from_amount))
+
+# Payin address
+packed_data.append(len(payin_address_bytes))
+packed_data.extend(payin_address_bytes)
+
+# 4-byte timestamp
+packed_data.extend(struct.pack(">I", current_timestamp))
+```
+
+Key Points:
+- ">d" = big-endian double (8 bytes)
+- ">I" = big-endian unsigned int (4 bytes)
+- Length prefixes allow variable-length fields
+- No delimiters needed (length-prefixed parsing)
+
+
+Step 5: Generate HMAC-SHA256 Signature
+```python
+full_signature = hmac.new(signing_key.encode(), bytes(packed_data), hashlib.sha256).digest()
+truncated_signature = full_signature[:16]
+```
+
+Process:
+1. Convert signing_key to bytes
+2. Hash packed_data with HMAC-SHA256
+3. Result: 32-byte signature
+4. Truncate to first 16 bytes (128 bits)
+
+Why Truncate?
+- 128 bits = sufficient security (2^128 = 3.4×10³⁸ combinations)
+- Reduces token size by 16 bytes
+- Still computationally infeasible to forge
+
+
+Step 6: Combine Data + Signature
+```python
+final_data = bytes(packed_data) + truncated_signature
+```
+
+Structure:
+[unique_id][cn_api_id_len][cn_api_id][currency_len][currency]...
+...[network_len][network][amount][address_len][address][timestamp][signature]
+
+
+Step 7: Base64 URL-Safe Encoding
+```python
+token = base64.urlsafe_b64encode(final_data).rstrip(b'=').decode('utf-8')
+```
+
+Process:
+1. Base64 encode binary data (URL-safe variant)
+2. Strip trailing '=' padding
+3. Convert bytes to string
+
+Why URL-Safe?
+- Uses - and _ instead of + and /
+- Can be safely transmitted in URLs or JSON
+- No encoding issues with HTTP headers
+
+Result: Alphanumeric string ready for transmission
+
+
+LOGGING AND VERIFICATION
+-------------------------
+
+The function logs all parameters for debugging:
+
+```
+🔐 [HOSTPAY_TOKEN] Building HostPay webhook token
+✅ [HOSTPAY_TOKEN] Token generated successfully
+🆔 [HOSTPAY_TOKEN] Unique ID: AH7CWKX82NCPIII9
+🆔 [HOSTPAY_TOKEN] CN API ID: ec4b26e3a392e6
+💰 [HOSTPAY_TOKEN] Amount: 0.0005574 ETH
+🌐 [HOSTPAY_TOKEN] Network: eth
+🏦 [HOSTPAY_TOKEN] Payin Address: 0x1D70FD91E955445A2AA09D43a520312b71A6Bf01
+⏰ [HOSTPAY_TOKEN] Timestamp: 1730841645
+🔐 [HOSTPAY_TOKEN] Token size: 187 chars
+```
+
+
+ERROR HANDLING
+--------------
+
+The function returns None if any step fails:
+
+```python
+except Exception as e:
+    print(f"❌ [HOSTPAY_TOKEN] Error building token: {e}")
+    return None
+```
+
+Possible Failures:
+- UTF-8 encoding error (invalid characters)
+- struct.pack error (invalid amount value)
+- HMAC generation error (invalid signing key)
+- Base64 encoding error (corrupted data)
+
+
+================================================================================
+5. TOKEN TRANSMISSION PROCESS
+================================================================================
+
+FUNCTION: trigger_hostpay_webhook()
+LOCATION: GCSplit10-21/tps10-21.py:237-317
+CALLED BY: create_fixed_rate_transaction() [Line 428]
+CALLED WHEN: After ChangeNow transaction saved to split_payout_que
+
+
+TRANSMISSION WORKFLOW
+---------------------
+
+Step 1: Get Configuration
+```python
+hostpay_webhook_url = config.get('hostpay_webhook_url')
+signing_key = config.get('tps_hostpay_signing_key')
+```
+
+Configuration Sources (Google Secret Manager):
+- HOSTPAY_WEBHOOK_URL: "https://tphp10-21-xxx.run.app"
+- TPS_HOSTPAY_SIGNING_KEY: Shared HMAC key
+
+Validation:
+- If webhook URL not configured → Return False (skip payment)
+- If signing key not available → Return False (cannot create token)
+
+
+Step 2: Build Token (Call build_hostpay_token)
+```python
+token = build_hostpay_token(
+    unique_id=unique_id,
+    cn_api_id=cn_api_id,
+    from_currency=from_currency,
+    from_network=from_network,
+    from_amount=from_amount,
+    payin_address=payin_address,
+    signing_key=signing_key
+)
+```
+
+If token is None → Return False
+
+
+Step 3: Prepare HTTP Request Payload
+```python
+payload = {
+    "token": token
+}
+```
+
+Format: JSON
+Content-Type: application/json
+
+Example:
+```json
+{
+  "token": "QUg3Q1dLWDgyTkNQSUlJOQ5lYzRiMjZlM2EzOTJlNgNldGgDZXRoP0JUyF73oppv..."
+}
+```
+
+
+Step 4: Send POST Request
+```python
+response = requests.post(
+    hostpay_webhook_url,
+    json=payload,
+    headers={'Content-Type': 'application/json'},
+    timeout=30
+)
+```
+
+Request Details:
+- Method: POST
+- URL: https://tphp10-21-xxx.run.app
+- Headers: Content-Type: application/json
+- Body: JSON payload with token
+- Timeout: 30 seconds
+
+⏰ TIMING: This HTTP request is where the time-sensitive token travels
+          from GCSplit (token created) to GCHostPay (token validated).
+          The timestamp embedded in the token starts aging NOW.
+
+
+Step 5: Check Response Status
+```python
+if response.status_code == 200:
+    print(f"✅ [HOSTPAY_WEBHOOK] Webhook triggered successfully")
+    try:
+        response_data = response.json()
+        print(f"📦 [HOSTPAY_WEBHOOK] Response: {response_data}")
+    except:
+        pass
+    return True
+else:
+    print(f"❌ [HOSTPAY_WEBHOOK] Webhook failed with status {response.status_code}: {response.text}")
+    return False
+```
+
+Success Criteria:
+- HTTP 200 OK
+- Response body (optional, for logging)
+
+Failure Conditions:
+- HTTP 400: Bad Request (invalid token, expired token)
+- HTTP 401: Unauthorized (signature mismatch)
+- HTTP 500: Internal Server Error (GCHostPay processing error)
+
+
+Step 6: Error Handling
+```python
+except requests.exceptions.Timeout:
+    print(f"❌ [HOSTPAY_WEBHOOK] Request timeout")
+    return False
+except requests.exceptions.ConnectionError:
+    print(f"❌ [HOSTPAY_WEBHOOK] Connection error")
+    return False
+except Exception as e:
+    print(f"❌ [HOSTPAY_WEBHOOK] Error triggering webhook: {e}")
+    return False
+```
+
+Error Types:
+- Timeout: 30-second limit exceeded (network issue)
+- ConnectionError: Cannot reach GCHostPay (service down)
+- Other: Generic exceptions (DNS failure, SSL error, etc.)
+
+
+LOGGING EXAMPLE
+---------------
+
+Successful Webhook:
+```
+🚀 [HOSTPAY_WEBHOOK] Triggering GCHostPay10-21 webhook
+🌐 [HOSTPAY_WEBHOOK] URL: https://tphp10-21-291176869049.us-central1.run.app
+✅ [HOSTPAY_WEBHOOK] Webhook triggered successfully
+📦 [HOSTPAY_WEBHOOK] Response: {
+  "status": "success",
+  "message": "ETH payment executed and logged successfully",
+  "data": {
+    "unique_id": "AH7CWKX82NCPIII9",
+    "cn_api_id": "ec4b26e3a392e6",
+    "tx_hash": "0x99a936f95ee27b32ecce738c9998b4b4d51879368d6582a7a761942fb15d1489",
+    "gas_used": 21000,
+    "block_number": 23632807
+  }
+}
+```
+
+Failed Webhook (Token Expired):
+```
+🚀 [HOSTPAY_WEBHOOK] Triggering GCHostPay10-21 webhook
+🌐 [HOSTPAY_WEBHOOK] URL: https://tphp10-21-291176869049.us-central1.run.app
+❌ [HOSTPAY_WEBHOOK] Webhook failed with status 400: Invalid token: Token expired (created 75 seconds ago, max 60 seconds)
+```
+
+
+TIMING CONSIDERATIONS
+---------------------
+
+Network Latency Budget:
+- DNS Resolution: 10-50ms
+- TCP Handshake: 20-100ms
+- TLS Handshake: 50-200ms
+- HTTP Request: 10-50ms
+- GCHostPay Processing: 100-500ms
+- HTTP Response: 10-50ms
+Total: 200-950ms (typical: ~500ms)
+
+⚠️ The 30-second timeout is generous and should never be hit under normal
+   conditions. If timeout occurs, it indicates serious network or service issues.
+
+⏰ Token Age at GCHostPay Receipt:
+   - Ideal: 0-5 seconds (same datacenter)
+   - Normal: 5-15 seconds (cross-region)
+   - Acceptable: 15-45 seconds (network congestion)
+   - Expired: > 60 seconds (rejected)
+
+
+================================================================================
+6. TOKEN DECODING PROCESS (GCHOSTPAY10-21)
+================================================================================
+
+FUNCTION: decode_and_verify_hostpay_token()
+LOCATION: GCHostPay10-21/tphp10-21.py:143-270
+CALLED BY: hostpay_webhook() [Line 305]
+CALLED WHEN: Webhook request received from GCSplit10-21
+
+
+DECODING WORKFLOW (STEP-BY-STEP)
+---------------------------------
+
+Step 1: Base64 URL-Safe Decoding
+```python
+padding = '=' * (-len(token) % 4)
+try:
+    raw = base64.urlsafe_b64decode(token + padding)
+except Exception:
+    raise ValueError("Invalid token: cannot decode base64")
+```
+
+Process:
+- Add padding if needed (base64 requires length multiple of 4)
+- Decode from URL-safe base64 to raw bytes
+- Catch any decoding errors (invalid characters, corrupted data)
+
+Example:
+Input:  "QUg3Q1dLWDgyTkNQSUlJOQ5lYzRiMjZlM2EzOTJlNg..."
+Output: b'AH7CWKX82NCPIII9\x0eec4b26e3a392e6\x03eth...'
+
+
+Step 2: Size Validation
+```python
+if len(raw) < 52:
+    raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 52)")
+```
+
+Minimum Token Size Calculation:
+- 16 bytes: unique_id (fixed)
+- 1+1 bytes: cn_api_id (min 1 char)
+- 1+1 bytes: from_currency (min 1 char)
+- 1+1 bytes: from_network (min 1 char)
+- 8 bytes: from_amount (fixed)
+- 1+1 bytes: payin_address (min 1 char)
+- 4 bytes: timestamp (fixed)
+- 16 bytes: signature (fixed)
+= 52 bytes minimum
+
+Purpose: Prevent buffer underflow attacks
+
+
+Step 3: Parse Fixed 16-Byte unique_id
+```python
+offset = 0
+unique_id_bytes = raw[offset:offset+16]
+unique_id = unique_id_bytes.rstrip(b'\x00').decode('utf-8')
+offset += 16
+```
+
+Process:
+- Extract first 16 bytes
+- Strip null byte padding from right
+- Decode UTF-8 to string
+- Move offset forward by 16
+
+Example:
+Input:  b'AH7CWKX82NCPIII9'
+Output: "AH7CWKX82NCPIII9"
+Offset: 0 → 16
+
+
+Step 4: Parse Variable-Length cn_api_id
+```python
+if offset + 1 > len(raw):
+    raise ValueError("Invalid token: missing cn_api_id length field")
+cn_api_id_len = raw[offset]
+offset += 1
+
+if offset + cn_api_id_len > len(raw):
+    raise ValueError("Invalid token: incomplete cn_api_id")
+cn_api_id = raw[offset:offset+cn_api_id_len].decode('utf-8')
+offset += cn_api_id_len
+```
+
+Process:
+- Read 1-byte length prefix
+- Validate enough bytes remaining
+- Extract N bytes based on length
+- Decode UTF-8 to string
+- Move offset forward
+
+Example:
+Input:  b'\x0eec4b26e3a392e6'
+Length: 14 (0x0e)
+Output: "ec4b26e3a392e6"
+Offset: 16 → 17 → 31
+
+
+Step 5: Parse from_currency (Same Pattern)
+```python
+if offset + 1 > len(raw):
+    raise ValueError("Invalid token: missing from_currency length field")
+from_currency_len = raw[offset]
+offset += 1
+
+if offset + from_currency_len > len(raw):
+    raise ValueError("Invalid token: incomplete from_currency")
+from_currency = raw[offset:offset+from_currency_len].decode('utf-8')
+offset += from_currency_len
+```
+
+Example:
+Input:  b'\x03eth'
+Length: 3
+Output: "eth"
+Offset: 31 → 32 → 35
+
+
+Step 6: Parse from_network (Same Pattern)
+```python
+if offset + 1 > len(raw):
+    raise ValueError("Invalid token: missing from_network length field")
+from_network_len = raw[offset]
+offset += 1
+
+if offset + from_network_len > len(raw):
+    raise ValueError("Invalid token: incomplete from_network")
+from_network = raw[offset:offset+from_network_len].decode('utf-8')
+offset += from_network_len
+```
+
+Example:
+Input:  b'\x03eth'
+Length: 3
+Output: "eth"
+Offset: 35 → 36 → 39
+
+
+Step 7: Parse 8-Byte from_amount
+```python
+if offset + 8 > len(raw):
+    raise ValueError("Invalid token: incomplete from_amount")
+from_amount = struct.unpack(">d", raw[offset:offset+8])[0]
+offset += 8
+```
+
+Process:
+- Extract 8 bytes
+- Unpack as big-endian double (">d")
+- Result is Python float
+
+Example:
+Input:  b'\x3f\x42\x54\xc8\x5e\xf7\xa2\x9a'
+Output: 0.0005574
+Offset: 39 → 47
+
+
+Step 8: Parse Variable-Length payin_address
+```python
+if offset + 1 > len(raw):
+    raise ValueError("Invalid token: missing payin_address length field")
+payin_address_len = raw[offset]
+offset += 1
+
+if offset + payin_address_len > len(raw):
+    raise ValueError("Invalid token: incomplete payin_address")
+payin_address = raw[offset:offset+payin_address_len].decode('utf-8')
+offset += payin_address_len
+```
+
+Example:
+Input:  b'\x2a0x1D70FD91E955445A2AA09D43a520312b71A6Bf01'
+Length: 42 (0x2a)
+Output: "0x1D70FD91E955445A2AA09D43a520312b71A6Bf01"
+Offset: 47 → 48 → 90
+
+
+Step 9: Parse 4-Byte Timestamp ⏰ (CRITICAL)
+```python
+if offset + 4 > len(raw):
+    raise ValueError("Invalid token: incomplete timestamp")
+timestamp = struct.unpack(">I", raw[offset:offset+4])[0]
+offset += 4
+```
+
+Process:
+- Extract 4 bytes
+- Unpack as big-endian unsigned int (">I")
+- Result is Unix timestamp (seconds since epoch)
+
+Example:
+Input:  b'\x67\x1a\x8c\x0d'
+Output: 1730841645 (November 5, 2024, 22:34:05 UTC)
+Offset: 90 → 94
+
+⚠️ This timestamp will be validated in Step 11
+
+
+Step 10: Extract Signature
+```python
+if len(raw) - offset != 16:
+    raise ValueError(f"Invalid token: wrong signature size (got {len(raw) - offset}, expected 16)")
+
+data = raw[:offset]  # All data except signature
+sig = raw[offset:]   # The signature
+```
+
+Process:
+- Verify exactly 16 bytes remaining
+- Split token into data + signature
+- Data: Everything parsed so far
+- Signature: Last 16 bytes
+
+Example:
+Offset: 94
+Raw Length: 110 bytes
+Signature: raw[94:110] (16 bytes)
+
+
+Step 11: Verify HMAC Signature
+```python
+expected_full_sig = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()
+expected_sig = expected_full_sig[:16]
+if not hmac.compare_digest(sig, expected_sig):
+    raise ValueError("Signature mismatch - token may be tampered or invalid signing key")
+```
+
+Process:
+1. Recreate HMAC using same signing_key and data
+2. Hash data with HMAC-SHA256 (32-byte result)
+3. Truncate to first 16 bytes (same as token generation)
+4. Compare using constant-time comparison (prevents timing attacks)
+
+Security:
+- hmac.compare_digest() prevents timing side-channel attacks
+- Any modification to data → different signature
+- Cannot forge signature without knowing signing_key
+
+Failure Reasons:
+❌ Token tampered with (data modified)
+❌ Wrong signing_key (server misconfiguration)
+❌ Token corrupted during transmission
+❌ Different encoding/packing (version mismatch)
+
+
+Step 12: Validate Timestamp ⏰ (CRITICAL - TIME SENSITIVITY)
+```python
+current_time = int(time.time())
+if not (current_time - 60 <= timestamp <= current_time + 5):
+    time_diff = current_time - timestamp
+    raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 60 seconds)")
+```
+
+⚠️ THIS IS THE TIME-SENSITIVE VALIDATION THAT ENFORCES THE 60-SECOND WINDOW ⚠️
+
+Validation Logic:
+- Get current server time
+- Calculate valid range:
+  - Minimum: current_time - 60 (token up to 60 seconds old)
+  - Maximum: current_time + 5 (allow 5-second clock skew)
+- Check if timestamp falls within range
+
+Example (VALID):
+- Token timestamp: 1730841645 (22:34:05 UTC)
+- Current time:    1730841650 (22:34:10 UTC)
+- Time difference: 5 seconds
+- Validation: 1730841590 <= 1730841645 <= 1730841655 ✅ VALID
+
+Example (EXPIRED):
+- Token timestamp: 1730841600 (22:33:20 UTC)
+- Current time:    1730841675 (22:34:35 UTC)
+- Time difference: 75 seconds
+- Validation: 1730841615 <= 1730841600 <= 1730841680 ❌ EXPIRED
+
+Example (FUTURE TOKEN - Clock Skew):
+- Token timestamp: 1730841653 (22:34:13 UTC)
+- Current time:    1730841650 (22:34:10 UTC)
+- Time difference: -3 seconds (token from "future")
+- Validation: 1730841590 <= 1730841653 <= 1730841655 ✅ VALID
+- Reason: 5-second grace period allows for clock differences
+
+
+Step 13: Log Validation Success
+```python
+print(f"🔓 [TOKEN_VALIDATION] Token validated successfully")
+print(f"⏰ [TOKEN_VALIDATION] Token age: {current_time - timestamp} seconds")
+```
+
+Logging Example:
+```
+🔍 [TOKEN_DEBUG] Raw data size: 110 bytes
+🔍 [TOKEN_DEBUG] Data size: 94 bytes
+🔍 [TOKEN_DEBUG] Signature size: 16 bytes
+🔓 [TOKEN_VALIDATION] Token validated successfully
+⏰ [TOKEN_VALIDATION] Token age: 5 seconds
+```
+
+
+Step 14: Return Extracted Values
+```python
+return unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address
+```
+
+Return Type: Tuple[str, str, str, str, float, str]
+
+Example:
+```python
+(
+    "AH7CWKX82NCPIII9",              # unique_id
+    "ec4b26e3a392e6",                # cn_api_id
+    "eth",                           # from_currency
+    "eth",                           # from_network
+    0.0005574,                       # from_amount
+    "0x1D70FD91E955445A2AA09D43a520312b71A6Bf01"  # payin_address
+)
+```
+
+
+================================================================================
+7. TIME WINDOW VALIDATION (CRITICAL)
+================================================================================
+
+⏰ THE HEART OF TIME SENSITIVITY ⏰
+
+This section explains in extreme detail the 60-second validation window
+and why it's absolutely critical for security and operational correctness.
+
+
+THE 60-SECOND WINDOW EXPLAINED
+-------------------------------
+
+Validation Formula:
+```python
+current_time - 60 <= timestamp <= current_time + 5
+```
+
+Breakdown:
+
+Lower Bound: current_time - 60
+- Tokens older than 60 seconds are REJECTED
+- Purpose: Prevent replay attacks
+- Reasoning: ChangeNow transactions expire if not paid quickly
+
+Upper Bound: current_time + 5
+- Tokens with timestamps up to 5 seconds in the future are ACCEPTED
+- Purpose: Allow for clock skew between servers
+- Reasoning: GCSplit and GCHostPay may have slightly different system clocks
+
+
+TIME WINDOW VISUAL REPRESENTATION
+----------------------------------
+
+Timeline (current_time = 1000):
+
+                     Valid Window (65 seconds)
+                  ┌─────────────────────────────┐
+                  │                             │
+─────────────────────────────────────────────────────────────────→ Time
+       |          |                             |          |
+      935        940                          1000       1005
+       |          |                             |          |
+   Too Old   Oldest Valid                  Current    Future OK
+   (expired)  (60s old)                     Time     (+5s grace)
+
+
+Examples:
+
+Token Age: -10 seconds (timestamp = 1010)
+Status: ❌ REJECTED (too far in future)
+Reason: Likely clock skew > 5 seconds or malicious token
+
+Token Age: -3 seconds (timestamp = 1003)
+Status: ✅ ACCEPTED (within grace period)
+Reason: Minor clock difference between servers
+
+Token Age: 0 seconds (timestamp = 1000)
+Status: ✅ ACCEPTED (ideal case)
+Reason: Instant processing
+
+Token Age: 30 seconds (timestamp = 970)
+Status: ✅ ACCEPTED (normal processing delay)
+Reason: Well within 60-second window
+
+Token Age: 59 seconds (timestamp = 941)
+Status: ✅ ACCEPTED (near expiration)
+Reason: Just barely within 60-second window
+
+Token Age: 60 seconds (timestamp = 940)
+Status: ✅ ACCEPTED (exact boundary)
+Reason: Exactly at lower bound (inclusive)
+
+Token Age: 61 seconds (timestamp = 939)
+Status: ❌ REJECTED (expired)
+Reason: Exceeds 60-second maximum age
+
+
+CLOCK SKEW HANDLING
+--------------------
+
+Real-World Scenario:
+- GCSplit Server Clock: 2024-11-05 22:34:05 UTC
+- GCHostPay Server Clock: 2024-11-05 22:34:12 UTC (7 seconds ahead)
+
+Token Flow:
+1. GCSplit creates token at 22:34:05 (GCSplit time)
+   - Embedded timestamp: 1730841645
+2. Token transmitted to GCHostPay (travel time: 1 second)
+3. GCHostPay receives at 22:34:06 (GCSplit time) / 22:34:13 (GCHostPay time)
+4. GCHostPay validates:
+   - current_time = 1730841653 (GCHostPay's clock)
+   - timestamp = 1730841645 (embedded in token)
+   - Apparent age: 8 seconds
+   - Valid range: 1730841593 to 1730841658
+   - Validation: 1730841593 <= 1730841645 <= 1730841658 ✅ VALID
+
+Without Grace Period (Hypothetical):
+- Token would appear to be -7 seconds old (from future)
+- Would be rejected as invalid
+- System would break due to normal clock drift
+
+With 5-Second Grace Period:
+- Accommodates clock differences up to 5 seconds
+- System remains operational despite minor time sync issues
+- Still prevents significant replay attacks
+
+
+ATTACK SCENARIOS AND DEFENSES
+------------------------------
+
+Attack 1: Replay Attack
+Scenario:
+- Attacker intercepts valid token at T=1000
+- Attacker tries to replay token at T=1070 (70 seconds later)
+
+Defense:
+- Token timestamp: 1000
+- Current time: 1070
+- Token age: 70 seconds
+- Validation: 1010 <= 1000 <= 1075 ❌ REJECTED (too old)
+
+Result: Attack fails
+
+
+Attack 2: Preemptive Token Creation
+Scenario:
+- Attacker creates token with future timestamp (T=1100)
+- Attacker tries to use at T=1050
+
+Defense:
+- Token timestamp: 1100
+- Current time: 1050
+- Token age: -50 seconds (future)
+- Validation: 990 <= 1100 <= 1055 ❌ REJECTED (too far in future)
+
+Result: Attack fails
+
+
+Attack 3: Token Modification
+Scenario:
+- Attacker intercepts valid token
+- Attacker changes from_amount to higher value
+- Attacker replays modified token
+
+Defense:
+- Signature verification detects modification
+- HMAC mismatch → ValueError("Signature mismatch")
+- Token rejected before timestamp check
+
+Result: Attack fails
+
+
+Attack 4: Slow Lorris (Delayed Replay)
+Scenario:
+- Attacker intercepts token at T=1000
+- Attacker delays network packet for 55 seconds
+- Token arrives at T=1055
+
+Defense:
+- Token timestamp: 1000
+- Current time: 1055
+- Token age: 55 seconds
+- Validation: 995 <= 1000 <= 1060 ✅ ACCEPTED
+
+Result: Attack succeeds BUT:
+- ChangeNow transaction likely expired (status != "waiting")
+- GCHostPay checks ChangeNow status before payment
+- Payment rejected due to expired ChangeNow transaction
+- Attacker gains nothing
+
+
+OPERATIONAL TIMING BUDGET
+--------------------------
+
+Component Timing Analysis:
+
+1. ChangeNow Transaction Creation: 2-5 seconds
+   - API request/response latency
+
+2. Token Generation (GCSplit): < 0.1 seconds
+   - Binary packing
+   - HMAC calculation
+   - Base64 encoding
+
+3. HTTP Request (GCSplit → GCHostPay): 0.2-2 seconds
+   - Network latency (same region)
+   - DNS, TCP, TLS overhead
+
+4. Token Decoding (GCHostPay): < 0.1 seconds
+   - Base64 decoding
+   - Binary unpacking
+   - HMAC verification
+   - Timestamp check
+
+5. ChangeNow Status Check: 1-3 seconds
+   - API request to ChangeNow
+   - Status validation
+
+6. Database Duplicate Check: 0.1-0.5 seconds
+   - Query split_payout_hostpay table
+
+7. ETH Transaction Broadcasting: 2-5 seconds
+   - Web3 provider interaction
+   - Gas estimation
+   - Transaction signing
+   - Broadcasting to Ethereum network
+
+Total Expected Time: 6-16 seconds
+Typical Time: ~10 seconds
+
+Timing Budget vs. Expiration:
+- 60-second window
+- ~10 seconds typical processing
+- 50 seconds safety margin
+- Accommodates retries, network congestion, server load
+
+
+REAL-WORLD TIMING LOGS
+-----------------------
+
+Successful Case (Fast):
+```
+⏰ [HOSTPAY_TOKEN] Timestamp: 1730841645  (22:34:05 UTC)
+   [Network transmission: 1.2 seconds]
+⏰ [TOKEN_VALIDATION] Token age: 3 seconds (22:34:08 UTC)
+   ✅ VALID - Processed in 3 seconds
+```
+
+Successful Case (Normal):
+```
+⏰ [HOSTPAY_TOKEN] Timestamp: 1730841600  (22:33:20 UTC)
+   [Network transmission: 2.5 seconds]
+   [ChangeNow status check: 3.1 seconds]
+⏰ [TOKEN_VALIDATION] Token age: 8 seconds (22:33:28 UTC)
+   ✅ VALID - Processed in 8 seconds
+```
+
+Successful Case (Slow but Valid):
+```
+⏰ [HOSTPAY_TOKEN] Timestamp: 1730841500  (22:31:40 UTC)
+   [Network congestion: 15 seconds]
+   [Server load: 25 seconds processing delay]
+⏰ [TOKEN_VALIDATION] Token age: 45 seconds (22:32:25 UTC)
+   ✅ VALID - Processed in 45 seconds (within 60s window)
+```
+
+Failed Case (Expired):
+```
+⏰ [HOSTPAY_TOKEN] Timestamp: 1730841400  (22:30:00 UTC)
+   [Service outage: 80 seconds]
+⏰ [TOKEN_VALIDATION] Token age: 80 seconds (22:31:20 UTC)
+   ❌ REJECTED - Token expired (created 80 seconds ago, max 60 seconds)
+```
+
+
+WHY 60 SECONDS?
+---------------
+
+Too Short (e.g., 10 seconds):
+❌ Not enough time for network latency
+❌ Fails during normal load spikes
+❌ No room for retries on transient errors
+❌ Requires perfect network conditions
+
+Too Long (e.g., 300 seconds):
+❌ Increases replay attack window
+❌ ChangeNow transactions may expire
+❌ Database state may change (duplicate payments)
+❌ Weakens security guarantees
+
+Just Right (60 seconds):
+✅ Accommodates network issues
+✅ Allows for retries
+✅ Matches ChangeNow transaction lifecycle
+✅ Limits replay attack surface
+✅ Provides operational flexibility
+✅ Balances security and reliability
+
+
+MONITORING AND ALERTS
+----------------------
+
+Recommended Monitoring:
+
+1. Average Token Age at Validation
+   - Normal: 2-15 seconds
+   - Warning: 30-45 seconds
+   - Critical: > 50 seconds
+
+2. Token Expiration Rate
+   - Normal: < 0.1% expired
+   - Warning: 0.1-1% expired
+   - Critical: > 1% expired
+
+3. Clock Skew Detection
+   - Measure: |server1_time - server2_time|
+   - Normal: < 2 seconds
+   - Warning: 2-4 seconds
+   - Critical: > 4 seconds
+
+Alert Examples:
+⚠️ "Token validation taking > 30 seconds (current: 42s)"
+⚠️ "Clock skew detected: 7 seconds between GCSplit and GCHostPay"
+🚨 "5% of tokens expired in last hour - investigate delays"
+
+
+================================================================================
+8. SECURITY MECHANISMS
+================================================================================
+
+The GCSplit → GCHostPay token system employs multiple layers of security.
+
+
+LAYER 1: HMAC-SHA256 SIGNATURE
+-------------------------------
+
+Mechanism: HMAC (Hash-based Message Authentication Code)
+
+Purpose:
+✅ Verify token authenticity (came from trusted source)
+✅ Detect tampering (any modification invalidates signature)
+✅ Prevent forgery (cannot create valid tokens without key)
+
+Implementation:
+```python
+# Generation (GCSplit)
+signature = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()[:16]
+
+# Verification (GCHostPay)
+expected_sig = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()[:16]
+if not hmac.compare_digest(sig, expected_sig):
+    raise ValueError("Signature mismatch")
+```
+
+Security Properties:
+- Key length: 256+ bits recommended
+- Hash: SHA-256 (cryptographically secure)
+- Truncation: 128 bits (16 bytes) still secure
+- Comparison: Constant-time (prevents timing attacks)
+
+Attack Resistance:
+❌ Brute force: 2^128 = 3.4×10³⁸ attempts (infeasible)
+❌ Collision: SHA-256 collision resistance
+❌ Forgery: Requires knowing signing_key
+❌ Timing: hmac.compare_digest() prevents side-channel
+
+
+LAYER 2: TIME-BASED EXPIRATION
+-------------------------------
+
+Mechanism: Embedded Unix timestamp + validation window
+
+Purpose:
+✅ Prevent replay attacks (old tokens rejected)
+✅ Enforce temporal coupling (payment must happen soon)
+✅ Limit attack surface (60-second window)
+✅ Align with ChangeNow transaction lifecycle
+
+Implementation:
+```python
+# Generation (GCSplit)
+timestamp = int(time.time())  # Current time
+
+# Verification (GCHostPay)
+current_time = int(time.time())
+if not (current_time - 60 <= timestamp <= current_time + 5):
+    raise ValueError("Token expired")
+```
+
+Security Properties:
+- Expiration: 60 seconds from creation
+- Grace: 5 seconds for clock skew
+- Resolution: 1 second (Unix timestamp)
+
+Attack Resistance:
+❌ Replay: Old tokens expire automatically
+❌ Preemption: Future tokens rejected
+❌ Interception: Limited usefulness (60s window)
+
+
+LAYER 3: REQUEST-RESPONSE PATTERN
+----------------------------------
+
+Mechanism: Synchronous HTTP POST with immediate validation
+
+Purpose:
+✅ Immediate validation (no queuing old requests)
+✅ Clear success/failure (no ambiguity)
+✅ Idempotency support (check duplicate transactions)
+
+Implementation:
+```python
+# GCSplit sends request
+response = requests.post(hostpay_webhook_url, json={"token": token}, timeout=30)
+
+# GCHostPay responds immediately
+if token_valid:
+    return jsonify({"status": "success"}), 200
+else:
+    return jsonify({"status": "error", "message": "Invalid token"}), 400
+```
+
+Security Properties:
+- Timeout: 30 seconds max
+- Synchronous: No queuing delays
+- Immediate validation: Token checked before processing
+
+Operational Benefits:
+✅ Fast feedback (know immediately if token accepted)
+✅ No orphaned requests (timeout prevents hanging)
+✅ Simple error handling (HTTP status codes)
+
+
+LAYER 4: DATABASE DUPLICATE PREVENTION
+---------------------------------------
+
+Mechanism: Check unique_id before processing
+
+Purpose:
+✅ Prevent duplicate payments (same transaction paid twice)
+✅ Idempotency (safe to retry webhook calls)
+✅ Audit trail (detect replay attempts)
+
+Implementation:
+```python
+# Check if transaction already processed
+if db_manager.check_transaction_exists(unique_id):
+    print(f"⚠️ Transaction {unique_id} already processed - skipping")
+    return jsonify({"status": "already_processed"}), 200
+```
+
+Security Properties:
+- Primary key: unique_id (16-char string)
+- Check before payment: No double-spend
+- Idempotent: Safe to retry webhook
+
+Attack Resistance:
+❌ Duplicate payment: Detected and rejected
+❌ Race condition: Database UNIQUE constraint
+❌ Replay with new token: Same unique_id detected
+
+
+LAYER 5: CHANGENOW STATUS VERIFICATION
+---------------------------------------
+
+Mechanism: Query ChangeNow API for transaction status
+
+Purpose:
+✅ Verify transaction is still waiting for payment
+✅ Prevent payment to expired transactions
+✅ Align with ChangeNow state machine
+
+Implementation:
+```python
+cn_status = check_changenow_status(cn_api_id)
+if cn_status != "waiting":
+    print(f"⚠️ ChangeNow status is '{cn_status}' - expected 'waiting'")
+    return jsonify({"status": "invalid_status"}), 400
+```
+
+Security Properties:
+- External validation: Independent check
+- State verification: Must be "waiting"
+- Fail-safe: Don't pay if transaction invalid
+
+Transaction States:
+- "waiting" ✅ Ready for payment
+- "confirming" ⚠️ Already paid (reject)
+- "exchanging" ⚠️ Already processing (reject)
+- "finished" ⚠️ Already complete (reject)
+- "failed" ❌ Transaction failed (reject)
+- "expired" ❌ Transaction expired (reject)
+
+
+LAYER 6: BINARY FORMAT VALIDATION
+----------------------------------
+
+Mechanism: Strict parsing with bounds checking
+
+Purpose:
+✅ Prevent buffer overflow attacks
+✅ Detect corrupted tokens early
+✅ Enforce format constraints
+
+Implementation:
+```python
+# Size check
+if len(raw) < 52:
+    raise ValueError("Invalid token: too small")
+
+# Bounds checking for each field
+if offset + field_length > len(raw):
+    raise ValueError("Invalid token: incomplete field")
+```
+
+Security Properties:
+- Minimum size: 52 bytes
+- Bounds checking: Every field validated
+- Early rejection: Invalid tokens never processed
+
+Attack Resistance:
+❌ Buffer overflow: Bounds checking prevents
+❌ Malformed data: Detected during parsing
+❌ Corrupted tokens: Rejected before processing
+
+
+COMBINED SECURITY ANALYSIS
+---------------------------
+
+Attack: Replay Old Token
+Defense Stack:
+1. ⏰ Time validation: Rejected (> 60 seconds old)
+2. 💾 Database check: May detect duplicate unique_id
+3. 🔄 ChangeNow status: Transaction likely expired
+
+Result: ❌ Attack fails at step 1
+
+
+Attack: Modify Token Amount
+Defense Stack:
+1. 🔐 HMAC verification: Rejected (signature mismatch)
+2. Never reaches time validation
+
+Result: ❌ Attack fails at step 1
+
+
+Attack: Create Fake Token
+Defense Stack:
+1. 🔐 HMAC verification: Rejected (no valid signing key)
+2. Cannot forge valid signature
+
+Result: ❌ Attack fails at step 1
+
+
+Attack: Intercept and Delay Token
+Defense Stack:
+1. ⏰ Time validation: Rejected if delay > 60s
+2. 🔄 ChangeNow status: Transaction likely expired
+3. 💾 Database: May already be processed
+
+Result: ⚠️ May pass time validation if delay < 60s
+        ❌ Fails ChangeNow status check (expired)
+
+
+SECURITY BEST PRACTICES
+------------------------
+
+1. Signing Key Management
+   ✅ Store in Google Cloud Secret Manager
+   ✅ Rotate periodically (quarterly recommended)
+   ✅ Use strong random key (256+ bits)
+   ✅ Never commit to version control
+   ✅ Same key shared between GCSplit and GCHostPay
+
+2. Time Synchronization
+   ✅ Use NTP on all servers
+   ✅ Monitor clock drift
+   ✅ Alert if drift > 2 seconds
+   ✅ Consider using Google Cloud's time service
+
+3. Logging and Monitoring
+   ✅ Log all token validations (success and failure)
+   ✅ Monitor expiration rate (< 1% normal)
+   ✅ Alert on signature mismatches (may indicate attack)
+   ✅ Track token age distribution
+
+4. Network Security
+   ✅ Use HTTPS for all webhook communications
+   ✅ Verify TLS certificates
+   ✅ Use VPC for internal communication (if possible)
+   ✅ Implement rate limiting on webhook endpoints
+
+5. Error Handling
+   ✅ Return generic errors to client (no leak details)
+   ✅ Log detailed errors server-side
+   ✅ Implement exponential backoff for retries
+   ✅ Set max retry attempts (3-5 recommended)
+
+
+================================================================================
+9. FAILURE SCENARIOS
+================================================================================
+
+This section covers common and edge-case failure modes.
+
+
+SCENARIO 1: Token Expired (> 60 seconds)
+-----------------------------------------
+
+Cause:
+- Network delay
+- Service downtime
+- Processing backlog
+
+Symptom:
+```
+❌ [HOSTPAY_WEBHOOK] Token validation failed: Token expired (created 75 seconds ago, max 60 seconds)
+```
+
+HTTP Response: 400 Bad Request
+
+Impact:
+- ETH payment not executed
+- ChangeNow transaction likely expired
+- Client payout not processed
+
+Recovery:
+- GCSplit logs warning (non-fatal)
+- Manual intervention may be needed
+- Admin can create new ChangeNow transaction
+
+Prevention:
+- Monitor token age distribution
+- Alert if average age > 30 seconds
+- Investigate service delays
+
+
+SCENARIO 2: Signature Mismatch
+-------------------------------
+
+Cause:
+- Token tampered with
+- Wrong signing key configured
+- Token corrupted during transmission
+
+Symptom:
+```
+❌ [HOSTPAY_WEBHOOK] Token validation failed: Signature mismatch - token may be tampered or invalid signing key
+```
+
+HTTP Response: 400 Bad Request
+
+Impact:
+- ETH payment not executed
+- Token rejected immediately
+
+Recovery:
+- Verify signing key matches between services
+- Check Secret Manager configuration
+- Retry with fresh token
+
+Prevention:
+- Use Secret Manager for key management
+- Automate key rotation with update scripts
+- Test key validity during deployment
+
+
+SCENARIO 3: ChangeNow Transaction Not "waiting"
+------------------------------------------------
+
+Cause:
+- Token delayed > ChangeNow timeout
+- Transaction already paid by another source
+- ChangeNow transaction failed/expired
+
+Symptom:
+```
+⚠️ [HOSTPAY_WEBHOOK] ChangeNow status is 'expired' - expected 'waiting'
+🛑 [HOSTPAY_WEBHOOK] Terminating execution for unique_id: AH7CWKX82NCPIII9
+```
+
+HTTP Response: 400 Bad Request
+
+Impact:
+- ETH payment prevented (correct behavior)
+- Avoids paying to invalid transaction
+
+Recovery:
+- Create new ChangeNow transaction
+- Generate new token
+- Retry entire flow
+
+Prevention:
+- Process tokens quickly (< 20 seconds typical)
+- Monitor ChangeNow transaction lifetimes
+- Alert on frequent transaction expirations
+
+
+SCENARIO 4: Duplicate Transaction (unique_id exists)
+-----------------------------------------------------
+
+Cause:
+- Webhook retry (intentional)
+- Network issue caused duplicate request
+- Manual replay for testing
+
+Symptom:
+```
+⚠️ [HOSTPAY_WEBHOOK] Transaction AH7CWKX82NCPIII9 already processed - skipping
+```
+
+HTTP Response: 200 OK (idempotent)
+
+Impact:
+- No duplicate payment (correct behavior)
+- Safe idempotency
+
+Recovery:
+- None needed (working as designed)
+
+Prevention:
+- This is expected behavior for retries
+- Database UNIQUE constraint ensures safety
+
+
+SCENARIO 5: Wallet Manager ETH Payment Fails
+---------------------------------------------
+
+Cause:
+- Insufficient ETH balance in host wallet
+- Gas price spike
+- Ethereum network congestion
+- Invalid payin_address
+
+Symptom:
+```
+❌ [HOSTPAY_WEBHOOK] ETH payment failed
+```
+
+HTTP Response: 500 Internal Server Error
+
+Impact:
+- ChangeNow transaction not paid
+- Client payout blocked
+- Requires manual intervention
+
+Recovery:
+- Check host wallet balance
+- Verify Ethereum RPC connectivity
+- Retry with higher gas price
+- Manual payment if automated fails
+
+Prevention:
+- Monitor host wallet balance
+- Alert if balance < 0.5 ETH
+- Implement automatic balance top-up
+- Use gas price oracles for estimation
+
+
+SCENARIO 6: Database Insert Fails
+----------------------------------
+
+Cause:
+- Database connection error
+- Cloud SQL instance down
+- Constraint violation (rare)
+
+Symptom:
+```
+⚠️ [HOSTPAY_DB] Database error inserting hostpay transaction: [error details]
+⚠️ [HOSTPAY_WEBHOOK] Database logging failed (non-fatal)
+```
+
+HTTP Response: 200 OK (ETH payment succeeded)
+
+Impact:
+- ETH payment completed successfully
+- Database record missing
+- Audit trail incomplete
+
+Recovery:
+- Manual database entry using transaction data
+- Retrieve from Ethereum transaction logs
+
+Prevention:
+- Monitor database health
+- Implement connection pooling
+- Add retry logic for database operations
+
+
+SCENARIO 7: Network Timeout (30 seconds)
+-----------------------------------------
+
+Cause:
+- Severe network congestion
+- GCHostPay service overloaded
+- Firewall/routing issue
+
+Symptom:
+```
+❌ [HOSTPAY_WEBHOOK] Request timeout
+```
+
+HTTP Response: None (timeout exception)
+
+Impact:
+- Unknown state (payment may or may not have been executed)
+- Requires status check
+
+Recovery:
+- Check database for unique_id
+- Query Ethereum for pending transactions
+- Safe to retry (idempotency protection)
+
+Prevention:
+- Monitor network latency
+- Scale GCHostPay service (auto-scaling)
+- Investigate routing issues
+
+
+SCENARIO 8: Malformed Token
+----------------------------
+
+Cause:
+- Base64 encoding error
+- Corrupted data transmission
+- Version mismatch (different packing format)
+
+Symptom:
+```
+❌ [HOSTPAY_WEBHOOK] Token validation failed: Invalid token: cannot decode base64
+```
+
+HTTP Response: 400 Bad Request
+
+Impact:
+- Token rejected immediately
+- No processing attempted
+
+Recovery:
+- Regenerate token with correct encoding
+- Verify GCSplit version matches GCHostPay
+
+Prevention:
+- Use URL-safe base64 encoding
+- Add version field to token format
+- Test token generation in staging
+
+
+ERROR RATE BENCHMARKS
+----------------------
+
+Normal Operation:
+- Token expiration: < 0.1%
+- Signature mismatch: < 0.01%
+- Duplicate transactions: 1-5% (retries expected)
+- ChangeNow status mismatch: < 0.5%
+- ETH payment failures: < 1%
+- Database errors: < 0.1%
+
+Warning Thresholds:
+- Token expiration: > 1%
+- Signature mismatch: > 0.1%
+- ETH payment failures: > 5%
+- Database errors: > 1%
+
+Critical Thresholds:
+- Token expiration: > 5%
+- Any category > 10%
+
+
+================================================================================
+10. CODE REFERENCES
+================================================================================
+
+GCSPLIT10-21 (Token Generation)
+--------------------------------
+
+1. tps10-21.py:142-235
+   - build_hostpay_token()
+   - Generates binary packed token
+   - Signs with HMAC-SHA256
+   - Returns base64 encoded string
+
+2. tps10-21.py:237-317
+   - trigger_hostpay_webhook()
+   - Sends POST request to GCHostPay
+   - Handles response and errors
+   - Returns success/failure boolean
+
+3. tps10-21.py:319-458
+   - create_fixed_rate_transaction()
+   - Creates ChangeNow transaction
+   - Saves to split_payout_que
+   - Calls trigger_hostpay_webhook()
+
+4. tps10-21.py:699-838
+   - process_payment_split()
+   - Main workflow orchestration
+   - Calls all helper functions
+   - Returns processing result
+
+
+GCHOSTPAY10-21 (Token Decoding)
+--------------------------------
+
+1. tphp10-21.py:143-270
+   - decode_and_verify_hostpay_token()
+   - Base64 decodes token
+   - Parses binary structure
+   - Verifies HMAC signature
+   - Validates timestamp (⏰ TIME CHECK)
+   - Returns extracted values
+
+2. tphp10-21.py:272-421
+   - hostpay_webhook()
+   - Receives POST request
+   - Calls decode_and_verify_hostpay_token()
+   - Checks ChangeNow status
+   - Executes ETH payment
+   - Logs to database
+
+3. tphp10-21.py:92-141
+   - check_changenow_status()
+   - Queries ChangeNow API
+   - Returns transaction status
+   - Used to verify "waiting" status
+
+
+SHARED COMPONENTS
+-----------------
+
+1. Config Manager (GCSplit)
+   - config_manager.py
+   - Fetches secrets from Google Secret Manager
+   - Provides configuration to services
+
+2. Database Manager (GCHostPay)
+   - database_manager.py
+   - Handles split_payout_hostpay table
+   - Checks for duplicate transactions
+   - Inserts completed payments
+
+3. Wallet Manager (GCHostPay)
+   - wallet_manager.py
+   - Executes ETH transactions
+   - Handles gas optimization
+   - Returns tx_hash, gas_used, block_number
+
+
+ENVIRONMENT VARIABLES
+---------------------
+
+GCSplit10-21:
+- HOSTPAY_WEBHOOK_URL
+  Path: projects/*/secrets/hostpay_webhook_url/versions/latest
+  Value: https://tphp10-21-xxx.run.app
+
+- TPS_HOSTPAY_SIGNING_KEY
+  Path: projects/*/secrets/tps_hostpay_signing_key/versions/latest
+  Value: [shared HMAC key]
+
+GCHostPay10-21:
+- TPS_HOSTPAY_SIGNING_KEY
+  Path: projects/*/secrets/tps_hostpay_signing_key/versions/latest
+  Value: [shared HMAC key - MUST MATCH GCSplit]
+
+- HOST_WALLET_ETH_ADDRESS
+  Path: projects/*/secrets/host_wallet_eth_address/versions/latest
+
+- HOST_WALLET_PRIVATE_KEY
+  Path: projects/*/secrets/host_wallet_private_key/versions/latest
+
+- ETHEREUM_RPC_URL
+  Path: projects/*/secrets/ethereum_rpc_url/versions/latest
+
+
+================================================================================
+11. TIMING DIAGRAMS
+================================================================================
+
+NORMAL FLOW (Fast Processing)
+------------------------------
+
+Time: 0s
+┌────────────────────────────────────────────────┐
+│ GCSplit10-21: ChangeNow API Response Received │
+│ cn_api_id: ec4b26e3a392e6                     │
+│ payin_address: 0x1D70FD91E9...                │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 0.05s
+┌────────────────────────────────────────────────┐
+│ GCSplit10-21: build_hostpay_token()           │
+│ ⏰ TIMESTAMP EMBEDDED: 1730841645             │
+│ TOKEN AGE: 0 seconds                          │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 0.1s
+┌────────────────────────────────────────────────┐
+│ GCSplit10-21: trigger_hostpay_webhook()       │
+│ POST https://tphp10-21-xxx.run.app            │
+│ Payload: {"token": "QUg3Q1dL..."}             │
+└────────────────────────────────────────────────┘
+                    ↓ [Network: 0.5s]
+
+Time: 0.6s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: Webhook Request Received      │
+│ TOKEN AGE: 0.55 seconds                       │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 0.7s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: decode_and_verify_token()     │
+│ ⏰ TIMESTAMP CHECK: 0.65s old ✅ VALID        │
+│ Signature verification: ✅ PASSED             │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 1.5s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: check_changenow_status()      │
+│ Status: "waiting" ✅ Ready for payment        │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 3.2s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: send_eth_payment()            │
+│ Broadcasting ETH transaction...               │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 8.5s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: ETH Transaction Confirmed     │
+│ tx_hash: 0x99a936f95ee27b...                  │
+│ gas_used: 21000                               │
+│ block_number: 23632807                        │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 8.7s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: Database Insert Complete      │
+│ Table: split_payout_hostpay                   │
+│ unique_id: AH7CWKX82NCPIII9                   │
+└────────────────────────────────────────────────┘
+                    ↓
+
+Time: 8.8s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: HTTP 200 OK Response Sent     │
+│ ✅ WEBHOOK COMPLETE                           │
+└────────────────────────────────────────────────┘
+
+Total Time: 8.8 seconds
+Token Age at Validation: 0.65 seconds ✅
+Final Token Age: 8.75 seconds ✅
+
+
+DELAYED FLOW (Network Congestion)
+----------------------------------
+
+Time: 0s
+┌────────────────────────────────────────────────┐
+│ GCSplit10-21: Token Generated                 │
+│ ⏰ TIMESTAMP: 1730841600                      │
+└────────────────────────────────────────────────┘
+                    ↓ [Network Delay: 35s]
+
+Time: 35s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: Request Received              │
+│ ⏰ TOKEN AGE: 35 seconds                      │
+│ ⏰ VALIDATION: 35 < 60 ✅ STILL VALID         │
+└────────────────────────────────────────────────┘
+                    ↓ [Processing: 10s]
+
+Time: 45s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: Payment Complete              │
+│ ⏰ FINAL TOKEN AGE: 45 seconds ✅             │
+└────────────────────────────────────────────────┘
+
+
+EXPIRED FLOW (Service Outage)
+------------------------------
+
+Time: 0s
+┌────────────────────────────────────────────────┐
+│ GCSplit10-21: Token Generated                 │
+│ ⏰ TIMESTAMP: 1730841400                      │
+└────────────────────────────────────────────────┘
+                    ↓ [Service Down: 80s]
+
+Time: 80s
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: Service Restored              │
+│ Request Received (Retry)                      │
+│ ⏰ TOKEN AGE: 80 seconds                      │
+│ ⏰ VALIDATION: 80 > 60 ❌ EXPIRED             │
+│ ❌ REJECTED: "Token expired"                  │
+│ HTTP 400 Bad Request                          │
+└────────────────────────────────────────────────┘
+
+
+CLOCK SKEW SCENARIO
+-------------------
+
+GCSplit Clock: 10:00:00 UTC
+GCHostPay Clock: 10:00:08 UTC (8 seconds ahead)
+
+Time: 0s (GCSplit Time)
+┌────────────────────────────────────────────────┐
+│ GCSplit10-21: Token Generated                 │
+│ ⏰ TIMESTAMP: 1730841600 (10:00:00 GCSplit)   │
+└────────────────────────────────────────────────┘
+                    ↓ [Network: 1s]
+
+Time: 1s (GCSplit) / 9s (GCHostPay)
+┌────────────────────────────────────────────────┐
+│ GCHostPay10-21: Request Received              │
+│ GCHostPay Clock: 10:00:09                     │
+│ Token Timestamp: 10:00:00 (GCSplit)           │
+│ ⏰ APPARENT AGE: 9 seconds                    │
+│ ⏰ GRACE PERIOD: +5 seconds                   │
+│ ⏰ VALIDATION: 9 > 5 but < 60 ✅ VALID        │
+└────────────────────────────────────────────────┘
+
+
+================================================================================
+12. BEST PRACTICES
+================================================================================
+
+DEVELOPMENT
+-----------
+
+1. Token Testing
+   ✅ Write unit tests for build_hostpay_token()
+   ✅ Write unit tests for decode_and_verify_hostpay_token()
+   ✅ Test with various timestamp ages (0s, 30s, 59s, 61s)
+   ✅ Test signature verification with wrong keys
+   ✅ Test with malformed tokens (truncated, corrupted)
+
+2. Local Testing
+   ✅ Use fixed timestamps for reproducibility
+   ✅ Mock time.time() to test expiration logic
+   ✅ Use test signing key (never production key in code)
+   ✅ Log all token generation/validation steps
+
+3. Integration Testing
+   ✅ Test full flow: GCSplit → GCHostPay → ETH payment
+   ✅ Test retry logic (intentional token reuse)
+   ✅ Test ChangeNow status variations
+   ✅ Test database duplicate detection
+
+
+DEPLOYMENT
+----------
+
+1. Configuration Management
+   ✅ Use Google Secret Manager for all keys
+   ✅ Rotate signing keys quarterly
+   ✅ Update both services simultaneously during rotation
+   ✅ Verify key sync between GCSplit and GCHostPay
+
+2. Monitoring Setup
+   ✅ Track average token age at validation
+   ✅ Alert if token age > 30 seconds
+   ✅ Monitor token expiration rate (< 1% normal)
+   ✅ Track signature mismatch rate (< 0.01% normal)
+   ✅ Monitor webhook success rate (> 99% target)
+
+3. Logging Configuration
+   ✅ Log all token validations (success and failure)
+   ✅ Log token age at validation time
+   ✅ Log ChangeNow status checks
+   ✅ Log ETH transaction hashes
+   ✅ Use structured logging (JSON format)
+
+
+OPERATIONS
+----------
+
+1. Incident Response
+   ✅ If token expiration rate spikes → Check service health
+   ✅ If signature mismatches → Verify key sync
+   ✅ If ETH payments failing → Check wallet balance
+   ✅ If ChangeNow rejections → Check transaction lifetimes
+
+2. Performance Optimization
+   ✅ Monitor token validation latency (< 100ms target)
+   ✅ Monitor webhook request latency (< 2s target)
+   ✅ Optimize database queries (indexed lookups)
+   ✅ Use connection pooling for database
+
+3. Capacity Planning
+   ✅ Estimate webhook throughput (requests/second)
+   ✅ Plan for 3x peak load capacity
+   ✅ Monitor GCHostPay CPU and memory usage
+   ✅ Enable auto-scaling on Cloud Run
+
+
+SECURITY
+--------
+
+1. Key Management
+   ✅ Never commit keys to version control
+   ✅ Use different keys for dev/staging/prod
+   ✅ Implement key rotation procedure
+   ✅ Log all key access (Secret Manager audit logs)
+
+2. Network Security
+   ✅ Use HTTPS for all webhook communications
+   ✅ Verify TLS certificates (no self-signed in prod)
+   ✅ Consider VPC for internal communication
+   ✅ Implement rate limiting (100 req/min per IP)
+
+3. Monitoring and Alerts
+   ✅ Alert on unusual spike in validation failures
+   ✅ Alert on signature mismatch (possible attack)
+   ✅ Monitor for replay attempts (duplicate unique_id)
+   ✅ Review logs daily for anomalies
+
+
+DOCUMENTATION
+-------------
+
+1. Runbooks
+   ✅ Document token expiration investigation steps
+   ✅ Document key rotation procedure
+   ✅ Document common failure scenarios and fixes
+   ✅ Document escalation procedures
+
+2. Architecture Diagrams
+   ✅ Maintain up-to-date flow diagrams
+   ✅ Document all webhook endpoints
+   ✅ Document database schema changes
+   ✅ Document token format versions
+
+3. API Documentation
+   ✅ Document webhook payload format
+   ✅ Document response codes and meanings
+   ✅ Document retry behavior and idempotency
+   ✅ Document rate limits and quotas
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+The GCSplit → GCHostPay token flow is a TIME-SENSITIVE security mechanism
+that enables automated ETH payments while preventing replay attacks and
+ensuring transaction integrity.
+
+Key Takeaways:
+
+⏰ TIME SENSITIVITY: 60-second expiration window
+   - Prevents replay attacks
+   - Aligns with ChangeNow transaction lifecycle
+   - Provides operational flexibility
+
+🔐 SECURITY: Multi-layered protection
+   - HMAC-SHA256 signature (128-bit truncated)
+   - Time-based expiration
+   - Database duplicate prevention
+   - ChangeNow status verification
+
+📦 EFFICIENCY: Binary packed format
+   - Compact size (~120 bytes)
+   - Fast parsing
+   - No ambiguity
+
+🛡️ RELIABILITY: Defensive design
+   - Idempotent webhooks
+   - Clear error messages
+   - Comprehensive logging
+   - Graceful failure handling
+
+⚡ PERFORMANCE: Fast processing
+   - Typical token age: 2-15 seconds
+   - Total workflow: 8-16 seconds
+   - 50-second safety margin
+
+This document provides complete technical details for understanding,
+implementing, debugging, and maintaining the token-based webhook system.
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
+
+Generated: October 2025
+Last Updated: 2025-10-23
+Version: 10-18
+For: TelegramFunnel Payment System
+
+Related Documentation:
+- INVITATION_LINK_WORKFLOW.txt - User invitation flow
+- SUCCESS_URL_FLOW_EXPLANATION.txt - Success URL token format
+- ENVIRONMENT_VARIABLES.txt - Configuration reference
+
+For questions about token generation or time-sensitive validation:
+- GCSplit10-21/tps10-21.py (token generation)
+- GCHostPay10-21/tphp10-21.py (token validation)
+- Contact: System Administrator
+
+================================================================================

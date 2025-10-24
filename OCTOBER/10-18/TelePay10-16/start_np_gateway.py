@@ -192,6 +192,7 @@ class PaymentGatewayManager:
             closed_channel_id = "donation_default_closed"
             wallet_address = ""
             payout_currency = ""
+            payout_network = ""
             closed_channel_title = "Donation Channel"
             closed_channel_description = "supporting our community"
         else:
@@ -201,11 +202,11 @@ class PaymentGatewayManager:
                 chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
                 await context.bot.send_message(chat_id, "❌ Could not find a closed_channel_id for this open_channel_id. Please check your database!")
                 return
-            
-            # Get wallet info from database
-            wallet_address, payout_currency = db_manager.fetch_client_wallet_info(global_open_channel_id)
-            print(f"💰 [DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}'")
-            
+
+            # Get wallet info from database (now includes network)
+            wallet_address, payout_currency, payout_network = db_manager.fetch_client_wallet_info(global_open_channel_id)
+            print(f"💰 [DEBUG] Retrieved wallet info for {global_open_channel_id}: wallet='{wallet_address}', currency='{payout_currency}', network='{payout_network}'")
+
             # Get channel title and description info for personalized message
             _, channel_info_map = db_manager.fetch_open_channel_list()
             channel_data = channel_info_map.get(global_open_channel_id, {})
@@ -220,12 +221,13 @@ class PaymentGatewayManager:
                 await context.bot.send_message(chat_id, "❌ Signing key missing, cannot generate secure URL.")
             return
 
-        # Build secure success URL with wallet info, subscription time and price
+        # Build secure success URL with wallet info, network, subscription time and price
         secure_success_url = webhook_manager.build_signed_success_url(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
             client_wallet_address=wallet_address or "",
             client_payout_currency=payout_currency or "",
+            client_payout_network=payout_network or "",
             subscription_time=global_sub_time,
             subscription_price=str(global_sub_value)
         )
