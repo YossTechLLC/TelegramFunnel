@@ -281,6 +281,7 @@ class ChangeNowClient:
     
     def create_fixed_rate_transaction(self, from_currency: str, to_currency: str,
                                     from_amount: float, address: str,
+                                    from_network: str = None, to_network: str = None,
                                     user_id: str = None, rate_id: str = None) -> Optional[Dict]:
         """
         Create a transaction with ChangeNow API v2.
@@ -290,6 +291,8 @@ class ChangeNowClient:
             to_currency: Target currency
             from_amount: Amount to exchange
             address: Recipient wallet address
+            from_network: Source network (defaults to from_currency if not provided)
+            to_network: Target network (defaults to to_currency if not provided)
             user_id: Optional user ID for tracking
             rate_id: Optional rate ID for guaranteed pricing
 
@@ -301,11 +304,17 @@ class ChangeNowClient:
             print(f"💱 [CHANGENOW_TRANSACTION] {from_amount} {from_currency.upper()} → {to_currency.upper()}")
 
             # Prepare transaction data for v2 API
+            # Use provided networks or fall back to currency defaults
+            actual_from_network = from_network.lower() if from_network else from_currency.lower()
+            actual_to_network = to_network.lower() if to_network else to_currency.lower()
+
+            print(f"🌐 [CHANGENOW_TRANSACTION] Networks: {actual_from_network} → {actual_to_network}")
+
             transaction_data = {
                 "fromCurrency": from_currency.lower(),
                 "toCurrency": to_currency.lower(),
-                "fromNetwork": from_currency.lower(),
-                "toNetwork": to_currency.lower(),
+                "fromNetwork": actual_from_network,
+                "toNetwork": actual_to_network,
                 "fromAmount": str(from_amount),
                 "toAmount": "",
                 "address": address,

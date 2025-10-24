@@ -350,6 +350,8 @@ def create_fixed_rate_transaction(to_amount: float, from_currency: str, to_curre
             to_currency=to_currency,
             from_amount=to_amount,
             address=wallet_address,
+            from_network=from_network,
+            to_network=to_network,
             user_id=str(user_id)
         )
 
@@ -793,7 +795,7 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
             unique_id=estimate_data['unique_id'],  # Pass unique_id for linking tables
             closed_channel_id=str(closed_channel_id),  # Pass closed_channel_id for database
             from_network="eth",
-            to_network="eth"
+            to_network=payout_network  # Use actual network from main_clients_database
         )
 
         if transaction:
