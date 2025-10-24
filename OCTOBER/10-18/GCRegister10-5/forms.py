@@ -216,6 +216,7 @@ class ChannelRegistrationForm(FlaskForm):
         choices=[
             ('', '-- Select Network --')
         ],
+        validate_choice=False,  # Allow dynamic choices from JavaScript/database
         render_kw={
             'class': 'form-select',
             'id': 'client_payout_network'
@@ -230,6 +231,7 @@ class ChannelRegistrationForm(FlaskForm):
         choices=[
             ('', '-- Select Currency --')
         ],
+        validate_choice=False,  # Allow dynamic choices from JavaScript/database
         render_kw={
             'class': 'form-select',
             'id': 'client_payout_currency'
