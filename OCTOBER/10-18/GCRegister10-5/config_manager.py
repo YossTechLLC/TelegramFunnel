@@ -139,12 +139,12 @@ class ConfigManager:
             'db_user': self.db_user,
             'db_password': self.db_password,
             'secret_key': self.secret_key,
-            'cloud_sql_connection_name': self.cloud_sql_connection_name
+            'instance_connection_name': self.cloud_sql_connection_name
         }
 
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
-        print(f"   Cloud SQL Instance: {'✅' if config['cloud_sql_connection_name'] else '❌'}")
+        print(f"   Cloud SQL Instance: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   Database Name: {'✅' if config['db_name'] else '❌'}")
         print(f"   Database User: {'✅' if config['db_user'] else '❌'}")
         print(f"   Database Password: {'✅' if config['db_password'] else '❌'}")
@@ -164,5 +164,5 @@ class ConfigManager:
             'db_user': self.db_user,
             'db_password': self.db_password,
             'secret_key': self.secret_key,
-            'cloud_sql_connection_name': self.cloud_sql_connection_name
+            'instance_connection_name': self.cloud_sql_connection_name
         }

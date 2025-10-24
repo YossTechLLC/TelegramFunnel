@@ -27,9 +27,18 @@ class DatabaseManager:
 
         # Validate that critical credentials are available
         if not self.password:
+            print(f"❌ [DATABASE] Database password is missing")
             raise RuntimeError("Database password not available. Cannot initialize DatabaseManager.")
-        if not self.instance_connection_name or not self.dbname or not self.user:
-            raise RuntimeError("Critical database configuration missing.")
+        if not self.instance_connection_name:
+            print(f"❌ [DATABASE] Cloud SQL instance connection name is missing")
+            print(f"🔍 [DATABASE] Expected key: 'instance_connection_name', got: {config.get('instance_connection_name')}")
+            raise RuntimeError("Critical database configuration missing: instance_connection_name")
+        if not self.dbname:
+            print(f"❌ [DATABASE] Database name is missing")
+            raise RuntimeError("Critical database configuration missing: db_name")
+        if not self.user:
+            print(f"❌ [DATABASE] Database user is missing")
+            raise RuntimeError("Critical database configuration missing: db_user")
 
         print(f"🔗 [DATABASE] DatabaseManager initialized with Cloud SQL Connector")
         print(f"🔗 [DATABASE] Instance: {self.instance_connection_name}")
