@@ -95,12 +95,30 @@
                     <!-- Subscription Tiers Section -->
                     <div class="section-divider mb-4">
                         <h3 class="h5 text-primary mb-3">💰 Subscription Pricing Tiers</h3>
-                        <p class="text-muted small">Configure three subscription tiers (Bronze, Silver, Gold)</p>
+                        <p class="text-muted small">Select how many tiers you want to offer and configure their pricing</p>
 
-                        <!-- Tier 1 -->
-                        <div class="card mb-3">
+                        <!-- Tier Count Selection -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold d-block mb-3">Number of Subscription Tiers</label>
+                            <div class="btn-group d-flex" role="group" aria-label="Tier count selection">
+                                <input type="radio" class="btn-check" name="tier_count" id="tier_count_1" value="1" autocomplete="off">
+                                <label class="btn btn-outline-primary" for="tier_count_1">1 Tier</label>
+
+                                <input type="radio" class="btn-check" name="tier_count" id="tier_count_2" value="2" autocomplete="off">
+                                <label class="btn btn-outline-primary" for="tier_count_2">2 Tiers</label>
+
+                                <input type="radio" class="btn-check" name="tier_count" id="tier_count_3" value="3" autocomplete="off" checked>
+                                <label class="btn btn-outline-primary" for="tier_count_3">3 Tiers</label>
+                            </div>
+                            <div class="form-text mt-2">
+                                💡 <strong>Tier 1 (Gold)</strong> is always shown. Add <strong>Tier 2 (Silver)</strong> and <strong>Tier 3 (Bronze)</strong> as needed.
+                            </div>
+                        </div>
+
+                        <!-- Tier 1 - Gold (Premium) -->
+                        <div class="card mb-3 tier-card" data-tier="1">
                             <div class="card-header bg-light">
-                                <h4 class="h6 mb-0">🥉 Tier 1 - Bronze</h4>
+                                <h4 class="h6 mb-0">🥇 Tier 1 - Gold (Premium)</h4>
                             </div>
                             <div class="card-body">
                                 <div class="row">
@@ -126,10 +144,10 @@
                             </div>
                         </div>
 
-                        <!-- Tier 2 -->
-                        <div class="card mb-3">
+                        <!-- Tier 2 - Silver (Mid-tier) -->
+                        <div class="card mb-3 tier-card" data-tier="2">
                             <div class="card-header bg-light">
-                                <h4 class="h6 mb-0">🥈 Tier 2 - Silver</h4>
+                                <h4 class="h6 mb-0">🥈 Tier 2 - Silver (Mid-tier)</h4>
                             </div>
                             <div class="card-body">
                                 <div class="row">
@@ -155,10 +173,10 @@
                             </div>
                         </div>
 
-                        <!-- Tier 3 -->
-                        <div class="card mb-3">
+                        <!-- Tier 3 - Bronze (Basic) -->
+                        <div class="card mb-3 tier-card" data-tier="3">
                             <div class="card-header bg-light">
-                                <h4 class="h6 mb-0">🥇 Tier 3 - Gold</h4>
+                                <h4 class="h6 mb-0">🥉 Tier 3 - Bronze (Basic)</h4>
                             </div>
                             <div class="card-body">
                                 <div class="row">
@@ -482,14 +500,78 @@
         console.log('✅ Payment fields reset complete - all options restored');
     }
 
+    // Update tier visibility based on selected tier count
+    function updateTierVisibility() {
+        // Get selected tier count
+        const tierCountRadios = document.querySelectorAll('input[name="tier_count"]');
+        let selectedTierCount = 3; // Default to 3 tiers
+
+        tierCountRadios.forEach(radio => {
+            if (radio.checked) {
+                selectedTierCount = parseInt(radio.value);
+            }
+        });
+
+        console.log(`💰 Updating tier visibility for ${selectedTierCount} tier(s)`);
+
+        // Get all tier cards
+        const tier1 = document.querySelector('.tier-card[data-tier="1"]');
+        const tier2 = document.querySelector('.tier-card[data-tier="2"]');
+        const tier3 = document.querySelector('.tier-card[data-tier="3"]');
+
+        // Get tier input fields
+        const tier1Price = document.getElementById('sub_1_price');
+        const tier1Time = document.getElementById('sub_1_time');
+        const tier2Price = document.getElementById('sub_2_price');
+        const tier2Time = document.getElementById('sub_2_time');
+        const tier3Price = document.getElementById('sub_3_price');
+        const tier3Time = document.getElementById('sub_3_time');
+
+        // Show/hide tiers based on selection
+        if (selectedTierCount === 1) {
+            // Show only Tier 1 (Gold)
+            if (tier1) tier1.style.display = 'block';
+            if (tier2) tier2.style.display = 'none';
+            if (tier3) tier3.style.display = 'none';
+
+            // Clear hidden tier values
+            if (tier2Price) tier2Price.value = '';
+            if (tier2Time) tier2Time.value = '';
+            if (tier3Price) tier3Price.value = '';
+            if (tier3Time) tier3Time.value = '';
+
+            console.log('✅ Showing: Tier 1 (Gold) only');
+
+        } else if (selectedTierCount === 2) {
+            // Show Tier 1 (Gold) and Tier 2 (Silver)
+            if (tier1) tier1.style.display = 'block';
+            if (tier2) tier2.style.display = 'block';
+            if (tier3) tier3.style.display = 'none';
+
+            // Clear hidden tier values
+            if (tier3Price) tier3Price.value = '';
+            if (tier3Time) tier3Time.value = '';
+
+            console.log('✅ Showing: Tier 1 (Gold) + Tier 2 (Silver)');
+
+        } else if (selectedTierCount === 3) {
+            // Show all three tiers
+            if (tier1) tier1.style.display = 'block';
+            if (tier2) tier2.style.display = 'block';
+            if (tier3) tier3.style.display = 'block';
+
+            console.log('✅ Showing: All tiers (Gold, Silver, Bronze)');
+        }
+    }
+
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('🚀 Initializing currency-network dynamic filtering...');
+        console.log('🚀 Initializing currency-network dynamic filtering and tier management...');
 
         // Fetch mappings and setup dropdowns
         fetchCurrencyNetworkMappings();
 
-        // Attach event listeners
+        // Attach event listeners for payment fields
         const networkSelect = document.getElementById('client_payout_network');
         const currencySelect = document.getElementById('client_payout_currency');
 
@@ -510,6 +592,16 @@
             console.log('✅ Reset button event listener attached');
         }
 
+        // Attach tier count radio button event listeners
+        const tierCountRadios = document.querySelectorAll('input[name="tier_count"]');
+        tierCountRadios.forEach(radio => {
+            radio.addEventListener('change', updateTierVisibility);
+        });
+        console.log('✅ Tier count selection event listeners attached');
+
+        // Initialize tier visibility on page load (default: 3 tiers)
+        updateTierVisibility();
+
         // Form submission handler
         const form = document.querySelector('form');
         if (form) {
@@ -522,7 +614,7 @@
             });
         }
 
-        console.log('✅ Dynamic filtering initialized');
+        console.log('✅ Dynamic filtering and tier management initialized');
     });
 </script>
 {% endblock %}

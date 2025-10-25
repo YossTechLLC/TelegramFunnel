@@ -184,7 +184,19 @@ class DatabaseManager:
 
                     print(f"✅ [DATABASE] Successfully inserted registration for channel: {data['open_channel_id']}")
                     print(f"📊 [DATABASE] Details: {data['open_channel_title']} -> {data['closed_channel_title']}")
-                    print(f"💰 [DATABASE] Tiers: ${data['sub_1_price']}/{data['sub_1_time']}d, ${data['sub_2_price']}/{data['sub_2_time']}d, ${data['sub_3_price']}/{data['sub_3_time']}d")
+
+                    # Log tier configuration (handle NULL values)
+                    tier_info = []
+                    if data['sub_1_price'] is not None and data['sub_1_time'] is not None:
+                        tier_info.append(f"Tier 1 (Gold): ${data['sub_1_price']}/{data['sub_1_time']}d")
+                    if data['sub_2_price'] is not None and data['sub_2_time'] is not None:
+                        tier_info.append(f"Tier 2 (Silver): ${data['sub_2_price']}/{data['sub_2_time']}d")
+                    if data['sub_3_price'] is not None and data['sub_3_time'] is not None:
+                        tier_info.append(f"Tier 3 (Bronze): ${data['sub_3_price']}/{data['sub_3_time']}d")
+
+                    tier_count = len(tier_info)
+                    print(f"💰 [DATABASE] {tier_count} tier(s) configured: {', '.join(tier_info)}")
+
                     print(f"🏦 [DATABASE] Wallet: {data['client_wallet_address'][:20]}...")
                     print(f"🌐 [DATABASE] Payout: {data['client_payout_currency']} on {data['client_payout_network']} network")
 

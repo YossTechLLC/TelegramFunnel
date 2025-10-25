@@ -108,17 +108,17 @@ class ChannelRegistrationForm(FlaskForm):
         }
     )
 
-    # Subscription Tier 1 (Bronze)
+    # Subscription Tier 1 (Gold - Premium)
+    # NOTE: Fields are optional - validation occurs based on selected tier count
     sub_1_price = DecimalField(
         'Tier 1 Price (USD)',
         validators=[
-            DataRequired(message='❌ Tier 1 price is required'),
             NumberRange(min=0, max=9999.99, message='❌ Price must be between $0.00 and $9999.99'),
             validate_price
         ],
         places=2,
         render_kw={
-            'placeholder': 'e.g., 9.99',
+            'placeholder': 'e.g., 49.99',
             'class': 'form-control',
             'step': '0.01',
             'min': '0',
@@ -129,23 +129,22 @@ class ChannelRegistrationForm(FlaskForm):
     sub_1_time = IntegerField(
         'Tier 1 Duration (Days)',
         validators=[
-            DataRequired(message='❌ Tier 1 duration is required'),
             NumberRange(min=1, max=999, message='❌ Duration must be between 1 and 999 days'),
             validate_time
         ],
         render_kw={
-            'placeholder': 'e.g., 30',
+            'placeholder': 'e.g., 365',
             'class': 'form-control',
             'min': '1',
             'max': '999'
         }
     )
 
-    # Subscription Tier 2 (Silver)
+    # Subscription Tier 2 (Silver - Mid-tier)
+    # NOTE: Fields are optional - validation occurs based on selected tier count
     sub_2_price = DecimalField(
         'Tier 2 Price (USD)',
         validators=[
-            DataRequired(message='❌ Tier 2 price is required'),
             NumberRange(min=0, max=9999.99, message='❌ Price must be between $0.00 and $9999.99'),
             validate_price
         ],
@@ -162,7 +161,6 @@ class ChannelRegistrationForm(FlaskForm):
     sub_2_time = IntegerField(
         'Tier 2 Duration (Days)',
         validators=[
-            DataRequired(message='❌ Tier 2 duration is required'),
             NumberRange(min=1, max=999, message='❌ Duration must be between 1 and 999 days'),
             validate_time
         ],
@@ -174,17 +172,17 @@ class ChannelRegistrationForm(FlaskForm):
         }
     )
 
-    # Subscription Tier 3 (Gold)
+    # Subscription Tier 3 (Bronze - Basic)
+    # NOTE: Fields are optional - validation occurs based on selected tier count
     sub_3_price = DecimalField(
         'Tier 3 Price (USD)',
         validators=[
-            DataRequired(message='❌ Tier 3 price is required'),
             NumberRange(min=0, max=9999.99, message='❌ Price must be between $0.00 and $9999.99'),
             validate_price
         ],
         places=2,
         render_kw={
-            'placeholder': 'e.g., 49.99',
+            'placeholder': 'e.g., 9.99',
             'class': 'form-control',
             'step': '0.01',
             'min': '0',
@@ -195,12 +193,11 @@ class ChannelRegistrationForm(FlaskForm):
     sub_3_time = IntegerField(
         'Tier 3 Duration (Days)',
         validators=[
-            DataRequired(message='❌ Tier 3 duration is required'),
             NumberRange(min=1, max=999, message='❌ Duration must be between 1 and 999 days'),
             validate_time
         ],
         render_kw={
-            'placeholder': 'e.g., 365',
+            'placeholder': 'e.g., 30',
             'class': 'form-control',
             'min': '1',
             'max': '999'

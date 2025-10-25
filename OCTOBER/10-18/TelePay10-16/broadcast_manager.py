@@ -53,7 +53,7 @@ class BroadcastManager:
             buttons_cfg = []
             
             # Add subscription tier buttons with emojis
-            tier_emojis = {1: "🥉", 2: "🥈", 3: "🥇"}
+            tier_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
             for idx in (1, 2, 3):
                 price = data.get(f"sub_{idx}_price")
                 days = data.get(f"sub_{idx}_time")

@@ -111,7 +111,60 @@ def register():
 
         print("✅ [APP] CAPTCHA verified successfully")
 
+        # Get tier count from form (radio button)
+        tier_count = int(request.form.get('tier_count', 3))
+        print(f"💰 [APP] User selected {tier_count} subscription tier(s)")
+
+        # Validate tier data based on selected tier count
+        validation_errors = []
+
+        # Tier 1 validation (always required if tier_count >= 1)
+        if tier_count >= 1:
+            if not form.sub_1_price.data or not form.sub_1_time.data:
+                validation_errors.append('❌ Tier 1 (Gold) price and duration are required')
+
+        # Tier 2 validation (required if tier_count >= 2)
+        if tier_count >= 2:
+            if not form.sub_2_price.data or not form.sub_2_time.data:
+                validation_errors.append('❌ Tier 2 (Silver) price and duration are required')
+
+        # Tier 3 validation (required if tier_count == 3)
+        if tier_count == 3:
+            if not form.sub_3_price.data or not form.sub_3_time.data:
+                validation_errors.append('❌ Tier 3 (Bronze) price and duration are required')
+
+        # If validation errors exist, flash them and return to form
+        if validation_errors:
+            for error in validation_errors:
+                flash(error, 'danger')
+                print(f"❌ [APP] Tier validation error: {error}")
+
+            # Generate new CAPTCHA
+            captcha_question, captcha_answer = generate_captcha()
+            session['captcha_answer'] = captcha_answer
+            session['captcha_question'] = captcha_question
+
+            return render_template(
+                'register.html',
+                form=form,
+                captcha_question=session.get('captcha_question')
+            )
+
         # Prepare data for database insertion
+        # Convert empty/None values to None (PostgreSQL NULL)
+        def get_tier_value(value, value_type='float'):
+            """Convert form data to appropriate type or None for NULL."""
+            if value is None or value == '':
+                return None
+            try:
+                if value_type == 'float':
+                    return float(value)
+                elif value_type == 'int':
+                    return int(value)
+            except (ValueError, TypeError):
+                return None
+            return None
+
         registration_data = {
             'open_channel_id': form.open_channel_id.data.strip(),
             'open_channel_title': form.open_channel_title.data.strip(),
@@ -119,18 +172,19 @@ def register():
             'closed_channel_id': form.closed_channel_id.data.strip(),
             'closed_channel_title': form.closed_channel_title.data.strip(),
             'closed_channel_description': form.closed_channel_description.data.strip(),
-            'sub_1_price': float(form.sub_1_price.data),
-            'sub_1_time': int(form.sub_1_time.data),
-            'sub_2_price': float(form.sub_2_price.data),
-            'sub_2_time': int(form.sub_2_time.data),
-            'sub_3_price': float(form.sub_3_price.data),
-            'sub_3_time': int(form.sub_3_time.data),
+            'sub_1_price': get_tier_value(form.sub_1_price.data, 'float') if tier_count >= 1 else None,
+            'sub_1_time': get_tier_value(form.sub_1_time.data, 'int') if tier_count >= 1 else None,
+            'sub_2_price': get_tier_value(form.sub_2_price.data, 'float') if tier_count >= 2 else None,
+            'sub_2_time': get_tier_value(form.sub_2_time.data, 'int') if tier_count >= 2 else None,
+            'sub_3_price': get_tier_value(form.sub_3_price.data, 'float') if tier_count >= 3 else None,
+            'sub_3_time': get_tier_value(form.sub_3_time.data, 'int') if tier_count >= 3 else None,
             'client_wallet_address': form.client_wallet_address.data.strip(),
             'client_payout_currency': form.client_payout_currency.data.upper(),
             'client_payout_network': form.client_payout_network.data.upper()
         }
 
         print(f"📦 [APP] Prepared registration data for channel: {registration_data['open_channel_id']}")
+        print(f"💰 [APP] Tier configuration: {tier_count} tier(s) selected")
 
         # Insert into database
         try:
