@@ -24,7 +24,8 @@
       "Bash(env)",
       "Bash(gcloud run services list:*)",
       "Bash(cd:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(git check-ignore:*)"
     ],
     "deny": []
   }

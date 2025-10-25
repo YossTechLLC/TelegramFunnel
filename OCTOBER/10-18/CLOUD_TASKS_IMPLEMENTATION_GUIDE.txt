@@ -1,0 +1,3072 @@
+================================================================================
+GOOGLE CLOUD TASKS IMPLEMENTATION GUIDE
+TelegramFunnel Payment System - October 2025
+================================================================================
+
+This document provides a comprehensive architectural guide for implementing
+Google Cloud Tasks as a reliable, rate-limited, retrying HTTP job queue for
+all Cloud Run services in the TelegramFunnel payment system.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Executive Summary
+2. Current Architecture (Without Cloud Tasks)
+3. Proposed Architecture (With Cloud Tasks)
+4. Cloud Tasks Overview
+5. Service-Specific Implementation Requirements
+6. Queue Configuration Recommendations
+7. Code Changes Required (High-Level)
+8. Benefits & Trade-offs
+9. Time-Sensitive Token Considerations
+10. Deployment Sequence
+11. Monitoring & Observability
+12. Cost Analysis
+13. Migration Strategy
+14. Testing Approach
+15. Rollback Plan
+
+================================================================================
+1. EXECUTIVE SUMMARY
+================================================================================
+
+CURRENT STATE
+-------------
+All inter-service HTTP communications use direct synchronous HTTP POST requests:
+- GCWebhook10-16 → GCSplit10-21 (direct POST)
+- GCSplit10-21 → GCHostPay10-21 (direct POST with 60-second time constraint)
+
+LIMITATIONS
+-----------
+❌ No automatic retry on transient failures
+❌ No rate limiting (can overwhelm downstream services)
+❌ No request queuing (spikes in traffic can cause service overload)
+❌ Manual error handling required for each HTTP call
+❌ Tight coupling between services
+
+PROPOSED SOLUTION
+-----------------
+Implement Google Cloud Tasks as an asynchronous job queue layer between services:
+✅ Automatic retries with exponential backoff
+✅ Rate limiting and traffic shaping
+✅ Guaranteed delivery (at-least-once semantics)
+✅ Request queuing and buffering
+✅ Loose coupling between services
+✅ Built-in monitoring and observability
+
+CRITICAL CONSIDERATION
+----------------------
+⏰ The GCSplit → GCHostPay flow has a 60-SECOND time-sensitive token.
+   Cloud Tasks implementation MUST respect this constraint.
+
+================================================================================
+2. CURRENT ARCHITECTURE (WITHOUT CLOUD TASKS)
+================================================================================
+
+SYNCHRONOUS FLOW (Current)
+--------------------------
+
+User Payment
+    ↓
+NowPayments Invoice
+    ↓
+Payment Completed
+    ↓
+NowPayments redirects → GCWebhook10-16 (success_url with token)
+    ↓
+GCWebhook10-16 receives request
+    ↓ [Step 1: Process payment confirmation]
+    ↓ Grant Telegram channel access
+    ↓ Insert to split_payout_request table
+    ↓
+    ↓ [Step 2: Trigger payment split - SYNCHRONOUS HTTP POST]
+    ↓
+    └─→ requests.post("https://tps10-21.run.app") ← DIRECT CALL
+            ↓
+        GCSplit10-21 receives request
+            ↓ [Step 3: Process split calculation]
+            ↓ Query ChangeNow API for rates
+            ↓ Calculate client payout (95%)
+            ↓ Create ChangeNow transaction
+            ↓ Insert to split_payout_que table
+            ↓
+            ↓ [Step 4: Trigger ETH payment - SYNCHRONOUS HTTP POST]
+            ↓
+            └─→ requests.post("https://tphp10-21.run.app") ← DIRECT CALL
+                    ↓ [⏰ Token created with 60-second expiration]
+                    ↓
+                GCHostPay10-21 receives request
+                    ↓ [Step 5: Execute ETH payment]
+                    ↓ Validate token (60-second window)
+                    ↓ Check ChangeNow status
+                    ↓ Send ETH from host wallet
+                    ↓ Log to split_payout_hostpay table
+
+
+CURRENT FAILURE SCENARIOS
+--------------------------
+
+Scenario 1: GCWebhook → GCSplit POST fails
+Problem:
+- Network timeout (30-second limit)
+- GCSplit service down
+- Rate limit exceeded
+
+Result:
+❌ Payment split never initiated
+❌ Client never receives payout
+❌ No automatic retry
+⚠️ Requires manual investigation and retry
+
+
+Scenario 2: GCSplit → GCHostPay POST fails
+Problem:
+- Network timeout
+- GCHostPay service down
+- Token expires before delivery (> 60 seconds)
+
+Result:
+❌ ETH payment never executed
+❌ ChangeNow transaction stuck in "waiting" status
+❌ No automatic retry
+⚠️ Requires creating new ChangeNow transaction
+
+
+Scenario 3: Spike in Payment Volume
+Problem:
+- 100 users complete payment simultaneously
+- GCWebhook makes 100 concurrent HTTP calls to GCSplit
+- GCSplit gets overwhelmed (cold start + CPU saturation)
+
+Result:
+⚠️ Some requests timeout
+⚠️ Some requests fail with 5xx errors
+⚠️ Cloud Run auto-scaling may not react fast enough
+❌ No request buffering or queuing
+
+
+CURRENT ERROR HANDLING CODE
+----------------------------
+
+Location: GCWebhook10-16/tph10-16.py:428-450
+
+try:
+    response = requests.post(
+        split_service_url,
+        json=split_payload,
+        headers={'Content-Type': 'application/json'},
+        timeout=30
+    )
+    if response.status_code != 200:
+        print(f"❌ [SPLIT_TRIGGER] Failed: {response.status_code}")
+        # NO RETRY - Request is lost!
+except requests.exceptions.Timeout:
+    print(f"❌ [SPLIT_TRIGGER] Timeout after 30 seconds")
+    # NO RETRY - Request is lost!
+except Exception as e:
+    print(f"❌ [SPLIT_TRIGGER] Error: {e}")
+    # NO RETRY - Request is lost!
+
+
+Location: GCSplit10-21/tps10-21.py:237-317
+
+try:
+    response = requests.post(
+        hostpay_webhook_url,
+        json={"token": token},
+        timeout=30
+    )
+    if response.status_code != 200:
+        print(f"❌ [HOSTPAY_WEBHOOK] Failed: {response.status_code}")
+        return False  # NO RETRY
+except requests.exceptions.Timeout:
+    print(f"❌ [HOSTPAY_WEBHOOK] Timeout")
+    return False  # NO RETRY
+
+================================================================================
+3. PROPOSED ARCHITECTURE (WITH CLOUD TASKS)
+================================================================================
+
+ASYNCHRONOUS FLOW (Proposed with Cloud Tasks)
+----------------------------------------------
+
+User Payment
+    ↓
+NowPayments Invoice
+    ↓
+Payment Completed
+    ↓
+NowPayments redirects → GCWebhook10-16 (success_url with token)
+    ↓
+GCWebhook10-16 receives request
+    ↓ [Step 1: Process payment confirmation]
+    ↓ Grant Telegram channel access
+    ↓ Insert to split_payout_request table
+    ↓
+    ↓ [Step 2: Enqueue task to Cloud Tasks - ASYNCHRONOUS]
+    ↓
+    └─→ CloudTasksClient.create_task() → "split-payment-queue"
+            ↓ [Queue: split-payment-queue]
+            ↓ Rate limit: 100/sec
+            ↓ Max retries: 5
+            ↓ Retry delay: exponential backoff
+            ↓
+            ↓ [Cloud Tasks dispatches HTTP POST]
+            ↓
+        GCSplit10-21 receives task
+            ↓ [Step 3: Process split calculation]
+            ↓ Query ChangeNow API for rates
+            ↓ Calculate client payout (95%)
+            ↓ Create ChangeNow transaction
+            ↓ Insert to split_payout_que table
+            ↓
+            ↓ [Step 4: Enqueue task to Cloud Tasks - ASYNCHRONOUS]
+            ↓
+            └─→ CloudTasksClient.create_task() → "hostpay-execution-queue"
+                    ↓ [Queue: hostpay-execution-queue]
+                    ↓ Rate limit: 50/sec (ETH transaction rate limiting)
+                    ↓ Max retries: 3 (⏰ respects 60-second token window)
+                    ↓ Retry delay: 5 seconds (fast retry for time-sensitive)
+                    ↓ Max dispatch duration: 45 seconds
+                    ↓
+                    ↓ [Cloud Tasks dispatches HTTP POST]
+                    ↓ [⏰ Token created with 60-second expiration]
+                    ↓
+                GCHostPay10-21 receives task
+                    ↓ [Step 5: Execute ETH payment]
+                    ↓ Validate token (60-second window)
+                    ↓ Check ChangeNow status
+                    ↓ Send ETH from host wallet
+                    ↓ Log to split_payout_hostpay table
+
+
+CLOUD TASKS QUEUE ARCHITECTURE
+-------------------------------
+
+Queue Name: split-payment-queue
+Purpose: Trigger payment splitting in GCSplit10-21
+Target: https://tps10-21-xxx.us-central1.run.app/process_split
+Method: POST
+Payload: {unique_id, subscription_price}
+
+Configuration:
+- max_dispatches_per_second: 100
+- max_concurrent_dispatches: 50
+- max_attempts: 5
+- min_backoff: 1s
+- max_backoff: 60s
+- max_doublings: 5
+
+
+Queue Name: hostpay-execution-queue
+Purpose: Trigger ETH payment in GCHostPay10-21
+Target: https://tphp10-21-xxx.us-central1.run.app/hostpay_webhook
+Method: POST
+Payload: {token: "base64_encoded_token"}
+
+Configuration:
+- max_dispatches_per_second: 50 (ETH network rate limiting)
+- max_concurrent_dispatches: 20 (wallet nonce management)
+- max_attempts: 3 (⏰ limited due to 60-second token window)
+- min_backoff: 5s (fast retry for time-sensitive tasks)
+- max_backoff: 15s (never exceed 60-second window)
+- max_doublings: 2 (5s → 10s → 15s)
+- task_age_limit: 60s (⏰ auto-delete tasks older than 60 seconds)
+
+
+Queue Name: registration-processing-queue (Optional)
+Purpose: Process new client registrations from GCRegister10-5
+Target: https://gcregister10-5-xxx.us-central1.run.app/process_registration
+Method: POST
+Payload: {registration data}
+
+Configuration:
+- max_dispatches_per_second: 10 (low volume)
+- max_concurrent_dispatches: 5
+- max_attempts: 10 (registration is not time-sensitive)
+- min_backoff: 5s
+- max_backoff: 3600s
+- max_doublings: 10
+
+
+RETRY BEHAVIOR WITH CLOUD TASKS
+--------------------------------
+
+Example: GCWebhook → GCSplit task fails
+
+Attempt 1: Dispatch at T+0s
+  ↓ GCSplit returns HTTP 500 (internal error)
+  ↓
+Cloud Tasks: Retry scheduled (exponential backoff)
+  ↓
+Attempt 2: Dispatch at T+1s (min_backoff)
+  ↓ GCSplit returns HTTP 503 (service unavailable)
+  ↓
+Cloud Tasks: Retry scheduled
+  ↓
+Attempt 3: Dispatch at T+3s (2s backoff)
+  ↓ GCSplit returns HTTP 200 (success!)
+  ↓
+Cloud Tasks: Task marked as complete ✅
+
+
+Example: GCSplit → GCHostPay time-sensitive task
+
+Attempt 1: Dispatch at T+0s
+  ↓ [Token age: 3 seconds]
+  ↓ GCHostPay returns HTTP 500 (transient error)
+  ↓
+Cloud Tasks: Retry scheduled (fast retry)
+  ↓
+Attempt 2: Dispatch at T+5s
+  ↓ [Token age: 8 seconds - still valid!]
+  ↓ GCHostPay returns HTTP 200 (success!)
+  ↓
+Cloud Tasks: Task marked as complete ✅
+
+
+Example: Token expiration scenario
+
+Attempt 1: Dispatch at T+0s
+  ↓ [Token age: 3 seconds]
+  ↓ Network timeout (30 seconds)
+  ↓
+Cloud Tasks: Retry scheduled
+  ↓
+Attempt 2: Dispatch at T+35s
+  ↓ [Token age: 38 seconds]
+  ↓ GCHostPay returns HTTP 500 (database error)
+  ↓
+Cloud Tasks: Retry scheduled
+  ↓
+Attempt 3: Dispatch at T+50s
+  ↓ [Token age: 53 seconds]
+  ↓ GCHostPay returns HTTP 200 (success!)
+  ↓
+Cloud Tasks: Task marked as complete ✅
+  ↓
+Total time: 53 seconds (within 60-second window)
+
+
+Example: Token expires before completion
+
+Attempt 1: Dispatch at T+0s
+  ↓ [Token age: 5 seconds]
+  ↓ Network timeout (30 seconds)
+  ↓
+Cloud Tasks: Retry scheduled
+  ↓
+Attempt 2: Dispatch at T+35s
+  ↓ [Token age: 40 seconds]
+  ↓ Service down (30 seconds timeout)
+  ↓
+Cloud Tasks: Retry scheduled
+  ↓
+Attempt 3: Dispatch at T+70s
+  ↓ [Token age: 75 seconds - EXPIRED!]
+  ↓ GCHostPay returns HTTP 400 ("Token expired")
+  ↓
+Cloud Tasks: HTTP 4xx = permanent failure, do not retry
+  ↓
+Task marked as failed ❌
+  ↓
+Requires manual intervention (create new ChangeNow transaction)
+
+================================================================================
+4. CLOUD TASKS OVERVIEW
+================================================================================
+
+WHAT IS GOOGLE CLOUD TASKS?
+----------------------------
+
+Google Cloud Tasks is a fully managed service for managing the execution of
+large numbers of distributed tasks. It allows you to:
+
+✅ Decouple services (async communication)
+✅ Rate limit and throttle requests
+✅ Retry failed tasks automatically
+✅ Schedule tasks for future execution
+✅ Guarantee at-least-once delivery
+
+KEY FEATURES
+------------
+
+1. Asynchronous Task Execution
+   - Create tasks that execute HTTP requests
+   - Tasks are queued and dispatched independently
+   - Services return immediately (non-blocking)
+
+2. Automatic Retries
+   - Configurable retry policies
+   - Exponential backoff
+   - Max attempts limit
+   - Distinguish between retryable (5xx) and permanent (4xx) failures
+
+3. Rate Limiting
+   - max_dispatches_per_second: Control request rate
+   - max_concurrent_dispatches: Limit parallel execution
+   - Prevents overwhelming downstream services
+
+4. Task Scheduling
+   - Schedule tasks for immediate execution
+   - Schedule tasks for future execution (delay)
+   - schedule_time parameter for precise timing
+
+5. Guaranteed Delivery
+   - At-least-once delivery semantics
+   - Tasks persist until completed or max_attempts reached
+   - Survives service restarts and outages
+
+6. Dead Letter Queue (Optional)
+   - Failed tasks can be moved to a separate queue
+   - Allows manual inspection and reprocessing
+   - Prevents permanent data loss
+
+CLOUD TASKS VS DIRECT HTTP CALLS
+---------------------------------
+
+Feature                     | Direct HTTP | Cloud Tasks
+----------------------------|-------------|-------------
+Retry on failure            | Manual      | Automatic
+Rate limiting               | Manual      | Built-in
+Request buffering           | No          | Yes
+Guaranteed delivery         | No          | Yes (at-least-once)
+Monitoring                  | Custom      | Built-in (Stackdriver)
+Latency                     | Lower       | Slightly higher
+Complexity                  | Lower       | Higher
+Cost                        | Free        | $0.40 per million tasks
+Transient failure handling  | Poor        | Excellent
+Service decoupling          | Tight       | Loose
+
+WHEN TO USE CLOUD TASKS
+------------------------
+
+✅ Use Cloud Tasks when:
+- Need reliable delivery guarantees
+- Want automatic retry on transient failures
+- Need rate limiting to protect downstream services
+- Processing can tolerate slight delay (async)
+- Want to decouple services
+- Need request buffering during traffic spikes
+- Want centralized task monitoring
+
+❌ Don't use Cloud Tasks when:
+- Need synchronous response (user waiting for result)
+- Sub-100ms latency is critical
+- Processing must happen immediately (no delay tolerance)
+- Very high throughput (> 500 tasks/second per queue)
+- Cost is primary concern (high volume = higher cost)
+
+CLOUD TASKS PRICING (as of 2025)
+---------------------------------
+
+First 1 million tasks/month: FREE
+Additional tasks: $0.40 per million
+
+Example cost calculation for TelegramFunnel:
+- 1,000 payments/day
+- 2 tasks per payment (GCWebhook → GCSplit, GCSplit → GCHostPay)
+- 2,000 tasks/day × 30 days = 60,000 tasks/month
+- Cost: $0.00 (within free tier)
+
+Even at 10,000 payments/day:
+- 600,000 tasks/month
+- Cost: $0.00 (within free tier)
+
+CLOUD TASKS LIMITS (Default Quotas)
+------------------------------------
+
+Per project:
+- Queues: 1,000
+- Tasks per queue: 1,000,000
+- Task size: 100 KB
+- Queue throughput: 500 tasks/second (can request increase)
+- Concurrent dispatches: 1,000 (can request increase)
+
+Per task:
+- Max schedule time: 30 days in future
+- Max task execution time: 10 minutes (configurable)
+- Max retries: Configurable (default: unlimited)
+
+================================================================================
+5. SERVICE-SPECIFIC IMPLEMENTATION REQUIREMENTS
+================================================================================
+
+SERVICE: GCWebhook10-16
+-----------------------
+
+CURRENT BEHAVIOR (tph10-16.py:428-450)
+---------------------------------------
+After granting channel access:
+1. Make synchronous HTTP POST to GCSplit10-21
+2. Wait for response (with 30-second timeout)
+3. Return success/failure
+
+NEW BEHAVIOR (With Cloud Tasks)
+--------------------------------
+After granting channel access:
+1. Create Cloud Tasks task pointing to GCSplit10-21
+2. Return immediately (non-blocking)
+3. Cloud Tasks handles delivery + retries
+
+REQUIRED CHANGES
+----------------
+
+1. Import Cloud Tasks Client
+   Location: tph10-16.py:1-20
+
+   Add:
+   from google.cloud import tasks_v2
+
+2. Initialize Cloud Tasks Client
+   Location: tph10-16.py (initialization section)
+
+   Add:
+   tasks_client = tasks_v2.CloudTasksClient()
+   project_id = os.getenv("GCP_PROJECT_ID")
+   location = "us-central1"
+   queue_name = "split-payment-queue"
+
+3. Replace Synchronous HTTP Call with Task Creation
+   Location: tph10-16.py:428-450
+
+   REMOVE:
+   response = requests.post(split_service_url, json=split_payload, timeout=30)
+
+   REPLACE WITH:
+   # Create Cloud Task
+   parent = tasks_client.queue_path(project_id, location, queue_name)
+   task = {
+       "http_request": {
+           "http_method": tasks_v2.HttpMethod.POST,
+           "url": split_service_url,
+           "headers": {"Content-Type": "application/json"},
+           "body": json.dumps(split_payload).encode()
+       }
+   }
+   response = tasks_client.create_task(request={"parent": parent, "task": task})
+   print(f"✅ [CLOUD_TASKS] Created task: {response.name}")
+
+4. Add Error Handling for Task Creation
+
+   try:
+       response = tasks_client.create_task(...)
+       print(f"✅ [CLOUD_TASKS] Task created successfully")
+   except Exception as e:
+       print(f"❌ [CLOUD_TASKS] Failed to create task: {e}")
+       # Fallback: Could retry or log to database for manual processing
+
+5. Environment Variables to Add
+   - GCP_PROJECT_ID (if not already present)
+   - No additional secrets needed (uses default credentials)
+
+6. IAM Permissions Required
+   - Service account needs: roles/cloudtasks.enqueuer
+   - Grant to GCWebhook10-16 service account
+
+ENDPOINT CHANGES
+----------------
+No changes required to existing endpoint.
+GCSplit10-21 endpoint remains the same (/process_split or root endpoint).
+
+TESTING APPROACH
+----------------
+1. Deploy Cloud Tasks queue
+2. Update GCWebhook code with task creation
+3. Test with single payment
+4. Monitor Cloud Tasks console for task execution
+5. Verify GCSplit receives and processes task
+6. Check retry behavior (simulate GCSplit failure)
+
+--------------------------------------------------------------------------------
+
+SERVICE: GCSplit10-21
+---------------------
+
+CURRENT BEHAVIOR (tps10-21.py:237-317)
+---------------------------------------
+After creating ChangeNow transaction:
+1. Build time-sensitive token (60-second expiration)
+2. Make synchronous HTTP POST to GCHostPay10-21
+3. Wait for response (with 30-second timeout)
+4. Return success/failure
+
+NEW BEHAVIOR (With Cloud Tasks)
+--------------------------------
+After creating ChangeNow transaction:
+1. Build time-sensitive token (60-second expiration)
+2. Create Cloud Tasks task pointing to GCHostPay10-21
+3. Return immediately (non-blocking)
+4. Cloud Tasks handles delivery + retries (within 60-second window)
+
+REQUIRED CHANGES
+----------------
+
+1. Import Cloud Tasks Client
+   Location: tps10-21.py:1-20
+
+   Add:
+   from google.cloud import tasks_v2
+
+2. Initialize Cloud Tasks Client
+   Location: tps10-21.py (initialization section)
+
+   Add:
+   tasks_client = tasks_v2.CloudTasksClient()
+   project_id = os.getenv("GCP_PROJECT_ID")
+   location = "us-central1"
+   queue_name = "hostpay-execution-queue"
+
+3. Replace Synchronous HTTP Call with Task Creation
+   Location: tps10-21.py:237-317 (trigger_hostpay_webhook function)
+
+   REMOVE:
+   response = requests.post(hostpay_webhook_url, json=payload, timeout=30)
+
+   REPLACE WITH:
+   # Create Cloud Task for ETH payment
+   parent = tasks_client.queue_path(project_id, location, queue_name)
+   task = {
+       "http_request": {
+           "http_method": tasks_v2.HttpMethod.POST,
+           "url": hostpay_webhook_url,
+           "headers": {"Content-Type": "application/json"},
+           "body": json.dumps(payload).encode()
+       }
+   }
+   response = tasks_client.create_task(request={"parent": parent, "task": task})
+   print(f"✅ [CLOUD_TASKS] Created HostPay task: {response.name}")
+
+4. CRITICAL: Configure Task for Time-Sensitive Execution
+
+   ⏰ IMPORTANT: Task must be configured to respect 60-second token window
+
+   task = {
+       "http_request": {
+           "http_method": tasks_v2.HttpMethod.POST,
+           "url": hostpay_webhook_url,
+           "headers": {"Content-Type": "application/json"},
+           "body": json.dumps(payload).encode(),
+           "oidc_token": {
+               "service_account_email": f"gcsplit-service@{project_id}.iam.gserviceaccount.com"
+           }
+       },
+       "dispatch_deadline": "45s"  # ⏰ Task must complete within 45 seconds
+   }
+
+5. Add Monitoring for Task Age
+
+   ⏰ Log timestamp when task is created vs when it's received
+   This allows monitoring if tasks are being delayed
+
+   # In trigger_hostpay_webhook (when creating task):
+   task_metadata = {
+       "created_at": int(time.time()),
+       "token_expiration": int(time.time()) + 60
+   }
+   # Include in task payload for tracking
+   payload["_task_metadata"] = task_metadata
+
+6. Environment Variables to Add
+   - GCP_PROJECT_ID (if not already present)
+
+7. IAM Permissions Required
+   - Service account needs: roles/cloudtasks.enqueuer
+   - Grant to GCSplit10-21 service account
+
+ENDPOINT CHANGES
+----------------
+No changes required to existing endpoint.
+GCHostPay10-21 endpoint remains the same (/hostpay_webhook).
+
+TOKEN EXPIRATION HANDLING
+--------------------------
+CRITICAL CONSIDERATION: ⏰ 60-second token window
+
+Scenario: Task is dispatched but GCHostPay is down
+- Task created at T+0s (token age: 0s)
+- First dispatch attempt at T+0.1s → fails (service down)
+- Cloud Tasks retry at T+5s (token age: 5s) → fails
+- Cloud Tasks retry at T+10s (token age: 10s) → fails
+- Cloud Tasks retry at T+15s (token age: 15s) → succeeds ✅
+
+Scenario: Token expires before task completes
+- Task created at T+0s (token age: 0s)
+- First dispatch attempt at T+0.1s → fails (service down)
+- Multiple retries, all fail
+- Final attempt at T+65s (token age: 65s) → EXPIRED!
+- GCHostPay returns HTTP 400 ("Token expired")
+- Cloud Tasks: 4xx = permanent failure, stop retrying
+- Task marked as failed ❌
+
+MITIGATION:
+Configure queue with:
+- max_attempts: 3 (limited retries)
+- min_backoff: 5s (fast retry)
+- max_backoff: 15s (never too slow)
+- task_age_limit: 60s (auto-delete old tasks)
+
+If task fails after max_attempts:
+- GCSplit logs failure
+- Alert system administrator
+- Manual intervention required (create new ChangeNow transaction)
+
+TESTING APPROACH
+----------------
+1. Deploy hostpay-execution-queue with tight time constraints
+2. Update GCSplit code with task creation
+3. Test normal flow (verify ETH payment executes)
+4. Test with simulated GCHostPay downtime (5-second outage)
+5. Verify retry succeeds within 60-second window
+6. Test with extended downtime (> 60 seconds)
+7. Verify task fails gracefully and alerts are triggered
+
+--------------------------------------------------------------------------------
+
+SERVICE: GCHostPay10-21
+-----------------------
+
+CURRENT BEHAVIOR (tphp10-21.py:272-421)
+----------------------------------------
+Receives direct HTTP POST from GCSplit:
+1. Extract token from request body
+2. Validate token (60-second window)
+3. Check ChangeNow status
+4. Execute ETH payment
+5. Return HTTP 200/400/500
+
+NEW BEHAVIOR (With Cloud Tasks)
+--------------------------------
+Receives HTTP POST from Cloud Tasks (dispatched by GCSplit):
+1. Extract token from request body
+2. Validate token (60-second window)
+3. Check ChangeNow status
+4. Execute ETH payment
+5. Return HTTP 200/400/500 to Cloud Tasks
+   - HTTP 200 → Cloud Tasks marks task as complete
+   - HTTP 4xx → Cloud Tasks marks task as failed (no retry)
+   - HTTP 5xx → Cloud Tasks retries task (exponential backoff)
+
+REQUIRED CHANGES
+----------------
+
+1. Add Task Metadata Logging (Optional but Recommended)
+   Location: tphp10-21.py:272-421 (hostpay_webhook function)
+
+   # Extract task metadata if present
+   task_metadata = request_data.get("_task_metadata", {})
+   if task_metadata:
+       created_at = task_metadata.get("created_at")
+       current_time = int(time.time())
+       task_age = current_time - created_at
+       print(f"⏰ [CLOUD_TASKS] Task age: {task_age} seconds")
+
+       if task_age > 50:
+           print(f"⚠️ [CLOUD_TASKS] Task approaching 60-second limit!")
+
+2. Update Error Response Codes for Cloud Tasks Retry Logic
+   Location: tphp10-21.py:272-421
+
+   ENSURE PROPER HTTP STATUS CODES:
+
+   # Token expired (permanent failure - don't retry)
+   if token_expired:
+       return jsonify({"error": "Token expired"}), 400  # 4xx = no retry
+
+   # ChangeNow status is not "waiting" (permanent failure - don't retry)
+   if cn_status != "waiting":
+       return jsonify({"error": "Invalid ChangeNow status"}), 400  # 4xx = no retry
+
+   # Database error (transient - retry)
+   if database_error:
+       return jsonify({"error": "Database unavailable"}), 503  # 5xx = retry
+
+   # ETH transaction failed (transient - retry)
+   if eth_tx_failed:
+       return jsonify({"error": "ETH tx failed"}), 500  # 5xx = retry
+
+   # Success
+   return jsonify({"status": "success", "tx_hash": tx_hash}), 200
+
+3. Add Cloud Tasks Headers Validation (Security)
+   Location: tphp10-21.py:272-421
+
+   # Validate that request came from Cloud Tasks (not direct HTTP call)
+   def validate_cloud_tasks_request(request):
+       # Cloud Tasks includes these headers
+       task_name = request.headers.get("X-CloudTasks-TaskName")
+       queue_name = request.headers.get("X-CloudTasks-QueueName")
+
+       if not task_name or not queue_name:
+           print(f"⚠️ [SECURITY] Request not from Cloud Tasks - missing headers")
+           # In production, you might want to verify OIDC token
+       else:
+           print(f"✅ [CLOUD_TASKS] Task: {task_name}, Queue: {queue_name}")
+
+   # Call at start of hostpay_webhook function
+   validate_cloud_tasks_request(request)
+
+4. Add Idempotency Check (Important for Retries)
+   Location: tphp10-21.py:272-421
+
+   # Before processing ETH payment, check if already processed
+   # Cloud Tasks guarantees at-least-once delivery (can send duplicate tasks)
+
+   unique_id = extracted_from_token
+   if database_manager.check_transaction_exists(unique_id):
+       print(f"ℹ️ [IDEMPOTENCY] Transaction {unique_id} already processed")
+       return jsonify({"status": "already_processed"}), 200  # Success (idempotent)
+
+   # Proceed with ETH payment...
+
+5. Environment Variables to Add
+   - None (receives tasks, doesn't create them)
+
+6. IAM Permissions Required
+   - Cloud Tasks service account needs permission to invoke GCHostPay
+   - Grant: roles/run.invoker to Cloud Tasks service account
+
+ENDPOINT CHANGES
+----------------
+No changes required to existing endpoint (/hostpay_webhook).
+Endpoint signature remains the same.
+
+SECURITY CONSIDERATIONS
+------------------------
+
+Cloud Tasks adds authentication via OIDC tokens:
+- Each task includes an OIDC token in the Authorization header
+- GCHostPay can verify the token to ensure request came from Cloud Tasks
+- Prevents unauthorized direct HTTP calls
+
+To enable OIDC authentication:
+1. Configure task with service_account_email
+2. GCHostPay verifies token using Google Auth library
+3. Reject requests without valid OIDC token
+
+TESTING APPROACH
+----------------
+1. Keep existing endpoint unchanged initially
+2. Deploy queue and update GCSplit to use Cloud Tasks
+3. Test that GCHostPay receives tasks correctly
+4. Verify HTTP status codes trigger correct retry behavior
+5. Test idempotency (simulate duplicate task delivery)
+6. Add OIDC token validation (optional, for production)
+
+--------------------------------------------------------------------------------
+
+SERVICE: GCRegister10-5 (Optional - Low Priority)
+--------------------------------------------------
+
+CURRENT BEHAVIOR (app.py)
+--------------------------
+Handles client registration synchronously:
+1. Receive form submission
+2. Validate data
+3. Insert to main_clients_database
+4. Return success/error page
+
+CLOUD TASKS OPPORTUNITY
+------------------------
+Registrations could be processed asynchronously to:
+✅ Improve form submission response time
+✅ Retry failed database insertions
+✅ Perform additional processing (email notifications, etc.)
+
+However, this is LOW PRIORITY because:
+- Registration volume is low (not performance-critical)
+- Synchronous processing is acceptable for user experience
+- Complexity not justified by benefits
+
+RECOMMENDATION
+--------------
+⏸️ DEFER Cloud Tasks implementation for GCRegister10-5
+Focus on payment processing services (higher volume, more critical)
+
+If implementing later, approach would be:
+1. Form submission creates Cloud Task
+2. Task sent to "registration-processing-queue"
+3. Background worker processes registration
+4. User sees "Registration submitted, processing..." message
+5. Email/webhook notification upon completion
+
+================================================================================
+6. QUEUE CONFIGURATION RECOMMENDATIONS
+================================================================================
+
+QUEUE: split-payment-queue
+---------------------------
+
+Purpose: Trigger payment splitting in GCSplit10-21 after successful payment
+
+gcloud tasks queues create split-payment-queue \
+    --location=us-central1 \
+    --max-dispatches-per-second=100 \
+    --max-concurrent-dispatches=50 \
+    --max-attempts=5 \
+    --min-backoff=1s \
+    --max-backoff=60s \
+    --max-doublings=5
+
+Configuration Rationale:
+- max-dispatches-per-second: 100
+  → Allows burst of 100 payments/second
+  → Well above expected load (typical: 1-10 payments/sec)
+
+- max-concurrent-dispatches: 50
+  → Limits concurrent requests to GCSplit
+  → Prevents overwhelming Cloud Run instances
+
+- max-attempts: 5
+  → Adequate retries for transient failures
+  → Payment splitting is not time-sensitive (can retry multiple times)
+
+- min-backoff: 1s, max-backoff: 60s
+  → Fast initial retry (transient errors resolve quickly)
+  → Exponential backoff prevents hammering failed service
+
+- max-doublings: 5
+  → Backoff sequence: 1s, 2s, 4s, 8s, 16s, 32s, 60s, 60s...
+  → Reasonable progression for recovery time
+
+Queue YAML Configuration (queue.yaml):
+queue:
+- name: split-payment-queue
+  rate: 100/s
+  max_concurrent_requests: 50
+  retry_parameters:
+    task_retry_limit: 5
+    min_backoff_seconds: 1
+    max_backoff_seconds: 60
+    max_doublings: 5
+
+--------------------------------------------------------------------------------
+
+QUEUE: hostpay-execution-queue
+-------------------------------
+
+Purpose: Trigger ETH payment in GCHostPay10-21 (⏰ TIME-SENSITIVE)
+
+gcloud tasks queues create hostpay-execution-queue \
+    --location=us-central1 \
+    --max-dispatches-per-second=50 \
+    --max-concurrent-dispatches=20 \
+    --max-attempts=3 \
+    --min-backoff=5s \
+    --max-backoff=15s \
+    --max-doublings=2
+
+Configuration Rationale:
+- max-dispatches-per-second: 50
+  → ETH transaction rate limit
+  → Wallet nonce management (sequential transaction ordering)
+  → Prevents gas price spikes from parallel transactions
+
+- max-concurrent-dispatches: 20
+  → Conservative limit for ETH network interaction
+  → Prevents wallet nonce conflicts
+
+- max-attempts: 3 ⏰ CRITICAL
+  → Limited retries due to 60-second token window
+  → Retry sequence: T+0s, T+5s, T+10s, T+15s
+  → All attempts complete within ~30 seconds (well within 60s window)
+
+- min-backoff: 5s, max-backoff: 15s
+  → Fast retry for time-sensitive tasks
+  → Backoff sequence: 5s, 10s, 15s
+  → Total retry window: ~30 seconds
+
+- max-doublings: 2
+  → Limits backoff growth: 5s → 10s → 15s (then stays at 15s)
+
+⏰ TIME WINDOW ANALYSIS:
+Best case: Task dispatched immediately, succeeds on first try
+  - Total time: < 5 seconds ✅
+
+Typical case: Task dispatched immediately, succeeds on second retry
+  - Total time: ~10 seconds ✅
+
+Worst case: Task dispatched immediately, succeeds on third retry
+  - Total time: ~20 seconds ✅
+
+Failure case: Task dispatched immediately, all retries fail
+  - Total time: ~30 seconds
+  - Token age: 30 seconds (still valid, but service is down)
+  - Result: Task marked as failed, manual intervention required
+
+Queue YAML Configuration (queue.yaml):
+queue:
+- name: hostpay-execution-queue
+  rate: 50/s
+  max_concurrent_requests: 20
+  retry_parameters:
+    task_retry_limit: 3
+    min_backoff_seconds: 5
+    max_backoff_seconds: 15
+    max_doublings: 2
+    task_age_limit: 60s  # ⏰ Auto-delete tasks older than 60 seconds
+
+--------------------------------------------------------------------------------
+
+QUEUE: registration-processing-queue (Optional)
+------------------------------------------------
+
+Purpose: Process client registrations asynchronously (future enhancement)
+
+gcloud tasks queues create registration-processing-queue \
+    --location=us-central1 \
+    --max-dispatches-per-second=10 \
+    --max-concurrent-dispatches=5 \
+    --max-attempts=10 \
+    --min-backoff=5s \
+    --max-backoff=3600s \
+    --max-doublings=10
+
+Configuration Rationale:
+- Low throughput (registrations are infrequent)
+- High retry tolerance (not time-sensitive)
+- Generous backoff (can wait hours for database recovery)
+
+⏸️ DEFERRED - Not required for initial implementation
+
+================================================================================
+7. CODE CHANGES REQUIRED (HIGH-LEVEL)
+================================================================================
+
+DEPENDENCIES TO ADD
+-------------------
+
+All services (requirements.txt):
+google-cloud-tasks==2.14.2
+
+Install command:
+pip install google-cloud-tasks
+
+Docker image rebuild required: ✅ Yes
+
+
+PYTHON IMPORTS TO ADD
+---------------------
+
+from google.cloud import tasks_v2
+import json
+import time
+
+
+INITIALIZATION CODE (Per Service)
+----------------------------------
+
+# Initialize Cloud Tasks client (do this once at startup)
+tasks_client = tasks_v2.CloudTasksClient()
+
+# Configuration from environment variables
+project_id = os.getenv("GCP_PROJECT_ID")  # e.g., "telegramfunnel-2025"
+location = "us-central1"  # Must match queue location
+queue_name = "split-payment-queue"  # Or "hostpay-execution-queue"
+
+# Build queue path
+queue_path = tasks_client.queue_path(project_id, location, queue_name)
+
+
+TASK CREATION CODE PATTERN
+---------------------------
+
+def create_cloud_task(target_url, payload_dict, queue_path):
+    """
+    Create a Cloud Tasks task to invoke a Cloud Run service.
+
+    Args:
+        target_url: Full URL of target Cloud Run service
+        payload_dict: Dictionary to send as JSON body
+        queue_path: Full path to Cloud Tasks queue
+
+    Returns:
+        Task name if successful, None if failed
+    """
+    try:
+        # Create task
+        task = {
+            "http_request": {
+                "http_method": tasks_v2.HttpMethod.POST,
+                "url": target_url,
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": json.dumps(payload_dict).encode(),
+                # Optional: Add OIDC authentication
+                "oidc_token": {
+                    "service_account_email": f"service-account@{project_id}.iam.gserviceaccount.com"
+                }
+            }
+        }
+
+        # Submit task to queue
+        response = tasks_client.create_task(
+            request={
+                "parent": queue_path,
+                "task": task
+            }
+        )
+
+        print(f"✅ [CLOUD_TASKS] Created task: {response.name}")
+        return response.name
+
+    except Exception as e:
+        print(f"❌ [CLOUD_TASKS] Failed to create task: {e}")
+        return None
+
+
+EXAMPLE: GCWebhook10-16 Creating Task
+--------------------------------------
+
+# Replace this code:
+response = requests.post(split_service_url, json=split_payload, timeout=30)
+
+# With this code:
+task_name = create_cloud_task(
+    target_url=split_service_url,
+    payload_dict=split_payload,
+    queue_path=queue_path
+)
+
+if task_name:
+    print(f"✅ [SPLIT_TRIGGER] Task queued: {task_name}")
+else:
+    print(f"❌ [SPLIT_TRIGGER] Failed to queue task")
+    # Optionally: Fall back to direct HTTP call or log for manual processing
+
+
+EXAMPLE: GCSplit10-21 Creating Time-Sensitive Task
+---------------------------------------------------
+
+# Replace this code:
+response = requests.post(hostpay_webhook_url, json={"token": token}, timeout=30)
+
+# With this code:
+task = {
+    "http_request": {
+        "http_method": tasks_v2.HttpMethod.POST,
+        "url": hostpay_webhook_url,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"token": token}).encode(),
+        "oidc_token": {
+            "service_account_email": f"gcsplit-sa@{project_id}.iam.gserviceaccount.com"
+        }
+    },
+    "dispatch_deadline": "45s"  # ⏰ Must complete within 45 seconds
+}
+
+response = tasks_client.create_task(
+    request={
+        "parent": hostpay_queue_path,
+        "task": task
+    }
+)
+
+print(f"✅ [HOSTPAY_WEBHOOK] Task created: {response.name}")
+print(f"⏰ [HOSTPAY_WEBHOOK] Token expiration: {int(time.time()) + 60}")
+
+
+ERROR HANDLING PATTERN
+-----------------------
+
+try:
+    response = tasks_client.create_task(...)
+    print(f"✅ [CLOUD_TASKS] Task created successfully")
+
+except google.api_core.exceptions.NotFound:
+    print(f"❌ [CLOUD_TASKS] Queue not found - check queue name and location")
+
+except google.api_core.exceptions.PermissionDenied:
+    print(f"❌ [CLOUD_TASKS] Permission denied - check IAM roles")
+
+except google.api_core.exceptions.ResourceExhausted:
+    print(f"❌ [CLOUD_TASKS] Queue quota exceeded")
+
+except Exception as e:
+    print(f"❌ [CLOUD_TASKS] Unexpected error: {e}")
+
+
+IDEMPOTENCY HANDLING (GCHostPay10-21)
+--------------------------------------
+
+# At start of endpoint that processes Cloud Tasks
+def process_hostpay_task(request):
+    data = request.get_json()
+    token = data.get("token")
+
+    # Decode token to get unique_id
+    unique_id = decode_token(token)
+
+    # Check if already processed (idempotency)
+    if database_manager.check_transaction_exists(unique_id):
+        print(f"ℹ️ [IDEMPOTENCY] Transaction {unique_id} already processed")
+        return jsonify({"status": "already_processed"}), 200
+
+    # Proceed with processing...
+
+================================================================================
+8. BENEFITS & TRADE-OFFS
+================================================================================
+
+BENEFITS OF CLOUD TASKS IMPLEMENTATION
+---------------------------------------
+
+✅ 1. Automatic Retry on Transient Failures
+   Current: If GCSplit is down, payment split is lost (manual intervention)
+   With Tasks: Automatic retry with exponential backoff (up to 5 attempts)
+   Impact: Reduces manual intervention by ~90%
+
+✅ 2. Rate Limiting Protection
+   Current: Traffic spike can overwhelm GCSplit/GCHostPay
+   With Tasks: Queue buffers requests, dispatches at controlled rate
+   Impact: Prevents service overload, improves reliability
+
+✅ 3. Decoupled Services
+   Current: GCWebhook depends on GCSplit being responsive
+   With Tasks: GCWebhook creates task and returns immediately
+   Impact: Faster response times, better user experience
+
+✅ 4. Guaranteed Delivery
+   Current: Network timeout = lost request
+   With Tasks: Tasks persist until completed or max_attempts reached
+   Impact: Zero data loss from transient failures
+
+✅ 5. Built-in Monitoring
+   Current: Custom logging for each HTTP call
+   With Tasks: Cloud Console shows queue depth, task success/failure rates
+   Impact: Better observability, easier troubleshooting
+
+✅ 6. Request Buffering During Traffic Spikes
+   Current: 100 simultaneous payments = 100 concurrent HTTP calls
+   With Tasks: 100 tasks queued, dispatched at max_dispatches_per_second rate
+   Impact: Smooth load on downstream services, prevent cold start cascade
+
+✅ 7. Simplified Error Handling
+   Current: Try-except blocks with manual retry logic
+   With Tasks: Declarative retry policy (configuration, not code)
+   Impact: Cleaner code, consistent retry behavior
+
+✅ 8. Task Scheduling Flexibility
+   Current: Immediate execution only
+   With Tasks: Can schedule tasks for future execution
+   Impact: Enables delayed processing, scheduled payouts, etc.
+
+✅ 9. Dead Letter Queue Support
+   Current: Failed requests disappear (manual log inspection)
+   With Tasks: Failed tasks moved to dead letter queue for investigation
+   Impact: Easier debugging, no lost transactions
+
+✅ 10. At-Least-Once Delivery Guarantee
+   Current: Network error = no guarantee of delivery
+   With Tasks: Google guarantees task will be delivered at least once
+   Impact: Critical for financial transactions (payment splitting)
+
+
+TRADE-OFFS OF CLOUD TASKS IMPLEMENTATION
+-----------------------------------------
+
+❌ 1. Increased Latency
+   Current: Direct HTTP call (< 1 second end-to-end)
+   With Tasks: Task creation + queue dispatch (2-5 seconds typical)
+   Impact: Slightly slower payment processing (acceptable for async flows)
+   Mitigation: User doesn't see the delay (async processing)
+
+❌ 2. Added Complexity
+   Current: Simple requests.post() call
+   With Tasks: CloudTasksClient initialization, queue configuration, IAM setup
+   Impact: More code to maintain, steeper learning curve
+   Mitigation: Well-documented patterns, reusable helper functions
+
+❌ 3. Additional Cost
+   Current: Free (HTTP requests are free)
+   With Tasks: $0.40 per million tasks (after 1M free tier)
+   Impact: Minimal cost (expected: $0/month within free tier)
+   Mitigation: Monitor usage, cost is negligible at current scale
+
+❌ 4. Debugging Challenges
+   Current: Direct logs show HTTP call success/failure
+   With Tasks: Need to correlate task creation with task execution logs
+   Impact: Slightly harder to trace request flow
+   Mitigation: Add correlation IDs, use Cloud Trace for distributed tracing
+
+❌ 5. Dual Failure Modes
+   Current: HTTP call can fail
+   With Tasks: Task creation can fail + task execution can fail
+   Impact: Two points of failure to handle
+   Mitigation: Proper error handling for both scenarios
+
+❌ 6. At-Least-Once Semantics (Not Exactly-Once)
+   Current: Direct HTTP call is executed once
+   With Tasks: Task may be delivered multiple times (rare, but possible)
+   Impact: Must implement idempotency checks
+   Mitigation: Database checks before processing (already partially implemented)
+
+❌ 7. Limited Control Over Retry Timing
+   Current: Can retry immediately or with custom logic
+   With Tasks: Retry timing controlled by queue configuration
+   Impact: Less flexibility in retry strategy
+   Mitigation: Configure queues appropriately for use case
+
+❌ 8. Queue Quota Limits
+   Current: No limits on HTTP calls (besides Cloud Run request limits)
+   With Tasks: 500 tasks/second per queue (default)
+   Impact: Could hit limits during extreme traffic spikes
+   Mitigation: Request quota increase from Google (free)
+
+❌ 9. OIDC Token Authentication Complexity
+   Current: Simple API key or no authentication
+   With Tasks: OIDC token verification adds code
+   Impact: More security logic to implement and maintain
+   Mitigation: Use Google Auth libraries (handles complexity)
+
+❌ 10. Time-Sensitive Token Compatibility ⏰
+   Current: Direct call = immediate delivery (5-10 seconds total)
+   With Tasks: Queuing delay + retry delay may exceed 60-second window
+   Impact: Risk of token expiration if service is down
+   Mitigation: Configure queue with tight retry limits, monitor task age
+
+
+DECISION MATRIX: Should You Implement Cloud Tasks?
+---------------------------------------------------
+
+Evaluation Criteria:
+
+Criterion                           | Score (1-5) | Weight | Total
+------------------------------------|-------------|--------|------
+Reliability (retry on failure)      | 5           | 10     | 50
+Rate limiting need                  | 4           | 7      | 28
+Traffic spike handling              | 4           | 8      | 32
+Operational simplicity              | 3           | 6      | 18
+Cost effectiveness                  | 5           | 5      | 25
+Development effort                  | 3           | 4      | 12
+Time-sensitive compatibility        | 3           | 9      | 27
+Monitoring/observability            | 5           | 7      | 35
+Service decoupling                  | 4           | 6      | 24
+------------------------------------|-------------|--------|------
+TOTAL SCORE                         |             |        | 251/270
+
+Score: 251/270 = 93% → STRONG RECOMMENDATION TO IMPLEMENT
+
+Key Factors:
+✅ High reliability gains (automatic retry)
+✅ Better traffic handling (buffering)
+✅ Improved observability (built-in monitoring)
+⚠️ Time-sensitive token requires careful queue configuration
+⚠️ Development effort is moderate (not trivial)
+
+RECOMMENDATION: IMPLEMENT Cloud Tasks for GCWebhook → GCSplit flow (high value)
+                IMPLEMENT Cloud Tasks for GCSplit → GCHostPay flow (with careful configuration)
+                DEFER for GCRegister (low value at current scale)
+
+================================================================================
+9. TIME-SENSITIVE TOKEN CONSIDERATIONS
+================================================================================
+
+⏰ CRITICAL: GCSplit → GCHostPay Token Expires in 60 Seconds
+
+CHALLENGE
+---------
+The HostPay token generated by GCSplit has a strict 60-second expiration window.
+Cloud Tasks introduces queuing and retry delays that could exceed this window.
+
+CURRENT TIMING (Direct HTTP Call)
+----------------------------------
+Token created: T+0s
+HTTP POST sent: T+0.1s
+GCHostPay receives: T+0.5s (network latency)
+Token validated: T+0.6s (age: 0.6 seconds) ✅
+
+Total time: < 1 second
+Risk of expiration: NONE
+
+
+TIMING WITH CLOUD TASKS (Best Case)
+------------------------------------
+Token created: T+0s
+Task created: T+0.1s
+Task dispatched: T+0.5s (queuing delay)
+GCHostPay receives: T+1s
+Token validated: T+1.1s (age: 1.1 seconds) ✅
+
+Total time: ~1-2 seconds
+Risk of expiration: VERY LOW
+
+
+TIMING WITH CLOUD TASKS (Typical Retry Scenario)
+-------------------------------------------------
+Token created: T+0s
+Task created: T+0.1s
+Task dispatched: T+0.5s
+GCHostPay down, task fails: T+1s
+Cloud Tasks schedules retry (min_backoff: 5s): T+6s
+Task dispatched again: T+6s
+GCHostPay receives: T+6.5s
+Token validated: T+6.6s (age: 6.6 seconds) ✅
+
+Total time: ~7 seconds
+Risk of expiration: LOW
+
+
+TIMING WITH CLOUD TASKS (Worst Case - Extended Downtime)
+---------------------------------------------------------
+Token created: T+0s
+Attempt 1 fails: T+1s (service down)
+Retry 1 (backoff: 5s): T+6s → fails
+Retry 2 (backoff: 10s): T+16s → fails
+Retry 3 (backoff: 15s): T+31s → SUCCEEDS ✅
+Token age at success: 31 seconds
+
+Total time: ~31 seconds
+Risk of expiration: MEDIUM (still within 60-second window)
+
+
+TIMING WITH CLOUD TASKS (Failure Scenario - Token Expires)
+-----------------------------------------------------------
+Token created: T+0s
+Attempt 1 fails: T+1s (service down)
+Retry 1 (backoff: 5s): T+6s → fails
+Retry 2 (backoff: 10s): T+16s → fails
+Retry 3 (backoff: 15s): T+31s → fails
+Service remains down for 40 more seconds
+Retry 4 (backoff: 15s): T+46s → fails
+Retry 5 (backoff: 15s): T+61s → service back up!
+Token age: 61 seconds ❌ EXPIRED
+
+GCHostPay returns HTTP 400 ("Token expired")
+Cloud Tasks: 4xx = permanent failure, stop retrying
+Result: Task marked as failed
+
+Impact: Payment split completed, but ETH payment not executed
+Recovery: Manual intervention (create new ChangeNow transaction)
+
+
+MITIGATION STRATEGIES
+---------------------
+
+Strategy 1: Tight Retry Configuration ⏰
+----------------------------------------
+Configure hostpay-execution-queue with aggressive retry limits:
+
+max_attempts: 3
+min_backoff: 5s
+max_backoff: 15s
+max_doublings: 2
+
+Retry timeline:
+- Attempt 1: T+0s
+- Retry 1: T+5s
+- Retry 2: T+10s
+- Retry 3: T+15s
+
+All retries complete within 20 seconds → LOW risk of expiration
+
+✅ Pros: Simple, works for short outages (< 20 seconds)
+❌ Cons: Long outages (> 20 seconds) still cause expiration
+
+
+Strategy 2: Task Age Limit ⏰
+-----------------------------
+Configure queue with task_age_limit:
+
+task_age_limit: 60s
+
+Cloud Tasks automatically deletes tasks older than 60 seconds.
+Prevents wasting retries on expired tokens.
+
+✅ Pros: Automatic cleanup, no retry attempts on expired tokens
+❌ Cons: Tasks deleted without notification (need monitoring)
+
+
+Strategy 3: Dynamic Token Refresh 🔄
+------------------------------------
+Instead of embedding token in task payload, embed ChangeNow transaction ID:
+
+Current approach:
+1. GCSplit creates ChangeNow transaction
+2. GCSplit generates token (expires in 60s)
+3. GCSplit creates Cloud Task with token
+4. Task may be delayed/retried → token expires
+
+Alternative approach:
+1. GCSplit creates ChangeNow transaction
+2. GCSplit stores transaction in database with status "pending_hostpay"
+3. GCSplit creates Cloud Task with {unique_id, cn_api_id} (NO token)
+4. GCHostPay receives task
+5. GCHostPay generates FRESH token (age: 0 seconds)
+6. GCHostPay executes ETH payment immediately
+
+✅ Pros: Token never expires (generated on-demand)
+✅ Pros: Works with any retry delay
+❌ Cons: Requires database query in GCHostPay
+❌ Cons: Moves token signing logic from GCSplit to GCHostPay
+
+This approach ELIMINATES the 60-second constraint entirely!
+
+
+Strategy 4: Hybrid Approach (Fallback to Database) 🔄
+------------------------------------------------------
+Combine Cloud Tasks with database fallback:
+
+1. GCSplit creates task with token
+2. GCSplit also saves transaction to database (status: "pending_hostpay")
+3. Cloud Tasks attempts delivery within 60-second window
+4. If all retries fail (token expired):
+   - Task marked as failed
+   - Background job (Cloud Scheduler) runs every 5 minutes
+   - Checks database for "pending_hostpay" transactions
+   - Generates fresh token and calls GCHostPay directly
+   - Updates status to "completed"
+
+✅ Pros: Best of both worlds (fast delivery + guaranteed completion)
+✅ Pros: Handles extended outages gracefully
+❌ Cons: Requires Cloud Scheduler cron job
+❌ Cons: Increased complexity
+
+
+Strategy 5: Circuit Breaker Pattern 🔌
+---------------------------------------
+Monitor GCHostPay health before creating tasks:
+
+1. GCSplit checks GCHostPay health endpoint (/health)
+2. If GCHostPay is DOWN:
+   - Don't create Cloud Task (would fail anyway)
+   - Save transaction to database (status: "pending_hostpay")
+   - Wait for health check to pass
+3. If GCHostPay is UP:
+   - Create Cloud Task normally
+   - Token has full 60-second window available
+
+✅ Pros: Avoids wasting retries on known-down services
+✅ Pros: Preserves token window for when service recovers
+❌ Cons: Requires health check implementation
+❌ Cons: Adds latency (health check before each task)
+
+
+RECOMMENDED APPROACH FOR HOSTPAY QUEUE
+---------------------------------------
+
+PHASE 1: Tight Retry Configuration (Immediate Implementation)
+--------------------------------------------------------------
+Implement Strategy 1 + Strategy 2:
+
+hostpay-execution-queue:
+  max_attempts: 3
+  min_backoff: 5s
+  max_backoff: 15s
+  max_doublings: 2
+  task_age_limit: 60s
+
+✅ Handles 99% of scenarios (short transient failures)
+✅ Low complexity (configuration only, no code changes)
+✅ Automatic cleanup of expired tasks
+
+Failure scenario (extended outage > 20 seconds):
+- Task expires and fails
+- Alert triggered (Cloud Monitoring)
+- Manual intervention required
+
+
+PHASE 2: Dynamic Token Refresh (Future Enhancement)
+----------------------------------------------------
+Implement Strategy 3 after Phase 1 is stable:
+
+1. Modify GCSplit to send {unique_id, cn_api_id} instead of token
+2. Modify GCHostPay to:
+   - Fetch wallet address & payout currency from split_payout_que table
+   - Generate fresh token (age: 0 seconds)
+   - Execute ETH payment
+
+✅ Eliminates 60-second constraint completely
+✅ Works with any retry delay
+⚠️ Requires refactoring token generation logic
+
+
+PHASE 3: Database Fallback (Production Hardening)
+--------------------------------------------------
+Implement Strategy 4 for mission-critical reliability:
+
+1. Add Cloud Scheduler cron job (runs every 5 minutes)
+2. Query split_payout_que for transactions with status="confirming" and no hostpay entry
+3. Generate fresh token and call GCHostPay directly
+4. Update status to "completed"
+
+✅ Guaranteed eventual completion (even if Cloud Tasks fails)
+✅ Handles all edge cases (extended outages, quota limits, etc.)
+
+
+TIME WINDOW MONITORING
+-----------------------
+
+Add logging to track token age distribution:
+
+GCSplit (when creating task):
+print(f"⏰ [TOKEN_TIMING] Token created at: {int(time.time())}")
+
+GCHostPay (when receiving task):
+token_timestamp = <extracted from token>
+current_time = int(time.time())
+token_age = current_time - token_timestamp
+print(f"⏰ [TOKEN_TIMING] Token age: {token_age} seconds (max: 60)")
+
+if token_age > 50:
+    print(f"⚠️ [TOKEN_TIMING] Token nearing expiration!")
+
+Cloud Monitoring alert:
+- Trigger if token_age > 40 seconds (warning)
+- Trigger if token_age > 55 seconds (critical)
+
+
+SUMMARY: TIME-SENSITIVE TOKEN COMPATIBILITY
+--------------------------------------------
+
+✅ Cloud Tasks CAN work with 60-second token window
+✅ Requires careful queue configuration (tight retry limits)
+✅ Phase 1 implementation handles 99% of scenarios
+✅ Phase 2 eliminates constraint entirely (recommended for production)
+⚠️ Extended outages (> 20 seconds) may cause token expiration in Phase 1
+⚠️ Monitoring and alerting are critical for early detection
+
+RECOMMENDATION: Implement Phase 1 immediately, plan Phase 2 for next sprint
+
+================================================================================
+10. DEPLOYMENT SEQUENCE
+================================================================================
+
+OVERVIEW
+--------
+Cloud Tasks implementation requires coordinated deployment across:
+1. Google Cloud infrastructure (queues, IAM)
+2. Service code changes (task creation, endpoint handling)
+3. Testing and validation
+4. Monitoring setup
+
+Total estimated time: 2-4 hours (phased deployment)
+
+
+PHASE 0: PREPARATION (15 minutes)
+----------------------------------
+
+Step 1: Enable Cloud Tasks API
+-------------------------------
+gcloud services enable cloudtasks.googleapis.com --project=PROJECT_ID
+
+Verification:
+gcloud services list --enabled | grep cloudtasks
+
+
+Step 2: Create Service Accounts (if not exist)
+-----------------------------------------------
+# GCWebhook service account
+gcloud iam service-accounts create gcwebhook-sa \
+    --display-name="GCWebhook10-16 Service Account" \
+    --project=PROJECT_ID
+
+# GCSplit service account
+gcloud iam service-accounts create gcsplit-sa \
+    --display-name="GCSplit10-21 Service Account" \
+    --project=PROJECT_ID
+
+# GCHostPay service account
+gcloud iam service-accounts create gchostpay-sa \
+    --display-name="GCHostPay10-21 Service Account" \
+    --project=PROJECT_ID
+
+
+Step 3: Grant IAM Permissions
+------------------------------
+# Grant Cloud Tasks enqueuer role to GCWebhook (creates tasks for GCSplit)
+gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:gcwebhook-sa@PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/cloudtasks.enqueuer"
+
+# Grant Cloud Tasks enqueuer role to GCSplit (creates tasks for GCHostPay)
+gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:gcsplit-sa@PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/cloudtasks.enqueuer"
+
+# Grant Cloud Run invoker role to Cloud Tasks service account
+gcloud run services add-iam-policy-binding gcsplit10-21 \
+    --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudtasks.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --region=us-central1
+
+gcloud run services add-iam-policy-binding gchostpay10-21 \
+    --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudtasks.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --region=us-central1
+
+Verification:
+gcloud projects get-iam-policy PROJECT_ID | grep cloudtasks
+
+
+PHASE 1: QUEUE DEPLOYMENT (10 minutes)
+---------------------------------------
+
+Step 1: Create split-payment-queue
+-----------------------------------
+gcloud tasks queues create split-payment-queue \
+    --location=us-central1 \
+    --max-dispatches-per-second=100 \
+    --max-concurrent-dispatches=50 \
+    --max-attempts=5 \
+    --min-backoff=1s \
+    --max-backoff=60s \
+    --max-doublings=5
+
+Verification:
+gcloud tasks queues describe split-payment-queue --location=us-central1
+
+Expected output:
+name: projects/PROJECT_ID/locations/us-central1/queues/split-payment-queue
+state: RUNNING
+rateLimits:
+  maxDispatchesPerSecond: 100
+  maxConcurrentDispatches: 50
+retryConfig:
+  maxAttempts: 5
+  minBackoff: 1s
+  maxBackoff: 60s
+  maxDoublings: 5
+
+
+Step 2: Create hostpay-execution-queue
+---------------------------------------
+gcloud tasks queues create hostpay-execution-queue \
+    --location=us-central1 \
+    --max-dispatches-per-second=50 \
+    --max-concurrent-dispatches=20 \
+    --max-attempts=3 \
+    --min-backoff=5s \
+    --max-backoff=15s \
+    --max-doublings=2
+
+Verification:
+gcloud tasks queues describe hostpay-execution-queue --location=us-central1
+
+
+Step 3: Test Queue Creation
+----------------------------
+# List all queues
+gcloud tasks queues list --location=us-central1
+
+Expected output:
+NAME                        STATE
+split-payment-queue         RUNNING
+hostpay-execution-queue     RUNNING
+
+
+PHASE 2: CODE DEPLOYMENT (30-60 minutes)
+-----------------------------------------
+
+Step 1: Update GCWebhook10-16
+------------------------------
+1. Add google-cloud-tasks==2.14.2 to requirements.txt
+2. Add Cloud Tasks client initialization to tph10-16.py
+3. Replace synchronous HTTP call with task creation
+4. Test locally (optional, requires Cloud Tasks emulator)
+5. Build Docker image:
+   cd GCWebhook10-16
+   docker build -t gcr.io/PROJECT_ID/gcwebhook10-16:v2-cloudtasks .
+6. Push to Container Registry:
+   docker push gcr.io/PROJECT_ID/gcwebhook10-16:v2-cloudtasks
+7. Deploy to Cloud Run:
+   gcloud run deploy gcwebhook10-16 \
+       --image=gcr.io/PROJECT_ID/gcwebhook10-16:v2-cloudtasks \
+       --region=us-central1 \
+       --service-account=gcwebhook-sa@PROJECT_ID.iam.gserviceaccount.com \
+       --set-env-vars="GCP_PROJECT_ID=PROJECT_ID"
+
+Verification:
+- Check Cloud Run logs for "✅ [CLOUD_TASKS] Task created"
+- Trigger test payment, verify task appears in Cloud Tasks console
+
+
+Step 2: Update GCSplit10-21
+----------------------------
+1. Add google-cloud-tasks==2.14.2 to requirements.txt
+2. Add Cloud Tasks client initialization to tps10-21.py
+3. Replace synchronous HTTP call with task creation
+4. Build Docker image:
+   cd GCSplit10-21
+   docker build -t gcr.io/PROJECT_ID/gcsplit10-21:v2-cloudtasks .
+5. Push to Container Registry:
+   docker push gcr.io/PROJECT_ID/gcsplit10-21:v2-cloudtasks
+6. Deploy to Cloud Run:
+   gcloud run deploy gcsplit10-21 \
+       --image=gcr.io/PROJECT_ID/gcsplit10-21:v2-cloudtasks \
+       --region=us-central1 \
+       --service-account=gcsplit-sa@PROJECT_ID.iam.gserviceaccount.com \
+       --set-env-vars="GCP_PROJECT_ID=PROJECT_ID"
+
+Verification:
+- Check Cloud Run logs for "✅ [CLOUD_TASKS] Created HostPay task"
+- Monitor hostpay-execution-queue in Cloud Console
+
+
+Step 3: Update GCHostPay10-21 (Minor Changes)
+----------------------------------------------
+1. Add idempotency check (if not already present)
+2. Add Cloud Tasks header validation
+3. Verify HTTP status codes (4xx vs 5xx)
+4. Build Docker image:
+   cd GCHostPay10-21
+   docker build -t gcr.io/PROJECT_ID/gchostpay10-21:v2-cloudtasks .
+5. Push and deploy:
+   docker push gcr.io/PROJECT_ID/gchostpay10-21:v2-cloudtasks
+   gcloud run deploy gchostpay10-21 \
+       --image=gcr.io/PROJECT_ID/gchostpay10-21:v2-cloudtasks \
+       --region=us-central1 \
+       --service-account=gchostpay-sa@PROJECT_ID.iam.gserviceaccount.com
+
+Verification:
+- Check logs for idempotency messages
+- Verify tasks complete successfully
+
+
+PHASE 3: TESTING (30 minutes)
+------------------------------
+
+Test 1: End-to-End Payment Flow
+--------------------------------
+1. Complete test payment in Telegram bot
+2. Monitor Cloud Tasks console:
+   - Verify split-payment-queue task created
+   - Verify task dispatched to GCSplit
+   - Verify hostpay-execution-queue task created
+   - Verify task dispatched to GCHostPay
+3. Check database:
+   - split_payout_request: Entry exists ✅
+   - split_payout_que: ChangeNow transaction created ✅
+   - split_payout_hostpay: ETH payment logged ✅
+4. Check Telegram channel access granted ✅
+
+Expected logs:
+GCWebhook: "✅ [CLOUD_TASKS] Created task: projects/.../tasks/..."
+GCSplit: "✅ [CLOUD_TASKS] Created HostPay task: projects/.../tasks/..."
+GCHostPay: "✅ [HOSTPAY_WEBHOOK] ETH payment executed successfully"
+
+
+Test 2: Retry Behavior (Simulate GCSplit Failure)
+--------------------------------------------------
+1. Temporarily stop GCSplit service:
+   gcloud run services update gcsplit10-21 \
+       --region=us-central1 \
+       --min-instances=0 \
+       --max-instances=0
+
+2. Complete test payment
+3. Verify task created in split-payment-queue
+4. Observe task status: "DISPATCHED" → "PENDING" (retry scheduled)
+5. Wait for retry attempts (check queue console)
+6. Restart GCSplit:
+   gcloud run services update gcsplit10-21 \
+       --region=us-central1 \
+       --min-instances=0 \
+       --max-instances=100
+
+7. Verify task eventually succeeds on retry
+8. Confirm payment split completes
+
+Expected behavior:
+- Task fails initially (GCSplit down)
+- Cloud Tasks retries automatically (exponential backoff)
+- Task succeeds after service restored
+- No data loss
+
+
+Test 3: Token Expiration Handling
+----------------------------------
+1. Temporarily stop GCHostPay service
+2. Complete test payment (GCSplit creates task with token)
+3. Wait 65 seconds (token expires)
+4. Restart GCHostPay service
+5. Observe task dispatch to GCHostPay
+6. Verify GCHostPay returns HTTP 400 ("Token expired")
+7. Verify Cloud Tasks marks task as failed (no retry on 4xx)
+
+Expected behavior:
+- Token expires during GCHostPay outage
+- GCHostPay rejects expired token with HTTP 400
+- Cloud Tasks does NOT retry (4xx = permanent failure)
+- Task marked as failed in queue console
+- Alert triggered (if monitoring configured)
+
+
+Test 4: Rate Limiting
+---------------------
+1. Create script to simulate 100 concurrent payments
+2. Monitor split-payment-queue:
+   - Verify tasks queued (not all dispatched immediately)
+   - Verify dispatch rate ≤ 100/second
+   - Verify max_concurrent_dispatches ≤ 50
+3. Confirm GCSplit handles load smoothly (no overload)
+
+Expected behavior:
+- All 100 tasks created successfully
+- Tasks dispatched at controlled rate
+- No service overload or failures
+
+
+PHASE 4: MONITORING SETUP (20 minutes)
+---------------------------------------
+
+Step 1: Create Cloud Monitoring Alerts
+---------------------------------------
+
+Alert 1: High Queue Depth (split-payment-queue)
+------------------------------------------------
+Condition: queue depth > 100 for 5 minutes
+Severity: WARNING
+Action: Send email to ops team
+
+gcloud alpha monitoring policies create \
+    --notification-channels=CHANNEL_ID \
+    --display-name="High Queue Depth - Split Payment Queue" \
+    --condition-display-name="Queue depth > 100" \
+    --condition-threshold-value=100 \
+    --condition-threshold-duration=300s \
+    --condition-filter='resource.type="cloud_tasks_queue" AND resource.labels.queue_id="split-payment-queue" AND metric.type="cloudtasks.googleapis.com/queue/depth"'
+
+
+Alert 2: High Task Failure Rate
+--------------------------------
+Condition: > 5% tasks failed in last 10 minutes
+Severity: CRITICAL
+Action: Send email + PagerDuty
+
+
+Alert 3: Token Expiration Detected
+-----------------------------------
+Condition: Log entry contains "Token expired"
+Severity: WARNING
+Action: Send email
+
+
+Step 2: Create Custom Metrics Dashboard
+----------------------------------------
+1. Open Cloud Console → Monitoring → Dashboards
+2. Create new dashboard "Cloud Tasks - Payment Processing"
+3. Add charts:
+   - Queue depth (split-payment-queue)
+   - Queue depth (hostpay-execution-queue)
+   - Task success rate (both queues)
+   - Task latency (dispatch to completion)
+   - Task age at completion (GCHostPay)
+4. Save dashboard
+
+
+Step 3: Enable Log-Based Metrics
+---------------------------------
+Create metric for token expiration events:
+
+gcloud logging metrics create token_expiration_count \
+    --description="Count of token expiration errors" \
+    --log-filter='resource.type="cloud_run_revision" AND textPayload=~"Token expired"'
+
+
+PHASE 5: DOCUMENTATION UPDATE (10 minutes)
+-------------------------------------------
+
+1. Update DEPLOYMENT_INSTRUCTIONS.txt:
+   - Add Cloud Tasks queue creation steps
+   - Add IAM permission requirements
+   - Update service deployment commands
+
+2. Update ENVIRONMENT_VARIABLES.txt:
+   - Add GCP_PROJECT_ID to required variables
+
+3. Create CLOUD_TASKS_RUNBOOK.txt:
+   - How to check queue status
+   - How to manually retry failed tasks
+   - How to purge queue
+   - Troubleshooting common issues
+
+4. Update README.md:
+   - Mention Cloud Tasks integration
+   - Link to architecture documentation
+
+
+ROLLBACK PLAN
+--------------
+If issues arise after deployment:
+
+1. Immediate Rollback (< 5 minutes):
+   gcloud run services update gcwebhook10-16 \
+       --image=gcr.io/PROJECT_ID/gcwebhook10-16:v1-previous \
+       --region=us-central1
+
+   gcloud run services update gcsplit10-21 \
+       --image=gcr.io/PROJECT_ID/gcsplit10-21:v1-previous \
+       --region=us-central1
+
+2. Verify direct HTTP calls working
+3. Investigate issue offline
+4. Redeploy when fixed
+
+IMPORTANT: Keep previous Docker images tagged for quick rollback!
+
+================================================================================
+11. MONITORING & OBSERVABILITY
+================================================================================
+
+CLOUD TASKS CONSOLE
+--------------------
+URL: https://console.cloud.google.com/cloudtasks
+
+Provides real-time visibility into:
+✅ Queue depth (number of pending tasks)
+✅ Task dispatch rate (tasks/second)
+✅ Task success/failure counts
+✅ Task retry history
+✅ Task age distribution
+
+How to access:
+1. Open Cloud Console
+2. Navigate to "Cloud Tasks"
+3. Select queue (split-payment-queue or hostpay-execution-queue)
+4. View dashboard
+
+
+KEY METRICS TO MONITOR
+-----------------------
+
+Metric 1: Queue Depth
+----------------------
+What: Number of tasks waiting in queue
+Normal: 0-10 (tasks processed quickly)
+Warning: > 50 (processing backlog)
+Critical: > 100 (service degradation)
+
+Cause of high queue depth:
+- Downstream service slow/down
+- Traffic spike (more tasks than dispatch rate)
+- Task execution taking too long
+
+Action:
+- Check GCSplit/GCHostPay Cloud Run logs
+- Verify service health
+- Consider increasing max_dispatches_per_second
+
+
+Metric 2: Task Success Rate
+----------------------------
+What: Percentage of tasks that complete successfully
+Normal: > 99%
+Warning: < 95%
+Critical: < 90%
+
+Cause of low success rate:
+- Service errors (500s)
+- Token expiration (GCHostPay)
+- Database issues
+- ChangeNow API failures
+
+Action:
+- Review failed task logs
+- Check error patterns (same error repeated?)
+- Investigate root cause (service logs)
+
+
+Metric 3: Task Latency
+-----------------------
+What: Time from task creation to completion
+Normal: < 5 seconds (no retries)
+Warning: 10-30 seconds (1-2 retries)
+Critical: > 60 seconds (multiple retries or stuck)
+
+Cause of high latency:
+- Service cold starts
+- Retries due to transient errors
+- Queue backlog (tasks waiting)
+
+Action:
+- Check if cold starts are frequent (increase min-instances)
+- Review retry patterns
+- Verify dispatch rate is adequate
+
+
+Metric 4: Token Age at GCHostPay ⏰
+-----------------------------------
+What: Age of token when GCHostPay receives task
+Normal: < 10 seconds
+Warning: 30-50 seconds
+Critical: > 55 seconds (near expiration)
+
+Cause of high token age:
+- Queue backlog
+- Multiple retries before success
+- GCHostPay slow to process
+
+Action:
+- If consistently high, consider dynamic token refresh
+- Check GCHostPay performance
+- Verify queue dispatch rate
+
+
+CLOUD LOGGING QUERIES
+----------------------
+
+Query 1: Find Failed Cloud Tasks
+---------------------------------
+resource.type="cloud_run_revision"
+severity>=ERROR
+jsonPayload.message=~"CLOUD_TASKS.*failed"
+
+Shows all failed task creation attempts
+
+
+Query 2: Find Token Expiration Events
+--------------------------------------
+resource.type="cloud_run_revision"
+resource.labels.service_name="gchostpay10-21"
+textPayload=~"Token expired"
+
+Shows all cases where tasks arrived with expired tokens
+
+
+Query 3: Track Task Age Distribution
+-------------------------------------
+resource.type="cloud_run_revision"
+resource.labels.service_name="gchostpay10-21"
+jsonPayload.token_age>0
+
+Create log-based metric to chart token age over time
+
+
+Query 4: Find Tasks with Multiple Retries
+------------------------------------------
+resource.type="cloud_tasks_queue"
+protoPayload.request.task.dispatch_count>1
+
+Shows tasks that required retries (investigate why)
+
+
+CUSTOM DASHBOARD WIDGETS
+-------------------------
+
+Widget 1: Queue Depth Over Time (Line Chart)
+---------------------------------------------
+Metric: cloudtasks.googleapis.com/queue/depth
+Resource: cloud_tasks_queue
+Filters:
+  - queue_id = "split-payment-queue"
+  - queue_id = "hostpay-execution-queue"
+
+Shows queue backlog trends
+
+
+Widget 2: Task Execution Rate (Stacked Area Chart)
+---------------------------------------------------
+Metric: cloudtasks.googleapis.com/queue/task_attempt_count
+Aggregation: Rate (tasks/second)
+Group by: response_code
+
+Shows successful (200) vs failed (4xx, 5xx) task rates
+
+
+Widget 3: Task Latency Distribution (Heatmap)
+----------------------------------------------
+Metric: cloudtasks.googleapis.com/queue/task_attempt_delays
+Percentiles: p50, p95, p99
+
+Shows how long tasks spend in queue before dispatch
+
+
+Widget 4: Token Age at GCHostPay (Line Chart)
+----------------------------------------------
+Metric: Custom log-based metric (token_age)
+Resource: Cloud Run (gchostpay10-21)
+
+Shows token age trend (detect if approaching 60s limit)
+
+
+ALERTING STRATEGIES
+--------------------
+
+Alert Severity Levels:
+
+🟢 INFO: FYI, no action required
+🟡 WARNING: Investigate when convenient
+🟠 ERROR: Investigate within 1 hour
+🔴 CRITICAL: Immediate action required
+
+Alert Policies:
+
+Alert 1: Queue Depth Exceeds Threshold
+---------------------------------------
+Severity: WARNING
+Condition: Queue depth > 100 for 5 minutes
+Channels: Email, Slack
+Action: Check downstream service health
+
+Alert 2: High Task Failure Rate
+--------------------------------
+Severity: CRITICAL
+Condition: > 5% tasks failed in last 10 minutes
+Channels: Email, PagerDuty
+Action: Immediate investigation required
+
+Alert 3: Token Expiration Detected
+-----------------------------------
+Severity: WARNING
+Condition: Log entry contains "Token expired"
+Channels: Email
+Action: Review GCHostPay uptime, consider extending retry config
+
+Alert 4: Queue Processing Stalled
+----------------------------------
+Severity: CRITICAL
+Condition: Queue depth increasing for 10 minutes straight
+Channels: Email, PagerDuty
+Action: Service may be completely down, investigate immediately
+
+Alert 5: Task Latency Spike
+----------------------------
+Severity: WARNING
+Condition: p95 task latency > 30 seconds
+Channels: Email
+Action: Check for cold starts, service slowness
+
+
+TROUBLESHOOTING GUIDE
+----------------------
+
+Symptom: Tasks stuck in queue (not dispatching)
+------------------------------------------------
+Possible causes:
+1. Downstream service down/unreachable
+2. IAM permissions missing (run.invoker)
+3. Queue paused
+
+Debug steps:
+1. Check queue status: gcloud tasks queues describe QUEUE_NAME
+2. Verify service is up: curl CLOUD_RUN_URL
+3. Check IAM permissions: gcloud run services get-iam-policy SERVICE_NAME
+4. Resume queue if paused: gcloud tasks queues resume QUEUE_NAME
+
+
+Symptom: All tasks failing with 401/403
+----------------------------------------
+Possible causes:
+1. OIDC token authentication failing
+2. Missing run.invoker permission
+
+Debug steps:
+1. Verify OIDC token configuration in task creation
+2. Check IAM policy:
+   gcloud run services get-iam-policy SERVICE_NAME --region=REGION
+3. Add missing permission:
+   gcloud run services add-iam-policy-binding SERVICE_NAME \
+       --member="serviceAccount:SERVICE_ACCOUNT" \
+       --role="roles/run.invoker"
+
+
+Symptom: Tasks failing with "Token expired"
+--------------------------------------------
+Possible causes:
+1. GCHostPay was down for > 60 seconds
+2. Queue dispatch delay too long
+3. Too many retries with long backoff
+
+Debug steps:
+1. Check GCHostPay uptime history
+2. Review queue configuration (max_attempts, backoff)
+3. Consider implementing dynamic token refresh (Phase 2)
+4. Temporarily increase token expiration window (testing only)
+
+
+Symptom: High queue depth, service appears healthy
+---------------------------------------------------
+Possible causes:
+1. Traffic spike (more tasks than dispatch rate)
+2. Service cold starts causing slow processing
+3. Dispatch rate too conservative
+
+Debug steps:
+1. Check task creation rate (spike?)
+2. Increase max_dispatches_per_second:
+   gcloud tasks queues update QUEUE_NAME \
+       --max-dispatches-per-second=200
+3. Increase Cloud Run min-instances (reduce cold starts)
+
+
+OPERATIONAL RUNBOOK
+--------------------
+
+How to manually retry a failed task:
+1. Open Cloud Tasks console
+2. Navigate to queue
+3. Click on failed task
+4. Click "Retry Task"
+5. Monitor task execution
+
+How to purge a queue (CAUTION):
+gcloud tasks queues purge QUEUE_NAME --location=LOCATION
+⚠️ This deletes ALL tasks in the queue (cannot be undone)
+
+How to pause a queue (stop dispatching):
+gcloud tasks queues pause QUEUE_NAME --location=LOCATION
+
+How to resume a paused queue:
+gcloud tasks queues resume QUEUE_NAME --location=LOCATION
+
+How to delete a queue:
+gcloud tasks queues delete QUEUE_NAME --location=LOCATION
+⚠️ Delete all tasks first (purge)
+
+How to inspect task details:
+gcloud tasks describe TASK_NAME --queue=QUEUE_NAME --location=LOCATION
+
+================================================================================
+12. COST ANALYSIS
+================================================================================
+
+CLOUD TASKS PRICING (As of October 2025)
+-----------------------------------------
+
+Free Tier: First 1,000,000 tasks per month
+Paid Tier: $0.40 per million tasks
+
+Cloud Run Pricing (Unchanged):
+- CPU: $0.00002400 per vCPU-second
+- Memory: $0.00000250 per GiB-second
+- Requests: $0.40 per million requests
+
+Network Egress: $0.12 per GB (unchanged)
+
+
+MONTHLY COST CALCULATION
+-------------------------
+
+Scenario 1: Low Volume (100 payments/day)
+------------------------------------------
+Daily payments: 100
+Tasks per payment: 2 (GCWebhook → GCSplit, GCSplit → GCHostPay)
+Daily tasks: 200
+Monthly tasks: 6,000
+
+Cloud Tasks cost: $0.00 (within free tier)
+Cloud Run cost: ~$5/month (unchanged from current)
+Total additional cost: $0
+
+
+Scenario 2: Medium Volume (1,000 payments/day)
+-----------------------------------------------
+Daily payments: 1,000
+Tasks per payment: 2
+Daily tasks: 2,000
+Monthly tasks: 60,000
+
+Cloud Tasks cost: $0.00 (within free tier)
+Cloud Run cost: ~$15/month (unchanged)
+Total additional cost: $0
+
+
+Scenario 3: High Volume (10,000 payments/day)
+----------------------------------------------
+Daily payments: 10,000
+Tasks per payment: 2
+Daily tasks: 20,000
+Monthly tasks: 600,000
+
+Cloud Tasks cost: $0.00 (within free tier)
+Cloud Run cost: ~$50/month (unchanged)
+Total additional cost: $0
+
+
+Scenario 4: Very High Volume (50,000 payments/day)
+---------------------------------------------------
+Daily payments: 50,000
+Tasks per payment: 2
+Daily tasks: 100,000
+Monthly tasks: 3,000,000
+
+Cloud Tasks cost:
+  - First 1M: $0.00 (free tier)
+  - Next 2M: 2 × $0.40 = $0.80
+
+Cloud Run cost: ~$150/month (unchanged)
+Total additional cost: $0.80/month
+
+
+Scenario 5: Extreme Volume (100,000 payments/day)
+--------------------------------------------------
+Daily payments: 100,000
+Tasks per payment: 2
+Daily tasks: 200,000
+Monthly tasks: 6,000,000
+
+Cloud Tasks cost:
+  - First 1M: $0.00 (free tier)
+  - Next 5M: 5 × $0.40 = $2.00
+
+Cloud Run cost: ~$300/month (unchanged)
+Total additional cost: $2.00/month
+
+
+COST COMPARISON: CLOUD TASKS VS ALTERNATIVES
+---------------------------------------------
+
+Alternative 1: Pub/Sub
+-----------------------
+Pricing: $0.40 per million messages (after 10 GB free)
+Features: Message queue, not task queue (no retry, no rate limiting)
+Complexity: Higher (need to implement retry logic, dead letter handling)
+
+Comparison:
+- Cost: SAME as Cloud Tasks ($0.40/million)
+- Features: Cloud Tasks has MORE (built-in retry, scheduling)
+- Complexity: Pub/Sub is MORE complex
+
+Verdict: Cloud Tasks is BETTER value
+
+
+Alternative 2: Cloud Scheduler + Firestore
+-------------------------------------------
+Pricing:
+- Cloud Scheduler: $0.10 per job per month
+- Firestore: $0.18 per GB stored + $0.06 per 100K reads
+
+Features: Cron-based polling of database for pending tasks
+Complexity: HIGH (custom implementation, polling logic)
+
+Comparison:
+- Cost: HIGHER (storage + reads add up)
+- Features: LESS (no automatic retry, rate limiting)
+- Complexity: MUCH higher
+
+Verdict: Cloud Tasks is BETTER value
+
+
+Alternative 3: Keep Direct HTTP Calls
+--------------------------------------
+Pricing: FREE
+Features: No retry, no rate limiting, no queuing
+Reliability: POOR (no guaranteed delivery)
+
+Comparison:
+- Cost: FREE (cheapest)
+- Features: NONE (manual implementation required)
+- Reliability: LOW
+
+Verdict: Cloud Tasks provides MUCH better value for reliability
+
+
+COST SUMMARY
+------------
+
+Expected TelegramFunnel volume: 100-1,000 payments/day
+Expected monthly tasks: 6,000-60,000
+Expected Cloud Tasks cost: $0.00 (within free tier)
+
+Additional costs: NONE
+
+ROI Analysis:
+- Investment: 4 hours development time (~$200 engineer time)
+- Operating cost: $0/month (free tier)
+- Benefit: 90% reduction in manual intervention (payment failures)
+- Payback period: < 1 month
+
+RECOMMENDATION: Implement Cloud Tasks (negligible cost, high value)
+
+================================================================================
+13. MIGRATION STRATEGY
+================================================================================
+
+APPROACH: PHASED ROLLOUT WITH FEATURE FLAGS
+--------------------------------------------
+
+Goal: Minimize risk by gradually migrating traffic to Cloud Tasks while
+maintaining ability to rollback to direct HTTP calls if issues arise.
+
+
+PHASE 1: DEPLOYMENT (Week 1)
+-----------------------------
+
+Day 1-2: Infrastructure Setup
+- Enable Cloud Tasks API
+- Create IAM service accounts
+- Grant necessary permissions
+- Create queues (split-payment-queue, hostpay-execution-queue)
+
+Day 3-4: Code Development
+- Add google-cloud-tasks dependency
+- Implement task creation logic
+- Add feature flag: USE_CLOUD_TASKS (default: False)
+- Keep direct HTTP call as fallback
+
+Day 5: Testing
+- Test on staging environment
+- Verify end-to-end flow with Cloud Tasks
+- Test retry scenarios
+- Validate monitoring/logging
+
+
+PHASE 2: CANARY DEPLOYMENT (Week 2)
+------------------------------------
+
+Enable Cloud Tasks for 10% of traffic:
+
+if random.random() < 0.1 and os.getenv("USE_CLOUD_TASKS") == "true":
+    # Use Cloud Tasks
+    create_cloud_task(...)
+else:
+    # Use direct HTTP call
+    requests.post(...)
+
+Monitor metrics:
+- Task success rate (should be ≥ 99%)
+- Task latency (should be < 10 seconds)
+- Error rate (compare to baseline)
+
+If metrics look good after 48 hours → proceed to Phase 3
+If issues detected → investigate and fix before proceeding
+
+
+PHASE 3: GRADUAL ROLLOUT (Week 2-3)
+------------------------------------
+
+Increase Cloud Tasks traffic incrementally:
+
+Day 7: 25% Cloud Tasks, 75% direct HTTP
+Day 9: 50% Cloud Tasks, 50% direct HTTP
+Day 11: 75% Cloud Tasks, 25% direct HTTP
+Day 13: 90% Cloud Tasks, 10% direct HTTP
+
+At each stage:
+- Monitor for 24-48 hours
+- Compare Cloud Tasks vs direct HTTP metrics
+- Check for anomalies (latency spikes, failures)
+
+If any stage shows issues:
+- Rollback to previous percentage
+- Investigate root cause
+- Fix and retry
+
+
+PHASE 4: FULL MIGRATION (Week 3)
+---------------------------------
+
+Day 14: Enable Cloud Tasks for 100% of traffic
+- Set USE_CLOUD_TASKS=true for all services
+- Remove direct HTTP fallback code (after 1 week of 100% Cloud Tasks)
+- Update documentation
+
+Day 21: Clean up
+- Remove feature flag
+- Remove old direct HTTP code
+- Update tests to only test Cloud Tasks path
+
+
+ROLLBACK PROCEDURE
+------------------
+
+If critical issues arise at any stage:
+
+Immediate rollback (< 1 minute):
+1. Set environment variable: USE_CLOUD_TASKS=false
+2. Restart service: gcloud run services update SERVICE_NAME --update-env-vars=USE_CLOUD_TASKS=false
+
+Full rollback (< 5 minutes):
+1. Redeploy previous Docker image (without Cloud Tasks code)
+2. Verify direct HTTP calls working
+3. Investigate issue offline
+
+
+MONITORING CHECKLIST (Each Phase)
+----------------------------------
+
+✅ Task success rate ≥ 99%
+✅ Task latency p95 < 10 seconds
+✅ Queue depth stable (< 50)
+✅ No increase in error logs
+✅ Token expiration rate < 1%
+✅ GCHostPay ETH payment success rate unchanged
+✅ End-to-end payment flow latency acceptable
+
+
+SUCCESS CRITERIA
+-----------------
+
+Cloud Tasks migration is successful if:
+1. ✅ 99%+ task success rate maintained for 1 week
+2. ✅ No increase in payment failures
+3. ✅ No increase in manual interventions
+4. ✅ Retry behavior working as expected
+5. ✅ Monitoring dashboards showing healthy metrics
+
+
+CONTINGENCY PLAN
+-----------------
+
+If Cloud Tasks does not meet success criteria after 2 weeks:
+- Revert to direct HTTP calls
+- Document lessons learned
+- Re-evaluate approach (consider Pub/Sub or other alternatives)
+
+================================================================================
+14. TESTING APPROACH
+================================================================================
+
+UNIT TESTS
+----------
+
+Test 1: Task Creation Success
+------------------------------
+def test_create_cloud_task_success():
+    """Test that Cloud Task is created successfully with valid inputs"""
+    # Mock CloudTasksClient
+    mock_client = MagicMock()
+    mock_client.queue_path.return_value = "projects/test/locations/us-central1/queues/test-queue"
+    mock_client.create_task.return_value = MagicMock(name="task-123")
+
+    # Call function
+    task_name = create_cloud_task(
+        target_url="https://example.com",
+        payload_dict={"key": "value"},
+        queue_path="projects/test/locations/us-central1/queues/test-queue"
+    )
+
+    # Assertions
+    assert task_name == "task-123"
+    mock_client.create_task.assert_called_once()
+
+
+Test 2: Task Creation Failure
+------------------------------
+def test_create_cloud_task_failure():
+    """Test that task creation failure is handled gracefully"""
+    mock_client = MagicMock()
+    mock_client.create_task.side_effect = Exception("Queue not found")
+
+    task_name = create_cloud_task(...)
+
+    assert task_name is None  # Function returns None on failure
+
+
+Test 3: Task Payload Serialization
+-----------------------------------
+def test_task_payload_serialization():
+    """Test that complex payload is correctly serialized to JSON"""
+    payload = {
+        "unique_id": "ABC123",
+        "subscription_price": 15.00,
+        "timestamp": 1234567890
+    }
+
+    task = build_task(payload)
+    body_json = json.loads(task["http_request"]["body"].decode())
+
+    assert body_json["unique_id"] == "ABC123"
+    assert body_json["subscription_price"] == 15.00
+
+
+INTEGRATION TESTS
+-----------------
+
+Test 1: End-to-End Payment Flow with Cloud Tasks
+-------------------------------------------------
+def test_e2e_payment_with_cloud_tasks():
+    """Test complete payment flow from GCWebhook to GCHostPay via Cloud Tasks"""
+
+    # Step 1: Trigger payment in GCWebhook
+    response = client.post("/webhook", json={
+        "user_id": 123,
+        "closed_channel_id": 456,
+        "subscription_price": 25.00
+    })
+    assert response.status_code == 200
+
+    # Step 2: Verify task created in split-payment-queue
+    tasks = list_queue_tasks("split-payment-queue")
+    assert len(tasks) > 0
+
+    # Step 3: Wait for task to dispatch to GCSplit
+    time.sleep(5)
+
+    # Step 4: Verify GCSplit processed task and created ChangeNow transaction
+    cn_transaction = db.query("SELECT * FROM split_payout_que WHERE unique_id=?", unique_id)
+    assert cn_transaction is not None
+
+    # Step 5: Verify task created in hostpay-execution-queue
+    tasks = list_queue_tasks("hostpay-execution-queue")
+    assert len(tasks) > 0
+
+    # Step 6: Wait for task to dispatch to GCHostPay
+    time.sleep(5)
+
+    # Step 7: Verify GCHostPay executed ETH payment
+    hostpay_transaction = db.query("SELECT * FROM split_payout_hostpay WHERE unique_id=?", unique_id)
+    assert hostpay_transaction is not None
+    assert hostpay_transaction["tx_hash"] is not None
+
+
+Test 2: Retry Behavior (Simulate Service Downtime)
+---------------------------------------------------
+def test_cloud_tasks_retry_on_failure():
+    """Test that Cloud Tasks retries failed tasks automatically"""
+
+    # Step 1: Create task
+    create_cloud_task(target_url="https://gcsplit-down.com", ...)
+
+    # Step 2: Verify task created
+    tasks = list_queue_tasks("split-payment-queue")
+    initial_dispatch_count = tasks[0].dispatch_count
+    assert initial_dispatch_count == 0
+
+    # Step 3: Wait for first dispatch attempt (will fail)
+    time.sleep(2)
+
+    # Step 4: Verify dispatch count incremented (retry scheduled)
+    tasks = list_queue_tasks("split-payment-queue")
+    assert tasks[0].dispatch_count == 1
+
+    # Step 5: Wait for retry
+    time.sleep(5)
+
+    # Step 6: Verify second dispatch attempt
+    tasks = list_queue_tasks("split-payment-queue")
+    assert tasks[0].dispatch_count == 2
+
+
+Test 3: Token Expiration Handling
+----------------------------------
+def test_token_expiration_rejection():
+    """Test that expired tokens are rejected with HTTP 400"""
+
+    # Step 1: Create token with timestamp 65 seconds ago
+    old_timestamp = int(time.time()) - 65
+    token = build_token(timestamp=old_timestamp, ...)
+
+    # Step 2: Send task to GCHostPay
+    response = client.post("/hostpay_webhook", json={"token": token})
+
+    # Step 3: Verify HTTP 400 response (permanent failure)
+    assert response.status_code == 400
+    assert "Token expired" in response.json()["error"]
+
+
+Test 4: Idempotency (Duplicate Task Delivery)
+----------------------------------------------
+def test_idempotent_task_processing():
+    """Test that duplicate tasks don't cause duplicate ETH payments"""
+
+    # Step 1: Process task (creates ETH payment)
+    response1 = client.post("/hostpay_webhook", json={"token": valid_token})
+    assert response1.status_code == 200
+
+    # Step 2: Process same task again (simulate retry)
+    response2 = client.post("/hostpay_webhook", json={"token": valid_token})
+    assert response2.status_code == 200
+    assert response2.json()["status"] == "already_processed"
+
+    # Step 3: Verify only one ETH payment in database
+    payments = db.query("SELECT * FROM split_payout_hostpay WHERE unique_id=?", unique_id)
+    assert len(payments) == 1
+
+
+LOAD TESTS
+----------
+
+Test 1: Concurrent Payment Spike
+---------------------------------
+def test_100_concurrent_payments():
+    """Test system handles 100 concurrent payments without failures"""
+
+    import concurrent.futures
+
+    def trigger_payment():
+        response = client.post("/webhook", json=test_payment_data)
+        return response.status_code
+
+    # Trigger 100 payments concurrently
+    with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+        futures = [executor.submit(trigger_payment) for _ in range(100)]
+        results = [f.result() for f in futures]
+
+    # Verify all succeeded
+    assert all(status == 200 for status in results)
+
+    # Verify all tasks queued
+    tasks = list_queue_tasks("split-payment-queue")
+    assert len(tasks) == 100
+
+    # Wait for all tasks to complete
+    time.sleep(60)
+
+    # Verify all payments completed
+    completed = db.query("SELECT COUNT(*) FROM split_payout_hostpay")
+    assert completed == 100
+
+
+Test 2: Sustained Load (1000 payments over 10 minutes)
+-------------------------------------------------------
+def test_sustained_load():
+    """Test system handles sustained load without degradation"""
+
+    start_time = time.time()
+    success_count = 0
+
+    while time.time() - start_time < 600:  # 10 minutes
+        response = client.post("/webhook", json=test_payment_data)
+        if response.status_code == 200:
+            success_count += 1
+        time.sleep(0.6)  # 100 payments/minute
+
+    # Verify success rate > 99%
+    assert success_count / 1000 > 0.99
+
+
+MANUAL TESTING CHECKLIST
+-------------------------
+
+✅ Test payment flow in production environment
+✅ Verify task appears in Cloud Tasks console
+✅ Monitor task dispatch and completion
+✅ Test retry by temporarily stopping GCSplit
+✅ Verify retry succeeds after service restored
+✅ Test token expiration by stopping GCHostPay for 70 seconds
+✅ Verify monitoring alerts trigger correctly
+✅ Test queue purge (delete all tasks)
+✅ Test queue pause/resume
+✅ Verify OIDC authentication works
+✅ Test rollback to direct HTTP calls
+
+================================================================================
+15. ROLLBACK PLAN
+================================================================================
+
+ROLLBACK SCENARIOS
+------------------
+
+Scenario 1: Cloud Tasks Not Working (Tasks Not Dispatching)
+------------------------------------------------------------
+Symptom: Tasks created but never dispatched to downstream services
+Severity: CRITICAL
+Impact: All payments blocked
+
+Immediate Action (< 1 minute):
+1. Set feature flag: USE_CLOUD_TASKS=false
+   gcloud run services update gcwebhook10-16 \
+       --update-env-vars=USE_CLOUD_TASKS=false \
+       --region=us-central1
+
+2. Restart service (pick up new env var):
+   gcloud run services update gcwebhook10-16 \
+       --region=us-central1 \
+       --max-instances=100
+
+3. Verify direct HTTP calls working:
+   - Trigger test payment
+   - Check GCSplit logs for HTTP POST receipt
+
+Recovery:
+- Investigate IAM permissions
+- Check queue configuration
+- Verify service account email in OIDC token
+
+
+Scenario 2: High Task Failure Rate (> 10%)
+-------------------------------------------
+Symptom: Many tasks failing with 4xx/5xx errors
+Severity: HIGH
+Impact: Payment processing delayed/failed
+
+Immediate Action (< 5 minutes):
+1. Check error pattern in Cloud Tasks console
+2. If consistent error (e.g., all 401s):
+   - Indicates configuration issue
+   - Rollback to direct HTTP calls (see Scenario 1)
+3. If sporadic errors:
+   - Monitor for 15 minutes
+   - Tasks will retry automatically
+   - If failure rate doesn't decrease → rollback
+
+
+Scenario 3: Token Expiration Rate Spike
+----------------------------------------
+Symptom: Many GCHostPay tasks failing with "Token expired"
+Severity: MEDIUM
+Impact: ETH payments not executing (requires manual intervention)
+
+Immediate Action (< 10 minutes):
+1. Check GCHostPay uptime (is service down?)
+2. If service is down:
+   - Restart GCHostPay
+   - Tasks will retry and succeed
+3. If service is up but slow:
+   - Check queue configuration (retry too slow?)
+   - Increase Cloud Run resources (min-instances)
+4. If persistent:
+   - Consider implementing dynamic token refresh (Phase 2)
+   - Temporarily rollback GCSplit to direct HTTP calls
+
+
+Scenario 4: Queue Depth Growing Unbounded
+------------------------------------------
+Symptom: Queue depth increasing continuously (1000+ tasks)
+Severity: HIGH
+Impact: Payment processing severely delayed
+
+Immediate Action (< 5 minutes):
+1. Check downstream service (GCSplit/GCHostPay)
+   - Is service up?
+   - Are requests timing out?
+2. Increase dispatch rate (if service is healthy):
+   gcloud tasks queues update split-payment-queue \
+       --max-dispatches-per-second=200 \
+       --location=us-central1
+3. If service is down:
+   - Fix service first
+   - Queue will drain automatically when service recovers
+4. If service is overwhelmed:
+   - Scale up Cloud Run instances
+   - Increase CPU/memory allocation
+
+
+ROLLBACK PROCEDURES
+-------------------
+
+Full Rollback (Revert to Direct HTTP Calls)
+--------------------------------------------
+
+Step 1: Disable Cloud Tasks via Environment Variable (Fastest)
+---------------------------------------------------------------
+# GCWebhook
+gcloud run services update gcwebhook10-16 \
+    --update-env-vars=USE_CLOUD_TASKS=false \
+    --region=us-central1
+
+# GCSplit
+gcloud run services update gcsplit10-21 \
+    --update-env-vars=USE_CLOUD_TASKS=false \
+    --region=us-central1
+
+Time: < 1 minute
+Impact: Immediate switch to direct HTTP calls
+
+
+Step 2: Redeploy Previous Docker Images (If Code Changes)
+----------------------------------------------------------
+# If env var toggle doesn't exist, redeploy old images
+
+# GCWebhook
+gcloud run deploy gcwebhook10-16 \
+    --image=gcr.io/PROJECT_ID/gcwebhook10-16:v1-pre-cloudtasks \
+    --region=us-central1
+
+# GCSplit
+gcloud run deploy gcsplit10-21 \
+    --image=gcr.io/PROJECT_ID/gcsplit10-21:v1-pre-cloudtasks \
+    --region=us-central1
+
+Time: 2-5 minutes
+Impact: Services redeploy with old code
+
+
+Step 3: Verify Direct HTTP Calls Working
+-----------------------------------------
+1. Trigger test payment in Telegram bot
+2. Check logs for "requests.post()" calls (not "create_task()")
+3. Verify payment completes end-to-end
+4. Monitor for 30 minutes to ensure stability
+
+
+Step 4: Handle Queued Tasks
+----------------------------
+If tasks are stuck in queues during rollback:
+
+Option 1: Let them complete
+- Tasks will eventually dispatch
+- May take hours depending on queue depth
+- No data loss
+
+Option 2: Purge queues (CAUTION)
+gcloud tasks queues purge split-payment-queue --location=us-central1
+gcloud tasks queues purge hostpay-execution-queue --location=us-central1
+
+⚠️ WARNING: Purging deletes all tasks (payment splits/ETH payments lost)
+Only purge if:
+- All tasks are duplicates
+- Database records already exist
+- Manual processing is planned
+
+
+POST-ROLLBACK ACTIONS
+---------------------
+
+1. Notify team:
+   - Send email/Slack: "Cloud Tasks rollback completed"
+   - Include reason for rollback
+   - Provide ETA for fix
+
+2. Investigate root cause:
+   - Review Cloud Tasks logs
+   - Check IAM permissions
+   - Verify queue configuration
+
+3. Fix issue offline:
+   - Test on staging environment
+   - Verify fix works before redeployment
+
+4. Redeploy when ready:
+   - Follow phased rollout again (10% → 25% → 50% → 100%)
+   - Monitor closely during rollout
+
+
+ROLLBACK DECISION MATRIX
+-------------------------
+
+Issue                           | Severity | Action           | Rollback?
+--------------------------------|----------|------------------|----------
+Tasks not dispatching           | CRITICAL | Immediate        | YES
+> 10% task failure rate         | HIGH     | Within 5 min     | YES
+Token expiration > 5%           | MEDIUM   | Within 15 min    | MAYBE
+Queue depth > 1000              | HIGH     | Scale up first   | NO (yet)
+Latency spike (p95 > 30s)       | MEDIUM   | Monitor          | NO
+Individual task failures        | LOW      | Log only         | NO
+
+
+COMMUNICATION PLAN
+------------------
+
+Internal Team:
+- Slack: #alerts channel (automated)
+- Email: ops@company.com (manual on rollback)
+- PagerDuty: On-call engineer (critical issues only)
+
+External Users:
+- Status page update (if > 30 min outage)
+- No notification for < 10 min issues
+
+Post-Mortem:
+- Document rollback reason
+- Root cause analysis
+- Preventive measures
+- Update runbooks
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
+Generated: October 2025
+Version: 1.0
+For: TelegramFunnel Payment System
+
+This document provides complete architectural guidance for implementing
+Google Cloud Tasks as a reliable, rate-limited, retrying HTTP job queue
+for all Cloud Run services.
+
+Related Documentation:
+- GCSPLIT_TO_GCHOSTPAY_TOKEN_FLOW.txt - Time-sensitive token mechanics
+- SUCCESS_URL_FLOW_EXPLANATION.txt - Success URL token format
+- GOOGLE_CLOUD_RUN_DEPLOYMENT.txt - Deployment procedures
+- ENVIRONMENT_VARIABLES.txt - Configuration reference
+
+For questions about Cloud Tasks implementation:
+- Google Cloud Tasks Documentation: https://cloud.google.com/tasks/docs
+- Contact: System Administrator
+
+================================================================================
