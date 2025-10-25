@@ -226,21 +226,23 @@ class DatabaseManager:
     def get_currency_to_network_mappings(self) -> Dict[str, Any]:
         """
         Fetch all currency-to-network mappings from the currency_to_network table.
-        Returns data structured for bidirectional filtering.
+        Returns data structured for bidirectional filtering with friendly names.
 
         Returns:
             Dictionary with:
-            - 'mappings': List of {currency, network} pairs
-            - 'network_to_currencies': Dict mapping network -> list of currencies
-            - 'currency_to_networks': Dict mapping currency -> list of networks
+            - 'mappings': List of {currency, network, currency_name, network_name} pairs
+            - 'network_to_currencies': Dict mapping network -> list of currency objects with names
+            - 'currency_to_networks': Dict mapping currency -> list of network objects with names
+            - 'networks_with_names': Dict mapping network code -> network_name
+            - 'currencies_with_names': Dict mapping currency code -> currency_name
         """
         try:
             with self.get_connection() as conn:
                 cur = conn.cursor()
                 try:
-                    print(f"🔍 [DATABASE] Fetching currency-to-network mappings")
+                    print(f"🔍 [DATABASE] Fetching currency-to-network mappings with friendly names")
                     cur.execute(
-                        "SELECT currency, network FROM currency_to_network ORDER BY network, currency"
+                        "SELECT currency, network, currency_name, network_name FROM currency_to_network ORDER BY network, currency"
                     )
                     rows = cur.fetchall()
 
@@ -248,28 +250,50 @@ class DatabaseManager:
                     mappings = []
                     network_to_currencies = {}
                     currency_to_networks = {}
+                    networks_with_names = {}
+                    currencies_with_names = {}
 
-                    for currency, network in rows:
-                        mappings.append({'currency': currency, 'network': network})
+                    for currency, network, currency_name, network_name in rows:
+                        # Add to mappings list
+                        mappings.append({
+                            'currency': currency,
+                            'network': network,
+                            'currency_name': currency_name or currency,  # Fallback to code if name is NULL
+                            'network_name': network_name or network      # Fallback to code if name is NULL
+                        })
 
                         # Build network -> currencies mapping
                         if network not in network_to_currencies:
                             network_to_currencies[network] = []
-                        network_to_currencies[network].append(currency)
+                        network_to_currencies[network].append({
+                            'currency': currency,
+                            'currency_name': currency_name or currency
+                        })
 
                         # Build currency -> networks mapping
                         if currency not in currency_to_networks:
                             currency_to_networks[currency] = []
-                        currency_to_networks[currency].append(network)
+                        currency_to_networks[currency].append({
+                            'network': network,
+                            'network_name': network_name or network
+                        })
 
-                    print(f"✅ [DATABASE] Fetched {len(mappings)} currency-network mappings")
+                        # Build lookup tables for names
+                        if network not in networks_with_names:
+                            networks_with_names[network] = network_name or network
+                        if currency not in currencies_with_names:
+                            currencies_with_names[currency] = currency_name or currency
+
+                    print(f"✅ [DATABASE] Fetched {len(mappings)} currency-network mappings with friendly names")
                     print(f"📊 [DATABASE] {len(network_to_currencies)} unique networks")
                     print(f"📊 [DATABASE] {len(currency_to_networks)} unique currencies")
 
                     return {
                         'mappings': mappings,
                         'network_to_currencies': network_to_currencies,
-                        'currency_to_networks': currency_to_networks
+                        'currency_to_networks': currency_to_networks,
+                        'networks_with_names': networks_with_names,
+                        'currencies_with_names': currencies_with_names
                     }
                 finally:
                     cur.close()
@@ -279,5 +303,7 @@ class DatabaseManager:
             return {
                 'mappings': [],
                 'network_to_currencies': {},
-                'currency_to_networks': {}
+                'currency_to_networks': {},
+                'networks_with_names': {},
+                'currencies_with_names': {}
             }

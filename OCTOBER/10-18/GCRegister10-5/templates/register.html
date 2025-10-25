@@ -259,7 +259,9 @@
         network_to_currencies: {},
         currency_to_networks: {},
         all_networks: [],
-        all_currencies: []
+        all_currencies: [],
+        networks_with_names: {},  // Maps network code -> network_name
+        currencies_with_names: {} // Maps currency code -> currency_name
     };
 
     // Fetch currency-network mappings from API
@@ -272,12 +274,14 @@
             if (result.success && result.data) {
                 currencyNetworkData.network_to_currencies = result.data.network_to_currencies;
                 currencyNetworkData.currency_to_networks = result.data.currency_to_networks;
+                currencyNetworkData.networks_with_names = result.data.networks_with_names;
+                currencyNetworkData.currencies_with_names = result.data.currencies_with_names;
 
                 // Extract unique networks and currencies
                 currencyNetworkData.all_networks = Object.keys(result.data.network_to_currencies).sort();
                 currencyNetworkData.all_currencies = Object.keys(result.data.currency_to_networks).sort();
 
-                console.log(`✅ Loaded ${currencyNetworkData.all_networks.length} networks and ${currencyNetworkData.all_currencies.length} currencies`);
+                console.log(`✅ Loaded ${currencyNetworkData.all_networks.length} networks and ${currencyNetworkData.all_currencies.length} currencies with friendly names`);
 
                 // Populate initial network dropdown
                 populateNetworkDropdown();
@@ -298,11 +302,15 @@
         // Clear existing options except the first placeholder
         networkSelect.innerHTML = '<option value="">-- Select Network --</option>';
 
-        // Add all networks
+        // Add all networks with formatted display: "CODE - Name"
         currencyNetworkData.all_networks.forEach(network => {
             const option = document.createElement('option');
-            option.value = network;
-            option.textContent = network;
+            option.value = network;  // Value is just the code (e.g., "ETH")
+
+            // Get friendly name from lookup table
+            const networkName = currencyNetworkData.networks_with_names[network] || network;
+            option.textContent = `${network} - ${networkName}`;  // Display: "ETH - Ethereum"
+
             if (network === selectedNetwork) {
                 option.selected = true;
             }
@@ -320,11 +328,15 @@
         // Clear existing options except the first placeholder
         currencySelect.innerHTML = '<option value="">-- Select Currency --</option>';
 
-        // Add all currencies
+        // Add all currencies with formatted display: "CODE - Name"
         currencyNetworkData.all_currencies.forEach(currency => {
             const option = document.createElement('option');
-            option.value = currency;
-            option.textContent = currency;
+            option.value = currency;  // Value is just the code (e.g., "USDT")
+
+            // Get friendly name from lookup table
+            const currencyName = currencyNetworkData.currencies_with_names[currency] || currency;
+            option.textContent = `${currency} - ${currencyName}`;  // Display: "USDT - Tether USDt"
+
             if (currency === selectedCurrency) {
                 option.selected = true;
             }
@@ -342,8 +354,8 @@
             return;
         }
 
-        // Get currencies available for this network
-        const availableCurrencies = currencyNetworkData.network_to_currencies[selectedNetwork] || [];
+        // Get currencies available for this network (array of objects with currency and currency_name)
+        const availableCurrencyObjects = currencyNetworkData.network_to_currencies[selectedNetwork] || [];
 
         // Store current selection
         const currentCurrency = currencySelect.value;
@@ -351,21 +363,23 @@
         // Clear and repopulate currency dropdown
         currencySelect.innerHTML = '<option value="">-- Select Currency --</option>';
 
-        availableCurrencies.sort().forEach(currency => {
+        // Sort by currency code
+        availableCurrencyObjects.sort((a, b) => a.currency.localeCompare(b.currency)).forEach(currencyObj => {
             const option = document.createElement('option');
-            option.value = currency;
-            option.textContent = currency;
+            option.value = currencyObj.currency;  // Value is just the code (e.g., "USDT")
+            option.textContent = `${currencyObj.currency} - ${currencyObj.currency_name}`;  // Display: "USDT - Tether USDt"
             currencySelect.appendChild(option);
         });
 
         // Restore selection if still valid
-        if (availableCurrencies.includes(currentCurrency)) {
+        const availableCurrencyCodes = availableCurrencyObjects.map(obj => obj.currency);
+        if (availableCurrencyCodes.includes(currentCurrency)) {
             currencySelect.value = currentCurrency;
         } else {
             currencySelect.value = '';
         }
 
-        console.log(`🔽 Filtered to ${availableCurrencies.length} currencies for network: ${selectedNetwork}`);
+        console.log(`🔽 Filtered to ${availableCurrencyObjects.length} currencies for network: ${selectedNetwork}`);
     }
 
     // Filter networks based on selected currency
@@ -376,8 +390,8 @@
             return;
         }
 
-        // Get networks available for this currency
-        const availableNetworks = currencyNetworkData.currency_to_networks[selectedCurrency] || [];
+        // Get networks available for this currency (array of objects with network and network_name)
+        const availableNetworkObjects = currencyNetworkData.currency_to_networks[selectedCurrency] || [];
 
         // Store current selection
         const currentNetwork = networkSelect.value;
@@ -385,21 +399,23 @@
         // Clear and repopulate network dropdown
         networkSelect.innerHTML = '<option value="">-- Select Network --</option>';
 
-        availableNetworks.sort().forEach(network => {
+        // Sort by network code
+        availableNetworkObjects.sort((a, b) => a.network.localeCompare(b.network)).forEach(networkObj => {
             const option = document.createElement('option');
-            option.value = network;
-            option.textContent = network;
+            option.value = networkObj.network;  // Value is just the code (e.g., "ETH")
+            option.textContent = `${networkObj.network} - ${networkObj.network_name}`;  // Display: "ETH - Ethereum"
             networkSelect.appendChild(option);
         });
 
         // Restore selection if still valid
-        if (availableNetworks.includes(currentNetwork)) {
+        const availableNetworkCodes = availableNetworkObjects.map(obj => obj.network);
+        if (availableNetworkCodes.includes(currentNetwork)) {
             networkSelect.value = currentNetwork;
         } else {
             networkSelect.value = '';
         }
 
-        console.log(`🔽 Filtered to ${availableNetworks.length} networks for currency: ${selectedCurrency}`);
+        console.log(`🔽 Filtered to ${availableNetworkObjects.length} networks for currency: ${selectedCurrency}`);
     }
 
     // Event listener for network selection
