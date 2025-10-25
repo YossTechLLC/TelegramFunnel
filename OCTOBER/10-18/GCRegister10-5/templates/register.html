@@ -212,6 +212,17 @@
                             {% endif %}
                         </div>
 
+                        <!-- Reset Button for Payment Fields -->
+                        <div class="mb-4 text-center">
+                            <button type="button" id="resetPaymentFieldsBtn" class="btn btn-outline-secondary btn-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-counterclockwise me-1" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/>
+                                    <path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/>
+                                </svg>
+                                Reset Network & Currency Selection
+                            </button>
+                        </div>
+
                         <div class="mb-3">
                             {{ form.client_wallet_address.label(class="form-label fw-bold") }}
                             {{ form.client_wallet_address(class="form-control" + (" is-invalid" if form.client_wallet_address.errors else "")) }}
@@ -446,6 +457,31 @@
         }
     }
 
+    // Reset payment fields (Network Type & Payout Currency)
+    function resetPaymentFields() {
+        console.log('🔄 Resetting payment fields...');
+
+        const networkSelect = document.getElementById('client_payout_network');
+        const currencySelect = document.getElementById('client_payout_currency');
+
+        // Reset both dropdowns to empty selection
+        if (networkSelect) {
+            networkSelect.value = '';
+            console.log('✅ Network Type reset to default');
+        }
+
+        if (currencySelect) {
+            currencySelect.value = '';
+            console.log('✅ Payout Currency reset to default');
+        }
+
+        // Repopulate both dropdowns with all available options (remove any filtering)
+        populateNetworkDropdown();
+        populateCurrencyDropdown();
+
+        console.log('✅ Payment fields reset complete - all options restored');
+    }
+
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         console.log('🚀 Initializing currency-network dynamic filtering...');
@@ -465,6 +501,13 @@
         if (currencySelect) {
             currencySelect.addEventListener('change', onCurrencyChange);
             console.log('✅ Currency dropdown event listener attached');
+        }
+
+        // Attach reset button event listener
+        const resetBtn = document.getElementById('resetPaymentFieldsBtn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', resetPaymentFields);
+            console.log('✅ Reset button event listener attached');
         }
 
         // Form submission handler
