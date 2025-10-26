@@ -1,5 +1,5 @@
-Flask==3.0.0
-google-cloud-secret-manager==2.16.4
-google-cloud-sql-connector[pg8000]==1.4.3
-google-cloud-tasks==2.14.2
+Flask==3.0.3
+google-cloud-secret-manager==2.16.3
+cloud-sql-python-connector==1.4.3
 pg8000==1.30.3
+google-cloud-tasks==2.14.2
