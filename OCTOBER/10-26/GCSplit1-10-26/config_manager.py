@@ -100,7 +100,7 @@ class ConfigManager:
         )
 
         db_password = self.fetch_secret(
-            "DB_PASSWORD",
+            "DATABASE_PASSWORD_SECRET",
             "Database password"
         )
 
