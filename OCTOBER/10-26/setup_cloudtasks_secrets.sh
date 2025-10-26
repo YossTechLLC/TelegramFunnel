@@ -1,7 +1,10 @@
 #!/bin/bash
 # ==============================================================================
 # Cloud Tasks Configuration - Secret Manager Setup Script
-# Creates all queue name and service URL secrets in Google Cloud Secret Manager
+# Creates all Cloud Tasks secrets in Google Cloud Secret Manager:
+# - Queue names (5 secrets)
+# - Service URLs (4 secrets)
+# - Cloud Tasks configuration (2 secrets)
 # ==============================================================================
 
 set -e  # Exit on error
@@ -107,6 +110,22 @@ echo "✅ [SECRET_SETUP] PART 2 Complete: All service URL secrets created/update
 echo ""
 
 # ============================================================================
+# PART 3: CLOUD TASKS CONFIGURATION
+# ============================================================================
+
+echo "🚀 [SECRET_SETUP] PART 3: Creating 2 Cloud Tasks configuration secrets..."
+echo ""
+
+# 1. CLOUD_TASKS_PROJECT_ID
+create_or_update_secret "CLOUD_TASKS_PROJECT_ID" "telepay-459221"
+
+# 2. CLOUD_TASKS_LOCATION
+create_or_update_secret "CLOUD_TASKS_LOCATION" "us-central1"
+
+echo "✅ [SECRET_SETUP] PART 3 Complete: All Cloud Tasks configuration secrets created/updated!"
+echo ""
+
+# ============================================================================
 # VERIFICATION
 # ============================================================================
 
@@ -119,6 +138,10 @@ echo ""
 
 echo "📋 URL Secrets:"
 gcloud secrets list --project="$PROJECT_ID" | grep -E "(GCSPLIT1_ESTIMATE_RESPONSE_URL|GCSPLIT1_SWAP_RESPONSE_URL|GCSPLIT2_URL|GCSPLIT3_URL)"
+echo ""
+
+echo "📋 Cloud Tasks Configuration Secrets:"
+gcloud secrets list --project="$PROJECT_ID" | grep -E "(CLOUD_TASKS_PROJECT_ID|CLOUD_TASKS_LOCATION)"
 echo ""
 
 echo "✅ [SECRET_SETUP] Verification complete!"
@@ -170,6 +193,17 @@ echo "9. GCSPLIT3_URL:"
 gcloud secrets versions access latest --secret=GCSPLIT3_URL --project="$PROJECT_ID"
 echo ""
 
+echo "=== CLOUD TASKS CONFIGURATION ==="
+echo ""
+
+echo "10. CLOUD_TASKS_PROJECT_ID:"
+gcloud secrets versions access latest --secret=CLOUD_TASKS_PROJECT_ID --project="$PROJECT_ID"
+echo ""
+
+echo "11. CLOUD_TASKS_LOCATION:"
+gcloud secrets versions access latest --secret=CLOUD_TASKS_LOCATION --project="$PROJECT_ID"
+echo ""
+
 # ============================================================================
 # IAM PERMISSIONS
 # ============================================================================
@@ -182,7 +216,8 @@ SERVICE_ACCOUNT="$PROJECT_NUMBER-compute@developer.gserviceaccount.com"
 for secret_name in GCSPLIT2_QUEUE GCSPLIT3_QUEUE HOSTPAY_QUEUE \
                    GCSPLIT2_RESPONSE_QUEUE GCSPLIT3_RESPONSE_QUEUE \
                    GCSPLIT1_ESTIMATE_RESPONSE_URL GCSPLIT1_SWAP_RESPONSE_URL \
-                   GCSPLIT2_URL GCSPLIT3_URL; do
+                   GCSPLIT2_URL GCSPLIT3_URL \
+                   CLOUD_TASKS_PROJECT_ID CLOUD_TASKS_LOCATION; do
     echo "🔑 [SECRET_SETUP] Granting access to $secret_name..."
 
     gcloud secrets add-iam-policy-binding "$secret_name" \
@@ -200,7 +235,8 @@ echo ""
 echo "📝 [SECRET_SETUP] Summary:"
 echo "   ✅ 5 queue name secrets created"
 echo "   ✅ 4 service URL secrets created (with placeholders)"
-echo "   ✅ IAM permissions granted for all 9 secrets"
+echo "   ✅ 2 Cloud Tasks configuration secrets created"
+echo "   ✅ IAM permissions granted for all 11 secrets"
 echo ""
 echo "📝 [SECRET_SETUP] Next steps:"
 echo "   1. Verify secrets in Cloud Console: https://console.cloud.google.com/security/secret-manager?project=$PROJECT_ID"

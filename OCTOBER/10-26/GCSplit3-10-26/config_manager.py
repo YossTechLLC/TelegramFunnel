@@ -89,13 +89,13 @@ class ConfigManager:
             "ChangeNow API key"
         )
 
-        # Get environment variables for Cloud Tasks
-        cloud_tasks_project_id = self.get_env_var(
+        # Get Cloud Tasks configuration from Secret Manager
+        cloud_tasks_project_id = self.fetch_secret(
             "CLOUD_TASKS_PROJECT_ID",
             "Cloud Tasks project ID"
         )
 
-        cloud_tasks_location = self.get_env_var(
+        cloud_tasks_location = self.fetch_secret(
             "CLOUD_TASKS_LOCATION",
             "Cloud Tasks location/region"
         )

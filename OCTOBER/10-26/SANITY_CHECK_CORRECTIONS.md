@@ -389,6 +389,92 @@ chmod +x update_service_urls.sh
 
 ---
 
+## 🔄 **ADDENDUM 3: Cloud Tasks Configuration to Secret Manager**
+### Date: 2025-10-26
+
+Following the same security principle as database credentials, queue names, and service URLs, Cloud Tasks configuration values (project ID and location) have been migrated from environment variables to Google Cloud Secret Manager.
+
+### **Before (Incorrect)**
+```bash
+# Cloud Tasks configuration as plain environment variables
+CLOUD_TASKS_PROJECT_ID=telepay-459221          # ❌ Plain env var
+CLOUD_TASKS_LOCATION=us-central1               # ❌ Plain env var
+```
+
+### **After (Correct)**
+```bash
+# Cloud Tasks configuration from Secret Manager
+CLOUD_TASKS_PROJECT_ID=projects/291176869049/secrets/CLOUD_TASKS_PROJECT_ID/versions/latest   # ✅
+CLOUD_TASKS_LOCATION=projects/291176869049/secrets/CLOUD_TASKS_LOCATION/versions/latest       # ✅
+```
+
+### **Files Updated**
+
+1. **GCSplit1-10-26/config_manager.py** (Lines 108-116)
+   - `CLOUD_TASKS_PROJECT_ID`: Changed from `get_env_var()` to `fetch_secret()`
+   - `CLOUD_TASKS_LOCATION`: Changed from `get_env_var()` to `fetch_secret()`
+
+2. **GCSplit2-10-26/config_manager.py** (Lines 93-101)
+   - `CLOUD_TASKS_PROJECT_ID`: Changed from `get_env_var()` to `fetch_secret()`
+   - `CLOUD_TASKS_LOCATION`: Changed from `get_env_var()` to `fetch_secret()`
+
+3. **GCSplit3-10-26/config_manager.py** (Lines 93-101)
+   - `CLOUD_TASKS_PROJECT_ID`: Changed from `get_env_var()` to `fetch_secret()`
+   - `CLOUD_TASKS_LOCATION`: Changed from `get_env_var()` to `fetch_secret()`
+
+4. **DEPLOYMENT_GUIDE.md**
+   - Updated environment variables sections for all 3 services
+   - Updated deployment commands for all 3 services
+
+5. **setup_cloudtasks_secrets.sh** (EXPANDED AGAIN)
+   - Now creates 11 total secrets (5 queues + 4 URLs + 2 config)
+   - Added PART 3: Cloud Tasks Configuration
+   - Updated summary counts and IAM permissions
+
+### **Rationale**
+
+**Problem**: Cloud Tasks project ID and location were hardcoded as plain environment variables, creating inconsistency with other configuration management.
+
+**Solution**: Store these values in Secret Manager for:
+- ✅ Consistency with all other configuration
+- ✅ Ability to change project/region without code changes
+- ✅ Environment-specific configuration (dev/staging/prod)
+- ✅ Centralized configuration management
+- ✅ Audit trail for configuration changes
+
+### **Secret Manager Secrets Required**
+
+Create these secrets using `./setup_cloudtasks_secrets.sh`:
+
+1. **CLOUD_TASKS_PROJECT_ID** → `telepay-459221`
+2. **CLOUD_TASKS_LOCATION** → `us-central1`
+
+### **Setup Commands**
+
+```bash
+# Run expanded setup script (now creates 11 secrets)
+chmod +x setup_cloudtasks_secrets.sh
+./setup_cloudtasks_secrets.sh
+
+# Verify all secrets created
+gcloud secrets list --project=telepay-459221 | grep CLOUD_TASKS
+```
+
+### **Verification Checklist**
+
+- [x] All 2 config secrets specified
+- [x] GCSplit1/config_manager.py updated (2 variables)
+- [x] GCSplit2/config_manager.py updated (2 variables)
+- [x] GCSplit3/config_manager.py updated (2 variables)
+- [x] DEPLOYMENT_GUIDE.md updated (env vars + commands for all 3 services)
+- [x] setup_cloudtasks_secrets.sh expanded to 11 secrets
+- [ ] Secrets deployed to Google Cloud
+- [ ] Services deployed with new configuration
+- [ ] Health checks verified
+- [ ] End-to-end test completed
+
+---
+
 **Corrected By**: Claude Code
 **Date**: 2025-10-26
 **Verification**: Ready for deployment
