@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for TPS10-21 Payment Splitting Service.
+Configuration Manager for TPS10-26 Payment Splitting Service.
 Handles fetching configuration values from Google Cloud Secret Manager.
 """
 import os
@@ -9,16 +9,16 @@ from typing import Optional
 
 #LIST OF ENVIORNMENT VARIABLES
 # CHANGENOW_API_KEY: Path to ChangeNow API key in Secret Manager
-# SUCCESS_URL_SIGNING_KEY: Path to success URL signing key in Secret Manager (shared with tph10-16)
+# SUCCESS_URL_SIGNING_KEY: Path to success URL signing key in Secret Manager (shared with tph10-26)
 # TPS_WEBHOOK_URL: Path to TPS webhook URL in Secret Manager
 # TELEGRAM_BOT_USERNAME: Path to Telegram bot token in Secret Manager (shared with main app)
 # TP_FLAT_FEE: Path to TelePay flat fee percentage in Secret Manager
-# TPS_HOSTPAY_SIGNING_KEY: Path to HostPay signing key in Secret Manager (shared with GCHostPay10-21)
+# TPS_HOSTPAY_SIGNING_KEY: Path to HostPay signing key in Secret Manager (shared with GCHostPay10-26)
 # HOSTPAY_WEBHOOK_URL: Path to HostPay webhook URL in Secret Manager
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the TPS10-21 service.
+    Manages configuration and secrets for the TPS10-26 service.
     """
     
     def __init__(self):
@@ -74,7 +74,7 @@ class ConfigManager:
     def fetch_success_url_signing_key(self) -> Optional[str]:
         """
         Fetch the success URL signing key from Secret Manager.
-        This key is shared with tph10-16 for webhook signature verification.
+        This key is shared with tph10-26 for webhook signature verification.
 
         Returns:
             Success URL signing key or None if failed
@@ -123,7 +123,7 @@ class ConfigManager:
     def fetch_tps_hostpay_signing_key(self) -> Optional[str]:
         """
         Fetch the TPS HostPay signing key from Secret Manager.
-        This key is shared with GCHostPay10-21 for token signature verification.
+        This key is shared with GCHostPay10-26 for token signature verification.
 
         Returns:
             TPS HostPay signing key or None if failed

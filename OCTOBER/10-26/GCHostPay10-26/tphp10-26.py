@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-GCHostPay10-21: Host Wallet Payment Service
+GCHostPay10-26: Host Wallet Payment Service
 Google Cloud Run webhook service for automated ETH payments from host wallet to ChangeNow.
-Receives encrypted tokens from TPS10-21 and executes ETH transfers.
+Receives encrypted tokens from TPS10-26 and executes ETH transfers.
 """
 import os
 import time
@@ -19,7 +19,7 @@ from wallet_manager import WalletManager
 from alchemy_webhook_handler import AlchemyWebhookHandler
 
 # LIST OF ENVIRONMENT VARIABLES
-# TPS_HOSTPAY_SIGNING_KEY: Path to signing key in Secret Manager (shared with GCSplit10-21)
+# TPS_HOSTPAY_SIGNING_KEY: Path to signing key in Secret Manager (shared with GCSplit10-26)
 # HOST_WALLET_ETH_ADDRESS: Path to host wallet ETH address in Secret Manager
 # HOST_WALLET_PRIVATE_KEY: Path to host wallet private key in Secret Manager
 # ETHEREUM_RPC_URL_API: Path to Ethereum RPC API key in Secret Manager (for gas optimization)
@@ -455,7 +455,7 @@ def health_check():
 
         return jsonify({
             "status": "healthy",
-            "service": "GCHostPay10-21 Host Wallet Payment Service",
+            "service": "GCHostPay10-26 Host Wallet Payment Service",
             "timestamp": int(time.time()),
             "configuration": {
                 "signing_key": "✅" if signing_key_available else "❌"
@@ -465,12 +465,12 @@ def health_check():
         print(f"❌ [HEALTH_CHECK] Error: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCHostPay10-21 Host Wallet Payment Service",
+            "service": "GCHostPay10-26 Host Wallet Payment Service",
             "error": str(e)
         }), 503
 
 # --- Flask entrypoint for deployment ---
 if __name__ == "__main__":
-    print("🚀 [HOSTPAY] Starting GCHostPay10-21 Host Wallet Payment Service")
+    print("🚀 [HOSTPAY] Starting GCHostPay10-26 Host Wallet Payment Service")
     print("📡 [HOSTPAY] Listening on port 8080")
     app.run(host="0.0.0.0", port=8080)

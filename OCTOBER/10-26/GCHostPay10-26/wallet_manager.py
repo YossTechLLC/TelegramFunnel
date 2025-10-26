@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Wallet Manager for GCHostPay10-21 Host Wallet Payment Service.
+Wallet Manager for GCHostPay10-26 Host Wallet Payment Service.
 Handles all Web3 wallet connections and ETH payment execution.
 Uses Google Cloud Secret Manager for secure credential storage.
 Enhanced with Alchemy SDK for gas optimization, retry logic, and webhook monitoring.
@@ -15,7 +15,7 @@ from web3.middleware import geth_poa_middleware
 
 class WalletManager:
     """
-    Manages Web3 wallet operations for the GCHostPay10-21 service.
+    Manages Web3 wallet operations for the GCHostPay10-26 service.
     Handles ETH payment execution from host wallet to ChangeNow payin addresses.
     """
 

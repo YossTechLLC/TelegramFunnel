@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Custom validators for GCRegister10-5 Channel Registration Service.
+Custom validators for GCRegister10-26 Channel Registration Service.
 Provides validation functions for form fields.
 """
 from wtforms.validators import ValidationError
@@ -51,6 +51,10 @@ def validate_price(form, field):
     """
     price = field.data
 
+    # Skip validation if field is empty (optional tiers)
+    if price is None:
+        return
+
     # Check range
     if not (0 <= price <= 9999.99):
         raise ValidationError('❌ Price must be between $0.00 and $9999.99')
@@ -80,6 +84,10 @@ def validate_time(form, field):
         ValidationError: If validation fails
     """
     time_days = field.data
+
+    # Skip validation if field is empty (optional tiers)
+    if time_days is None:
+        return
 
     # Check range
     if not (1 <= time_days <= 999):

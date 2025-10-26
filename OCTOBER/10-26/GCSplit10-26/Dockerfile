@@ -19,7 +19,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code
-COPY tps10-21.py .
+COPY tps10-26.py .
 COPY config_manager.py .
 COPY changenow_client.py .
 COPY database_manager.py .
@@ -28,4 +28,4 @@ COPY database_manager.py .
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tps10-21.py"]
+CMD ["python", "tps10-26.py"]

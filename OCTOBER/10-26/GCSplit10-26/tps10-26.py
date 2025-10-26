@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-TPS10-21: ChangeNow Payment Splitting Service
+TPS10-26: ChangeNow Payment Splitting Service
 Google Cloud Function for automated cryptocurrency payment splitting using ChangeNow API.
 Converts ETH payments to client payout currencies after successful subscription payments.
 """
@@ -34,8 +34,8 @@ database_manager = DatabaseManager()
 
 def verify_webhook_signature(payload: bytes, signature: str, signing_key: str) -> bool:
     """
-    Verify webhook signature from tph10-16.py to ensure authentic requests.
-    Uses SUCCESS_URL_SIGNING_KEY (shared with tph10-16) for signature verification.
+    Verify webhook signature from tph10-26.py to ensure authentic requests.
+    Uses SUCCESS_URL_SIGNING_KEY (shared with tph10-26) for signature verification.
 
     Args:
         payload: Raw request payload
@@ -143,7 +143,7 @@ def build_hostpay_token(unique_id: str, cn_api_id: str, from_currency: str,
                        from_network: str, from_amount: float, payin_address: str,
                        signing_key: str) -> Optional[str]:
     """
-    Build a cryptographically signed token for GCHostPay10-21 webhook.
+    Build a cryptographically signed token for GCHostPay10-26 webhook.
     Token is valid for 1 minute from creation.
 
     Token Format (binary packed):
@@ -237,7 +237,7 @@ def build_hostpay_token(unique_id: str, cn_api_id: str, from_currency: str,
 def trigger_hostpay_webhook(unique_id: str, cn_api_id: str, from_currency: str,
                            from_network: str, from_amount: float, payin_address: str) -> bool:
     """
-    Trigger the GCHostPay10-21 webhook with encrypted token.
+    Trigger the GCHostPay10-26 webhook with encrypted token.
 
     Args:
         unique_id: Database unique ID
@@ -278,7 +278,7 @@ def trigger_hostpay_webhook(unique_id: str, cn_api_id: str, from_currency: str,
             print(f"❌ [HOSTPAY_WEBHOOK] Failed to build token")
             return False
 
-        print(f"🚀 [HOSTPAY_WEBHOOK] Triggering GCHostPay10-21 webhook")
+        print(f"🚀 [HOSTPAY_WEBHOOK] Triggering GCHostPay10-26 webhook")
         print(f"🌐 [HOSTPAY_WEBHOOK] URL: {hostpay_webhook_url}")
 
         # Prepare request payload
@@ -699,8 +699,8 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
     Main processing function for payment splitting workflow.
 
     Args:
-        webhook_data: Data received from tph10-16.py webhook
-        
+        webhook_data: Data received from tph10-26.py webhook
+
     Returns:
         Processing result dictionary
     """
@@ -841,14 +841,14 @@ def process_payment_split(webhook_data: Dict[str, Any]) -> Dict[str, Any]:
 @app.route("/", methods=["POST"])
 def payment_split_webhook():
     """
-    Main webhook endpoint for receiving payment split requests from tph10-16.py.
+    Main webhook endpoint for receiving payment split requests from tph10-26.py.
     """
     try:
         # Get raw payload for signature verification
         payload = request.get_data()
         signature = request.headers.get('X-Webhook-Signature', '')
 
-        print(f"🎯 [WEBHOOK] TPS10-21 Webhook Called")
+        print(f"🎯 [WEBHOOK] TPS10-26 Webhook Called")
         print(f"📦 [WEBHOOK] Payload size: {len(payload)} bytes")
         
         # Verify webhook signature if signing key is available

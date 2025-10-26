@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """
-Form definitions for GCRegister10-5 Channel Registration Service.
+Form definitions for GCRegister10-26 Channel Registration Service.
 Uses Flask-WTF for form handling and validation.
 """
 from flask_wtf import FlaskForm
 from wtforms import StringField, TextAreaField, DecimalField, IntegerField, SelectField, SubmitField
-from wtforms.validators import DataRequired, Length, NumberRange
+from wtforms.validators import DataRequired, Length, NumberRange, Optional
 from validators import (
     validate_channel_id,
     validate_price,
@@ -113,6 +113,7 @@ class ChannelRegistrationForm(FlaskForm):
     sub_1_price = DecimalField(
         'Tier 1 Price (USD)',
         validators=[
+            Optional(),
             NumberRange(min=0, max=9999.99, message='❌ Price must be between $0.00 and $9999.99'),
             validate_price
         ],
@@ -129,6 +130,7 @@ class ChannelRegistrationForm(FlaskForm):
     sub_1_time = IntegerField(
         'Tier 1 Duration (Days)',
         validators=[
+            Optional(),
             NumberRange(min=1, max=999, message='❌ Duration must be between 1 and 999 days'),
             validate_time
         ],
@@ -145,6 +147,7 @@ class ChannelRegistrationForm(FlaskForm):
     sub_2_price = DecimalField(
         'Tier 2 Price (USD)',
         validators=[
+            Optional(),
             NumberRange(min=0, max=9999.99, message='❌ Price must be between $0.00 and $9999.99'),
             validate_price
         ],
@@ -161,6 +164,7 @@ class ChannelRegistrationForm(FlaskForm):
     sub_2_time = IntegerField(
         'Tier 2 Duration (Days)',
         validators=[
+            Optional(),
             NumberRange(min=1, max=999, message='❌ Duration must be between 1 and 999 days'),
             validate_time
         ],
@@ -177,6 +181,7 @@ class ChannelRegistrationForm(FlaskForm):
     sub_3_price = DecimalField(
         'Tier 3 Price (USD)',
         validators=[
+            Optional(),
             NumberRange(min=0, max=9999.99, message='❌ Price must be between $0.00 and $9999.99'),
             validate_price
         ],
@@ -193,6 +198,7 @@ class ChannelRegistrationForm(FlaskForm):
     sub_3_time = IntegerField(
         'Tier 3 Duration (Days)',
         validators=[
+            Optional(),
             NumberRange(min=1, max=999, message='❌ Duration must be between 1 and 999 days'),
             validate_time
         ],

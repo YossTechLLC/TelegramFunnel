@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-Database Manager for GCHostPay10-21 Host Wallet Payment Service.
+Database Manager for GCHostPay10-26 Host Wallet Payment Service.
 Handles database operations for the split_payout_hostpay table.
-Uses Google Cloud SQL Connector (mirroring GCSplit10-21 pattern).
+Uses Google Cloud SQL Connector (mirroring GCSplit10-26 pattern).
 """
 import os
 from google.cloud import secretmanager
@@ -21,7 +21,7 @@ except ImportError as e:
 
 class DatabaseManager:
     """
-    Manages database connections and operations for GCHostPay10-21 service.
+    Manages database connections and operations for GCHostPay10-26 service.
     Uses the same database as the main TelePay application.
     Uses Google Cloud SQL Connector (no connection pooling).
     """
@@ -95,7 +95,7 @@ class DatabaseManager:
     def get_database_connection(self):
         """
         Create and return a database connection using Cloud SQL Connector.
-        This mirrors the pattern from GCSplit10-21.
+        This mirrors the pattern from GCSplit10-26.
 
         Returns:
             Database connection object or None if failed

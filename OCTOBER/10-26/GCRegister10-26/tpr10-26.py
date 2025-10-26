@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCRegister10-5: Channel Registration Service
+GCRegister10-26: Channel Registration Service
 Flask web application for registering Telegram channels into the payment system.
 """
 from flask import Flask, render_template, redirect, url_for, flash, session, request
@@ -15,7 +15,7 @@ from forms import ChannelRegistrationForm
 app = Flask(__name__)
 
 # Initialize configuration
-print("🚀 [APP] Initializing GCRegister10-5 Channel Registration Service")
+print("🚀 [APP] Initializing GCRegister10-26 Channel Registration Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -307,20 +307,20 @@ def health():
         if db_manager and db_manager.test_connection():
             return {
                 'status': 'healthy',
-                'service': 'GCRegister10-5 Channel Registration',
+                'service': 'GCRegister10-26 Channel Registration',
                 'database': 'connected'
             }, 200
         else:
             return {
                 'status': 'unhealthy',
-                'service': 'GCRegister10-5 Channel Registration',
+                'service': 'GCRegister10-26 Channel Registration',
                 'database': 'disconnected'
             }, 503
     except Exception as e:
         print(f"❌ [APP] Health check failed: {e}")
         return {
             'status': 'unhealthy',
-            'service': 'GCRegister10-5 Channel Registration',
+            'service': 'GCRegister10-26 Channel Registration',
             'error': str(e)
         }, 503
 
@@ -350,5 +350,5 @@ def internal_error(e):
 
 # --- Flask entrypoint for deployment ---
 if __name__ == "__main__":
-    print("🚀 [APP] Starting GCRegister10-5 on port 8080")
+    print("🚀 [APP] Starting GCRegister10-26 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

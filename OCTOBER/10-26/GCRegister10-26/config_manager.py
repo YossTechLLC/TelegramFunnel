@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCRegister10-5 Channel Registration Service.
+Configuration Manager for GCRegister10-26 Channel Registration Service.
 Handles fetching configuration values from Google Cloud Secret Manager.
 """
 import os
@@ -16,7 +16,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCRegister10-5 service.
+    Manages configuration and secrets for the GCRegister10-26 service.
     """
 
     def __init__(self):
@@ -111,7 +111,7 @@ class ConfigManager:
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCRegister10-5 configuration")
+        print(f"⚙️ [CONFIG] Initializing GCRegister10-26 configuration")
 
         # Fetch all secrets and environment variables
         self.db_name = self.fetch_database_name()

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Database Manager for GCRegister10-5 Channel Registration Service.
+Database Manager for GCRegister10-26 Channel Registration Service.
 Handles PostgreSQL connections and data operations using Cloud SQL Connector.
 """
 from google.cloud.sql.connector import Connector

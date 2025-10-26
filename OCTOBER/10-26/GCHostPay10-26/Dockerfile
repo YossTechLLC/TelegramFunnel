@@ -8,9 +8,8 @@ ENV PYTHONUNBUFFERED=1
 # Set workdir
 WORKDIR /app
 
-# Install system dependencies for PostgreSQL and build tools
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
     gcc \
     libc6-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -19,11 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copy the app code
-COPY tph10-16.py .
+# Copy the app code and supporting modules
+COPY tphp10-26.py .
+COPY database_manager.py .
+COPY wallet_manager.py .
+COPY alchemy_webhook_handler.py .
 
 # Expose the port
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tph10-16.py"]
+CMD ["python", "tphp10-26.py"]
