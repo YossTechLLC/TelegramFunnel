@@ -1,0 +1,468 @@
+================================================================================
+TELEPAY10-16 ENVIRONMENT VARIABLES DOCUMENTATION
+TelegramFunnel Payment Bot - October 2025
+================================================================================
+
+This document contains all environment variables required for the TelePay10-16
+(telepay10-16.py) main Telegram bot application to run successfully.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. Overview
+2. Required Environment Variables
+3. Google Cloud Secret Manager Setup
+4. Environment Variable Details
+5. Configuration Validation
+6. Integration Notes
+7. Troubleshooting
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+The TelePay10-16 application is the main Telegram bot that handles:
+- User subscription management
+- Payment gateway integration (NowPayments)
+- Secure webhook URL generation
+- Database operations for client and user data
+- Broadcast management
+- Subscription expiration monitoring
+
+All sensitive credentials are stored in Google Cloud Secret Manager for security.
+
+================================================================================
+2. REQUIRED ENVIRONMENT VARIABLES
+================================================================================
+
+Total Environment Variables: 10
+
+Secret Manager Paths (9):
+1. TELEGRAM_BOT_SECRET_NAME
+2. TELEGRAM_BOT_USERNAME
+3. NOWPAYMENT_WEBHOOK_KEY
+4. PAYMENT_PROVIDER_SECRET_NAME
+5. DATABASE_HOST_SECRET
+6. DATABASE_NAME_SECRET
+7. DATABASE_USER_SECRET
+8. DATABASE_PASSWORD_SECRET
+9. SUCCESS_URL_SIGNING_KEY
+
+Direct Values (1):
+10. WEBHOOK_BASE_URL
+
+================================================================================
+3. GOOGLE CLOUD SECRET MANAGER SETUP
+================================================================================
+
+Create the following secrets in Google Cloud Secret Manager:
+
+# Telegram Bot Token
+gcloud secrets create TELEGRAM_BOT_TOKEN \
+    --data-file=./telegram_bot_token.txt
+
+# Telegram Bot Username
+gcloud secrets create TELEGRAM_BOT_USERNAME \
+    --data-file=./telegram_bot_username.txt
+
+# NowPayments Webhook Key
+gcloud secrets create NOWPAYMENT_WEBHOOK_KEY \
+    --data-file=./nowpayment_webhook_key.txt
+
+# NowPayments API Key
+gcloud secrets create PAYMENT_PROVIDER_API_KEY \
+    --data-file=./payment_provider_api_key.txt
+
+# Database Host
+gcloud secrets create DATABASE_HOST \
+    --data-file=./database_host.txt
+
+# Database Name
+gcloud secrets create DATABASE_NAME \
+    --data-file=./database_name.txt
+
+# Database User
+gcloud secrets create DATABASE_USER \
+    --data-file=./database_user.txt
+
+# Database Password
+gcloud secrets create DATABASE_PASSWORD \
+    --data-file=./database_password.txt
+
+# Success URL Signing Key (HMAC key for webhook signatures)
+gcloud secrets create SUCCESS_URL_SIGNING_KEY \
+    --data-file=./success_url_signing_key.txt
+
+================================================================================
+4. ENVIRONMENT VARIABLE DETAILS
+================================================================================
+
+--- 1. TELEGRAM_BOT_SECRET_NAME ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        Telegram bot token for API authentication
+Format:         projects/PROJECT_ID/secrets/TELEGRAM_BOT_TOKEN/versions/latest
+Example:        projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest
+Used By:        config_manager.py, app_initializer.py, subscription_manager.py
+Secret Value:   Bot token from @BotFather (e.g., 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz)
+
+Description:
+Main Telegram bot token obtained from @BotFather. Used for all bot API calls
+including sending messages, managing channel memberships, and handling updates.
+
+--- 2. TELEGRAM_BOT_USERNAME ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        Telegram bot username for display and references
+Format:         projects/PROJECT_ID/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+Example:        projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+Used By:        config_manager.py, broadcast_manager.py
+Secret Value:   Bot username without @ symbol (e.g., PayGatePrime_bot)
+
+Description:
+Bot username used for broadcast messages and user-facing references. This is
+the public identifier of your bot without the @ symbol.
+
+--- 3. NOWPAYMENT_WEBHOOK_KEY ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        NowPayments webhook verification key
+Format:         projects/PROJECT_ID/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest
+Example:        projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest
+Used By:        config_manager.py, start_np_gateway.py
+Secret Value:   Webhook signature key from NowPayments dashboard
+
+Description:
+HMAC key provided by NowPayments for verifying webhook authenticity. Ensures
+that payment notifications are genuinely from NowPayments API.
+
+--- 4. PAYMENT_PROVIDER_SECRET_NAME ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        NowPayments API key for payment operations
+Format:         projects/PROJECT_ID/secrets/PAYMENT_PROVIDER_API_KEY/versions/latest
+Example:        projects/291176869049/secrets/PAYMENT_PROVIDER_API_KEY/versions/latest
+Used By:        start_np_gateway.py
+Secret Value:   API key from NowPayments dashboard
+
+Description:
+NowPayments API key used to create payment invoices, check payment status,
+and interact with the NowPayments cryptocurrency payment gateway.
+
+--- 5. DATABASE_HOST_SECRET ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        PostgreSQL database host address
+Format:         projects/PROJECT_ID/secrets/DATABASE_HOST/versions/latest
+Example:        projects/291176869049/secrets/DATABASE_HOST/versions/latest
+Used By:        database.py
+Secret Value:   Database host (e.g., 127.0.0.1 for Cloud SQL Proxy, or Cloud SQL IP)
+
+Description:
+PostgreSQL database host address. Typically 127.0.0.1 when using Cloud SQL
+Proxy, or the Cloud SQL instance IP address for direct connections.
+
+--- 6. DATABASE_NAME_SECRET ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        PostgreSQL database name
+Format:         projects/PROJECT_ID/secrets/DATABASE_NAME/versions/latest
+Example:        projects/291176869049/secrets/DATABASE_NAME/versions/latest
+Used By:        database.py
+Secret Value:   Database name (e.g., telegram_funnel)
+
+Description:
+Name of the PostgreSQL database containing the application tables:
+- main_clients_database (channel registrations)
+- private_channel_users_database (user subscriptions)
+- registered_payments_database (payment tracking)
+
+--- 7. DATABASE_USER_SECRET ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        PostgreSQL database username
+Format:         projects/PROJECT_ID/secrets/DATABASE_USER/versions/latest
+Example:        projects/291176869049/secrets/DATABASE_USER/versions/latest
+Used By:        database.py
+Secret Value:   Database username (e.g., postgres or custom user)
+
+Description:
+PostgreSQL username with read/write permissions for the application database.
+User must have permissions to SELECT, INSERT, UPDATE, and DELETE on all tables.
+
+--- 8. DATABASE_PASSWORD_SECRET ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        PostgreSQL database password
+Format:         projects/PROJECT_ID/secrets/DATABASE_PASSWORD/versions/latest
+Example:        projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest
+Used By:        database.py
+Secret Value:   Database password
+
+Description:
+Password for the PostgreSQL database user. Store securely in Secret Manager
+and rotate regularly for security.
+
+--- 9. SUCCESS_URL_SIGNING_KEY ---
+
+Type:           Secret Manager Path
+Required:       Yes
+Purpose:        HMAC key for signing success redirect URLs
+Format:         projects/PROJECT_ID/secrets/SUCCESS_URL_SIGNING_KEY/versions/latest
+Example:        projects/291176869049/secrets/SUCCESS_URL_SIGNING_KEY/versions/latest
+Used By:        secure_webhook.py
+Secret Value:   32+ character random string for HMAC signatures
+
+Description:
+Cryptographic key used to sign success redirect URLs after payment completion.
+This key ensures that redirect tokens cannot be forged. Must match the
+SUCCESS_URL_SIGNING_KEY used by tph10-16.py (GCWebhook10-16) service.
+
+IMPORTANT: This key must be identical across TelePay10-16 and GCWebhook10-16
+services for successful token verification.
+
+--- 10. WEBHOOK_BASE_URL ---
+
+Type:           Direct Environment Variable Value
+Required:       Yes
+Purpose:        Base URL of the webhook handler service
+Format:         https://SERVICE_URL
+Example:        https://tph10-16-abc123-uc.a.run.app
+Used By:        secure_webhook.py
+Value:          Full HTTPS URL of the tph10-16 webhook service
+
+Description:
+The base URL of your deployed GCWebhook10-16 (tph10-16) service on Google
+Cloud Run. This URL is used to generate the success redirect URL that users
+are sent to after completing payment.
+
+The generated URL format is:
+https://tph10-16-SERVICE_URL/?token=SIGNED_TOKEN
+
+IMPORTANT: Set this after deploying the tph10-16 service. See
+GOOGLE_CLOUD_RUN_DEPLOYMENT.txt for deployment instructions.
+
+================================================================================
+5. CONFIGURATION VALIDATION
+================================================================================
+
+The application validates configuration during startup. Look for these log
+messages to confirm proper setup:
+
+✅ Successful Configuration:
+🔐 [CONFIG] Fetching Telegram bot token
+✅ [CONFIG] Successfully fetched Telegram bot token
+🔐 [CONFIG] Fetching NowPayments webhook key
+✅ [CONFIG] Successfully fetched NowPayments webhook key
+🔐 [CONFIG] Fetching Telegram bot username
+✅ [CONFIG] Successfully fetched Telegram bot username
+🔐 [CONFIG] Fetching Payment provider API key
+✅ [CONFIG] Successfully fetched Payment provider API key
+📊 [CONFIG] Configuration status:
+   Bot Token: ✅
+   NowPayments Webhook Key: ✅
+   Bot Username: ✅
+   Payment Provider API Key: ✅
+
+❌ Configuration Errors:
+❌ [CONFIG] Environment variable TELEGRAM_BOT_SECRET_NAME is not set
+❌ [CONFIG] Error fetching Telegram bot token: [error details]
+⚠️ [CONFIG] Warning: Payment provider API key not available
+
+If you see configuration errors:
+1. Verify the environment variable is set correctly
+2. Check Secret Manager permissions
+3. Confirm the secret exists in Secret Manager
+4. Validate the secret path format
+
+================================================================================
+6. INTEGRATION NOTES
+================================================================================
+
+--- Database Connection ---
+The application uses psycopg2 for PostgreSQL connections with a connection
+pool. Ensure your database credentials have proper permissions:
+
+Required Database Tables:
+1. main_clients_database
+   - Stores channel registration data
+   - Columns: channel_id, channel_name, payout_wallet, payout_crypto, etc.
+
+2. private_channel_users_database
+   - Stores user subscription data
+   - Columns: user_id, private_channel_id, expire_time, expire_date, is_active
+
+3. registered_payments_database
+   - Stores payment transaction data
+   - Columns: payment_id, user_id, amount, currency, status, etc.
+
+--- Cross-Service Integration ---
+1. GCWebhook10-16 (tph10-16):
+   - Shares SUCCESS_URL_SIGNING_KEY for token verification
+   - Receives success redirects generated by TelePay10-16
+   - WEBHOOK_BASE_URL must point to tph10-16 service URL
+
+2. GCSplit10-21 (tps10-21):
+   - Triggered by tph10-16 after successful payment
+   - Handles cryptocurrency conversion via ChangeNow API
+
+3. NowPayments API:
+   - Payment gateway for cryptocurrency payments
+   - Requires PAYMENT_PROVIDER_SECRET_NAME and NOWPAYMENT_WEBHOOK_KEY
+
+--- Subscription Monitoring ---
+The subscription_manager.py module runs a background task that:
+- Checks for expired subscriptions every 60 seconds
+- Automatically removes users from private channels when subscriptions expire
+- Marks subscriptions as inactive in the database
+
+This requires:
+- Valid TELEGRAM_BOT_SECRET_NAME for channel management API calls
+- Proper database access via DATABASE_* secrets
+- Bot must be an admin in all managed private channels
+
+================================================================================
+7. TROUBLESHOOTING
+================================================================================
+
+--- Common Issues ---
+
+Issue: "Bot token is required to start the application"
+Solution: Verify TELEGRAM_BOT_SECRET_NAME is set and points to valid secret
+
+Issue: "Error fetching secret: Permission denied"
+Solution: Grant Secret Manager Secret Accessor role to the service account:
+gcloud projects add-iam-policy-binding PROJECT_ID \
+    --member="serviceAccount:SERVICE_ACCOUNT" \
+    --role="roles/secretmanager.secretAccessor"
+
+Issue: "Database connection failed"
+Solution:
+1. Verify all DATABASE_* secrets are set correctly
+2. Check network connectivity to database
+3. Confirm database user has proper permissions
+4. For Cloud SQL, ensure Cloud SQL Admin API is enabled
+
+Issue: "Webhook signature verification failed"
+Solution:
+1. Verify NOWPAYMENT_WEBHOOK_KEY matches NowPayments dashboard
+2. Check that webhook URL is correctly configured in NowPayments
+3. Ensure HTTPS is used for webhook endpoint
+
+Issue: "Success URL token verification failed"
+Solution:
+1. Verify SUCCESS_URL_SIGNING_KEY is identical in both TelePay10-16 and
+   tph10-16 (GCWebhook10-16)
+2. Check that WEBHOOK_BASE_URL points to correct tph10-16 service URL
+3. Ensure token expiration (2 hours) has not been exceeded
+
+Issue: "Users not being removed from expired subscriptions"
+Solution:
+1. Verify bot is admin in all private channels
+2. Check that subscription_manager is running (look for startup log message)
+3. Confirm database expire_time and expire_date are set correctly
+4. Review logs for Telegram API errors
+
+--- Verification Commands ---
+
+# Test Secret Manager access
+gcloud secrets versions access latest --secret="TELEGRAM_BOT_TOKEN"
+
+# Check service account permissions
+gcloud projects get-iam-policy PROJECT_ID \
+    --flatten="bindings[].members" \
+    --filter="bindings.members:serviceAccount:YOUR_SERVICE_ACCOUNT"
+
+# Test database connectivity (from Cloud Shell or local with Cloud SQL Proxy)
+psql "host=127.0.0.1 dbname=DATABASE_NAME user=DATABASE_USER password=PASSWORD"
+
+# View application logs
+gcloud run services logs read telepay10-16 \
+    --region us-central1 \
+    --limit 50
+
+================================================================================
+8. DEPLOYMENT EXAMPLE
+================================================================================
+
+Example environment variable configuration for Google Cloud Run deployment:
+
+gcloud run deploy telepay10-16 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 1Gi \
+    --cpu 1 \
+    --timeout 300 \
+    --max-instances 10 \
+    --min-instances 1 \
+    --port 8080 \
+    --set-env-vars TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_TOKEN/versions/latest \
+    --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest \
+    --set-env-vars NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest \
+    --set-env-vars PAYMENT_PROVIDER_SECRET_NAME=projects/291176869049/secrets/NOWPAYMENTS_API_KEY/versions/latest \
+    --set-env-vars DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest \
+    --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
+    --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
+    --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
+    --set-env-vars SUCCESS_URL_SIGNING_KEY=projects/291176869049/secrets/SUCCESS_URL_SIGNING_KEY/versions/latest \
+    --set-env-vars WEBHOOK_BASE_URL=https://tph10-16-abc123-uc.a.run.app
+
+Note: Replace PROJECT_ID (291176869049) with your actual Google Cloud project ID
+Note: Replace tph10-16-abc123-uc.a.run.app with your actual tph10-16 service URL
+
+================================================================================
+9. SECURITY BEST PRACTICES
+================================================================================
+
+🔒 Secret Management:
+- Never commit secrets to version control
+- Store all sensitive credentials in Google Cloud Secret Manager
+- Rotate secrets regularly (recommended: every 90 days)
+- Use least-privilege principle for Secret Manager access
+
+🔐 API Keys:
+- Keep NowPayments API key confidential
+- Monitor API usage for suspicious activity
+- Use webhook signatures to verify all payment notifications
+
+🛡️ Database Security:
+- Use strong, unique passwords for database users
+- Limit database user permissions to only required operations
+- Enable Cloud SQL connection encryption
+- Regularly backup database
+
+🔑 Token Signing:
+- Use cryptographically secure random strings for signing keys
+- Keep SUCCESS_URL_SIGNING_KEY synchronized across services
+- Monitor for token verification failures (potential attack indicator)
+
+📊 Monitoring:
+- Enable Cloud Run logging
+- Set up alerting for service failures
+- Monitor subscription expiration task execution
+- Track payment gateway webhook delivery
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
+
+Generated: October 2025
+Version: 10-16
+Service: TelePay10-16 (telepay10-16.py)
+Platform: Google Cloud Run
+
+For deployment instructions for other services, see:
+- GOOGLE_CLOUD_RUN_DEPLOYMENT.txt (tps10-21 and tph10-16 services)
+- GCRegister10-5/README.md (channel registration service)
+
+================================================================================

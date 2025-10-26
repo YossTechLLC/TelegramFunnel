@@ -1,0 +1,572 @@
+===============================================================================
+GCRegister10-23 - Channel Registration Service Deployment Instructions
+===============================================================================
+
+📋 OVERVIEW
+-----------
+GCRegister10-23 is the updated version with bidirectional Network Type ↔
+Payout Currency dynamic filtering. This service allows Telegram channel
+owners to self-register their channels with cryptocurrency payment details.
+
+NEW FEATURES (10-23 Update):
+• Network Type dropdown (appears FIRST in Payment Information)
+• Bidirectional dynamic filtering between Network and Currency
+• 196 currency-network mappings from currency_to_network table
+• Both client_payout_network AND client_payout_currency saved to database
+• API endpoint: /api/currency-network-mappings for JavaScript filtering
+
+
+===============================================================================
+⚠️  PREREQUISITES - MUST COMPLETE BEFORE DEPLOYMENT
+===============================================================================
+
+1. ENABLE SECRET MANAGER API
+   ---------------------------
+   Run this command FIRST (this fixes the CONSUMER_INVALID error):
+
+   gcloud services enable secretmanager.googleapis.com --project=telepay-459221
+
+
+2. CREATE REQUIRED SECRETS
+   ------------------------
+   Create these secrets in Google Cloud Secret Manager (skip if already exist):
+
+   # Database credentials (shared with other services)
+   echo "your_db_name" | gcloud secrets create DATABASE_NAME --project=telepay-459221 --data-file=-
+   echo "your_db_user" | gcloud secrets create DATABASE_USER --project=telepay-459221 --data-file=-
+   echo "your_db_password" | gcloud secrets create DATABASE_PASSWORD --project=telepay-459221 --data-file=-
+
+   # Cloud SQL connection name (shared with other services)
+   echo "telepay-459221:us-central1:telepaypsql" | gcloud secrets create CLOUD_SQL_CONNECTION_NAME --project=telepay-459221 --data-file=-
+
+   # Flask secret key (NEW - specific to GCRegister)
+   echo "y764wg_-y2PHggbnl_BPfUiZhxOhTZhXadhCkNMl3LM" | gcloud secrets create DATABASE_SECRET_KEY --project=telepay-459221 --data-file=-
+
+
+3. GRANT SERVICE ACCOUNT PERMISSIONS
+   ----------------------------------
+   The service account needs TWO critical roles:
+
+   # Grant Secret Manager access (fixes Permission denied errors)
+   gcloud projects add-iam-policy-binding telepay-459221 \
+       --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+       --role="roles/secretmanager.secretAccessor"
+
+   # Grant Cloud SQL Client access (for database connection)
+   gcloud projects add-iam-policy-binding telepay-459221 \
+       --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+       --role="roles/cloudsql.client"
+
+   # Verify permissions were granted
+   gcloud projects get-iam-policy telepay-459221 \
+       --flatten="bindings[].members" \
+       --filter="bindings.members:serviceAccount:291176869049-compute@developer.gserviceaccount.com"
+
+
+4. VERIFY CLOUD SQL INSTANCE IS RUNNING
+   -------------------------------------
+   gcloud sql instances describe telepaypsql --project=telepay-459221
+
+   # Status should show: RUNNABLE
+   # If not running, start it:
+   gcloud sql instances patch telepaypsql --activation-policy=ALWAYS --project=telepay-459221
+
+
+5. VERIFY DATABASE TABLE EXISTS
+   -----------------------------
+   The currency_to_network table MUST exist with 196 mappings for the
+   dynamic filtering to work. Connect to your database and verify:
+
+   gcloud sql connect telepaypsql --user=postgres --project=telepay-459221
+
+   # Run this query:
+   SELECT COUNT(*) FROM currency_to_network;
+
+   # Should return: 196
+
+   # If table doesn't exist, create it:
+   CREATE TABLE IF NOT EXISTS currency_to_network (
+       currency VARCHAR(6) NOT NULL,
+       network VARCHAR(8) NOT NULL,
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       PRIMARY KEY (currency, network)
+   );
+
+   # Insert all 196 mappings (see bottom of this file for full INSERT statement)
+
+
+===============================================================================
+🚀 DEPLOYMENT COMMAND
+===============================================================================
+
+Navigate to the GCRegister10-5 directory and run:
+
+cd /path/to/OCTOBER/10-18/GCRegister10-5
+
+gcloud run deploy gcregister10-23 \
+  --source . \
+  --region us-central1 \
+  --port 8080 \
+  --allow-unauthenticated \
+  --platform managed \
+  --memory 512Mi \
+  --cpu 1 \
+  --timeout 60 \
+  --max-instances 10 \
+  --min-instances 0 \
+  --service-account=291176869049-compute@developer.gserviceaccount.com \
+  --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
+  --set-env-vars CLOUD_SQL_CONNECTION_NAME="projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest" \
+  --set-env-vars DATABASE_NAME_SECRET="projects/291176869049/secrets/DATABASE_NAME/versions/latest" \
+  --set-env-vars DATABASE_USER_SECRET="projects/291176869049/secrets/DATABASE_USER/versions/latest" \
+  --set-env-vars DATABASE_PASSWORD_SECRET="projects/291176869049/secrets/DATABASE_PASSWORD/versions/latest" \
+  --set-env-vars DATABASE_SECRET_KEY="projects/291176869049/secrets/DATABASE_SECRET_KEY/versions/latest"
+
+IMPORTANT NOTES:
+• All "PROJECT_ID" placeholders have been replaced with "291176869049"
+• Secret names should match exactly (e.g., DATABASE_NAME not DATABASE_NAME_SECRET in Secret Manager)
+• The _SECRET suffix is only in the environment variable names, not the actual secret names
+
+
+===============================================================================
+✅ POST-DEPLOYMENT VERIFICATION
+===============================================================================
+
+1. CHECK DEPLOYMENT STATUS
+   -----------------------
+   gcloud run services describe gcregister10-23 \
+       --region us-central1 \
+       --project=telepay-459221 \
+       --format="value(status.url)"
+
+   # This will output your service URL
+
+
+2. TEST HEALTH ENDPOINT
+   --------------------
+   curl https://gcregister10-23-[HASH]-uc.a.run.app/health
+
+   Expected response:
+   {
+     "status": "healthy",
+     "service": "GCRegister10-5 Channel Registration",
+     "database": "connected"
+   }
+
+
+3. TEST CURRENCY-NETWORK API ENDPOINT (NEW)
+   ----------------------------------------
+   curl https://gcregister10-23-[HASH]-uc.a.run.app/api/currency-network-mappings
+
+   Expected response:
+   {
+     "success": true,
+     "data": {
+       "mappings": [...],
+       "network_to_currencies": {...},
+       "currency_to_networks": {...}
+     }
+   }
+
+
+4. VIEW DEPLOYMENT LOGS
+   --------------------
+   gcloud run services logs read gcregister10-23 \
+       --region us-central1 \
+       --project=telepay-459221 \
+       --limit 50
+
+   Look for these success indicators:
+   ✅ [CONFIG] Successfully fetched database name
+   ✅ [CONFIG] Successfully fetched database user
+   ✅ [CONFIG] Successfully fetched database password
+   ✅ [CONFIG] Successfully fetched Cloud SQL connection name
+   ✅ [DATABASE] DatabaseManager initialized with Cloud SQL Connector
+   ✅ [DATABASE] Connection established
+
+
+5. TEST THE REGISTRATION FORM
+   --------------------------
+   Visit: https://gcregister10-23-[HASH]-uc.a.run.app/
+
+   • Verify Network Type dropdown is populated (should show networks like ETH, BSC, SOL, etc.)
+   • Select a Network Type → Currency dropdown should filter
+   • Select a Currency → Network dropdown should filter
+   • Fill out form completely and submit
+   • Verify registration success page appears
+
+
+6. VERIFY DATABASE PERSISTENCE
+   ----------------------------
+   Connect to database and check the new registration:
+
+   gcloud sql connect telepaypsql --user=postgres --project=telepay-459221
+
+   SELECT
+       open_channel_id,
+       client_payout_currency,
+       client_payout_network,
+       created_at
+   FROM main_clients_database
+   ORDER BY created_at DESC
+   LIMIT 1;
+
+   # Should show both client_payout_currency AND client_payout_network
+
+
+===============================================================================
+🐛 TROUBLESHOOTING
+===============================================================================
+
+ERROR: "403 Permission denied - CONSUMER_INVALID"
+-------------------------------------------------
+CAUSE: Secret Manager API is not enabled for the project
+FIX: Run this command:
+     gcloud services enable secretmanager.googleapis.com --project=telepay-459221
+
+
+ERROR: "Error fetching database name: Permission denied"
+--------------------------------------------------------
+CAUSE: Service account lacks Secret Manager access
+FIX: Grant the secretAccessor role:
+     gcloud projects add-iam-policy-binding telepay-459221 \
+         --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+         --role="roles/secretmanager.secretAccessor"
+
+
+ERROR: "Cloud SQL Connector not available"
+------------------------------------------
+CAUSE: Missing --add-cloudsql-instances flag or wrong instance name
+FIX: Ensure deployment command includes:
+     --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql
+
+
+ERROR: "Failed to create database connection"
+---------------------------------------------
+CAUSE: Service account lacks Cloud SQL Client role
+FIX: Grant the cloudsql.client role:
+     gcloud projects add-iam-policy-binding telepay-459221 \
+         --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+         --role="roles/cloudsql.client"
+
+
+ERROR: "No mappings found" from /api/currency-network-mappings
+---------------------------------------------------------------
+CAUSE: currency_to_network table is empty or doesn't exist
+FIX: Run the INSERT statement at the bottom of this file to populate
+     the table with all 196 currency-network mappings
+
+
+ERROR: Network/Currency dropdowns are empty
+-------------------------------------------
+CAUSE: JavaScript failed to fetch mappings from API
+FIX:
+1. Open browser console (F12) and check for errors
+2. Verify API endpoint responds: curl [SERVICE_URL]/api/currency-network-mappings
+3. Check database has currency_to_network table with data
+
+
+ERROR: Form validation error on submit
+--------------------------------------
+CAUSE: client_payout_network field validation failing
+FIX: Ensure the form field has a valid network value selected
+     Check browser console for JavaScript errors
+
+
+===============================================================================
+📊 EXPECTED LOGS (Successful Deployment)
+===============================================================================
+
+Startup Logs:
+-------------
+🚀 [APP] Initializing GCRegister10-5 Channel Registration Service
+⚙️ [CONFIG] Initializing GCRegister10-5 configuration
+🔐 [CONFIG] Fetching database name
+✅ [CONFIG] Successfully fetched database name
+🔐 [CONFIG] Fetching database user
+✅ [CONFIG] Successfully fetched database user
+🔐 [CONFIG] Fetching database password
+✅ [CONFIG] Successfully fetched database password
+🔐 [CONFIG] Fetching Flask secret key
+✅ [CONFIG] Successfully fetched Flask secret key
+🔐 [CONFIG] Fetching Cloud SQL connection name
+✅ [CONFIG] Successfully fetched Cloud SQL connection name
+📊 [CONFIG] Configuration status:
+   Cloud SQL Instance: ✅
+   Database Name: ✅
+   Database User: ✅
+   Database Password: ✅
+   Secret Key: ✅
+🔗 [DATABASE] DatabaseManager initialized with Cloud SQL Connector
+🔗 [DATABASE] Instance: telepay-459221:us-central1:telepaypsql
+🔗 [DATABASE] Database: [your-db-name]
+✅ [APP] Database manager initialized successfully
+⚠️ [APP] Rate limiting is DISABLED for testing purposes
+
+API Request Logs:
+-----------------
+🔍 [APP] API request: /api/currency-network-mappings
+🔍 [DATABASE] Fetching currency-to-network mappings
+✅ [DATABASE] Fetched 196 currency-network mappings
+📊 [DATABASE] 35 unique networks
+📊 [DATABASE] 103 unique currencies
+✅ [APP] Returning 196 currency-network mappings
+
+Registration Logs:
+------------------
+📝 [APP] Registration page accessed - Method: POST
+✅ [APP] Form validation passed
+✅ [APP] CAPTCHA verified successfully
+📦 [APP] Prepared registration data for channel: -1001234567890
+🔍 [DATABASE] Checking uniqueness for open_channel_id: -1001234567890
+✅ [DATABASE] Channel ID -1001234567890 is unique
+✅ [DATABASE] Connection established
+📝 [DATABASE] Inserting new registration for channel: -1001234567890
+✅ [DATABASE] Successfully inserted registration for channel: -1001234567890
+📊 [DATABASE] Details: Test Channel -> Premium Test Channel
+💰 [DATABASE] Tiers: $9.99/30d, $24.99/90d, $49.99/365d
+🏦 [DATABASE] Wallet: 0x1234567890abcdef...
+🌐 [DATABASE] Payout: USDT on ETH network
+🔌 [DATABASE] Connection closed
+🎉 [APP] Registration successful for channel: -1001234567890
+
+
+===============================================================================
+📝 DATABASE SCHEMA UPDATE
+===============================================================================
+
+The main_clients_database table now includes:
+• client_payout_currency VARCHAR(6) - Existing field
+• client_payout_network VARCHAR(8) - NEW field (added in this update)
+
+If you need to add the column manually:
+
+ALTER TABLE main_clients_database
+ADD COLUMN IF NOT EXISTS client_payout_network VARCHAR(8);
+
+
+===============================================================================
+🔗 SERVICE INTEGRATION
+===============================================================================
+
+This service integrates with:
+
+1. TelePay10-16 - Reads client_payout_currency AND client_payout_network
+2. GCWebhook10-16 - Passes network through encrypted token
+3. GCSplit10-21 - Uses network from webhook (no database lookup)
+4. GCHostPay10-21 - Processes payouts using network information
+
+All services in the pipeline now use the network value from main_clients_database
+instead of looking it up from to_currency_to_network table.
+
+
+===============================================================================
+📊 CURRENCY-NETWORK TABLE DATA (196 Mappings)
+===============================================================================
+
+Run this SQL to populate the currency_to_network table:
+
+INSERT INTO currency_to_network (currency, network) VALUES
+  ('2Z','SOL'),
+  ('AAVE','BSC'),
+  ('AAVE','ETH'),
+  ('ADA','ADA'),
+  ('ADA','BSC'),
+  ('AERO','BASE'),
+  ('ALGO','ALGO'),
+  ('APT','APT'),
+  ('ARB','ARBITRUM'),
+  ('ARB','ETH'),
+  ('ASTER','BSC'),
+  ('ATOM','ATOM'),
+  ('ATOM','BSC'),
+  ('AVAX','BSC'),
+  ('AVAX','CCHAIN'),
+  ('AVAX','XCHAIN'),
+  ('BCH','BCH'),
+  ('BCH','BSC'),
+  ('BGB','ETH'),
+  ('BNB','BSC'),
+  ('BNB','OPBNB'),
+  ('BONK','BSC'),
+  ('BONK','SOL'),
+  ('BTC','BTC'),
+  ('CAKE','BSC'),
+  ('CFX','BSC'),
+  ('CRO','CRO'),
+  ('CRO','CROEVM'),
+  ('CRO','ETH'),
+  ('CRV','ARBITRUM'),
+  ('CRV','ETH'),
+  ('CRV','MATIC'),
+  ('CRV','OP'),
+  ('DAI','ARBITRUM'),
+  ('DAI','BSC'),
+  ('DAI','ETH'),
+  ('DAI','MATIC'),
+  ('DAI','OP'),
+  ('DEXE','ETH'),
+  ('DOGE','BSC'),
+  ('DOGE','DOGE'),
+  ('DOGE','ETH'),
+  ('DOT','BSC'),
+  ('DOT','DOT'),
+  ('ENA','ETH'),
+  ('ENS','ETH'),
+  ('ETC','BSC'),
+  ('ETC','ETC'),
+  ('ETH','ARBITRUM'),
+  ('ETH','BASE'),
+  ('ETH','BSC'),
+  ('ETH','ETH'),
+  ('ETH','LNA'),
+  ('ETH','MANTA'),
+  ('ETH','OP'),
+  ('ETH','STRK'),
+  ('ETH','ZKSYNC'),
+  ('ETHFI','ARBITRUM'),
+  ('ETHFI','ETH'),
+  ('FDUSD','BSC'),
+  ('FDUSD','ETH'),
+  ('FDUSD','SOL'),
+  ('FET','BSC'),
+  ('FET','ETH'),
+  ('FET','FET'),
+  ('FIL','BSC'),
+  ('FIL','FIL'),
+  ('FLOKI','BSC'),
+  ('FLOKI','ETH'),
+  ('FLR','FLR'),
+  ('GRT','ARBITRUM'),
+  ('GRT','ETH'),
+  ('GRT','MATIC'),
+  ('GT','ETH'),
+  ('HBAR','HBAR'),
+  ('IMX','ETH'),
+  ('INJ','BSC'),
+  ('INJ','ETH'),
+  ('INJ','INJ'),
+  ('IOTA','BSC'),
+  ('JUP','SOL'),
+  ('KAIA','KAIA'),
+  ('KAS','KAS'),
+  ('KCS','ETH'),
+  ('LDO','ARBITRUM'),
+  ('LDO','ETH'),
+  ('LEO','ETH'),
+  ('LINK','ARBITRUM'),
+  ('LINK','BSC'),
+  ('LINK','ETH'),
+  ('LINK','MATIC'),
+  ('LTC','BSC'),
+  ('LTC','LTC'),
+  ('MNT','ETH'),
+  ('MNT','MNT'),
+  ('MORPHO','ETH'),
+  ('MYX','BSC'),
+  ('NEAR','BSC'),
+  ('NEAR','NEAR'),
+  ('NEXO','ETH'),
+  ('NEXO','MATIC'),
+  ('OKB','ETH'),
+  ('ONDO','ETH'),
+  ('OP','OP'),
+  ('PAXG','ETH'),
+  ('PENGU','SOL'),
+  ('PEPE','ETH'),
+  ('POL','ETH'),
+  ('PUMP','BSC'),
+  ('PUMP','SOL'),
+  ('PYTH','SOL'),
+  ('PYUSD','ETH'),
+  ('PYUSD','SOL'),
+  ('QNT','ETH'),
+  ('RLUSD','ETH'),
+  ('SEI','SEI'),
+  ('SEI','SEIEVM'),
+  ('SHIB','BSC'),
+  ('SHIB','ETH'),
+  ('SKY','ETH'),
+  ('SOL','BSC'),
+  ('SOL','ETH'),
+  ('SOL','SOL'),
+  ('SPX','ETH'),
+  ('SPX','SOL'),
+  ('STX','STX'),
+  ('SUI','SUI'),
+  ('THETA','THETA'),
+  ('TIA','TIA'),
+  ('TON','BSC'),
+  ('TON','ETH'),
+  ('TON','TON'),
+  ('TRUMP','SOL'),
+  ('TRX','BSC'),
+  ('TRX','TRX'),
+  ('UNI','ARBITRUM'),
+  ('UNI','BSC'),
+  ('UNI','ETH'),
+  ('USD1','BSC'),
+  ('USD1','ETH'),
+  ('USD1','SOL'),
+  ('USD1','TRX'),
+  ('USDC','ALGO'),
+  ('USDC','ARBITRUM'),
+  ('USDC','AVAXC'),
+  ('USDC','BASE'),
+  ('USDC','BSC'),
+  ('USDC','CELO'),
+  ('USDC','ETH'),
+  ('USDC','MATIC'),
+  ('USDC','OP'),
+  ('USDC','SOL'),
+  ('USDE','BSC'),
+  ('USDE','ETH'),
+  ('USDE','TON'),
+  ('USDT','ARBITRUM'),
+  ('USDT','AVAXC'),
+  ('USDT','BASE'),
+  ('USDT','BSC'),
+  ('USDT','CELO'),
+  ('USDT','ETH'),
+  ('USDT','MATIC'),
+  ('USDT','OP'),
+  ('USDT','OPBNB'),
+  ('USDT','SOL'),
+  ('USDT','TON'),
+  ('USDT','TRX'),
+  ('VET','BSC'),
+  ('VET','VET'),
+  ('WLD','ETH'),
+  ('WLD','OP'),
+  ('WLFI','BSC'),
+  ('WLFI','ETH'),
+  ('WLFI','SOL'),
+  ('XAUT','ETH'),
+  ('XDC','XDC'),
+  ('XLM','XLM'),
+  ('XMR','XMR'),
+  ('XPL','BSC'),
+  ('XRP','BSC'),
+  ('XRP','XRP'),
+  ('XTZ','BSC'),
+  ('XTZ','XTZ'),
+  ('ZEC','BSC'),
+  ('ZEC','ZEC')
+ON CONFLICT (currency, network) DO NOTHING;
+
+COMMIT;
+
+
+===============================================================================
+📌 IMPORTANT REMINDERS
+===============================================================================
+
+1. Replace [HASH] in URLs with your actual Cloud Run service hash
+2. The service uses port 8080 internally (don't change this)
+3. Rate limiting is DISABLED for testing - enable in production by uncommenting
+   lines 41-48 and 235-242 in app.py
+4. All secrets must use project ID 291176869049 (NOT "PROJECT_ID" literal string)
+5. Test the bidirectional filtering thoroughly before production use
+6. Monitor logs for any JavaScript errors in browser console
+
+===============================================================================

@@ -1,0 +1,1073 @@
+================================================================================
+TELEGRAM CHANNEL INVITATION LINK WORKFLOW
+TelegramFunnel Payment System - October 2025
+================================================================================
+
+This document explains the complete workflow of how and when a user receives
+a one-time invitation link to a private Telegram channel after making a
+successful subscription payment.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Overview
+2. Complete Workflow Diagram
+3. Step-by-Step Process
+4. Trigger Points and Conditions
+5. Invitation Link Characteristics
+6. Confirmation and Timing
+7. Database Records
+8. Error Handling and Edge Cases
+9. Code References
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+The invitation link workflow is a SYNCHRONOUS process that occurs IMMEDIATELY
+after NowPayments confirms a successful payment. There is NO waiting period
+or manual confirmation required - the process is fully automated.
+
+Key Characteristics:
+- ✅ AUTOMATIC: No manual intervention required
+- ✅ IMMEDIATE: Invitation sent within seconds of payment confirmation
+- ✅ SYNCHRONOUS: All steps execute in sequence without delay
+- ✅ ONE-TIME USE: Invitation link expires after 1 hour and allows 1 member only
+- ✅ DIRECT MESSAGE: Invitation sent via Telegram DM to the user
+
+================================================================================
+2. COMPLETE WORKFLOW DIAGRAM
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: PAYMENT INITIATION (TelePay10-16 - Local Bot)                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+[User clicks subscription link]
+    ↓
+telegram.me/bot?start={encoded_token}
+    ↓
+/start command received by TelePay10-16
+    ↓
+menu_handlers.py:start_bot() [Line 73]
+    ↓ Parses token to extract:
+    ↓ - open_channel_id (base64 encoded)
+    ↓ - subscription_price (e.g., "15d00" = $15.00)
+    ↓ - subscription_time (e.g., 30 days)
+    ↓
+Sets global variables:
+    - self.global_open_channel_id = "-1001234567890"
+    - self.global_sub_value = 15.00
+    - self.global_sub_time = 30
+    ↓
+send_payment_gateway_ready() [Line 188]
+    ↓ Shows "Launch Payment Gateway" button
+    ↓
+[User clicks "Launch Payment Gateway" button]
+    ↓
+TRIGGER_PAYMENT callback received
+    ↓
+app_initializer.py:payment_gateway_wrapper() [Line 66]
+    ↓
+start_np_gateway.py:start_np_gateway_new() [Line 175]
+    ↓ Fetches from database:
+    ↓ - closed_channel_id (premium channel ID)
+    ↓ - client_wallet_address (for payment splitting)
+    ↓ - client_payout_currency (e.g., "USDT")
+    ↓ - closed_channel_title (for display)
+    ↓ - closed_channel_description (for display)
+    ↓
+secure_webhook.py:build_signed_success_url() [Line 71]
+    ↓ Creates encrypted token containing:
+    ↓ - user_id
+    ↓ - closed_channel_id
+    ↓ - wallet_address
+    ↓ - payout_currency
+    ↓ - subscription_time
+    ↓ - subscription_price
+    ↓ - timestamp (for expiration check)
+    ↓ - HMAC signature (for tamper prevention)
+    ↓
+    ↓ Returns: https://tph10-16-xxx.run.app?token={encrypted_data}
+    ↓
+start_np_gateway.py:create_payment_invoice() [Line 33]
+    ↓ Creates NowPayments invoice with:
+    ↓ - price_amount: $15.00
+    ↓ - price_currency: "USD"
+    ↓ - order_id: "PGP-{user_id}{open_channel_id}"
+    ↓ - success_url: {encrypted_success_url}
+    ↓
+NowPayments API responds with invoice_url
+    ↓
+User receives payment button in Telegram
+    ↓
+[User clicks payment button]
+    ↓
+NowPayments payment page opens in WebApp
+    ↓
+[User completes payment with cryptocurrency]
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: PAYMENT CONFIRMATION (NowPayments)                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+[User sends cryptocurrency to NowPayments address]
+    ↓
+NowPayments blockchain monitoring detects payment
+    ↓
+NowPayments waits for required confirmations
+    ↓
+Payment status changes to "finished"
+    ↓
+NowPayments redirects user's browser to success_url
+    ↓
+    ↓ GET Request:
+    ↓ https://tph10-16-xxx.run.app?token={encrypted_data}
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: INVITATION LINK GENERATION (GCWebhook10-16)                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+GCWebhook10-16 (tph10-16.py) receives GET request [Line 520]
+    ↓
+Extracts token from URL query parameter [Line 523]
+    ↓
+Fetches secrets from Google Secret Manager [Line 528-529]:
+    - bot_token (Telegram bot API token)
+    - signing_key (for token verification)
+    ↓
+decode_and_verify_token() [Line 86]
+    ↓ Decrypts token and verifies:
+    ↓ ✅ HMAC signature matches (prevents tampering)
+    ↓ ✅ Timestamp within 2-hour window (prevents replay attacks)
+    ↓ ✅ Base64 decoding successful
+    ↓ ✅ Token structure valid
+    ↓
+    ↓ Returns extracted data:
+    ↓ - user_id: 1234567890
+    ↓ - closed_channel_id: -1001234567891
+    ↓ - wallet_address: "0xBc29Be20D4F90cF94f994cfADCf24742118C0Fe5"
+    ↓ - payout_currency: "USDT"
+    ↓ - subscription_time_days: 30
+    ↓ - subscription_price: "15.00"
+    ↓
+calculate_expiration_time() [Line 56]
+    ↓ Calculates subscription expiration:
+    ↓ - expire_time: "22:30:45" (HH:MM:SS)
+    ↓ - expire_date: "2025-11-22" (YYYY-MM-DD)
+    ↓
+record_private_channel_user() [Line 342]
+    ↓ Inserts/updates database record:
+    ↓ - Table: private_channel_users_database
+    ↓ - Fields:
+    ↓   * user_id: 1234567890
+    ↓   * private_channel_id: -1001234567891
+    ↓   * sub_time: 30 (minutes for testing, days in production)
+    ↓   * sub_price: "15.00"
+    ↓   * timestamp: "22:30:45"
+    ↓   * datestamp: "2025-10-22"
+    ↓   * expire_time: "22:30:45"
+    ↓   * expire_date: "2025-11-22"
+    ↓   * is_active: True
+    ↓
+    ↓ Database operation completes [Line 411]
+    ↓
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: INVITATION LINK DELIVERY (IMMEDIATE)                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+✨ THIS IS WHERE THE INVITATION IS SENT - NO DELAY, NO CONFIRMATION NEEDED ✨
+
+bot.create_chat_invite_link() [Line 584-588]
+    ↓ Parameters:
+    ↓ - chat_id: closed_channel_id (-1001234567891)
+    ↓ - expire_date: current_time + 3600 seconds (1 hour)
+    ↓ - member_limit: 1 (single-use link)
+    ↓
+    ↓ Telegram API creates invite link
+    ↓ Returns: ChatInviteLink object
+    ↓   - invite_link: "https://t.me/+AbCdEfGhIjKlMn"
+    ↓   - expire_date: 1730845245
+    ↓   - member_limit: 1
+    ↓
+bot.send_message() [Line 589-597]
+    ↓ Sends direct message to user:
+    ↓
+    ↓ "✅ You've been granted access!
+    ↓  Here is your one-time invite link:
+    ↓  https://t.me/+AbCdEfGhIjKlMn"
+    ↓
+    ↓ Message sent to: user_id (1234567890)
+    ↓ Parse mode: Plain text
+    ↓ Web preview: Disabled
+    ↓
+✅ USER RECEIVES INVITATION LINK IN TELEGRAM DM (IMMEDIATELY)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: PAYMENT SPLITTING (PARALLEL - NON-BLOCKING)                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+trigger_payment_split_webhook() [Line 434]
+    ↓ Sends webhook to GCSplit10-21:
+    ↓ POST https://tps10-21-xxx.run.app
+    ↓ Payload:
+    ↓ {
+    ↓   "user_id": 1234567890,
+    ↓   "closed_channel_id": -1001234567891,
+    ↓   "wallet_address": "0xBc29...",
+    ↓   "payout_currency": "USDT",
+    ↓   "sub_price": "15.00",
+    ↓   "timestamp": 1730841645
+    ↓ }
+    ↓
+GCSplit10-21 processes payment splitting (separate service)
+    ↓
+GCHostPay10-21 sends ETH payment (separate service)
+    ↓
+ChangeNow converts to client currency (separate service)
+
+NOTE: Payment splitting runs in parallel and does NOT affect the invitation
+      link delivery. The user receives their invitation immediately, while
+      the payment splitting happens in the background.
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PHASE 6: USER ACCESSES CHANNEL (USER ACTION)                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+[User clicks invitation link in Telegram]
+    ↓
+Telegram validates invite link:
+    ✅ Link not expired (within 1 hour)
+    ✅ Link not already used (member_limit: 1)
+    ✅ User not already a member
+    ↓
+Telegram adds user to private channel
+    ↓
+User can now view private channel content
+
+
+================================================================================
+3. STEP-BY-STEP PROCESS (DETAILED)
+================================================================================
+
+STEP 1: TOKEN GENERATION (Before Payment)
+------------------------------------------
+Location: TelePay10-16/secure_webhook.py:build_signed_success_url()
+Time: When user clicks "Launch Payment Gateway"
+
+Process:
+1. Fetch closed_channel_id from database using open_channel_id
+2. Fetch wallet_address and payout_currency from database
+3. Create binary packed data structure:
+   - 6 bytes: user_id (48-bit integer)
+   - 6 bytes: closed_channel_id (48-bit integer)
+   - 2 bytes: timestamp_minutes (current_time / 60 % 65536)
+   - 2 bytes: subscription_time_days
+   - 1 byte + N bytes: subscription_price length + price string
+   - 1 byte + M bytes: wallet_address length + address string
+   - 1 byte + P bytes: payout_currency length + currency string
+4. Generate HMAC-SHA256 signature of packed data
+5. Truncate signature to first 16 bytes
+6. Combine packed_data + signature
+7. Base64 URL-safe encode
+8. Build URL: https://tph10-16-xxx.run.app?token={encoded_data}
+
+Output: Cryptographically signed URL embedded in NowPayments invoice
+
+
+STEP 2: PAYMENT COMPLETION (User Action)
+-----------------------------------------
+Location: NowPayments platform
+Time: When user sends cryptocurrency
+
+Process:
+1. User selects cryptocurrency (BTC, ETH, USDT, etc.)
+2. NowPayments generates deposit address
+3. User sends crypto to deposit address
+4. NowPayments monitors blockchain for transaction
+5. NowPayments waits for required confirmations
+6. Payment status changes: waiting → confirming → finished
+7. NowPayments redirects user to success_url with token
+
+
+STEP 3: TOKEN VERIFICATION (Automatic)
+---------------------------------------
+Location: GCWebhook10-16/tph10-16.py:decode_and_verify_token()
+Time: IMMEDIATELY when redirect occurs
+
+Process:
+1. Extract token from URL query parameter
+2. Add base64 padding if needed
+3. Base64 URL-safe decode to binary
+4. Verify minimum size (36 bytes)
+5. Parse fixed fields:
+   - Bytes 0-5: user_id
+   - Bytes 6-11: closed_channel_id
+   - Bytes 12-13: timestamp_minutes
+   - Bytes 14-15: subscription_time_days
+6. Parse variable fields:
+   - Read price_length (1 byte) + price (N bytes)
+   - Read wallet_length (1 byte) + wallet (M bytes)
+   - Read currency_length (1 byte) + currency (P bytes)
+7. Extract signature (last 16 bytes)
+8. Verify HMAC signature matches expected value
+9. Verify timestamp within valid window (now - 7200 to now + 300)
+
+Security Checks:
+✅ Signature mismatch → Reject (prevents tampering)
+✅ Timestamp expired → Reject (prevents replay attacks)
+✅ Invalid structure → Reject (prevents malformed data)
+
+Output: Verified user_id, closed_channel_id, and subscription data
+
+
+STEP 4: DATABASE RECORD (Automatic)
+------------------------------------
+Location: GCWebhook10-16/tph10-16.py:record_private_channel_user()
+Time: IMMEDIATELY after token verification
+
+Process:
+1. Get current timestamp: get_current_timestamp() → "22:30:45"
+2. Get current datestamp: get_current_datestamp() → "2025-10-22"
+3. Calculate expiration: calculate_expiration_time(sub_time_minutes)
+   - Input: 30 minutes (or days in production)
+   - Output: expire_time="23:00:45", expire_date="2025-10-22"
+4. Attempt UPDATE query:
+   ```sql
+   UPDATE private_channel_users_database
+   SET sub_time = %s, sub_price = %s, timestamp = %s, datestamp = %s,
+       is_active = %s, expire_time = %s, expire_date = %s
+   WHERE user_id = %s AND private_channel_id = %s
+   ```
+5. If UPDATE affects 0 rows (no existing record):
+   Execute INSERT query:
+   ```sql
+   INSERT INTO private_channel_users_database
+   (private_channel_id, user_id, sub_time, sub_price, timestamp,
+    datestamp, expire_time, expire_date, is_active)
+   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+   ```
+6. Commit transaction
+
+Database State: User subscription recorded with expiration time
+
+
+STEP 5: INVITATION LINK CREATION (IMMEDIATE - NO DELAY)
+--------------------------------------------------------
+Location: GCWebhook10-16/tph10-16.py:send_invite() → bot.create_chat_invite_link()
+Time: IMMEDIATELY after database record (within same request)
+
+⚠️ CRITICAL: This happens SYNCHRONOUSLY - no waiting, no confirmation needed ⚠️
+
+Process:
+1. Initialize Telegram Bot with bot_token
+2. Create async function run_invite()
+3. Call bot.create_chat_invite_link():
+   Parameters:
+   - chat_id: closed_channel_id (-1001234567891)
+   - expire_date: int(time.time()) + 3600 (1 hour from now)
+   - member_limit: 1 (single-use link)
+4. Telegram API creates invite link
+5. Telegram API returns ChatInviteLink object:
+   ```python
+   ChatInviteLink(
+       invite_link="https://t.me/+AbCdEfGhIjKlMn",
+       creator=Bot(...),
+       creates_join_request=False,
+       is_primary=False,
+       is_revoked=False,
+       name=None,
+       expire_date=datetime(2025, 10, 22, 23, 30, 45),
+       member_limit=1,
+       pending_join_request_count=None
+   )
+   ```
+
+Invite Link Characteristics:
+- Format: https://t.me/+{random_alphanumeric}
+- Expiration: 1 hour (3600 seconds)
+- Member limit: 1 (can only be used once)
+- Revocable: Yes (if needed)
+- Creates join request: No (instant access)
+
+
+STEP 6: INVITATION DELIVERY (IMMEDIATE - NO DELAY)
+---------------------------------------------------
+Location: GCWebhook10-16/tph10-16.py:send_invite() → bot.send_message()
+Time: IMMEDIATELY after invite link creation (within same request)
+
+⚠️ CRITICAL: This happens SYNCHRONOUSLY within the same request ⚠️
+
+Process:
+1. Call bot.send_message():
+   Parameters:
+   - chat_id: user_id (1234567890)
+   - text: "✅ You've been granted access!\nHere is your one-time invite link:\n{invite_link}"
+   - disable_web_page_preview: True
+2. Telegram API delivers message to user
+3. User receives message in their Telegram DM
+
+Message Format:
+```
+✅ You've been granted access!
+Here is your one-time invite link:
+https://t.me/+AbCdEfGhIjKlMn
+```
+
+Delivery Time: INSTANT (within 1-2 seconds of payment confirmation)
+
+User Experience:
+1. User completes payment on NowPayments
+2. User is redirected to success page
+3. User receives Telegram message with invite link (IMMEDIATE)
+4. Total time from payment to invite: 1-5 seconds
+
+
+STEP 7: PAYMENT SPLITTING (PARALLEL - NON-BLOCKING)
+----------------------------------------------------
+Location: GCWebhook10-16/tph10-16.py:trigger_payment_split_webhook()
+Time: AFTER invitation is sent (parallel process)
+
+⚠️ IMPORTANT: This runs AFTER the user receives their invite link ⚠️
+
+Process:
+1. Fetch TPS_WEBHOOK_URL from Secret Manager
+2. Fetch SUCCESS_URL_SIGNING_KEY from Secret Manager
+3. Prepare webhook payload:
+   ```json
+   {
+     "user_id": 1234567890,
+     "closed_channel_id": -1001234567891,
+     "wallet_address": "0xBc29Be20D4F90cF94f994cfADCf24742118C0Fe5",
+     "payout_currency": "USDT",
+     "sub_price": "15.00",
+     "timestamp": 1730841645
+   }
+   ```
+4. Generate HMAC-SHA256 signature of payload
+5. Send POST request to GCSplit10-21:
+   - URL: https://tps10-21-xxx.run.app
+   - Headers: X-Webhook-Signature
+   - Body: JSON payload
+6. GCSplit10-21 processes payment splitting
+7. GCHostPay10-21 sends ETH payment
+8. ChangeNow converts to client currency
+
+Status: Non-blocking - user invitation is NOT affected by this
+
+
+================================================================================
+4. TRIGGER POINTS AND CONDITIONS
+================================================================================
+
+PRIMARY TRIGGER: NowPayments Success Redirect
+----------------------------------------------
+What triggers the invitation process:
+✅ NowPayments payment status changes to "finished"
+✅ NowPayments redirects user to success_url
+✅ GET request received by GCWebhook10-16 (tph10-16.py)
+
+Conditions that MUST be met:
+✅ Token signature is valid (HMAC-SHA256 verification passes)
+✅ Token timestamp is within 2-hour window
+✅ Token structure is valid (minimum 36 bytes)
+✅ user_id is extractable from token
+✅ closed_channel_id is extractable from token
+✅ Telegram bot has admin access to closed channel
+✅ Telegram bot token is available from Secret Manager
+
+Conditions that are NOT required:
+❌ No manual approval needed
+❌ No waiting period
+❌ No email verification
+❌ No additional user action
+❌ Payment splitting completion (runs in parallel)
+
+
+FAILURE CONDITIONS (Invitation NOT sent)
+-----------------------------------------
+The invitation will NOT be sent if:
+
+1. Token Verification Fails:
+   - Invalid HMAC signature → User sees error page
+   - Expired timestamp (>2 hours old) → User sees error page
+   - Malformed token structure → User sees error page
+
+2. Secret Manager Issues:
+   - Bot token not available → 500 error returned
+   - Signing key not available → 500 error returned
+
+3. Telegram API Issues:
+   - Bot lacks admin permissions in channel → Telegram API error
+   - Invalid channel ID → Telegram API error
+   - User blocked the bot → Telegram API error (invite created but not delivered)
+
+4. Database Issues (NON-FATAL):
+   - Database connection fails → Invite still sent (logged as warning)
+   - Database insert fails → Invite still sent (logged as warning)
+
+   ⚠️ Note: Database failures do NOT prevent invitation delivery
+            The user will receive the invite even if database logging fails
+
+
+NO CONFIRMATION REQUIRED
+-------------------------
+The invitation link is sent WITHOUT any confirmation:
+
+❌ No email confirmation
+❌ No phone verification
+❌ No admin approval
+❌ No KYC verification
+❌ No waiting period
+❌ No manual review
+
+The process is FULLY AUTOMATED and IMMEDIATE.
+
+
+================================================================================
+5. INVITATION LINK CHARACTERISTICS
+================================================================================
+
+TECHNICAL SPECIFICATIONS
+-------------------------
+Format: https://t.me/+{random_alphanumeric_string}
+Example: https://t.me/+AbCdEfGhIjKlMn
+
+Generation Method: Telegram Bot API
+API Call: bot.create_chat_invite_link()
+Documentation: https://core.telegram.org/bots/api#createchatinvitelink
+
+Expiration Time: 1 hour (3600 seconds) from creation
+Code Reference: tph10-16.py:586
+```python
+invite = await bot.create_chat_invite_link(
+    chat_id=closed_channel_id,
+    expire_date=int(time.time()) + 3600,  # ← 1 hour expiration
+    member_limit=1  # ← Single-use only
+)
+```
+
+Member Limit: 1 (single-use link)
+- After first user joins, link becomes invalid
+- Prevents link sharing/reselling
+- Each payment generates a unique link
+
+
+USAGE RESTRICTIONS
+------------------
+✅ Can be used once by any user
+✅ Expires 1 hour after creation
+✅ Cannot be used after expiration
+✅ Cannot be used after member joins
+✅ Can be revoked manually if needed
+
+❌ Cannot be shared (becomes invalid after first use)
+❌ Cannot be used multiple times
+❌ Cannot be extended after expiration
+
+
+LINK DELIVERY METHOD
+--------------------
+Delivery Channel: Telegram Direct Message (DM)
+Recipient: user_id extracted from payment token
+Format: Plain text message with clickable link
+
+Message Template:
+```
+✅ You've been granted access!
+Here is your one-time invite link:
+https://t.me/+AbCdEfGhIjKlMn
+```
+
+Delivery Time: IMMEDIATE (1-5 seconds after payment)
+Retry Logic: None (single attempt)
+Error Handling: Logs error but does not retry
+
+User Experience:
+1. User completes payment
+2. User sees success page in browser
+3. User receives Telegram notification (instant)
+4. User clicks link in Telegram
+5. User is added to private channel
+
+
+SECURITY FEATURES
+-----------------
+✅ Time-based expiration (1 hour)
+✅ Single-use restriction (member_limit: 1)
+✅ Cannot be guessed (cryptographically random)
+✅ Cannot be reused after expiration
+✅ Cannot be shared effectively
+✅ Can be revoked by bot admin
+
+
+================================================================================
+6. CONFIRMATION AND TIMING
+================================================================================
+
+DOES THE INVITATION AWAIT CONFIRMATION?
+---------------------------------------
+**NO** - The invitation link is sent IMMEDIATELY without any confirmation.
+
+The workflow is SYNCHRONOUS and AUTOMATIC:
+
+Payment Confirmed → Token Verified → Database Updated → Invite Created → Invite Sent
+        ↓                  ↓               ↓                ↓              ↓
+    < 1 second        < 1 second      < 1 second      < 1 second     < 1 second
+
+Total Time: 1-5 seconds from payment confirmation to invitation delivery
+
+
+TIMING BREAKDOWN
+----------------
+
+1. NowPayments Redirect: < 1 second
+   - Browser redirects to success_url
+   - GET request reaches tph10-16 service
+
+2. Token Verification: < 1 second
+   - Base64 decoding
+   - HMAC signature verification
+   - Timestamp validation
+   - Data extraction
+
+3. Database Recording: < 1 second
+   - Cloud SQL connection via Cloud SQL Connector
+   - UPDATE or INSERT query execution
+   - Transaction commit
+
+4. Invitation Creation: < 1 second
+   - Telegram Bot API call
+   - Telegram generates invite link
+   - API returns ChatInviteLink object
+
+5. Invitation Delivery: < 1 second
+   - Telegram Bot API send_message call
+   - Telegram delivers message to user
+   - User receives notification
+
+Total Time: **1-5 seconds** (typically 2-3 seconds)
+
+
+WHAT HAPPENS IN SEQUENCE
+-------------------------
+
+Request arrives at tph10-16:
+    ↓ [0.1s] Token extraction from URL
+    ↓ [0.2s] Secret Manager: Fetch bot_token
+    ↓ [0.2s] Secret Manager: Fetch signing_key
+    ↓ [0.3s] Token decoding and verification
+    ↓ [0.1s] Calculate expiration times
+    ↓ [0.5s] Database: Insert/update subscription record
+    ↓ [0.3s] Telegram API: Create invite link
+    ↓ [0.3s] Telegram API: Send message with link
+    ↓ [0.5s] Trigger payment split webhook (non-blocking)
+    ↓ [0.1s] Return HTTP 200 response
+
+Total: ~2.6 seconds (typical)
+
+User Experience: INSTANT DELIVERY
+
+
+PARALLEL OPERATIONS
+-------------------
+While the invitation is being sent, these operations run in parallel:
+
+✅ Invitation Link Creation (BLOCKING - must complete)
+✅ Invitation Message Delivery (BLOCKING - must complete)
+⚠️ Payment Splitting Webhook (NON-BLOCKING - continues after invite sent)
+⚠️ ChangeNow Conversion (NON-BLOCKING - happens later)
+⚠️ ETH Transfer (NON-BLOCKING - happens later)
+
+The user receives their invitation BEFORE payment splitting completes.
+
+
+FAILURE SCENARIOS
+-----------------
+
+Scenario 1: Database Insert Fails
+Result: Invitation STILL SENT (non-fatal error)
+Code: tph10-16.py:576-578
+```python
+except Exception as e:
+    print(f"❌ [ERROR] Database error (non-fatal): {e}")
+    print(f"⚠️ [WARNING] User {user_id} will receive invite but subscription recording failed")
+```
+
+Scenario 2: Telegram API Timeout
+Result: Error logged, HTTP 500 returned, user may need to contact support
+Code: tph10-16.py:618-630
+
+Scenario 3: Payment Splitting Webhook Fails
+Result: Invitation ALREADY SENT, payment splitting logged as warning
+Code: tph10-16.py:614-616
+
+
+NO MANUAL STEPS REQUIRED
+-------------------------
+✅ No admin approval
+✅ No email confirmation
+✅ No phone verification
+✅ No manual review
+✅ No waiting queue
+✅ No business hours restriction (24/7 automatic)
+✅ No rate limiting on invitations
+
+
+================================================================================
+7. DATABASE RECORDS
+================================================================================
+
+PRIMARY TABLE: private_channel_users_database
+----------------------------------------------
+Purpose: Track active subscriptions and expiration times
+
+Schema:
+```sql
+CREATE TABLE private_channel_users_database (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    private_channel_id BIGINT NOT NULL,
+    sub_time INTEGER NOT NULL,           -- Subscription duration (days)
+    sub_price VARCHAR(10) NOT NULL,      -- Subscription price (e.g., "15.00")
+    timestamp TIME NOT NULL,             -- Subscription start time (HH:MM:SS)
+    datestamp DATE NOT NULL,             -- Subscription start date (YYYY-MM-DD)
+    expire_time TIME NOT NULL,           -- Subscription end time (HH:MM:SS)
+    expire_date DATE NOT NULL,           -- Subscription end date (YYYY-MM-DD)
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE(user_id, private_channel_id)  -- One active subscription per user/channel
+);
+```
+
+Insertion Logic: tph10-16.py:record_private_channel_user() [Line 342]
+
+Process:
+1. Attempt UPDATE if record exists (user_id + private_channel_id)
+2. If UPDATE affects 0 rows, execute INSERT
+3. Commit transaction
+
+Example Record:
+```
+id: 1
+user_id: 1234567890
+private_channel_id: -1001234567891
+sub_time: 30
+sub_price: "15.00"
+timestamp: "22:30:45"
+datestamp: "2025-10-22"
+expire_time: "23:00:45"
+expire_date: "2025-10-22"
+is_active: true
+```
+
+Usage:
+- subscription_manager.py monitors is_active and expire_date/expire_time
+- Automatically revokes access when subscription expires
+- Updates is_active = false when expired
+
+
+TIMING OF DATABASE INSERT
+--------------------------
+When: BEFORE invitation link is created
+Why: Ensures subscription is recorded even if invitation fails
+Status: BLOCKING (must complete before proceeding)
+
+Code Flow:
+```python
+# Step 1: Record subscription (BLOCKING)
+success = record_private_channel_user(...)  # Line 559
+
+# Step 2: Only proceed if database recording succeeded OR failed non-fatally
+if success:
+    print("Database recording succeeded")
+else:
+    print("Database recording failed (non-fatal)")
+
+# Step 3: Send invitation (proceeds regardless of database status)
+invite = await bot.create_chat_invite_link(...)  # Line 584
+```
+
+
+SUBSCRIPTION MONITORING
+-----------------------
+Service: TelePay10-16/subscription_manager.py
+Process: start_monitoring()
+
+Background Task:
+1. Runs every 60 seconds (configurable)
+2. Queries private_channel_users_database for expired subscriptions
+3. Finds records where:
+   - is_active = true
+   - expire_date + expire_time < current_datetime
+4. For each expired subscription:
+   - Removes user from private channel (bot.ban_chat_member + unban)
+   - Updates is_active = false
+   - Logs action
+
+Result: Automatic access revocation when subscription expires
+
+
+================================================================================
+8. ERROR HANDLING AND EDGE CASES
+================================================================================
+
+EDGE CASE 1: User Already in Channel
+-------------------------------------
+Scenario: User pays for subscription but is already a member
+Result: Invitation link still created and sent (Telegram handles duplicate join)
+Telegram Behavior: Shows "You're already a member" message
+Database: Subscription expiration extended
+
+Code: No special handling needed - Telegram manages this
+
+
+EDGE CASE 2: Bot Lacks Admin Permissions
+-----------------------------------------
+Scenario: Bot is not admin in closed channel
+Result: Telegram API error when creating invite link
+Error: "Bot is not an administrator in the chat"
+HTTP Response: 500 Internal Server Error
+User Experience: Error message, may need to contact support
+
+Code: tph10-16.py:618-630 (exception handler)
+
+Prevention: Ensure bot has admin permissions before deploying
+
+
+EDGE CASE 3: User Blocked Bot
+------------------------------
+Scenario: User previously blocked the Telegram bot
+Result: Invite link created but message delivery fails
+Error: "Bot was blocked by the user"
+HTTP Response: 500 Internal Server Error (currently)
+Invitation: Created but not delivered
+
+Improvement Opportunity: Could catch this specific exception and return
+                        a custom message to display on success page
+
+
+EDGE CASE 4: Token Replayed After Expiration
+---------------------------------------------
+Scenario: Attacker tries to reuse old success_url token
+Result: Token verification fails (timestamp check)
+Error: "Token expired or not yet valid"
+HTTP Response: 400 Bad Request
+
+Code: tph10-16.py:202-203
+```python
+if not (now - 7200 <= timestamp <= now + 300):
+    raise ValueError("Token expired or not yet valid")
+```
+
+Security: Prevents replay attacks with 2-hour window
+
+
+EDGE CASE 5: Database Connection Failure
+-----------------------------------------
+Scenario: Cloud SQL connection fails or times out
+Result: Database error logged as non-fatal, invitation STILL SENT
+Reasoning: Better to grant access and fail database logging than to block user
+
+Code: tph10-16.py:576-578
+```python
+except Exception as e:
+    print(f"❌ [ERROR] Database error (non-fatal): {e}")
+    print(f"⚠️ [WARNING] User {user_id} will receive invite but subscription recording failed")
+```
+
+Impact: User gets access but subscription may not be tracked correctly
+Manual Fix: Admin can manually add database record using user_id and closed_channel_id
+
+
+EDGE CASE 6: Payment Splitting Webhook Fails
+---------------------------------------------
+Scenario: GCSplit10-21 is down or unreachable
+Result: User gets invitation, webhook failure logged as warning
+Impact: User has channel access, but client payout may not process
+
+Code: tph10-16.py:614-616
+```python
+except Exception as webhook_error:
+    print(f"❌ [PAYMENT_SPLITTING] Error in payment splitting webhook: {webhook_error}")
+    # Don't fail the main process if webhook fails
+```
+
+Recovery: Payment splitting can be retried manually or automatically
+
+
+EDGE CASE 7: Concurrent Payments by Same User
+----------------------------------------------
+Scenario: User makes multiple payments before first invitation arrives
+Result: Each payment generates a separate invitation link
+Database: UNIQUE constraint ensures only one active subscription per user/channel
+Behavior: UPDATE query extends expiration time on subsequent payments
+
+Code: tph10-16.py:382-408 (UPDATE before INSERT pattern)
+
+
+ERROR LOGGING PATTERNS
+----------------------
+The codebase uses emoji-based logging for easy visual scanning:
+
+✅ [INFO] - Successful operations
+❌ [ERROR] - Fatal errors
+⚠️ [WARNING] - Non-fatal errors
+🔍 [DEBUG] - Debug information
+💰 [INFO] - Financial operations
+🔐 [INFO] - Security operations
+📦 [DEBUG] - Data structures
+🆔 [DEBUG] - Identifiers
+🏦 [DEBUG] - Wallet/address operations
+📊 [INFO] - Statistics/calculations
+⏰ [DEBUG] - Timestamp operations
+🎉 [DEBUG] - Success celebrations
+
+Example:
+```python
+print(f"✅ [INFO] Successfully decoded token - User: {user_id}, Channel: {closed_channel_id}")
+print(f"❌ [ERROR] Database error recording private channel user: {e}")
+print(f"⚠️ [WARNING] User {user_id} will receive invite but subscription recording failed")
+```
+
+
+================================================================================
+9. CODE REFERENCES
+================================================================================
+
+PRIMARY FILES
+-------------
+
+1. TelePay10-16/menu_handlers.py
+   - Line 73: start_bot() - Parses subscription token
+   - Line 188: send_payment_gateway_ready() - Shows payment button
+
+2. TelePay10-16/start_np_gateway.py
+   - Line 33: create_payment_invoice() - Creates NowPayments invoice
+   - Line 106: start_payment_flow() - Orchestrates payment flow
+   - Line 175: start_np_gateway_new() - Legacy wrapper function
+
+3. TelePay10-16/secure_webhook.py
+   - Line 71: build_signed_success_url() - Generates encrypted token
+   - Line 38: fetch_webhook_base_url() - Fetches tph10-16 URL
+
+4. GCWebhook10-16/tph10-16.py
+   - Line 520: send_invite() - Main webhook handler (Flask route)
+   - Line 86: decode_and_verify_token() - Decrypts and verifies token
+   - Line 56: calculate_expiration_time() - Calculates subscription end
+   - Line 342: record_private_channel_user() - Inserts database record
+   - Line 584: bot.create_chat_invite_link() - Creates Telegram invite
+   - Line 589: bot.send_message() - Sends invite to user
+   - Line 434: trigger_payment_split_webhook() - Triggers payment splitting
+
+
+CONFIGURATION FILES
+-------------------
+
+1. ENVIRONMENT_VARIABLES.txt
+   - Documents all required environment variables
+   - Lists Secret Manager paths
+
+2. SUCCESS_URL_FLOW_EXPLANATION.txt
+   - Explains success_url generation process
+   - Documents token structure
+
+3. GOOGLE_CLOUD_RUN_DEPLOYMENT.txt
+   - Deployment commands for Cloud Run services
+   - Service URLs and configurations
+
+
+KEY ENVIRONMENT VARIABLES
+--------------------------
+
+TelePay10-16 (Local Bot):
+- TELEGRAM_BOT_SECRET_NAME: Bot API token
+- SUCCESS_URL_SIGNING_KEY: HMAC signing key
+- WEBHOOK_BASE_URL: tph10-16 service URL
+- DATABASE_HOST_SECRET: PostgreSQL host
+- DATABASE_NAME_SECRET: Database name
+- DATABASE_USER_SECRET: Database user
+- DATABASE_PASSWORD_SECRET: Database password
+
+GCWebhook10-16 (Cloud Run):
+- TELEGRAM_BOT_SECRET_NAME: Bot API token (for sending invites)
+- SUCCESS_URL_SIGNING_KEY: HMAC signing key (for verifying tokens)
+- TPS_WEBHOOK_URL: GCSplit10-21 service URL
+- DATABASE_NAME_SECRET: Database name
+- DATABASE_USER_SECRET: Database user
+- DATABASE_PASSWORD_SECRET: Database password
+- CLOUD_SQL_CONNECTION_NAME: Cloud SQL instance connection
+
+
+DEPLOYMENT URLS
+---------------
+
+Production Services:
+- GCWebhook10-16: https://tph10-16-291176869049.us-central1.run.app
+- GCSplit10-21: https://tps10-21-291176869049.us-central1.run.app
+- GCHostPay10-21: https://tphp10-21-291176869049.us-central1.run.app
+
+Test with:
+```bash
+curl https://tph10-16-291176869049.us-central1.run.app/health
+```
+
+
+================================================================================
+10. SUMMARY
+================================================================================
+
+INVITATION LINK WORKFLOW: IMMEDIATE AND AUTOMATIC
+--------------------------------------------------
+
+✅ TRIGGER: NowPayments payment completion redirect
+✅ TIMING: 1-5 seconds from payment to invitation delivery
+✅ PROCESS: Fully automatic, no manual steps required
+✅ CONFIRMATION: None needed - immediate delivery
+✅ DELIVERY: Telegram direct message to user
+✅ EXPIRATION: 1 hour from creation
+✅ USAGE: Single-use only (member_limit: 1)
+✅ SECURITY: Cryptographically signed tokens, HMAC verification
+
+The workflow is designed for INSTANT GRATIFICATION:
+- User pays → User receives invite IMMEDIATELY
+- No waiting, no approval, no confirmation
+- Entire process completes in 1-5 seconds
+- Payment splitting happens in background (non-blocking)
+
+The user experience is seamless:
+1. Click payment link in Telegram
+2. Complete cryptocurrency payment
+3. See success page in browser
+4. Receive invitation link in Telegram (INSTANT)
+5. Click link and join private channel
+
+Total time from "Pay" button to channel access: < 10 seconds
+
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
+
+Generated: October 2025
+Last Updated: 2025-10-23
+Version: 10-18
+For: TelegramFunnel Payment System
+
+Related Documentation:
+- SUCCESS_URL_FLOW_EXPLANATION.txt - Token generation details
+- ENVIRONMENT_VARIABLES.txt - Configuration reference
+- GOOGLE_CLOUD_RUN_DEPLOYMENT.txt - Deployment guide
+
+For support or questions about the invitation workflow, review:
+- GCWebhook10-16/tph10-16.py (main invitation logic)
+- TelePay10-16/secure_webhook.py (token generation)
+- TelePay10-16/start_np_gateway.py (payment flow)
+
+================================================================================

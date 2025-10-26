@@ -1,0 +1,684 @@
+================================================================================
+ENVIRONMENT VARIABLES ANALYSIS - OCTOBER 10-16
+Complete Breakdown by Folder and Redundancy Detection
+================================================================================
+
+This document provides a comprehensive analysis of all environment variables
+used across the 10-16 codebase, organized by service/folder, with redundancy
+analysis and recommendations.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. Overview
+2. TelePay10-16 Environment Variables
+3. GCWebhook10-16 Environment Variables
+4. GCSplit10-21 Environment Variables
+5. GCRegister10-5 Environment Variables
+6. Cross-Service Analysis
+7. Redundancies Detected
+8. Recommendations
+9. Variable Naming Inconsistencies
+10. Consolidated Environment Variable List
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+Total Services: 4
+Total Unique Variables: 15
+Total Variable References: 24
+
+Services:
+  - TelePay10-16 (Main Telegram Bot)
+  - GCWebhook10-16 (Webhook Handler)
+  - GCSplit10-21 (Payment Splitting)
+  - GCRegister10-5 (Channel Registration)
+
+Variable Types:
+  - Secret Manager Paths (15 variables) - ALL variables now use Secret Manager
+  - Direct Values (0 variables) - Migrated to Secret Manager
+
+================================================================================
+2. TELEPAY10-16 ENVIRONMENT VARIABLES
+================================================================================
+
+Location: TelePay10-16/
+Files Using Environment Variables: 4
+
+--- File: config_manager.py ---
+Line 24:  TELEGRAM_BOT_SECRET_NAME
+           Purpose: Telegram bot token
+           Type: Secret Manager Path
+           Function: fetch_telegram_bot_token()
+
+Line 37:  NOWPAYMENT_WEBHOOK_KEY
+           Purpose: NowPayments webhook verification key
+           Type: Secret Manager Path
+           Function: fetch_nowpayment_webhook_key()
+
+Line 61:  TELEGRAM_BOT_USERNAME
+           Purpose: Telegram bot username
+           Type: Secret Manager Path
+           Function: fetch_telegram_bot_username()
+
+--- File: database.py ---
+Line 13:  DATABASE_HOST_SECRET
+           Purpose: PostgreSQL database host
+           Type: Secret Manager Path
+           Function: fetch_database_host()
+
+Line 26:  DATABASE_NAME_SECRET
+           Purpose: PostgreSQL database name
+           Type: Secret Manager Path
+           Function: fetch_database_name()
+
+Line 39:  DATABASE_USER_SECRET
+           Purpose: PostgreSQL database username
+           Type: Secret Manager Path
+           Function: fetch_database_user()
+
+Line 52:  DATABASE_PASSWORD_SECRET
+           Purpose: PostgreSQL database password
+           Type: Secret Manager Path
+           Function: fetch_database_password()
+
+--- File: secure_webhook.py ---
+Line 21:  WEBHOOK_BASE_URL
+           Purpose: Base URL for webhook handler (tph10-16 service)
+           Type: Secret Manager Path
+           Example: projects/291176869049/secrets/WEBHOOK_BASE_URL/versions/latest
+           Used By: SecureWebhookManager.__init__() via fetch_webhook_base_url()
+
+Line 29:  SUCCESS_URL_SIGNING_KEY
+           Purpose: HMAC signing key for success URLs
+           Type: Secret Manager Path
+           Function: fetch_success_url_signing_key()
+
+--- File: start_np_gateway.py ---
+Line 24:  PAYMENT_PROVIDER_SECRET_NAME
+           Purpose: NowPayments API key
+           Type: Secret Manager Path
+           Function: fetch_payment_provider_token()
+
+--- SUMMARY: TelePay10-16 ---
+Total Variables: 10
+
+Secret Manager Paths (10): ✅ ALL VARIABLES NOW USE SECRET MANAGER
+  1. TELEGRAM_BOT_SECRET_NAME
+  2. TELEGRAM_BOT_USERNAME
+  3. NOWPAYMENT_WEBHOOK_KEY
+  4. PAYMENT_PROVIDER_SECRET_NAME
+  5. DATABASE_HOST_SECRET
+  6. DATABASE_NAME_SECRET
+  7. DATABASE_USER_SECRET
+  8. DATABASE_PASSWORD_SECRET
+  9. SUCCESS_URL_SIGNING_KEY
+  10. WEBHOOK_BASE_URL ✅ MIGRATED TO SECRET MANAGER
+
+================================================================================
+3. GCWEBHOOK10-16 ENVIRONMENT VARIABLES
+================================================================================
+
+Location: GCWebhook10-16/
+Files Using Environment Variables: 1
+
+--- File: tph10-16.py ---
+Line 221: TELEGRAM_BOT_SECRET_NAME
+           Purpose: Telegram bot token for sending invites
+           Type: Secret Manager Path
+           Function: fetch_telegram_bot_token()
+
+Line 234: SUCCESS_URL_SIGNING_KEY
+           Purpose: HMAC signing key for verifying success URL tokens
+           Type: Secret Manager Path
+           Function: fetch_success_url_signing_key()
+
+Line 247: DATABASE_NAME_SECRET
+           Purpose: PostgreSQL database name
+           Type: Secret Manager Path
+           Function: fetch_database_name()
+
+Line 260: DATABASE_USER_SECRET
+           Purpose: PostgreSQL database username
+           Type: Secret Manager Path
+           Function: fetch_database_user()
+
+Line 273: DATABASE_PASSWORD_SECRET
+           Purpose: PostgreSQL database password
+           Type: Secret Manager Path
+           Function: fetch_database_password()
+
+Line 286: CLOUD_SQL_CONNECTION_NAME
+           Purpose: Cloud SQL instance connection string
+           Type: Secret Manager Path
+           Function: fetch_cloud_sql_connection_name()
+
+Line 448: TPS_WEBHOOK_URL
+           Purpose: URL for TPS10-21 payment splitting service
+           Type: Secret Manager Path
+           Example: projects/291176869049/secrets/TPS_WEBHOOK_URL/versions/latest
+           Function: trigger_payment_split_webhook() via fetch_tps_webhook_url()
+
+--- SUMMARY: GCWebhook10-16 ---
+Total Variables: 7
+
+Secret Manager Paths (7): ✅ ALL VARIABLES NOW USE SECRET MANAGER
+  1. TELEGRAM_BOT_SECRET_NAME
+  2. SUCCESS_URL_SIGNING_KEY
+  3. DATABASE_NAME_SECRET
+  4. DATABASE_USER_SECRET
+  5. DATABASE_PASSWORD_SECRET
+  6. CLOUD_SQL_CONNECTION_NAME
+  7. TPS_WEBHOOK_URL ✅ MIGRATED TO SECRET MANAGER
+
+================================================================================
+4. GCSPLIT10-16 ENVIRONMENT VARIABLES
+================================================================================
+
+Location: GCSplit10-21/
+Files Using Environment Variables: 1
+
+--- File: config_manager.py ---
+Line 40:  CHANGENOW_API_KEY (via secret_name_env parameter)
+           Purpose: ChangeNow API key for crypto exchange
+           Type: Secret Manager Path
+           Function: fetch_changenow_api_key()
+           Called with: "CHANGENOW_API_KEY"
+
+Line 40:  WEBHOOK_SIGNING_KEY (via secret_name_env parameter)
+           Purpose: Webhook signature verification from tph10-16
+           Type: Secret Manager Path
+           Function: fetch_webhook_signing_key()
+           Called with: "WEBHOOK_SIGNING_KEY"
+
+Line 40:  TELEGRAM_BOT_USERNAME (via secret_name_env parameter)
+           Purpose: Telegram bot token for notifications
+           Type: Secret Manager Path
+           Function: fetch_telegram_bot_token()
+           Called with: "TELEGRAM_BOT_USERNAME"
+
+Line 99:  TPS_WEBHOOK_URL
+           Purpose: Self-reference URL for logging
+           Type: Secret Manager Path
+           Function: get_tps_webhook_url() via fetch_secret()
+
+--- SUMMARY: GCSplit10-21 ---
+Total Variables: 4
+
+Secret Manager Paths (4): ✅ ALL VARIABLES NOW USE SECRET MANAGER
+  1. CHANGENOW_API_KEY
+  2. WEBHOOK_SIGNING_KEY
+  3. TELEGRAM_BOT_USERNAME
+  4. TPS_WEBHOOK_URL ✅ MIGRATED TO SECRET MANAGER
+
+================================================================================
+5. GCREGISTER10-5 ENVIRONMENT VARIABLES
+================================================================================
+
+Location: GCRegister10-5/
+Files Using Environment Variables: 1
+
+--- File: config_manager.py ---
+Line 43:  DATABASE_NAME_SECRET (via secret_name_env parameter)
+           Purpose: PostgreSQL database name
+           Type: Secret Manager Path
+           Function: fetch_database_name()
+           Called with: "DATABASE_NAME_SECRET"
+
+Line 43:  DATABASE_USER_SECRET (via secret_name_env parameter)
+           Purpose: PostgreSQL database username
+           Type: Secret Manager Path
+           Function: fetch_database_user()
+           Called with: "DATABASE_USER_SECRET"
+
+Line 43:  DATABASE_PASSWORD_SECRET (via secret_name_env parameter)
+           Purpose: PostgreSQL database password
+           Type: Secret Manager Path
+           Function: fetch_database_password()
+           Called with: "DATABASE_PASSWORD_SECRET"
+
+Line 43:  DATABASE_SECRET_KEY (via secret_name_env parameter)
+           Purpose: Flask secret key for CSRF protection
+           Type: Secret Manager Path
+           Function: get_secret_key()
+           Called with: "DATABASE_SECRET_KEY"
+
+Line 103: CLOUD_SQL_CONNECTION_NAME
+           Purpose: Cloud SQL instance connection string
+           Type: Secret Manager Path
+           Example: projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+           Function: get_cloud_sql_connection_name() via fetch_secret()
+           Note: ✅ RENAMED from INSTANCE_CONNECTION_NAME
+
+--- SUMMARY: GCRegister10-5 ---
+Total Variables: 5
+
+Secret Manager Paths (5): ✅ ALL VARIABLES NOW USE SECRET MANAGER
+  1. DATABASE_NAME_SECRET
+  2. DATABASE_USER_SECRET
+  3. DATABASE_PASSWORD_SECRET
+  4. DATABASE_SECRET_KEY
+  5. CLOUD_SQL_CONNECTION_NAME ✅ RENAMED from INSTANCE_CONNECTION_NAME & MIGRATED TO SECRET MANAGER
+
+================================================================================
+6. CROSS-SERVICE ANALYSIS
+================================================================================
+
+This section shows which variables are shared across multiple services.
+
+--- Shared Across Multiple Services ---
+
+1. TELEGRAM_BOT_SECRET_NAME
+   Used by:
+   - TelePay10-16 (config_manager.py:24)
+   - GCWebhook10-16 (tph10-16.py:221)
+   Purpose: Telegram bot token
+   **SHARED CORRECTLY** ✅
+
+2. TELEGRAM_BOT_USERNAME
+   Used by:
+   - TelePay10-16 (config_manager.py:61)
+   - GCSplit10-21 (config_manager.py:88)
+   Purpose: Telegram bot username/token
+   **WARNING: Naming inconsistency** ⚠️
+   Note: In GCSplit, this is used to fetch bot TOKEN, not username
+
+3. SUCCESS_URL_SIGNING_KEY
+   Used by:
+   - TelePay10-16 (secure_webhook.py:29)
+   - GCWebhook10-16 (tph10-16.py:234)
+   Purpose: HMAC signing key for success URL tokens
+   **SHARED CORRECTLY** ✅
+
+4. DATABASE_NAME_SECRET
+   Used by:
+   - TelePay10-16 (database.py:26)
+   - GCWebhook10-16 (tph10-16.py:247)
+   - GCRegister10-5 (config_manager.py:66)
+   Purpose: PostgreSQL database name
+   **SHARED CORRECTLY** ✅
+
+5. DATABASE_USER_SECRET
+   Used by:
+   - TelePay10-16 (database.py:39)
+   - GCWebhook10-16 (tph10-16.py:260)
+   - GCRegister10-5 (config_manager.py:75)
+   Purpose: PostgreSQL database username
+   **SHARED CORRECTLY** ✅
+
+6. DATABASE_PASSWORD_SECRET
+   Used by:
+   - TelePay10-16 (database.py:52)
+   - GCWebhook10-16 (tph10-16.py:273)
+   - GCRegister10-5 (config_manager.py:84)
+   Purpose: PostgreSQL database password
+   **SHARED CORRECTLY** ✅
+
+7. TPS_WEBHOOK_URL
+   Used by:
+   - GCWebhook10-16 (tph10-16.py:436)
+   - GCSplit10-21 (config_manager.py:99)
+   Purpose: TPS10-21 service URL
+   **SHARED CORRECTLY** ✅
+
+--- Service-Specific Variables ---
+
+TelePay10-16 Only:
+  - NOWPAYMENT_WEBHOOK_KEY (NowPayments webhook verification)
+  - PAYMENT_PROVIDER_SECRET_NAME (NowPayments API key)
+  - DATABASE_HOST_SECRET (Database host for direct connections)
+  - WEBHOOK_BASE_URL (tph10-16 webhook URL)
+
+GCWebhook10-16 Only:
+  - CLOUD_SQL_CONNECTION_NAME (Cloud SQL instance connection)
+
+GCSplit10-21 Only:
+  - CHANGENOW_API_KEY (ChangeNow API key)
+  - WEBHOOK_SIGNING_KEY (Webhook signature verification)
+
+GCRegister10-5 Only:
+  - DATABASE_SECRET_KEY (Flask CSRF secret key)
+  - INSTANCE_CONNECTION_NAME (Cloud SQL instance connection)
+
+================================================================================
+7. REDUNDANCIES DETECTED
+================================================================================
+
+**REDUNDANCY #1: Cloud SQL Connection Name** ✅ RESOLVED
+---------------------------------------------
+Variable Names:
+  - CLOUD_SQL_CONNECTION_NAME (GCWebhook10-16, GCRegister10-5)
+  - INSTANCE_CONNECTION_NAME (REMOVED)
+
+Status: ✅ FIXED - Standardized on CLOUD_SQL_CONNECTION_NAME
+Purpose: Specifies Cloud SQL instance connection string
+Type: Secret Manager Path
+Example: projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+
+Changes Made:
+  ✅ GCRegister10-5/config_manager.py - Renamed to CLOUD_SQL_CONNECTION_NAME
+  ✅ GCRegister10-5/.env.example - Updated variable name
+  ✅ GCRegister10-5/README.md - Updated all references (6 locations)
+  ✅ Migrated from direct value to Secret Manager path
+
+
+**REDUNDANCY #2: Telegram Bot Token Variable Naming**
+------------------------------------------------------
+Variable Names:
+  - TELEGRAM_BOT_SECRET_NAME (TelePay10-16, GCWebhook10-16)
+  - TELEGRAM_BOT_USERNAME (TelePay10-16, GCSplit10-21)
+
+Issue: Confusing naming - "USERNAME" variable actually contains TOKEN
+Purpose: Both are Secret Manager paths to Telegram bot token
+
+Context:
+  - TELEGRAM_BOT_SECRET_NAME: Correctly named, points to bot token
+  - TELEGRAM_BOT_USERNAME: Misleading name, actually points to bot token
+    (despite the name suggesting it's the username)
+
+In TelePay10-16:
+  - TELEGRAM_BOT_SECRET_NAME → bot token (config_manager.py:24)
+  - TELEGRAM_BOT_USERNAME → bot username (config_manager.py:61)
+
+In GCSplit10-21:
+  - TELEGRAM_BOT_USERNAME → bot token (config_manager.py:88)
+    **MISLEADING**: Used to fetch TOKEN, not username!
+
+Impact:
+  - Confusion about what each variable contains
+  - GCSplit uses "USERNAME" variable to fetch TOKEN
+  - Documentation inconsistency
+
+Recommendation:
+  Option A: Consolidate to TELEGRAM_BOT_SECRET_NAME everywhere
+  Option B: Rename TELEGRAM_BOT_USERNAME to TELEGRAM_BOT_TOKEN
+
+  Preferred: Option A (consolidate to TELEGRAM_BOT_SECRET_NAME)
+
+Files to Change:
+  - GCSplit10-21/config_manager.py:88 (change TELEGRAM_BOT_USERNAME to TELEGRAM_BOT_SECRET_NAME)
+
+
+**REDUNDANCY #3: Webhook Signing Key Naming**
+----------------------------------------------
+Variable Names:
+  - SUCCESS_URL_SIGNING_KEY (TelePay10-16, GCWebhook10-16)
+  - WEBHOOK_SIGNING_KEY (GCSplit10-21)
+
+Issue: Two different names for webhook signature verification
+Purpose: HMAC signing key for webhook authentication
+
+Context:
+  - SUCCESS_URL_SIGNING_KEY: Used to sign/verify success URL tokens
+  - WEBHOOK_SIGNING_KEY: Used to verify webhook signatures from tph10-16
+
+These are DIFFERENT keys for DIFFERENT purposes, but the naming is confusing.
+
+Analysis:
+  - SUCCESS_URL_SIGNING_KEY: Shared between TelePay10-16 and GCWebhook10-16 ✅
+  - WEBHOOK_SIGNING_KEY: Used only in GCSplit10-21 for tph10-16 webhooks
+
+Current Implementation:
+  TelePay10-16 generates success URLs with SUCCESS_URL_SIGNING_KEY
+  GCWebhook10-16 verifies success URLs with SUCCESS_URL_SIGNING_KEY
+  GCWebhook10-16 signs webhooks to GCSplit with ???
+  GCSplit10-21 verifies webhooks with WEBHOOK_SIGNING_KEY
+
+**POTENTIAL ISSUE**: These should be the SAME key!
+  - tph10-16.py:464 uses SUCCESS_URL_SIGNING_KEY to sign webhook to tps10-21
+  - tps10-21.py:322 uses WEBHOOK_SIGNING_KEY to verify webhook
+
+Impact:
+  - These two keys MUST match for webhook verification to work
+  - Confusing to have two different variable names
+  - Easy to set different values and break the integration
+
+Recommendation:
+  Consolidate to SUCCESS_URL_SIGNING_KEY everywhere
+  This key is used for:
+    1. Signing success URLs (TelePay → GCWebhook)
+    2. Signing webhooks (GCWebhook → GCSplit)
+    3. Verifying both of the above
+
+Files to Change:
+  - GCSplit10-21/config_manager.py:76 (change WEBHOOK_SIGNING_KEY to SUCCESS_URL_SIGNING_KEY)
+  - GCSplit10-21/tps10-21.py:322 (update variable name reference)
+
+
+**REDUNDANCY #4: Database Host Variables**
+-------------------------------------------
+Variable Names:
+  - DATABASE_HOST_SECRET (TelePay10-16 only)
+  - CLOUD_SQL_CONNECTION_NAME (GCWebhook10-16)
+  - INSTANCE_CONNECTION_NAME (GCRegister10-5)
+
+Issue: Different approaches to database connectivity
+
+Context:
+  TelePay10-16: Uses DATABASE_HOST_SECRET (direct host connection)
+  GCWebhook10-16: Uses CLOUD_SQL_CONNECTION_NAME (Cloud SQL Connector)
+  GCRegister10-5: Uses INSTANCE_CONNECTION_NAME (Cloud SQL Connector)
+
+Analysis:
+  - TelePay10-16 uses old-style direct connection with host IP
+  - GCWebhook10-16 and GCRegister10-5 use modern Cloud SQL Connector
+  - Cloud SQL Connector is more secure (no VPC needed)
+
+Impact:
+  - TelePay10-16 requires different database configuration
+  - Inconsistent deployment approach
+  - DATABASE_HOST_SECRET is legacy approach
+
+Recommendation:
+  Migrate TelePay10-16 to Cloud SQL Connector
+  Remove DATABASE_HOST_SECRET
+  Standardize on CLOUD_SQL_CONNECTION_NAME
+
+Files to Change:
+  - TelePay10-16/database.py (migrate to Cloud SQL Connector)
+  - TelePay10-16/database.py:13 (remove DATABASE_HOST_SECRET)
+
+
+**REDUNDANCY #5: TPS Webhook URL** ✅ IMPROVED
+-----------------------------------
+Variable Name: TPS_WEBHOOK_URL
+Used by:
+  - GCWebhook10-16 (tph10-16.py:448)
+  - GCSplit10-21 (config_manager.py:99)
+
+Status: ✅ MIGRATED TO SECRET MANAGER
+Type: Secret Manager Path
+Example: projects/291176869049/secrets/TPS_WEBHOOK_URL/versions/latest
+
+Context:
+  - GCWebhook10-16: Uses to trigger payment splitting webhook
+  - GCSplit10-21: Reads for logging/self-reference only
+
+Changes Made:
+  ✅ GCWebhook10-16/tph10-16.py - Added fetch_tps_webhook_url() function
+  ✅ GCSplit10-21/config_manager.py - Updated get_tps_webhook_url() to use fetch_secret()
+  ✅ Migrated from direct value to Secret Manager path
+
+Impact: Improved security and consistency
+
+================================================================================
+8. RECOMMENDATIONS
+================================================================================
+
+**Priority 1: Critical Fixes**
+
+1. ✅ COMPLETED - Standardize CLOUD_SQL_CONNECTION_NAME
+   - Renamed INSTANCE_CONNECTION_NAME → CLOUD_SQL_CONNECTION_NAME
+   - File: GCRegister10-5/config_manager.py
+   - Status: All references updated across config_manager.py, .env.example, and README.md
+   - Impact: Deployment consistency achieved
+
+2. ✅ COMPLETED - Migrate Direct Values to Secret Manager
+   - WEBHOOK_BASE_URL → Secret Manager (TelePay10-16/secure_webhook.py)
+   - TPS_WEBHOOK_URL → Secret Manager (GCWebhook10-16/tph10-16.py, GCSplit10-21/config_manager.py)
+   - CLOUD_SQL_CONNECTION_NAME → Secret Manager (GCRegister10-5/config_manager.py)
+   - Impact: All environment variables now use Secret Manager for improved security
+
+3. PENDING - Consolidate Webhook Signing Keys
+   - Rename WEBHOOK_SIGNING_KEY → SUCCESS_URL_SIGNING_KEY
+   - File: GCSplit10-21/config_manager.py:76
+   - Impact: Security - ensures keys match
+
+4. PENDING - Standardize Telegram Bot Token Variable
+   - In GCSplit10-21, change TELEGRAM_BOT_USERNAME → TELEGRAM_BOT_SECRET_NAME
+   - File: GCSplit10-21/config_manager.py:88
+   - Impact: Naming clarity
+
+**Priority 2: Architecture Improvements**
+
+4. Migrate TelePay10-16 to Cloud SQL Connector
+   - Remove DATABASE_HOST_SECRET
+   - Add CLOUD_SQL_CONNECTION_NAME support
+   - File: TelePay10-16/database.py
+   - Impact: Modern, secure database connectivity
+
+**Priority 3: Documentation**
+
+5. Update all deployment documentation to reflect standardized variable names
+6. Create a single master environment variables reference
+7. Add validation checks for variable name consistency
+
+================================================================================
+9. VARIABLE NAMING INCONSISTENCIES
+================================================================================
+
+**Pattern Analysis:**
+
+Secret Manager Path Variables:
+  ✅ Consistent: DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+  ✅ Consistent: TELEGRAM_BOT_SECRET_NAME
+  ⚠️ Inconsistent: PAYMENT_PROVIDER_SECRET_NAME (uses SECRET_NAME suffix)
+  ⚠️ Inconsistent: DATABASE_HOST_SECRET (uses SECRET suffix)
+  ⚠️ Inconsistent: DATABASE_SECRET_KEY (uses SECRET prefix)
+  ⚠️ Inconsistent: TELEGRAM_BOT_USERNAME (no SECRET indicator)
+
+Recommendation: Standardize on _SECRET suffix for all Secret Manager paths
+  - TELEGRAM_BOT_USERNAME → TELEGRAM_BOT_TOKEN_SECRET
+  - PAYMENT_PROVIDER_SECRET_NAME → PAYMENT_PROVIDER_API_SECRET
+  - SUCCESS_URL_SIGNING_KEY → SUCCESS_URL_SIGNING_SECRET
+
+Direct Value Variables: ✅ ALL MIGRATED TO SECRET MANAGER
+  ✅ WEBHOOK_BASE_URL → Now Secret Manager Path
+  ✅ TPS_WEBHOOK_URL → Now Secret Manager Path
+  ✅ CLOUD_SQL_CONNECTION_NAME → Now Secret Manager Path (renamed from INSTANCE_CONNECTION_NAME)
+
+Status: All environment variables now use Secret Manager
+  - Improved security
+  - Consistent configuration management
+  - No direct values exposed in environment variables
+
+================================================================================
+10. CONSOLIDATED ENVIRONMENT VARIABLE LIST
+================================================================================
+
+This is the RECOMMENDED final list after fixing all redundancies:
+
+**TelePay10-16 (10 variables):** ✅ ALL SECRET MANAGER
+  1. TELEGRAM_BOT_SECRET_NAME (Secret Manager)
+  2. TELEGRAM_BOT_USERNAME_SECRET (Secret Manager) - for username only
+  3. NOWPAYMENT_WEBHOOK_KEY (Secret Manager)
+  4. PAYMENT_PROVIDER_API_SECRET (Secret Manager)
+  5. CLOUD_SQL_CONNECTION_NAME (Secret Manager) - NEW, replaces DATABASE_HOST_SECRET
+  6. DATABASE_NAME_SECRET (Secret Manager)
+  7. DATABASE_USER_SECRET (Secret Manager)
+  8. DATABASE_PASSWORD_SECRET (Secret Manager)
+  9. SUCCESS_URL_SIGNING_KEY (Secret Manager)
+ 10. WEBHOOK_BASE_URL (Secret Manager) ✅ MIGRATED
+
+**GCWebhook10-16 (7 variables):** ✅ ALL SECRET MANAGER
+  1. TELEGRAM_BOT_SECRET_NAME (Secret Manager)
+  2. SUCCESS_URL_SIGNING_KEY (Secret Manager)
+  3. DATABASE_NAME_SECRET (Secret Manager)
+  4. DATABASE_USER_SECRET (Secret Manager)
+  5. DATABASE_PASSWORD_SECRET (Secret Manager)
+  6. CLOUD_SQL_CONNECTION_NAME (Secret Manager)
+  7. TPS_WEBHOOK_URL (Secret Manager) ✅ MIGRATED
+
+**GCSplit10-21 (4 variables):** ✅ ALL SECRET MANAGER
+  1. CHANGENOW_API_KEY (Secret Manager)
+  2. SUCCESS_URL_SIGNING_KEY (Secret Manager) - PENDING: Change from WEBHOOK_SIGNING_KEY
+  3. TELEGRAM_BOT_SECRET_NAME (Secret Manager) - PENDING: Change from TELEGRAM_BOT_USERNAME
+  4. TPS_WEBHOOK_URL (Secret Manager) ✅ MIGRATED
+
+**GCRegister10-5 (5 variables):** ✅ ALL SECRET MANAGER
+  1. DATABASE_NAME_SECRET (Secret Manager)
+  2. DATABASE_USER_SECRET (Secret Manager)
+  3. DATABASE_PASSWORD_SECRET (Secret Manager)
+  4. DATABASE_SECRET_KEY (Secret Manager)
+  5. CLOUD_SQL_CONNECTION_NAME (Secret Manager) ✅ RENAMED from INSTANCE_CONNECTION_NAME & MIGRATED
+
+**Total Unique Variables After Consolidation: 13**
+
+Shared Variables (used by multiple services):
+  1. TELEGRAM_BOT_SECRET_NAME (TelePay, GCWebhook, GCSplit)
+  2. SUCCESS_URL_SIGNING_KEY (TelePay, GCWebhook, GCSplit)
+  3. DATABASE_NAME_SECRET (TelePay, GCWebhook, GCRegister)
+  4. DATABASE_USER_SECRET (TelePay, GCWebhook, GCRegister)
+  5. DATABASE_PASSWORD_SECRET (TelePay, GCWebhook, GCRegister)
+  6. CLOUD_SQL_CONNECTION_NAME (TelePay, GCWebhook, GCRegister)
+  7. TPS_WEBHOOK_URL (GCWebhook, GCSplit)
+
+Service-Specific Variables:
+  - NOWPAYMENT_WEBHOOK_KEY (TelePay only)
+  - PAYMENT_PROVIDER_API_SECRET (TelePay only)
+  - TELEGRAM_BOT_USERNAME_SECRET (TelePay only)
+  - WEBHOOK_BASE_URL (TelePay only)
+  - CHANGENOW_API_KEY (GCSplit only)
+  - DATABASE_SECRET_KEY (GCRegister only)
+
+================================================================================
+11. DEPLOYMENT CHECKLIST
+================================================================================
+
+When deploying all services, you need to set these environment variables:
+
+**✅ ALL VARIABLES NOW USE GOOGLE CLOUD SECRET MANAGER**
+
+**Google Cloud Secret Manager Secrets (15 total):**
+  1. TELEGRAM_BOT_SECRET_NAME → Bot token
+  2. TELEGRAM_BOT_USERNAME → Bot username (note: naming inconsistency, see recommendations)
+  3. NOWPAYMENT_WEBHOOK_KEY → NowPayments webhook key
+  4. PAYMENT_PROVIDER_SECRET_NAME → NowPayments API key
+  5. DATABASE_HOST_SECRET → Database host (TelePay10-16 only)
+  6. DATABASE_NAME_SECRET → Database name
+  7. DATABASE_USER_SECRET → Database username
+  8. DATABASE_PASSWORD_SECRET → Database password
+  9. DATABASE_SECRET_KEY → Flask secret key
+ 10. SUCCESS_URL_SIGNING_KEY → HMAC signing key for success URLs
+ 11. WEBHOOK_SIGNING_KEY → HMAC signing key for webhooks (should match #10)
+ 12. CLOUD_SQL_CONNECTION_NAME → Cloud SQL instance connection ✅ RENAMED & MIGRATED
+ 13. CHANGENOW_API_KEY → ChangeNow API key
+ 14. WEBHOOK_BASE_URL → tph10-16 service URL ✅ MIGRATED TO SECRET MANAGER
+ 15. TPS_WEBHOOK_URL → tps10-21 service URL ✅ MIGRATED TO SECRET MANAGER
+
+**Direct Environment Variables: 0 (all migrated to Secret Manager)**
+
+**Total: 15 environment variables - ALL using Secret Manager ✅**
+
+**Key Improvements:**
+  ✅ 100% of environment variables now use Secret Manager
+  ✅ No sensitive values exposed as direct environment variables
+  ✅ Consistent configuration management across all services
+  ✅ Standardized naming for Cloud SQL connection (CLOUD_SQL_CONNECTION_NAME)
+
+================================================================================
+END OF ANALYSIS
+================================================================================
+
+Generated: October 2025
+Version: 10-16
+Purpose: Environment variable redundancy analysis
+Services Analyzed: TelePay10-16, GCWebhook10-16, GCSplit10-21, GCRegister10-5
+
+For deployment instructions, see:
+  - GOOGLE_CLOUD_RUN_DEPLOYMENT.txt
+  - TELEPAY10-16_ENVIRONMENT_VARIABLES.txt
+  - SUCCESS_URL_FLOW_EXPLANATION.txt
+
+================================================================================

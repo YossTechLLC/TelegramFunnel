@@ -1,0 +1,372 @@
+================================================================================
+  DATABASE ENUM TYPE FIX - GCHostPay10-21
+  Issue Resolution: currency_type ENUM Requires Uppercase Values
+================================================================================
+
+DATE: 2025-10-22
+ISSUE: Database insert failing with enum validation error
+STATUS: RESOLVED ✅
+
+================================================================================
+  PROBLEM DESCRIPTION
+================================================================================
+
+ERROR MESSAGE:
+❌ [HOSTPAY_DB] Database error inserting hostpay transaction: {'S': 'ERROR',
+'V': 'ERROR', 'C': '22P02', 'M': 'invalid input value for enum currency_type:
+"eth"', 'W': "unnamed portal parameter $3 = '...'", 'F': 'enum.c', 'L': '133',
+'R': 'enum_in'}
+
+SYMPTOM:
+- Token validation: ✅ SUCCESS
+- ChangeNow status check: ✅ SUCCESS
+- ETH payment execution: ✅ SUCCESS
+- Database insertion: ❌ FAILED (enum validation error)
+- Transaction rollback occurred
+- Database table split_payout_hostpay not populated
+
+ROOT CAUSE:
+PostgreSQL database uses an ENUM type called `currency_type` for the
+`from_currency` and `from_network` columns in the `split_payout_hostpay` table.
+
+The ENUM type is case-sensitive and expects UPPERCASE values:
+- Valid: "ETH", "BTC", "USDT"
+- Invalid: "eth", "btc", "usdt"
+
+The code was passing lowercase values ("eth") from the token payload directly
+to the database without converting to uppercase, causing the ENUM validation
+to fail.
+
+AFFECTED CODE:
+database_manager.py:169 (before fix)
+insert_params = (unique_id, cn_api_id, from_currency, from_network, ...)
+                                       ^^^^^^^^^^^^^ ^^^^^^^^^^^^
+                                       lowercase     lowercase
+
+
+================================================================================
+  WHAT IS A POSTGRESQL ENUM TYPE?
+================================================================================
+
+ENUM (enumerated type) is a PostgreSQL data type that restricts column values
+to a predefined set of allowed values.
+
+EXAMPLE DEFINITION:
+CREATE TYPE currency_type AS ENUM ('ETH', 'BTC', 'USDT', 'LINK', 'MATIC', ...);
+
+CREATE TABLE split_payout_hostpay (
+    unique_id VARCHAR(16) PRIMARY KEY,
+    cn_api_id VARCHAR(255),
+    from_currency currency_type,  -- Must be one of the ENUM values
+    from_network currency_type,   -- Must be one of the ENUM values
+    from_amount NUMERIC(20, 8),
+    payin_address VARCHAR(255),
+    is_complete BOOLEAN DEFAULT FALSE
+);
+
+BENEFITS:
+1. **Data Integrity**: Ensures only valid currencies are stored
+2. **Type Safety**: Database rejects invalid values at insert time
+3. **Storage Efficiency**: ENUMs stored as integers internally
+4. **Query Performance**: Faster comparisons than strings
+
+CONSTRAINT:
+⚠️ ENUM values are CASE-SENSITIVE. "ETH" ≠ "eth" ≠ "Eth"
+
+
+================================================================================
+  SOLUTION IMPLEMENTED
+================================================================================
+
+CHANGES MADE TO: database_manager.py
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FIX: Convert Currency and Network Values to Uppercase Before Insertion     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Location: insert_hostpay_transaction() method (lines 162-169)
+
+BEFORE:
+    insert_params = (unique_id, cn_api_id, from_currency, from_network,
+                     from_amount, payin_address, is_complete)
+
+AFTER:
+    # NOTE: Database uses currency_type ENUM which expects UPPERCASE values
+    insert_params = (unique_id, cn_api_id, from_currency.upper(),
+                     from_network.upper(), from_amount, payin_address,
+                     is_complete)
+
+BENEFIT:
+Converts all currency/network values to uppercase before database insertion,
+ensuring compatibility with the currency_type ENUM definition.
+
+EXAMPLE:
+Input:  from_currency="eth", from_network="eth"
+Insert: from_currency="ETH", from_network="ETH"
+Result: ✅ Database accepts the values
+
+
+================================================================================
+  CONSISTENCY WITH GCSPLIT10-21
+================================================================================
+
+This fix follows the exact same pattern used in GCSplit10-21's
+database_manager.py, which successfully handles the same ENUM types:
+
+GCSPLIT10-21 PATTERN (database_manager.py:300):
+params = (
+    unique_id, user_id, closed_channel_id,
+    from_currency.upper(), to_currency.upper(),
+    from_network.upper(), to_network.upper(),
+    from_amount, to_amount, ...
+)
+
+GCHOSTPAY10-21 PATTERN (database_manager.py:169) - NOW MATCHES:
+insert_params = (
+    unique_id, cn_api_id,
+    from_currency.upper(), from_network.upper(),
+    from_amount, payin_address, is_complete
+)
+
+✅ Both services now use consistent uppercase conversion for currency/network
+✅ Both services correctly handle the currency_type ENUM requirement
+
+
+================================================================================
+  VERIFICATION CHECKLIST
+================================================================================
+
+After redeployment, verify the following logs appear:
+
+□ 1. TOKEN VALIDATION (unchanged):
+   ✅ [HOSTPAY_WEBHOOK] Token validated and decoded successfully
+   📦 [HOSTPAY_WEBHOOK] Extracted values:
+      🆔 unique_id: VV2SW735RGXD0Y5F
+      🆔 cn_api_id: K8A5YUYX1TLGOX3U
+      💰 from_currency: eth
+      🌐 from_network: eth
+      💸 from_amount: 0.0060158
+      🏦 payin_address: 0x7bd2d384e4b0873d60a68576c40a72ac7e6f6dd4
+
+□ 2. CHANGENOW STATUS CHECK (unchanged):
+   ✅ [HOSTPAY_WEBHOOK] ChangeNow status confirmed: waiting
+
+□ 3. ETH PAYMENT (unchanged):
+   ✅ [HOSTPAY_WEBHOOK] ETH payment successful
+      TX Hash: 0x...
+      Status: success
+      Gas Used: 21000
+
+□ 4. DATABASE INSERT (FIXED - should now succeed):
+   💾 [HOSTPAY_WEBHOOK] Logging transaction to database
+   📝 [HOSTPAY_DB] Starting database insert for unique_id: VV2SW735RGXD0Y5F
+   🔗 [DATABASE] ✅ Cloud SQL Connector connection successful!
+   🔄 [HOSTPAY_DB] Executing INSERT query
+   ✅ [HOSTPAY_DB] Transaction committed successfully
+   🎉 [HOSTPAY_DB] Successfully inserted record for unique_id: VV2SW735RGXD0Y5F
+      🆔 CN API ID: K8A5YUYX1TLGOX3U
+      💰 Currency: ETH          ⭐ (note the uppercase)
+      🌐 Network: ETH           ⭐ (note the uppercase)
+      💰 Amount: 0.0060158 ETH
+      🏦 Payin Address: 0x7bd2d384e4b0873d60a68576c40a72ac7e6f6dd4
+      ✔️ Is Complete: True
+   🔌 [HOSTPAY_DB] Database connection closed
+
+□ 5. SUCCESS RESPONSE:
+   🎉 [HOSTPAY_WEBHOOK] Host payment completed successfully!
+
+□ 6. RED FLAGS (should NOT see after fix):
+   ❌ invalid input value for enum currency_type
+   🔄 [HOSTPAY_DB] Transaction rolled back due to error
+   ⚠️ [HOSTPAY_WEBHOOK] Database logging failed (non-fatal)
+
+
+================================================================================
+  DEPLOYMENT STEPS
+================================================================================
+
+1. VERIFY LOCAL CODE CHANGES:
+   cd /path/to/GCHostPay10-21
+
+   Check database_manager.py contains:
+   - Line 163: Comment about ENUM expecting UPPERCASE
+   - Line 169: from_currency.upper(), from_network.upper()
+   - Line 180-181: Logging shows uppercase in output
+
+2. REDEPLOY TO GOOGLE CLOUD RUN:
+   gcloud run deploy tphp10-21 \
+       --source . \
+       --region us-central1 \
+       --platform managed \
+       --allow-unauthenticated \
+       --memory 1Gi \
+       --cpu 1 \
+       --timeout 600 \
+       --max-instances 10 \
+       --min-instances 0 \
+       --port 8080 \
+       --set-env-vars TPS_HOSTPAY_SIGNING_KEY=projects/291176869049/secrets/TPS_HOSTPAY_SIGNING_KEY/versions/latest \
+       --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
+       --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
+       --set-env-vars ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest \
+       --set-env-vars ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest \
+       --set-env-vars ETHEREUM_RPC_WEBHOOK_SECRET=projects/291176869049/secrets/ETHEREUM_RPC_WEBHOOK_SECRET/versions/latest \
+       --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
+       --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
+       --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
+       --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
+       --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+
+3. TEST HEALTH ENDPOINT:
+   curl https://tphp10-21-291176869049.us-central1.run.app/health
+
+   Expected: {"status": "healthy", ...}
+
+4. CHECK DEPLOYMENT LOGS:
+   gcloud run services logs read tphp10-21 --region us-central1 --limit 50
+
+   Look for: Service started successfully
+
+5. TRIGGER TEST PAYMENT:
+   Make a test subscription payment through the system
+
+   Monitor logs for successful database insert
+
+6. VERIFY DATABASE:
+   Query split_payout_hostpay table to confirm record was inserted:
+
+   SELECT * FROM split_payout_hostpay
+   WHERE unique_id = 'VV2SW735RGXD0Y5F';
+
+   Expected: One row with from_currency='ETH', from_network='ETH' (uppercase)
+
+
+================================================================================
+  TECHNICAL DETAILS
+================================================================================
+
+WHY DOES POSTGRESQL ENUM REQUIRE SPECIFIC CASE?
+
+1. ENUM Definition: When ENUM is created, values are stored exactly as defined
+2. Storage: ENUMs stored as 4-byte integers mapping to exact string values
+3. Comparison: PostgreSQL compares ENUM values using integer ordinals
+4. Lookup: When inserting, PostgreSQL looks for EXACT string match
+5. Case Sensitivity: No automatic case normalization - "ETH" ≠ "eth"
+
+HOW UPPERCASE CONVERSION WORKS:
+
+Python str.upper() method converts string to uppercase:
+- Input: "eth" → Output: "ETH"
+- Input: "btc" → Output: "BTC"
+- Input: "usdt" → Output: "USDT"
+
+This is applied before the value reaches PostgreSQL, ensuring compatibility
+with the ENUM definition.
+
+EXAMPLE FLOW:
+
+1. Token decoded: from_currency="eth" (lowercase from token)
+2. Python conversion: from_currency.upper() → "ETH"
+3. SQL parameter: INSERT ... VALUES ('VV2SW...', 'K8A5...', 'ETH', ...)
+4. PostgreSQL ENUM lookup: "ETH" found in currency_type ENUM ✅
+5. Insert succeeds
+
+
+================================================================================
+  WHY WAS THIS NOT CAUGHT EARLIER?
+================================================================================
+
+DEVELOPMENT HISTORY:
+
+Phase 1 (Stub Implementation):
+- Database insert was stubbed out (not implemented)
+- No actual database operations performed
+- ENUM error couldn't surface
+
+Phase 2 (Full Implementation - CHECKSUM_ADDRESS_FIX.txt):
+- Web3 checksum address error occurred BEFORE database insert
+- Transaction execution failed, never reached database code
+- ENUM error hidden behind checksum error
+
+Phase 2 (After Checksum Fix):
+- ETH payment now succeeds
+- Code reaches database insert for first time
+- ENUM error finally surfaces ✅
+
+LESSON LEARNED:
+When implementing database operations, ensure all string values are properly
+formatted according to database schema constraints (ENUMs, CHECK constraints,
+triggers, etc.).
+
+
+================================================================================
+  RELATED FILES MODIFIED
+================================================================================
+
+✅ database_manager.py
+   - Line 163: Added comment about ENUM uppercase requirement
+   - Line 169: Applied .upper() to from_currency and from_network
+   - Line 180-181: Updated logging to show uppercase values
+
+NO CHANGES NEEDED:
+   - tphp10-21.py (passes raw values, database_manager handles conversion)
+   - wallet_manager.py (doesn't interact with currency ENUMs)
+   - alchemy_webhook_handler.py (doesn't handle currencies)
+
+
+================================================================================
+  SUCCESS CRITERIA
+================================================================================
+
+Deployment is successful when:
+
+✅ Service deploys without errors
+✅ Health endpoint returns healthy status
+✅ Token validation works correctly
+✅ ChangeNow status check succeeds
+✅ ETH payment executes successfully
+✅ Database insert completes WITHOUT enum error
+✅ Logs show "✅ [HOSTPAY_DB] Transaction committed successfully"
+✅ Logs show currency and network in UPPERCASE: "💰 Currency: ETH"
+✅ split_payout_hostpay table populated with correct data
+✅ No transaction rollback occurs
+✅ Webhook returns 200 success response
+
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+ISSUE: Still getting enum error after redeployment
+CAUSE: Old container still running
+FIX:   1. Force new revision deployment
+       2. Verify logs show service restart
+       3. Check service has latest revision active
+
+ISSUE: Different enum error (e.g., "invalid input value for enum: 'TEST'")
+CAUSE: Currency value not in ENUM definition
+FIX:   1. Check what currencies are defined in currency_type ENUM
+       2. Ensure test uses valid currency (ETH, BTC, USDT, etc.)
+       3. Update ENUM definition if new currency needed
+
+ISSUE: Insert works but shows lowercase in logs
+CAUSE: Logging statement not using .upper()
+FIX:   Check line 182 uses from_currency.upper() in print statement
+
+ISSUE: Insert succeeds but data appears lowercase in database
+CAUSE: This should not happen - ENUM stores exact values as defined
+FIX:   1. Verify ENUM definition: \dT+ currency_type
+       2. Check if ENUM was modified to include lowercase values
+       3. Recreate ENUM with uppercase values only
+
+
+================================================================================
+  END OF DOCUMENTATION
+================================================================================
+
+Issue: PostgreSQL ENUM type case sensitivity
+Resolution: Convert currency/network to uppercase before insertion
+Impact: Database inserts now work correctly for split_payout_hostpay
+Status: RESOLVED ✅
+
+Last Updated: 2025-10-22

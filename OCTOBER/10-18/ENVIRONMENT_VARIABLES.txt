@@ -1,0 +1,509 @@
+================================================================================
+  ENVIRONMENT VARIABLES CONFIGURATION GUIDE
+  TelegramFunnel Payment System - October 2025
+================================================================================
+
+This document lists ALL environment variables required for deploying the
+TelegramFunnel payment system services to Google Cloud Run and running
+the local Telegram bot.
+
+================================================================================
+  TABLE OF CONTENTS
+================================================================================
+
+1. GCSplit10-21 (tps10-21.py) - Payment Splitting Service
+2. GCWebhook10-16 (tph10-16.py) - Payment Success Webhook Handler
+3. GCHostPay10-21 (tphp10-21.py) - Host Wallet Payment Service
+4. TelePay10-16 (telepay10-16.py) - Local Telegram Bot
+5. Shared Secrets Reference
+6. Complete Deployment Commands
+
+================================================================================
+  1. GCSplit10-21 (tps10-21.py) - Payment Splitting Service
+================================================================================
+
+SERVICE: tps10-21
+REGION: us-central1
+PLATFORM: Google Cloud Run
+
+REQUIRED ENVIRONMENT VARIABLES (7 total):
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CHANGENOW API CONFIGURATION                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest
+  Purpose: ChangeNow API authentication for cryptocurrency exchange
+  Used by: config_manager.py, changenow_client.py
+  Shared: No
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ WEBHOOK SIGNATURE & COMMUNICATION                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+SUCCESS_URL_SIGNING_KEY=projects/291176869049/secrets/SUCCESS_URL_SIGNING_KEY/versions/latest
+  Purpose: Verify webhook signatures from tph10-16.py (HMAC-SHA256)
+  Used by: tps10-21.py verify_webhook_signature()
+  Shared: YES - with tph10-16.py
+
+TPS_HOSTPAY_SIGNING_KEY=projects/291176869049/secrets/TPS_HOSTPAY_SIGNING_KEY/versions/latest
+  Purpose: Sign tokens sent to GCHostPay10-21 for ETH payment requests
+  Used by: tps10-21.py generate_hostpay_token()
+  Shared: YES - with tphp10-21.py
+  Value: 6b5f0a6e6dca94b1e5d9b1f018f4c8a9e7fe4b0ecfc6e8b29bd2d19f7937df5a
+
+HOSTPAY_WEBHOOK_URL=projects/291176869049/secrets/HOSTPAY_WEBHOOK_URL/versions/latest
+  Purpose: URL endpoint for GCHostPay10-21 service
+  Used by: tps10-21.py to trigger host wallet payments
+  Value: https://tphp10-21-291176869049.us-central1.run.app
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ OPTIONAL CONFIGURATION                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+  Purpose: Telegram bot username for notifications (optional)
+  Used by: config_manager.py
+  Shared: YES - with telepay10-16.py and tph10-16.py
+
+TP_FLAT_FEE=projects/291176869049/secrets/TP_FLAT_FEE/versions/latest
+  Purpose: TelePay service fee percentage (default: 3%)
+  Used by: tps10-21.py calculate_adjusted_amount()
+  Value: "3" (represents 3%)
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DATABASE CREDENTIALS (PostgreSQL via Cloud SQL)                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest
+  Purpose: PostgreSQL database name
+  Used by: database_manager.py
+  Shared: YES - with tph10-16.py and tphp10-21.py
+
+DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest
+  Purpose: PostgreSQL database username
+  Used by: database_manager.py
+  Shared: YES - with tph10-16.py and tphp10-21.py
+
+DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest
+  Purpose: PostgreSQL database password
+  Used by: database_manager.py
+  Shared: YES - with tph10-16.py and tphp10-21.py
+
+CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+  Purpose: Cloud SQL instance connection string
+  Used by: database_manager.py
+  Shared: YES - with tph10-16.py and tphp10-21.py
+
+
+================================================================================
+  2. GCWebhook10-16 (tph10-16.py) - Payment Success Webhook Handler
+================================================================================
+
+SERVICE: tph10-16
+REGION: us-central1
+PLATFORM: Google Cloud Run
+
+REQUIRED ENVIRONMENT VARIABLES (7 total):
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TELEGRAM BOT CONFIGURATION                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest
+  Purpose: Telegram bot API token for sending invite links
+  Used by: tph10-16.py fetch_telegram_token()
+  Shared: YES - with telepay10-16.py
+
+TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+  Purpose: Telegram bot username (e.g., @YourBot)
+  Used by: tph10-16.py
+  Shared: YES - with telepay10-16.py and tps10-21.py
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ WEBHOOK SIGNATURE & COMMUNICATION                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+SUCCESS_URL_SIGNING_KEY=projects/291176869049/secrets/SUCCESS_URL_SIGNING_KEY/versions/latest
+  Purpose: Verify success URL tokens from NowPayments & sign webhooks to tps10-21
+  Used by: tph10-16.py decode_and_verify_token(), trigger_tps_webhook()
+  Shared: YES - with tps10-21.py
+
+TPS_WEBHOOK_URL=projects/291176869049/secrets/TPS_WEBHOOK_URL/versions/latest
+  Purpose: URL endpoint for GCSplit10-21 service
+  Used by: tph10-16.py to trigger payment splitting
+  Value: https://tps10-21-291176869049.us-central1.run.app
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DATABASE CREDENTIALS (PostgreSQL via Cloud SQL)                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest
+  Purpose: PostgreSQL database name
+  Used by: tph10-16.py database operations
+  Shared: YES - with tps10-21.py and tphp10-21.py
+
+DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest
+  Purpose: PostgreSQL database username
+  Used by: tph10-16.py database operations
+  Shared: YES - with tps10-21.py and tphp10-21.py
+
+DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest
+  Purpose: PostgreSQL database password
+  Used by: tph10-16.py database operations
+  Shared: YES - with tps10-21.py and tphp10-21.py
+
+CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+  Purpose: Cloud SQL instance connection string
+  Used by: tph10-16.py database operations
+  Shared: YES - with tps10-21.py and tphp10-21.py
+
+
+================================================================================
+  3. GCHostPay10-21 (tphp10-21.py) - Host Wallet Payment Service
+================================================================================
+
+SERVICE: tphp10-21
+REGION: us-central1
+PLATFORM: Google Cloud Run
+
+REQUIRED ENVIRONMENT VARIABLES (11 total):
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TOKEN SIGNATURE VERIFICATION                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+TPS_HOSTPAY_SIGNING_KEY=projects/291176869049/secrets/TPS_HOSTPAY_SIGNING_KEY/versions/latest
+  Purpose: Verify signed tokens from GCSplit10-21 (HMAC-SHA256, 1-min expiry)
+  Used by: tphp10-21.py decode_and_verify_hostpay_token()
+  Shared: YES - with tps10-21.py
+  Value: 6b5f0a6e6dca94b1e5d9b1f018f4c8a9e7fe4b0ecfc6e8b29bd2d19f7937df5a
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ETHEREUM WALLET CREDENTIALS                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest
+  Purpose: Public Ethereum address of host wallet
+  Used by: wallet_manager.py for ETH transfers
+  Shared: No
+  Security: Public address (safe to log)
+
+HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest
+  Purpose: Private key for signing ETH transactions
+  Used by: wallet_manager.py send_eth_payment()
+  Shared: No
+  Security: CRITICAL - Never log or expose
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ETHEREUM RPC CONFIGURATION (Alchemy/Infura)                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest
+  Purpose: Ethereum node provider URL for Web3 connections
+  Used by: wallet_manager.py _connect_to_web3()
+  Example: https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+  Shared: No
+
+ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest
+  Purpose: API key for Ethereum RPC provider (for gas optimization)
+  Used by: wallet_manager.py _initialize_alchemy()
+  Shared: No
+  Note: Optional - falls back to standard Web3 if not provided
+
+ETHEREUM_RPC_WEBHOOK_SECRET=projects/291176869049/secrets/ETHEREUM_RPC_WEBHOOK_SECRET/versions/latest
+  Purpose: Webhook signing secret from Alchemy Notify
+  Used by: alchemy_webhook_handler.py _verify_signature()
+  Value Format: whsec_...
+  Shared: No
+  Note: Optional - only needed for real-time transaction monitoring
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CHANGENOW API CONFIGURATION                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest
+  Purpose: ChangeNow API authentication for status verification
+  Used by: tphp10-21.py check_changenow_status()
+  Shared: YES - with tps10-21.py
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DATABASE CREDENTIALS (PostgreSQL via Cloud SQL)                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest
+  Purpose: PostgreSQL database name
+  Used by: database_manager.py
+  Shared: YES - with tps10-21.py and tph10-16.py
+
+DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest
+  Purpose: PostgreSQL database username
+  Used by: database_manager.py
+  Shared: YES - with tps10-21.py and tph10-16.py
+
+DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest
+  Purpose: PostgreSQL database password
+  Used by: database_manager.py
+  Shared: YES - with tps10-21.py and tph10-16.py
+
+CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+  Purpose: Cloud SQL instance connection string
+  Used by: database_manager.py
+  Shared: YES - with tps10-21.py and tph10-16.py
+
+
+================================================================================
+  4. TelePay10-16 (telepay10-16.py) - Local Telegram Bot
+================================================================================
+
+RUNTIME: Local Python environment (NOT Google Cloud Run)
+LOCATION: Runs on your local machine or VPS
+
+REQUIRED ENVIRONMENT VARIABLES (3 total):
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TELEGRAM BOT CONFIGURATION                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest
+  Purpose: Telegram bot API token for polling updates
+  Used by: config_manager.py fetch_telegram_token()
+  Shared: YES - with tph10-16.py
+
+TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+  Purpose: Telegram bot username (e.g., @YourBot)
+  Used by: config_manager.py fetch_bot_username()
+  Shared: YES - with tph10-16.py and tps10-21.py
+
+NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest
+  Purpose: NowPayments webhook verification key
+  Used by: config_manager.py fetch_now_webhook_key()
+  Shared: No
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ LOCAL ENVIRONMENT SETUP INSTRUCTIONS                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Since telepay10-16.py runs locally, you must set these environment variables
+in your local shell before running the bot:
+
+OPTION 1: Export in terminal (Linux/Mac):
+  export TELEGRAM_BOT_SECRET_NAME="projects/291176869049/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest"
+  export TELEGRAM_BOT_USERNAME="projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest"
+  export NOWPAYMENT_WEBHOOK_KEY="projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest"
+
+OPTION 2: Set in PowerShell (Windows):
+  $env:TELEGRAM_BOT_SECRET_NAME="projects/291176869049/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest"
+  $env:TELEGRAM_BOT_USERNAME="projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest"
+  $env:NOWPAYMENT_WEBHOOK_KEY="projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest"
+
+OPTION 3: Create .env file in TelePay10-16 directory:
+  TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest
+  TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+  NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest
+
+Then load with python-dotenv:
+  from dotenv import load_dotenv
+  load_dotenv()
+
+IMPORTANT: You must have Google Cloud credentials configured locally:
+  gcloud auth application-default login
+
+
+================================================================================
+  5. SHARED SECRETS REFERENCE
+================================================================================
+
+The following secrets are shared across multiple services:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TELEGRAM_BOT_SECRET_NAME                                                    │
+│   Used by: telepay10-16.py, tph10-16.py                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TELEGRAM_BOT_USERNAME                                                       │
+│   Used by: telepay10-16.py, tph10-16.py, tps10-21.py                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SUCCESS_URL_SIGNING_KEY                                                     │
+│   Used by: tph10-16.py (generator), tps10-21.py (validator)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ TPS_HOSTPAY_SIGNING_KEY                                                     │
+│   Used by: tps10-21.py (generator), tphp10-21.py (validator)                │
+│   Value: 6b5f0a6e6dca94b1e5d9b1f018f4c8a9e7fe4b0ecfc6e8b29bd2d19f7937df5a  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CHANGENOW_API_KEY                                                           │
+│   Used by: tps10-21.py, tphp10-21.py                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DATABASE CREDENTIALS (4 secrets)                                            │
+│   Used by: tph10-16.py, tps10-21.py, tphp10-21.py                           │
+│   - DATABASE_NAME_SECRET                                                    │
+│   - DATABASE_USER_SECRET                                                    │
+│   - DATABASE_PASSWORD_SECRET                                                │
+│   - CLOUD_SQL_CONNECTION_NAME                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+  6. COMPLETE DEPLOYMENT COMMANDS
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DEPLOY GCSplit10-21 (tps10-21.py)                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+cd /path/to/GCSplit10-21
+
+gcloud run deploy tps10-21 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 512Mi \
+    --cpu 1 \
+    --timeout 300 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
+    --set-env-vars SUCCESS_URL_SIGNING_KEY=projects/291176869049/secrets/SUCCESS_URL_SIGNING_KEY/versions/latest \
+    --set-env-vars TPS_HOSTPAY_SIGNING_KEY=projects/291176869049/secrets/TPS_HOSTPAY_SIGNING_KEY/versions/latest \
+    --set-env-vars HOSTPAY_WEBHOOK_URL=projects/291176869049/secrets/HOSTPAY_WEBHOOK_URL/versions/latest \
+    --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest \
+    --set-env-vars TP_FLAT_FEE=projects/291176869049/secrets/TP_FLAT_FEE/versions/latest \
+    --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
+    --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
+    --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DEPLOY GCWebhook10-16 (tph10-16.py)                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+cd /path/to/GCWebhook10-16
+
+gcloud run deploy tph10-16 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 512Mi \
+    --cpu 1 \
+    --timeout 300 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --set-env-vars TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest \
+    --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest \
+    --set-env-vars SUCCESS_URL_SIGNING_KEY=projects/291176869049/secrets/SUCCESS_URL_SIGNING_KEY/versions/latest \
+    --set-env-vars TPS_WEBHOOK_URL=projects/291176869049/secrets/TPS_WEBHOOK_URL/versions/latest \
+    --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
+    --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
+    --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DEPLOY GCHostPay10-21 (tphp10-21.py)                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+cd /path/to/GCHostPay10-21
+
+gcloud run deploy tphp10-21 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --memory 1Gi \
+    --cpu 1 \
+    --timeout 600 \
+    --max-instances 10 \
+    --min-instances 0 \
+    --port 8080 \
+    --set-env-vars TPS_HOSTPAY_SIGNING_KEY=projects/291176869049/secrets/TPS_HOSTPAY_SIGNING_KEY/versions/latest \
+    --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
+    --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
+    --set-env-vars ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest \
+    --set-env-vars ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest \
+    --set-env-vars ETHEREUM_RPC_WEBHOOK_SECRET=projects/291176869049/secrets/ETHEREUM_RPC_WEBHOOK_SECRET/versions/latest \
+    --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
+    --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
+    --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
+    --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
+    --set-env-vars CLOUD_SQL_CONNECTION_NAME=projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+
+
+================================================================================
+  VERIFICATION CHECKLIST
+================================================================================
+
+After deployment, verify all services are configured correctly:
+
+□ GCSplit10-21 (tps10-21):
+  curl https://tps10-21-291176869049.us-central1.run.app/health
+  Expected: {"status": "healthy"}
+
+□ GCWebhook10-16 (tph10-16):
+  curl https://tph10-16-291176869049.us-central1.run.app/health
+  Expected: {"status": "healthy"}
+
+□ GCHostPay10-21 (tphp10-21):
+  curl https://tphp10-21-291176869049.us-central1.run.app/health
+  Expected: {"status": "healthy", "configuration": {"signing_key": "✅"}}
+
+□ TelePay10-16 (local):
+  Verify bot starts without errors
+  Check logs for: "✅ [CONFIG] Successfully fetched..."
+
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+Issue: "Environment variable X is not set"
+Solution: Verify the --set-env-vars flag includes the missing variable
+
+Issue: "Error fetching secret from Secret Manager"
+Solution:
+  1. Verify secret exists: gcloud secrets list
+  2. Check service account has secretAccessor role
+  3. Verify secret path format is correct
+
+Issue: "Cloud SQL connection failed"
+Solution:
+  1. Verify Cloud SQL instance is running
+  2. Check CLOUD_SQL_CONNECTION_NAME format
+  3. Ensure service account has Cloud SQL Client role
+
+Issue: Local bot can't access secrets
+Solution:
+  Run: gcloud auth application-default login
+  Ensure your user account has secretAccessor role
+
+
+================================================================================
+  END OF CONFIGURATION GUIDE
+================================================================================
+
+Generated: October 2025
+Last Updated: 2025-10-21
+Project: TelegramFunnel Payment System

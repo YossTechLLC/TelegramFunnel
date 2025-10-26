@@ -29,8 +29,8 @@ GCSplit7-14/
 ├── tps10-9.py                      # Added HPW10-9 webhook notification
 └── DEPLOYMENT_INSTRUCTIONS.md      # Updated with HPW_WEBHOOK_URL
 
-GCWebhook10-13/
-└── tph10-13.py                     # Added NowPayments IPN callback URL
+TelePay7-14/
+└── start_np_gateway.py             # Added NowPayments IPN callback URL
 ```
 
 ---
@@ -39,7 +39,7 @@ GCWebhook10-13/
 
 ### Step-by-Step Process:
 
-1. **User Initiates Payment** (GCWebhook10-13)
+1. **User Initiates Payment** (TelePay7-14)
    - User selects subscription tier
    - NowPayments invoice created with IPN callback
    - User pays via NowPayments gateway
@@ -49,7 +49,7 @@ GCWebhook10-13/
    - ETH deposited into custodial HOST wallet
    - NowPayments sends IPN webhook to HPW10-9
 
-3. **Payment Split Setup** (GCWebhook10-13 → GCSplit7-14)
+3. **Payment Split Setup** (GCWebhook7-14 → GCSplit7-14)
    - User receives Telegram invite to channel
    - GCSplit7-14 creates ChangeNow transaction
    - ChangeNow provides `payinAddress` for ETH deposit
@@ -107,14 +107,6 @@ Alchemy Mainnet: https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY
 Infura Mainnet: https://mainnet.infura.io/v3/YOUR_PROJECT_ID
 ```
 
-### Cloud SQL Connection:
-```bash
-# Cloud SQL Connection Name (direct environment variable)
-CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
-```
-
-**Note:** This application uses **Cloud SQL Connector** for database connections. No host IP or port configuration is needed.
-
 ---
 
 ## 🚀 Deployment Commands
@@ -123,55 +115,59 @@ CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
 ```bash
 cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-9/GCHostPay10-9
 
-gcloud run deploy hpw10-9 \
-    --source . \
-    --region us-central1 \
+gcloud functions deploy hpw10-9 \
+    --runtime python311 \
+    --trigger-http \
     --allow-unauthenticated \
-    --service-account=291176869049-compute@developer.gserviceaccount.com \
-    --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
+    --entry-point app \
+    --region us-central1 \
     --set-env-vars HOST_WALLET_ETH_ADDRESS=projects/291176869049/secrets/HOST_WALLET_ETH_ADDRESS/versions/latest \
     --set-env-vars HOST_WALLET_PRIVATE_KEY=projects/291176869049/secrets/HOST_WALLET_PRIVATE_KEY/versions/latest \
     --set-env-vars NOWPAYMENT_WEBHOOK_KEY=projects/291176869049/secrets/NOWPAYMENT_WEBHOOK_KEY/versions/latest \
     --set-env-vars ETHEREUM_RPC_URL=projects/291176869049/secrets/ETHEREUM_RPC_URL/versions/latest \
     --set-env-vars ETHEREUM_RPC_URL_API=projects/291176869049/secrets/ETHEREUM_RPC_URL_API/versions/latest \
-    --set-env-vars CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql \
+    --set-env-vars DATABASE_HOST_SECRET=projects/291176869049/secrets/DATABASE_HOST_SECRET/versions/latest \
     --set-env-vars DATABASE_NAME_SECRET=projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest \
     --set-env-vars DATABASE_USER_SECRET=projects/291176869049/secrets/DATABASE_USER_SECRET/versions/latest \
     --set-env-vars DATABASE_PASSWORD_SECRET=projects/291176869049/secrets/DATABASE_PASSWORD_SECRET/versions/latest \
     --set-env-vars ETH_NETWORK=mainnet \
     --set-env-vars PAYMENT_TIMEOUT_MINUTES=120 \
     --set-env-vars MAX_RETRY_ATTEMPTS=5 \
-    --set-env-vars POLLING_INTERVAL_SECONDS=30
+    --set-env-vars POLLING_INTERVAL_SECONDS=30 \
+    --source . \
+    --timeout 540s \
+    --memory 512MB \
+    --max-instances 10
 ```
 
 ### 2. Update GCSplit7-14:
 ```bash
 cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-9/GCSplit7-14
 
-gcloud run deploy tps10-9 \
-    --source . \
-    --region us-central1 \
-    --port 8080 \
+gcloud functions deploy tps10-9 \
+    --runtime python311 \
+    --trigger-http \
     --allow-unauthenticated \
-    --service-account=291176869049-compute@developer.gserviceaccount.com \
     --set-env-vars CHANGENOW_API_KEY=projects/291176869049/secrets/CHANGENOW_API_KEY/versions/latest \
     --set-env-vars WEBHOOK_SIGNING_KEY=projects/291176869049/secrets/WEBHOOK_SIGNING_KEY/versions/latest \
     --set-env-vars TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest \
-    --set-env-vars TPS_WEBHOOK_URL=https://tps7-14-291176869049.us-central1.run.app \
-    --set-env-vars HPW_WEBHOOK_URL=https://hpw10-9-291176869049.us-central1.run.app/gcsplit
+    --set-env-vars TPS_WEBHOOK_URL=https://tps10-9-291176869049.us-central1.run.app/tps10-9 \
+    --set-env-vars HPW_WEBHOOK_URL=https://hpw10-9-291176869049.us-central1.run.app/hpw10-9/gcsplit \
+    --region us-central1 \
+    --source .
 ```
 
-### 3. Update GCWebhook10-13 Environment:
-Add this environment variable to your GCWebhook10-13 deployment:
+### 3. Update TelePay7-14 Environment:
+Add this environment variable to your TelePay7-14 deployment:
 ```bash
-HPW_IPN_CALLBACK_URL=https://hpw10-9-291176869049.us-central1.run.app/nowpayments
+HPW_IPN_CALLBACK_URL=https://hpw10-9-291176869049.us-central1.run.app/hpw10-9/nowpayments
 ```
 
 ---
 
 ## 📊 Database Schema
 
-The `host_payment_queue` table must be created manually in pgAdmin before deployment:
+The system automatically creates the `host_payment_queue` table on first run:
 
 ```sql
 CREATE TABLE host_payment_queue (
@@ -203,7 +199,7 @@ CREATE TABLE host_payment_queue (
 
 ### Health Check Endpoint:
 ```bash
-curl https://hpw10-9-291176869049.us-central1.run.app/health
+curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/health
 ```
 
 **Response:**
@@ -224,7 +220,7 @@ curl https://hpw10-9-291176869049.us-central1.run.app/health
 
 ### Payment Status Check:
 ```bash
-curl https://hpw10-9-291176869049.us-central1.run.app/status/CHANGENOW_tx_123
+curl https://us-central1-291176869049.cloudfunctions.net/hpw10-9/status/CHANGENOW_tx_123
 ```
 
 ### Key Metrics to Monitor:
