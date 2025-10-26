@@ -75,7 +75,7 @@ class TokenManager:
         Encrypt token for GCSplit1 → GCSplit2 (USDT estimate request).
 
         Token Structure:
-        - 4 bytes: user_id (uint32)
+        - 8 bytes: user_id (uint64)
         - 16 bytes: closed_channel_id (fixed, padded)
         - 1 byte: wallet_address length + variable bytes
         - 1 byte: payout_currency length + variable bytes
@@ -96,8 +96,8 @@ class TokenManager:
             # Build packed data
             packed_data = bytearray()
 
-            # user_id (4 bytes)
-            packed_data.extend(struct.pack(">I", user_id))
+            # user_id (8 bytes)
+            packed_data.extend(struct.pack(">Q", user_id))
 
             # closed_channel_id (16 bytes fixed)
             packed_data.extend(closed_channel_id_bytes)
@@ -168,9 +168,9 @@ class TokenManager:
             # Unpack payload
             offset = 0
 
-            # user_id (4 bytes)
-            user_id = struct.unpack(">I", payload[offset:offset + 4])[0]
-            offset += 4
+            # user_id (8 bytes)
+            user_id = struct.unpack(">Q", payload[offset:offset + 8])[0]
+            offset += 8
 
             # closed_channel_id (16 bytes fixed)
             closed_channel_id_bytes = payload[offset:offset + 16]
@@ -227,7 +227,7 @@ class TokenManager:
         Encrypt token for GCSplit2 → GCSplit1 (USDT estimate response).
 
         Token Structure:
-        - 4 bytes: user_id
+        - 8 bytes: user_id (uint64)
         - 16 bytes: closed_channel_id (fixed)
         - Strings: wallet_address, payout_currency, payout_network
         - 8 bytes each: from_amount, to_amount, deposit_fee, withdrawal_fee
@@ -243,7 +243,7 @@ class TokenManager:
             closed_channel_id_bytes = closed_channel_id.encode('utf-8')[:16].ljust(16, b'\x00')
 
             packed_data = bytearray()
-            packed_data.extend(struct.pack(">I", user_id))
+            packed_data.extend(struct.pack(">Q", user_id))
             packed_data.extend(closed_channel_id_bytes)
             packed_data.extend(self._pack_string(wallet_address))
             packed_data.extend(self._pack_string(payout_currency))
@@ -298,8 +298,8 @@ class TokenManager:
                 raise ValueError("Invalid signature")
 
             offset = 0
-            user_id = struct.unpack(">I", payload[offset:offset + 4])[0]
-            offset += 4
+            user_id = struct.unpack(">Q", payload[offset:offset + 8])[0]
+            offset += 8
 
             closed_channel_id_bytes = payload[offset:offset + 16]
             closed_channel_id = closed_channel_id_bytes.rstrip(b'\x00').decode('utf-8')
@@ -359,7 +359,7 @@ class TokenManager:
 
         Token Structure:
         - 16 bytes: unique_id (fixed)
-        - 4 bytes: user_id
+        - 8 bytes: user_id (uint64)
         - 16 bytes: closed_channel_id (fixed)
         - Strings: wallet_address, payout_currency, payout_network
         - 8 bytes: eth_amount
@@ -377,7 +377,7 @@ class TokenManager:
 
             packed_data = bytearray()
             packed_data.extend(unique_id_bytes)
-            packed_data.extend(struct.pack(">I", user_id))
+            packed_data.extend(struct.pack(">Q", user_id))
             packed_data.extend(closed_channel_id_bytes)
             packed_data.extend(self._pack_string(wallet_address))
             packed_data.extend(self._pack_string(payout_currency))
@@ -434,8 +434,8 @@ class TokenManager:
             unique_id = unique_id_bytes.rstrip(b'\x00').decode('utf-8')
             offset += 16
 
-            user_id = struct.unpack(">I", payload[offset:offset + 4])[0]
-            offset += 4
+            user_id = struct.unpack(">Q", payload[offset:offset + 8])[0]
+            offset += 8
 
             closed_channel_id_bytes = payload[offset:offset + 16]
             closed_channel_id = closed_channel_id_bytes.rstrip(b'\x00').decode('utf-8')
@@ -495,7 +495,7 @@ class TokenManager:
 
         Token Structure:
         - 16 bytes: unique_id
-        - 4 bytes: user_id
+        - 8 bytes: user_id (uint64)
         - 16 bytes: closed_channel_id
         - Strings: cn_api_id, currencies, networks, addresses, flow, type
         - 8 bytes each: from_amount, to_amount
@@ -513,7 +513,7 @@ class TokenManager:
 
             packed_data = bytearray()
             packed_data.extend(unique_id_bytes)
-            packed_data.extend(struct.pack(">I", user_id))
+            packed_data.extend(struct.pack(">Q", user_id))
             packed_data.extend(closed_channel_id_bytes)
             packed_data.extend(self._pack_string(cn_api_id))
             packed_data.extend(self._pack_string(from_currency))
@@ -578,8 +578,8 @@ class TokenManager:
             unique_id = unique_id_bytes.rstrip(b'\x00').decode('utf-8')
             offset += 16
 
-            user_id = struct.unpack(">I", payload[offset:offset + 4])[0]
-            offset += 4
+            user_id = struct.unpack(">Q", payload[offset:offset + 8])[0]
+            offset += 8
 
             closed_channel_id_bytes = payload[offset:offset + 16]
             closed_channel_id = closed_channel_id_bytes.rstrip(b'\x00').decode('utf-8')
