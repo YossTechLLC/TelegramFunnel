@@ -1,0 +1,1067 @@
+================================================================================
+TELEPAY10-26 WEBHOOK REFACTORING PLAN
+Google Cloud Tasks Architecture Design
+================================================================================
+
+Date: 2025-10-26
+Purpose: Refactor TelePay10-26 from monolithic long-polling bot to event-driven
+         webhook-based microservices using Google Cloud Tasks architecture
+Status: DESIGN PHASE - Ready for Implementation
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+CURRENT ARCHITECTURE PROBLEMS:
+
+❌ Long-Polling Bot: Consumes resources 24/7, even when idle
+❌ Single Point of Failure: If bot crashes, all functionality stops
+❌ No Retry Logic: Failed operations (Telegram API, DB) fail permanently
+❌ Background Loops: Subscription monitoring runs every 60s regardless of load
+❌ No Rate Limiting: Broadcast operations can overwhelm Telegram API
+❌ Poor Scalability: Cannot scale horizontally (single bot instance)
+❌ Tight Coupling: All functionality in one service
+❌ No Queue Management: Operations execute synchronously
+
+PROPOSED SOLUTION:
+
+✅ Webhook-Based Bot: Only runs when Telegram sends updates (event-driven)
+✅ Microservices: Independent services with single responsibilities
+✅ Infinite Retry: Cloud Tasks provides automatic retry (60s backoff, 24h max)
+✅ Scheduled Tasks: Cloud Scheduler triggers subscription checks
+✅ Rate-Limited: Cloud Tasks queues throttle Telegram API calls
+✅ Horizontal Scaling: Each service can scale independently
+✅ Loose Coupling: Services communicate via Cloud Tasks queues
+✅ Queue Management: Asynchronous, reliable task dispatch
+
+BENEFITS:
+
+🚀 99%+ Cost Reduction: Only pay for actual bot interactions (not 24/7 polling)
+🚀 Zero Downtime: Cloud Run auto-scales and auto-restarts
+🚀 Guaranteed Delivery: Cloud Tasks ensures operations complete (infinite retry)
+🚀 Better Performance: Event-driven is faster than polling
+🚀 Easier Monitoring: Cloud Logging + Cloud Monitoring built-in
+🚀 Production-Ready: Same architecture as GCSplit, GCWebhook, GCHostPay
+
+================================================================================
+CURRENT ARCHITECTURE ANALYSIS
+================================================================================
+
+TELEPAY10-26 STRUCTURE:
+```
+TelePay10-26/
+├── telepay10-26.py              # Main orchestrator (56 lines)
+├── app_initializer.py           # App setup and initialization
+├── bot_manager.py               # Bot handler setup (112 lines)
+├── subscription_manager.py      # Subscription expiration monitoring (220 lines)
+├── broadcast_manager.py         # Broadcast message posting (112 lines)
+├── start_np_gateway.py          # NOWPayments integration (200+ lines)
+├── secure_webhook.py            # Success URL token generation (100+ lines)
+├── input_handlers.py            # Bot command/input handlers
+├── menu_handlers.py             # Bot menu/callback handlers
+├── message_utils.py             # Message formatting utilities
+├── database.py                  # Database operations
+├── config_manager.py            # Configuration management
+└── server_manager.py            # Flask server (unused?)
+```
+
+CURRENT EXECUTION FLOW:
+
+1. START: telepay10-26.py main()
+2. INITIALIZE: AppInitializer sets up bot, db, handlers
+3. FLASK THREAD: ServerManager starts Flask on random port (unused?)
+4. BOT TASK: Long-polling bot runs indefinitely
+5. SUBSCRIPTION TASK: Background loop checks expirations every 60s
+6. WAIT: asyncio.gather() blocks until both tasks complete (never)
+
+CURRENT COMPONENTS:
+
+[COMPONENT 1] Telegram Bot (Long-Polling)
+├── Purpose: Handle user commands, buttons, messages
+├── Implementation: Application.run_polling()
+├── Runs: 24/7 continuously
+├── Handlers:
+│   ├── /start - Start bot, decode deep link tokens
+│   ├── /database - Enter channel configuration flow
+│   ├── /start_np_gateway_new - Trigger payment flow
+│   ├── /cancel - Cancel conversation
+│   ├── CallbackQueryHandler - Handle button clicks
+│   ├── ConversationHandler - Multi-step input flows
+│   └── MessageHandler - Handle text messages
+└── Problem: Consumes resources even when idle, no retry logic
+
+[COMPONENT 2] Subscription Manager (Background Task)
+├── Purpose: Check for expired subscriptions and remove users
+├── Implementation: asyncio loop with 60s sleep
+├── Runs: 24/7 continuously
+├── Process:
+│   1. Query database for expired subscriptions
+│   2. For each expired subscription:
+│      a. Call Telegram API to remove user from channel
+│      b. Update database to mark subscription as inactive
+│   3. Sleep 60 seconds
+│   4. Repeat
+└── Problem: Runs continuously even when no subscriptions expire, no retry
+
+[COMPONENT 3] Broadcast Manager
+├── Purpose: Post welcome messages to open channels
+├── Implementation: Direct Telegram API POST requests
+├── Triggers: Manual via bot command (not documented)
+├── Process:
+│   1. Fetch all open channels from database
+│   2. For each channel:
+│      a. Build subscription tier buttons
+│      b. POST message to Telegram API
+│      c. Schedule message deletion after 60s
+└── Problem: No rate limiting, no retry, synchronous execution
+
+[COMPONENT 4] Payment Gateway
+├── Purpose: Create NOWPayments invoices
+├── Implementation: Direct API calls to nowpayments.io
+├── Triggers: User clicks payment button or /start_np_gateway_new
+├── Process:
+│   1. Build signed success_url token
+│   2. Create invoice via NOWPayments API
+│   3. Send invoice URL to user
+└── Problem: No retry on API failure
+
+[COMPONENT 5] Database Operations
+├── Purpose: CRUD operations for channels, subscriptions, users
+├── Implementation: Direct PostgreSQL queries via pg8000
+├── Triggers: Bot commands, payment flows, subscription checks
+├── Problem: Inline with bot, no connection pooling, no retry
+
+[COMPONENT 6] Flask Server
+├── Purpose: Unknown (possibly webhook receiver?)
+├── Implementation: Empty Flask app on random port
+├── Runs: 24/7 in background thread
+├── Problem: Appears unused, wastes resources
+
+STATUS: ❌ MONOLITHIC, RESOURCE-INTENSIVE, NO RETRY, NO SCALABILITY
+
+================================================================================
+PROPOSED WEBHOOK ARCHITECTURE
+================================================================================
+
+DESIGN PRINCIPLE: Follow the proven GCSplit/GCWebhook/GCHostPay pattern
+
+MICROSERVICES TO CREATE:
+
+1. TelePay-Bot-10-26 (Telegram Webhook Handler)
+2. TelePay-Subscription-10-26 (Subscription Expiration Processor)
+3. TelePay-Broadcast-10-26 (Channel Broadcast Sender)
+4. TelePay-Payment-10-26 (Payment Gateway Coordinator)
+5. TelePay-Database-10-26 (Database Service - Optional)
+
+CLOUD TASKS QUEUES TO CREATE:
+
+1. telepay-subscription-check-queue
+2. telepay-subscription-removal-queue
+3. telepay-broadcast-queue
+4. telepay-payment-queue
+5. telepay-database-queue (optional)
+
+CLOUD SCHEDULER JOBS TO CREATE:
+
+1. subscription-check-scheduler (every 5 minutes)
+2. broadcast-scheduler (on-demand or daily)
+
+ARCHITECTURE DIAGRAM:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        GOOGLE CLOUD PLATFORM                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────────┐         ┌──────────────────────────────────────┐ │
+│  │ Telegram API     │         │ Cloud Scheduler (Cron Jobs)          │ │
+│  │ Webhook          │         │                                       │ │
+│  └────────┬─────────┘         │  • subscription-check (every 5min)   │ │
+│           │ POST /webhook     │  • broadcast-trigger (on-demand)     │ │
+│           │                   └────────┬─────────────────────────────┘ │
+│           │                            │ HTTP POST                      │
+│           ▼                            ▼                                │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │ TelePay-Bot-10-26 (Cloud Run)                                   │  │
+│  │ • Receives Telegram webhooks                                    │  │
+│  │ • Handles commands: /start, /database, etc.                     │  │
+│  │ • Enqueues tasks to other services via Cloud Tasks             │  │
+│  │ • Fast response (<100ms)                                        │  │
+│  └───────────┬─────────────────────────────────────────────────────┘  │
+│              │ Enqueue Tasks                                           │
+│              │                                                          │
+│  ┌───────────▼──────────────────────────────────────────────────────┐ │
+│  │ Google Cloud Tasks (Queue Manager)                               │ │
+│  │                                                                   │ │
+│  │  ┌──────────────────────────────────────────────────────────┐  │ │
+│  │  │ telepay-subscription-check-queue                          │  │ │
+│  │  │ • Dispatches to TelePay-Subscription-10-26               │  │ │
+│  │  │ • Rate: 10 rps | Retry: 24h | Backoff: 60s              │  │ │
+│  │  └──────────────────────────────────────────────────────────┘  │ │
+│  │                                                                   │ │
+│  │  ┌──────────────────────────────────────────────────────────┐  │ │
+│  │  │ telepay-subscription-removal-queue                        │  │ │
+│  │  │ • Dispatches to TelePay-Subscription-10-26               │  │ │
+│  │  │ • Rate: 5 rps (Telegram API limit) | Retry: 24h         │  │ │
+│  │  └──────────────────────────────────────────────────────────┘  │ │
+│  │                                                                   │ │
+│  │  ┌──────────────────────────────────────────────────────────┐  │ │
+│  │  │ telepay-broadcast-queue                                   │  │ │
+│  │  │ • Dispatches to TelePay-Broadcast-10-26                  │  │ │
+│  │  │ • Rate: 8 rps (Telegram Bot API limit) | Retry: 24h     │  │ │
+│  │  └──────────────────────────────────────────────────────────┘  │ │
+│  │                                                                   │ │
+│  │  ┌──────────────────────────────────────────────────────────┐  │ │
+│  │  │ telepay-payment-queue                                     │  │ │
+│  │  │ • Dispatches to TelePay-Payment-10-26                    │  │ │
+│  │  │ • Rate: 20 rps | Retry: 24h                              │  │ │
+│  │  └──────────────────────────────────────────────────────────┘  │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│              │ Dispatch Tasks                                          │
+│              │                                                          │
+│  ┌───────────▼──────────────────────────────────────────────────────┐ │
+│  │ Microservices (Cloud Run)                                         │ │
+│  │                                                                    │ │
+│  │  ┌──────────────────────────────────────────────────────────┐   │ │
+│  │  │ TelePay-Subscription-10-26                                │   │ │
+│  │  │ • Check expired subscriptions                             │   │ │
+│  │  │ • Remove users from channels                              │   │ │
+│  │  │ • Update database (mark inactive)                         │   │ │
+│  │  └──────────────────────────────────────────────────────────┘   │ │
+│  │                                                                    │ │
+│  │  ┌──────────────────────────────────────────────────────────┐   │ │
+│  │  │ TelePay-Broadcast-10-26                                   │   │ │
+│  │  │ • Post welcome messages to channels                       │   │ │
+│  │  │ • Schedule message deletion                               │   │ │
+│  │  └──────────────────────────────────────────────────────────┘   │ │
+│  │                                                                    │ │
+│  │  ┌──────────────────────────────────────────────────────────┐   │ │
+│  │  │ TelePay-Payment-10-26                                     │   │ │
+│  │  │ • Create NOWPayments invoices                             │   │ │
+│  │  │ • Build signed success URLs                               │   │ │
+│  │  └──────────────────────────────────────────────────────────┘   │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+│  ┌────────────────────────────────────────────────────────────────┐   │
+│  │ PostgreSQL (Cloud SQL)                                          │   │
+│  │ • public_channels_database                                      │   │
+│  │ • private_channel_users_database                                │   │
+│  │ • other tables...                                               │   │
+│  └────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+================================================================================
+MICROSERVICE 1: TelePay-Bot-10-26 (Telegram Webhook Handler)
+================================================================================
+
+PURPOSE: Receive and process Telegram webhooks (replaces long-polling bot)
+
+RESPONSIBILITIES:
+├── Receive POST requests from Telegram API webhook
+├── Process bot commands (/start, /database, /cancel, etc.)
+├── Handle callback queries (button clicks)
+├── Handle conversation states (multi-step flows)
+├── Enqueue tasks to other services via Cloud Tasks
+└── Return HTTP 200 quickly (<100ms response time)
+
+ENDPOINTS:
+├── POST /webhook - Telegram webhook handler (main)
+├── GET /health - Health check endpoint
+└── POST /set_webhook - Setup Telegram webhook URL (admin)
+
+WORKFLOW EXAMPLES:
+
+[Example 1] User sends /start command
+```
+1. Telegram API → POST /webhook {"message": {"text": "/start xyz..."}}
+2. TelePay-Bot decodes deep link token (xyz)
+3. TelePay-Bot determines action (subscription tier selection)
+4. TelePay-Bot enqueues payment task to telepay-payment-queue
+5. TelePay-Bot responds to user immediately
+6. TelePay-Bot returns HTTP 200 to Telegram
+7. Cloud Tasks dispatches to TelePay-Payment-10-26
+8. TelePay-Payment creates NOWPayments invoice
+9. TelePay-Payment sends invoice URL to user via Telegram API
+```
+
+[Example 2] User clicks payment button
+```
+1. Telegram API → POST /webhook {"callback_query": {"data": "TRIGGER_PAYMENT"}}
+2. TelePay-Bot answers callback query
+3. TelePay-Bot enqueues payment task to telepay-payment-queue
+4. TelePay-Bot returns HTTP 200 to Telegram
+5. Cloud Tasks dispatches to TelePay-Payment-10-26
+6. TelePay-Payment processes payment flow
+```
+
+[Example 3] User enters channel configuration
+```
+1. Telegram API → POST /webhook {"message": {"text": "/database"}}
+2. TelePay-Bot enters conversation state (OPEN_CHANNEL_INPUT)
+3. TelePay-Bot sends prompt "Enter open channel ID"
+4. TelePay-Bot returns HTTP 200 to Telegram
+5. User enters channel ID
+6. Telegram API → POST /webhook {"message": {"text": "@mychannel"}}
+7. TelePay-Bot validates input, moves to next state
+8. TelePay-Bot sends next prompt
+9. ... (continues for all config steps)
+10. TelePay-Bot writes to database when flow completes
+```
+
+KEY FEATURES:
+✅ Stateless webhook handler (conversation state stored in context)
+✅ Fast response time (<100ms)
+✅ No long-polling (event-driven)
+✅ Automatic scaling via Cloud Run
+✅ Enqueues heavy operations to Cloud Tasks
+
+DEPENDENCIES:
+├── python-telegram-bot (webhook mode, not polling)
+├── google-cloud-tasks (for task enqueue)
+├── google-cloud-secret-manager (for config)
+└── Flask (for webhook server)
+
+ENVIRONMENT VARIABLES:
+├── TELEGRAM_BOT_SECRET_NAME (Secret Manager path)
+├── CLOUD_TASKS_PROJECT_ID
+├── CLOUD_TASKS_LOCATION
+├── TELEPAY_PAYMENT_QUEUE
+├── TELEPAY_BROADCAST_QUEUE
+├── TELEPAY_SUBSCRIPTION_QUEUE
+└── All service URLs (TELEPAY_PAYMENT_URL, etc.)
+
+CLOUD TASKS INTEGRATION:
+
+enqueue_payment_task():
+  queue: telepay-payment-queue
+  target: TelePay-Payment-10-26
+  payload: {user_id, chat_id, subscription_tier, open_channel_id}
+
+enqueue_broadcast_task():
+  queue: telepay-broadcast-queue
+  target: TelePay-Broadcast-10-26
+  payload: {open_channel_id, message_config}
+
+enqueue_database_task():
+  queue: telepay-database-queue (optional)
+  target: TelePay-Database-10-26
+  payload: {operation, table, data}
+
+MIGRATION FROM CURRENT:
+├── OLD: bot_manager.py + Application.run_polling()
+├── NEW: Webhook handler + Application.run_webhook()
+├── CHANGE: Remove asyncio.run() and background tasks
+├── CHANGE: Remove Flask ServerManager (use Cloud Run directly)
+└── BENEFIT: 99% cost reduction, auto-scaling, better performance
+
+================================================================================
+MICROSERVICE 2: TelePay-Subscription-10-26 (Subscription Processor)
+================================================================================
+
+PURPOSE: Check expired subscriptions and remove users from channels
+
+RESPONSIBILITIES:
+├── Receive trigger from Cloud Scheduler (every 5 minutes)
+├── Query database for expired subscriptions
+├── For each expired subscription:
+│   ├── Enqueue removal task to telepay-subscription-removal-queue
+│   └── Rate-limited via Cloud Tasks (5 rps)
+└── Return HTTP 200
+
+ENDPOINTS:
+├── POST /check-expired - Triggered by Cloud Scheduler
+├── POST /remove-user - Triggered by Cloud Tasks (remove single user)
+└── GET /health - Health check endpoint
+
+WORKFLOW:
+
+[Scheduled Trigger] Every 5 minutes
+```
+1. Cloud Scheduler → POST /check-expired
+2. TelePay-Subscription queries database
+3. SELECT * FROM private_channel_users_database
+   WHERE is_active = true
+   AND CONCAT(expire_date, ' ', expire_time) < NOW()
+4. For each expired subscription:
+   a. Enqueue to telepay-subscription-removal-queue
+      payload: {user_id, private_channel_id}
+5. Return HTTP 200 to Cloud Scheduler
+6. Cloud Tasks dispatches removal tasks (rate-limited at 5 rps)
+7. TelePay-Subscription → POST /remove-user
+8. Remove user from Telegram channel (ban + unban)
+9. Update database: SET is_active = false
+10. Return HTTP 200 (or 500 for retry)
+```
+
+KEY FEATURES:
+✅ Scheduled execution (every 5 min) instead of continuous loop
+✅ Rate-limited Telegram API calls (5 rps)
+✅ Infinite retry for failed removals (60s backoff, 24h max)
+✅ Separate check and removal for better parallelism
+✅ Scales horizontally during high load
+
+QUEUE CONFIGURATION:
+
+[Queue 1] telepay-subscription-check-queue
+Purpose: Trigger subscription expiration checks
+Rate: 10 dispatches/second (internal service, no limit)
+Retry: Infinite for 24h (60s fixed backoff)
+
+[Queue 2] telepay-subscription-removal-queue
+Purpose: Remove individual users from channels
+Rate: 5 dispatches/second (~50% of Telegram API limit)
+Retry: Infinite for 24h (60s fixed backoff)
+Rationale: Telegram ban_chat_member has ~10 rps limit per bot
+
+CLOUD SCHEDULER CONFIGURATION:
+
+Job: subscription-expiration-check
+Schedule: */5 * * * * (every 5 minutes)
+Target: TelePay-Subscription-10-26/check-expired
+Method: POST
+Retry: 3 attempts with exponential backoff
+
+DEPENDENCIES:
+├── python-telegram-bot (for Telegram API calls)
+├── google-cloud-tasks (for task enqueue)
+├── google-cloud-secret-manager (for config)
+├── cloud-sql-python-connector (for database)
+└── Flask (for webhook server)
+
+MIGRATION FROM CURRENT:
+├── OLD: subscription_manager.py with asyncio loop
+├── NEW: Webhook endpoint triggered by Cloud Scheduler
+├── CHANGE: Remove while True loop and sleep(60)
+├── CHANGE: Add Cloud Tasks queue for rate-limited removals
+└── BENEFIT: Only runs when needed, better rate limiting, retry capability
+
+================================================================================
+MICROSERVICE 3: TelePay-Broadcast-10-26 (Channel Broadcast Sender)
+================================================================================
+
+PURPOSE: Post welcome messages to open channels with subscription tier buttons
+
+RESPONSIBILITIES:
+├── Receive trigger (manual or scheduled)
+├── Query database for all open channels
+├── For each channel:
+│   ├── Build subscription tier buttons
+│   ├── Post welcome message to channel
+│   ├── Schedule message deletion (after 60s)
+└── Return HTTP 200
+
+ENDPOINTS:
+├── POST /broadcast-all - Broadcast to all channels
+├── POST /broadcast-one - Broadcast to specific channel
+├── GET /health - Health check endpoint
+
+WORKFLOW:
+
+[Manual Trigger] Admin calls broadcast
+```
+1. Admin → POST /broadcast-all
+2. TelePay-Broadcast queries database
+3. SELECT * FROM public_channels_database
+4. For each channel:
+   a. Fetch subscription tiers (sub_1, sub_2, sub_3)
+   b. Build inline keyboard buttons with deep link URLs
+   c. Enqueue to telepay-broadcast-queue
+      payload: {channel_id, message_text, buttons}
+5. Return HTTP 200
+6. Cloud Tasks dispatches broadcast tasks (rate-limited at 8 rps)
+7. TelePay-Broadcast sends message to channel via Telegram API
+8. TelePay-Broadcast schedules deletion task (60s delay)
+9. Return HTTP 200 (or 500 for retry)
+```
+
+KEY FEATURES:
+✅ Rate-limited Telegram API calls (8 rps)
+✅ Infinite retry for failed broadcasts (60s backoff, 24h max)
+✅ Scheduled message deletion (Cloud Tasks delay)
+✅ Supports both batch and single-channel broadcasts
+
+QUEUE CONFIGURATION:
+
+[Queue] telepay-broadcast-queue
+Purpose: Send broadcast messages to channels
+Rate: 8 dispatches/second (~80% of Telegram Bot API limit)
+Retry: Infinite for 24h (60s fixed backoff)
+Rationale: Telegram sendMessage has ~30 rps limit, but we're conservative
+
+DEPENDENCIES:
+├── python-telegram-bot (for Telegram API calls)
+├── google-cloud-tasks (for task enqueue + scheduled deletion)
+├── google-cloud-secret-manager (for config)
+├── cloud-sql-python-connector (for database)
+└── Flask (for webhook server)
+
+MIGRATION FROM CURRENT:
+├── OLD: broadcast_manager.py with synchronous requests.post()
+├── NEW: Webhook endpoint with Cloud Tasks queue
+├── CHANGE: Replace direct API calls with queued tasks
+├── CHANGE: Add rate limiting via Cloud Tasks
+└── BENEFIT: No rate limit errors, retry capability, better reliability
+
+================================================================================
+MICROSERVICE 4: TelePay-Payment-10-26 (Payment Gateway Coordinator)
+================================================================================
+
+PURPOSE: Create NOWPayments invoices and manage payment flow
+
+RESPONSIBILITIES:
+├── Receive payment request from TelePay-Bot via Cloud Tasks
+├── Build signed success_url token (same as current secure_webhook.py)
+├── Create NOWPayments invoice via API
+├── Send invoice URL to user via Telegram API
+└── Return HTTP 200
+
+ENDPOINTS:
+├── POST / - Process payment request (from Cloud Tasks)
+├── GET /health - Health check endpoint
+
+WORKFLOW:
+
+[Payment Request] User clicks subscription tier
+```
+1. Cloud Tasks → POST / (from telepay-payment-queue)
+   payload: {user_id, chat_id, subscription_tier, open_channel_id}
+2. TelePay-Payment fetches channel config from database
+3. TelePay-Payment builds signed success_url token:
+   - user_id (48-bit)
+   - closed_channel_id (48-bit)
+   - wallet_address
+   - payout_currency
+   - payout_network
+   - subscription_time_days
+   - subscription_price
+   - HMAC-SHA256 signature (16-byte truncated)
+4. TelePay-Payment calls NOWPayments API:
+   POST https://api.nowpayments.io/v1/invoice
+   {
+     "price_amount": subscription_price,
+     "price_currency": "USD",
+     "order_id": "PGP-{user_id}{open_channel_id}",
+     "success_url": "https://gcwebhook1-10-26-xxx.run.app/?token={token}",
+     "is_fixed_rate": false,
+     "is_fee_paid_by_user": false
+   }
+5. TelePay-Payment receives invoice_url from NOWPayments
+6. TelePay-Payment sends invoice URL to user:
+   Telegram API: sendMessage(chat_id, message_with_web_app_button)
+7. TelePay-Payment returns HTTP 200 (or 500 for retry)
+```
+
+KEY FEATURES:
+✅ Infinite retry for NOWPayments API failures (60s backoff, 24h max)
+✅ Infinite retry for Telegram API failures (sending invoice URL)
+✅ Signed success_url prevents tampering
+✅ Integrates with existing GCWebhook1 flow
+
+QUEUE CONFIGURATION:
+
+[Queue] telepay-payment-queue
+Purpose: Process payment gateway requests
+Rate: 20 dispatches/second (NOWPayments API should handle this)
+Retry: Infinite for 24h (60s fixed backoff)
+
+DEPENDENCIES:
+├── python-telegram-bot (for Telegram API calls)
+├── httpx (for NOWPayments API calls)
+├── google-cloud-secret-manager (for config)
+├── cloud-sql-python-connector (for database)
+└── Flask (for webhook server)
+
+MIGRATION FROM CURRENT:
+├── OLD: start_np_gateway.py inline with bot
+├── NEW: Separate webhook service
+├── CHANGE: Add retry capability via Cloud Tasks
+├── CHANGE: Remove inline execution from bot
+└── BENEFIT: Retry on failure, better reliability, scales independently
+
+================================================================================
+MICROSERVICE 5: TelePay-Database-10-26 (Database Service - OPTIONAL)
+================================================================================
+
+PURPOSE: Centralized database operations (optional abstraction layer)
+
+NOTE: This is OPTIONAL. Can keep database operations inline in other services.
+      Only create if you want strict separation of concerns.
+
+RESPONSIBILITIES:
+├── Receive database operation requests via Cloud Tasks
+├── Execute CRUD operations on PostgreSQL
+├── Return results
+└── Provide connection pooling
+
+ENDPOINTS:
+├── POST /query - Execute read query
+├── POST /execute - Execute write operation
+├── GET /health - Health check endpoint
+
+MIGRATION FROM CURRENT:
+├── OLD: database.py with inline operations
+├── NEW: Separate database service (optional)
+├── DECISION: Recommend keeping database operations inline
+└── REASON: Adds latency, extra hops, not much benefit for this use case
+
+STATUS: ❌ NOT RECOMMENDED - Keep database operations inline
+
+================================================================================
+CLOUD TASKS QUEUE CONFIGURATIONS
+================================================================================
+
+QUEUE 1: telepay-subscription-check-queue
+```bash
+gcloud tasks queues create telepay-subscription-check-queue \
+  --location=us-central1 \
+  --max-dispatches-per-second=10 \
+  --max-concurrent-dispatches=15 \
+  --max-attempts=-1 \
+  --max-retry-duration=86400s \
+  --min-backoff=60s \
+  --max-backoff=60s \
+  --max-doublings=0
+```
+Purpose: Trigger subscription expiration checks
+Rate: 10 rps (internal service, no external API limits)
+Concurrency: 15 (low, only runs every 5 minutes)
+
+QUEUE 2: telepay-subscription-removal-queue
+```bash
+gcloud tasks queues create telepay-subscription-removal-queue \
+  --location=us-central1 \
+  --max-dispatches-per-second=5 \
+  --max-concurrent-dispatches=15 \
+  --max-attempts=-1 \
+  --max-retry-duration=86400s \
+  --min-backoff=60s \
+  --max-backoff=60s \
+  --max-doublings=0
+```
+Purpose: Remove users from Telegram channels
+Rate: 5 rps (~50% of Telegram ban_chat_member limit of ~10 rps)
+Concurrency: 15 (assumes ~3s p95 latency × 5 rps)
+
+QUEUE 3: telepay-broadcast-queue
+```bash
+gcloud tasks queues create telepay-broadcast-queue \
+  --location=us-central1 \
+  --max-dispatches-per-second=8 \
+  --max-concurrent-dispatches=24 \
+  --max-attempts=-1 \
+  --max-retry-duration=86400s \
+  --min-backoff=60s \
+  --max-backoff=60s \
+  --max-doublings=0
+```
+Purpose: Send broadcast messages to channels
+Rate: 8 rps (~80% of Telegram sendMessage limit for safety)
+Concurrency: 24 (assumes ~3s p95 latency × 8 rps × 1.5 safety)
+
+QUEUE 4: telepay-payment-queue
+```bash
+gcloud tasks queues create telepay-payment-queue \
+  --location=us-central1 \
+  --max-dispatches-per-second=20 \
+  --max-concurrent-dispatches=30 \
+  --max-attempts=-1 \
+  --max-retry-duration=86400s \
+  --min-backoff=60s \
+  --max-backoff=60s \
+  --max-doublings=0
+```
+Purpose: Process payment gateway requests
+Rate: 20 rps (NOWPayments API + Telegram API combined)
+Concurrency: 30 (assumes ~1.5s p95 latency × 20 rps)
+
+================================================================================
+CLOUD SCHEDULER CONFIGURATIONS
+================================================================================
+
+JOB 1: subscription-expiration-check
+```bash
+gcloud scheduler jobs create http subscription-expiration-check \
+  --location=us-central1 \
+  --schedule="*/5 * * * *" \
+  --uri="https://telepay-subscription-10-26-xxx.run.app/check-expired" \
+  --http-method=POST \
+  --oidc-service-account-email=cloud-scheduler@telepay-459221.iam.gserviceaccount.com \
+  --attempt-deadline=300s
+```
+Schedule: Every 5 minutes (*/5 * * * *)
+Target: TelePay-Subscription-10-26/check-expired
+Timeout: 5 minutes (300s)
+Purpose: Trigger subscription expiration checks
+
+JOB 2: broadcast-trigger (OPTIONAL)
+```bash
+gcloud scheduler jobs create http broadcast-trigger \
+  --location=us-central1 \
+  --schedule="0 0 * * *" \
+  --uri="https://telepay-broadcast-10-26-xxx.run.app/broadcast-all" \
+  --http-method=POST \
+  --oidc-service-account-email=cloud-scheduler@telepay-459221.iam.gserviceaccount.com \
+  --attempt-deadline=600s
+```
+Schedule: Daily at midnight (0 0 * * *)
+Target: TelePay-Broadcast-10-26/broadcast-all
+Timeout: 10 minutes (600s)
+Purpose: Auto-broadcast to all channels (optional, can keep manual)
+
+================================================================================
+TELEGRAM WEBHOOK SETUP
+================================================================================
+
+CURRENT: Long-polling via Application.run_polling()
+NEW: Webhook via Telegram setWebhook API
+
+SETUP PROCESS:
+
+1. Deploy TelePay-Bot-10-26 to Cloud Run
+2. Get service URL: https://telepay-bot-10-26-xxx.run.app
+3. Set Telegram webhook:
+   ```bash
+   curl -X POST \
+     "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "url": "https://telepay-bot-10-26-xxx.run.app/webhook",
+       "max_connections": 100,
+       "allowed_updates": ["message", "callback_query"]
+     }'
+   ```
+4. Verify webhook:
+   ```bash
+   curl "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
+   ```
+
+WEBHOOK ENDPOINT:
+
+POST /webhook
+├── Receives: Telegram Update objects
+├── Processes: Commands, messages, callback queries
+├── Returns: HTTP 200 immediately (<100ms)
+└── Enqueues: Heavy operations to Cloud Tasks
+
+BENEFITS vs LONG-POLLING:
+✅ 99% cost reduction (only pay for actual bot usage)
+✅ Faster response time (webhook is instant, polling has delay)
+✅ Auto-scaling via Cloud Run (handles burst traffic)
+✅ No connection drops (polling can lose connection)
+✅ Lower server load (no continuous polling)
+
+================================================================================
+MIGRATION CHECKLIST
+================================================================================
+
+PHASE 1: Preparation (No Code Changes)
+├── [ ] Review current TelePay10-26 functionality
+├── [ ] Identify all bot commands and handlers
+├── [ ] Identify all background tasks (subscription monitoring, broadcasts)
+├── [ ] Document all database operations
+├── [ ] Document all external API calls (Telegram, NOWPayments)
+└── [ ] Create migration timeline
+
+PHASE 2: Infrastructure Setup
+├── [ ] Create Google Cloud Tasks queues (4 queues)
+├── [ ] Create Cloud Scheduler jobs (1-2 jobs)
+├── [ ] Set up Secret Manager secrets
+├── [ ] Set up Cloud SQL database (already exists)
+└── [ ] Set up Cloud Run service accounts and IAM permissions
+
+PHASE 3: TelePay-Bot-10-26 Implementation
+├── [ ] Create project structure
+├── [ ] Implement config_manager.py
+├── [ ] Implement token_manager.py (for Cloud Tasks payloads)
+├── [ ] Implement cloudtasks_client.py
+├── [ ] Implement main webhook handler (telepay-bot-10-26.py)
+├── [ ] Migrate bot command handlers from input_handlers.py
+├── [ ] Migrate bot menu handlers from menu_handlers.py
+├── [ ] Create Dockerfile
+├── [ ] Create requirements.txt
+├── [ ] Test locally with ngrok webhook
+└── [ ] Deploy to Cloud Run
+
+PHASE 4: TelePay-Subscription-10-26 Implementation
+├── [ ] Create project structure
+├── [ ] Implement config_manager.py
+├── [ ] Implement database_manager.py
+├── [ ] Implement main service (telepay-subscription-10-26.py)
+├── [ ] Migrate subscription check logic from subscription_manager.py
+├── [ ] Migrate user removal logic from subscription_manager.py
+├── [ ] Create Dockerfile
+├── [ ] Create requirements.txt
+├── [ ] Test locally
+├── [ ] Deploy to Cloud Run
+└── [ ] Configure Cloud Scheduler job
+
+PHASE 5: TelePay-Broadcast-10-26 Implementation
+├── [ ] Create project structure
+├── [ ] Implement config_manager.py
+├── [ ] Implement database_manager.py
+├── [ ] Implement main service (telepay-broadcast-10-26.py)
+├── [ ] Migrate broadcast logic from broadcast_manager.py
+├── [ ] Create Dockerfile
+├── [ ] Create requirements.txt
+├── [ ] Test locally
+└── [ ] Deploy to Cloud Run
+
+PHASE 6: TelePay-Payment-10-26 Implementation
+├── [ ] Create project structure
+├── [ ] Implement config_manager.py
+├── [ ] Implement secure_webhook.py (token generation)
+├── [ ] Implement main service (telepay-payment-10-26.py)
+├── [ ] Migrate payment gateway logic from start_np_gateway.py
+├── [ ] Create Dockerfile
+├── [ ] Create requirements.txt
+├── [ ] Test locally
+└── [ ] Deploy to Cloud Run
+
+PHASE 7: Integration Testing
+├── [ ] Test bot webhook receives Telegram updates
+├── [ ] Test /start command with deep link token
+├── [ ] Test payment flow end-to-end
+├── [ ] Test subscription expiration check
+├── [ ] Test user removal from channels
+├── [ ] Test broadcast messages
+├── [ ] Test retry behavior (simulate failures)
+├── [ ] Test rate limiting (burst traffic)
+└── [ ] Load test with multiple concurrent users
+
+PHASE 8: Telegram Webhook Setup
+├── [ ] Get TelePay-Bot-10-26 Cloud Run URL
+├── [ ] Call setWebhook API
+├── [ ] Verify webhook with getWebhookInfo
+├── [ ] Test with real Telegram bot
+└── [ ] Monitor logs for any issues
+
+PHASE 9: Monitoring & Alerting
+├── [ ] Set up Cloud Monitoring dashboards
+├── [ ] Configure alerts for high error rates
+├── [ ] Configure alerts for queue depth
+├── [ ] Configure alerts for task age
+├── [ ] Set up log-based metrics
+└── [ ] Test alerting
+
+PHASE 10: Cutover & Cleanup
+├── [ ] Stop old TelePay10-26 service (long-polling bot)
+├── [ ] Monitor new services for 7 days
+├── [ ] Archive old TelePay10-26 code
+├── [ ] Update documentation
+└── [ ] Celebrate! 🎉
+
+================================================================================
+COST ANALYSIS
+================================================================================
+
+CURRENT COSTS (TelePay10-26 Long-Polling):
+
+Cloud Run (24/7 bot running):
+├── 1 instance × 24 hours × 30 days = 720 instance-hours/month
+├── 512 MB RAM × 720 hours = 368 GB-hours/month
+├── Cost: ~$18-25/month (always-on)
+└── Wasted: 99% idle time (bot just waits for updates)
+
+NEW COSTS (Webhook-Based):
+
+TelePay-Bot-10-26:
+├── Requests: ~1000 bot interactions/day = 30,000/month
+├── Avg execution: 100ms × 30,000 = 3,000 seconds = 0.83 hours
+├── Cost: ~$0.05-0.10/month
+└── Savings: 99% reduction
+
+TelePay-Subscription-10-26:
+├── Scheduled: Every 5 minutes = 8,640 triggers/month
+├── Avg execution: 5s × 8,640 = 43,200 seconds = 12 hours
+├── Cost: ~$0.60/month
+└── Note: Only pays for actual processing time
+
+TelePay-Broadcast-10-26:
+├── Usage: ~100 broadcasts/month (manual trigger)
+├── Avg execution: 10s × 100 = 1,000 seconds = 0.28 hours
+├── Cost: ~$0.02/month
+└── Note: Negligible cost
+
+TelePay-Payment-10-26:
+├── Requests: ~500 payments/month
+├── Avg execution: 2s × 500 = 1,000 seconds = 0.28 hours
+├── Cost: ~$0.02/month
+└── Note: Negligible cost
+
+Cloud Tasks:
+├── Queued tasks: ~40,000/month
+├── Cost: Free tier covers 1M tasks/month
+└── Cost: $0/month
+
+Cloud Scheduler:
+├── Jobs: 2 jobs
+├── Cost: $0.10/job/month = $0.20/month
+└── Note: Minimal cost
+
+TOTAL NEW COST: ~$0.80-1.00/month
+TOTAL OLD COST: ~$18-25/month
+SAVINGS: ~$17-24/month (95-98% reduction)
+
+BENEFITS BEYOND COST:
+✅ Auto-scaling (handles burst traffic)
+✅ Zero downtime (Cloud Run auto-restarts)
+✅ Infinite retry (guaranteed delivery)
+✅ Better monitoring (Cloud Logging + Monitoring)
+✅ Independent scaling (each service scales independently)
+
+================================================================================
+RISK ANALYSIS & MITIGATION
+================================================================================
+
+RISK 1: Telegram Webhook Failures
+├── Impact: Bot stops receiving updates
+├── Probability: Low (Cloud Run 99.95% SLA)
+├── Mitigation:
+│   ├── Health check endpoint for monitoring
+│   ├── Alerting on webhook delivery failures
+│   └── Fallback to long-polling if webhook fails (manual)
+└── Recovery: Redeploy service, re-set webhook
+
+RISK 2: Cloud Tasks Queue Backlog
+├── Impact: Delayed processing (subscriptions, broadcasts)
+├── Probability: Low (queues designed for burst traffic)
+├── Mitigation:
+│   ├── Monitor queue depth metrics
+│   ├── Alert on queue depth > 1000 tasks
+│   └── Increase rate limits if needed
+└── Recovery: Scale up service replicas
+
+RISK 3: Database Connection Exhaustion
+├── Impact: Service errors, failed operations
+├── Probability: Medium (if many concurrent requests)
+├── Mitigation:
+│   ├── Use connection pooling (Cloud SQL Connector)
+│   ├── Limit max concurrent dispatches per queue
+│   └── Monitor connection count
+└── Recovery: Increase Cloud SQL connection limit
+
+RISK 4: Telegram API Rate Limiting
+├── Impact: Failed API calls (messages, removals)
+├── Probability: Low (queues throttle at safe rates)
+├── Mitigation:
+│   ├── Set conservative rate limits (5-8 rps)
+│   ├── Cloud Tasks retries automatically
+│   └── Monitor Telegram API error rates
+└── Recovery: Reduce queue dispatch rate
+
+RISK 5: NOWPayments API Downtime
+├── Impact: Unable to create payment invoices
+├── Probability: Medium (external dependency)
+├── Mitigation:
+│   ├── Cloud Tasks infinite retry (60s backoff, 24h max)
+│   ├── Monitor NOWPayments API success rate
+│   └── Alert user if invoice creation delayed
+└── Recovery: Automatic retry when API recovers
+
+RISK 6: Migration Bugs
+├── Impact: Broken functionality, user complaints
+├── Probability: Medium (major refactor)
+├── Mitigation:
+│   ├── Thorough testing before cutover
+│   ├── Phased rollout (test with small user group first)
+│   ├── Keep old system running for 7-day grace period
+│   └── Rollback plan ready
+└── Recovery: Rollback to old TelePay10-26, fix bugs, redeploy
+
+STATUS: ✅ RISKS ACCEPTABLE WITH MITIGATION STRATEGIES
+
+================================================================================
+SUCCESS CRITERIA
+================================================================================
+
+FUNCTIONAL REQUIREMENTS:
+✅ Bot responds to all commands (/start, /database, etc.)
+✅ Payment flow works end-to-end (invoice → payment → invite)
+✅ Subscription expiration monitoring works (users removed on expiration)
+✅ Broadcast messages sent successfully
+✅ No data loss during migration
+✅ All existing features preserved
+
+PERFORMANCE REQUIREMENTS:
+✅ Bot webhook response time < 100ms (current: ~500ms)
+✅ Subscription check completes within 5 minutes
+✅ Payment invoice created within 3 seconds
+✅ Broadcast to 100 channels completes within 2 minutes
+
+RELIABILITY REQUIREMENTS:
+✅ 99.9% uptime for bot webhook
+✅ Zero failed subscription removals (retry until success)
+✅ Zero failed payment invoices (retry until success)
+✅ Zero failed broadcasts (retry until success)
+
+SCALABILITY REQUIREMENTS:
+✅ Handle 10x user growth without code changes
+✅ Auto-scale to handle burst traffic (100 concurrent users)
+✅ Independent scaling per service
+
+COST REQUIREMENTS:
+✅ Reduce monthly cost by 95%+ (from $18-25 to $1-2)
+
+MONITORING REQUIREMENTS:
+✅ Real-time dashboards for all services
+✅ Alerts for errors, queue backlogs, API failures
+✅ Log retention for 30 days
+
+================================================================================
+RECOMMENDATION
+================================================================================
+
+STATUS: ✅ HIGHLY RECOMMENDED - Proceed with Implementation
+
+REASONING:
+
+1. ✅ PROVEN ARCHITECTURE: Same pattern as GCSplit, GCWebhook, GCHostPay
+   - Already tested and working in production
+   - No unknowns or risky new technologies
+
+2. ✅ MASSIVE COST SAVINGS: 95-98% reduction in Cloud Run costs
+   - Current: $18-25/month (always-on bot)
+   - New: $1-2/month (event-driven)
+
+3. ✅ BETTER RELIABILITY: Infinite retry with Cloud Tasks
+   - Current: Operations fail permanently
+   - New: Retry every 60s for 24h
+
+4. ✅ BETTER PERFORMANCE: Webhook is faster than polling
+   - Current: ~500ms bot response time
+   - New: <100ms bot response time
+
+5. ✅ BETTER SCALABILITY: Auto-scaling + independent services
+   - Current: Single bot instance, no scaling
+   - New: Each service scales independently
+
+6. ✅ PRODUCTION-READY: Cloud Run + Cloud Tasks are enterprise-grade
+   - 99.95% SLA
+   - Automatic failover
+   - Built-in monitoring
+
+7. ✅ EASIER MAINTENANCE: Smaller, focused services
+   - Current: 2000+ lines monolithic bot
+   - New: 4 services, each <500 lines
+
+NEXT STEPS:
+
+1. Review and approve this architecture plan
+2. Begin Phase 1: Preparation (create checklist, timeline)
+3. Begin Phase 2: Infrastructure setup (queues, scheduler)
+4. Begin Phase 3-6: Service implementation (parallel development)
+5. Begin Phase 7-10: Testing, deployment, cutover
+
+ESTIMATED TIMELINE: 2-3 weeks for full implementation
+
+================================================================================
+END OF REFACTORING PLAN
+================================================================================
+
+Document Created: 2025-10-26
+Status: READY FOR IMPLEMENTATION
+Recommendation: APPROVED - Proceed with Migration
+
+================================================================================

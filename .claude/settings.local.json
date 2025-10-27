@@ -6,7 +6,8 @@
       "Bash(tree:*)",
       "Bash(xargs -I {} sh -c 'echo \"\"\"\"=== {} ===\"\"\"\" && head -20 {}')",
       "Bash(xargs -I {} sh -c 'echo \"\"\"\"=== {} ===\"\"\"\" && cat {}')",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

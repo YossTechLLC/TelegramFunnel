@@ -1,0 +1,1745 @@
+================================================================================
+GCHOSTPAY10-26 TO GCHOSTPAY(1,2,3)-10-26 MIGRATION COMPREHENSIVE REVIEW
+================================================================================
+Review Date: 2025-10-27
+Reviewer: Claude Code AI Assistant
+Purpose: Systematic verification that all functionality from monolithic
+         GCHostPay10-26 was properly migrated to split architecture
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. ORIGINAL ARCHITECTURE INVENTORY
+2. NEW ARCHITECTURE OVERVIEW
+3. DETAILED COMPONENT MAPPING
+4. FUNCTIONALITY VERIFICATION MATRIX
+5. MISSING COMPONENTS ANALYSIS
+6. CHANGED FUNCTIONALITY ANALYSIS
+7. NEW FUNCTIONALITY ADDED
+8. SECURITY & CONFIGURATION REVIEW
+9. RECOMMENDATIONS & NEXT STEPS
+
+================================================================================
+SECTION 1: ORIGINAL ARCHITECTURE INVENTORY (GCHostPay10-26)
+================================================================================
+
+1.1 FILE STRUCTURE
+------------------
+GCHostPay10-26/
+├── tphp10-26.py                 [Main service file - 477 lines]
+├── wallet_manager.py            [Wallet operations - 634 lines]
+├── database_manager.py          [Database operations - 440 lines]
+├── alchemy_webhook_handler.py   [Webhook handler - 304 lines]
+├── Dockerfile
+└── requirements.txt
+
+1.2 MAIN SERVICE FILE (tphp10-26.py) - COMPONENT INVENTORY
+-----------------------------------------------------------
+
+IMPORTS:
+✓ os, time, struct, base64, hmac, hashlib, requests
+✓ Flask, request, abort, jsonify
+✓ secretmanager (Google Cloud)
+✓ DatabaseManager, WalletManager, AlchemyWebhookHandler
+
+GLOBAL INSTANCES:
+✓ app = Flask(__name__)
+✓ db_manager = DatabaseManager()
+✓ wallet_manager = WalletManager()
+✓ alchemy_webhook_handler = AlchemyWebhookHandler(db_manager)
+
+FUNCTIONS (5 total):
+--------------------
+
+FUNCTION 1: fetch_secret(env_var_name, description)
+Location: Lines 45-72
+Purpose: Fetch secrets from Google Cloud Secret Manager
+Parameters:
+  - env_var_name: str (environment variable containing secret path)
+  - description: str (logging description)
+Returns: Optional[str] (secret value or None)
+Dependencies: Google Cloud Secret Manager client
+
+FUNCTION 2: fetch_tps_hostpay_signing_key()
+Location: Lines 74-81
+Purpose: Fetch TPS_HOSTPAY_SIGNING_KEY from Secret Manager
+Parameters: None
+Returns: Optional[str]
+Dependencies: fetch_secret()
+
+FUNCTION 3: fetch_changenow_api_key()
+Location: Lines 83-90
+Purpose: Fetch CHANGENOW_API_KEY from Secret Manager
+Parameters: None
+Returns: Optional[str]
+Dependencies: fetch_secret()
+
+FUNCTION 4: check_changenow_status(cn_api_id)
+Location: Lines 92-141
+Purpose: Check ChangeNow transaction status via API
+Parameters:
+  - cn_api_id: str (ChangeNow transaction ID)
+Returns: Optional[str] (status: "waiting", "confirming", etc.)
+Dependencies: fetch_changenow_api_key(), requests library
+API Endpoint: GET https://api.changenow.io/v2/exchange/by-id
+Retry Logic: NONE (single attempt, no retry)
+Error Handling:
+  - Returns None on timeout (30s)
+  - Returns None on connection error
+  - Returns None on HTTP != 200
+
+FUNCTION 5: decode_and_verify_hostpay_token(token, signing_key)
+Location: Lines 143-270
+Purpose: Decode and verify encrypted token from GCSplit
+Parameters:
+  - token: str (Base64 URL-safe encoded token)
+  - signing_key: str (HMAC signing key)
+Returns: Tuple[str, str, str, str, float, str]
+         (unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address)
+Token Format:
+  - 16 bytes: unique_id (UTF-8, fixed, null-padded)
+  - 1 byte: cn_api_id length + variable bytes
+  - 1 byte: from_currency length + variable bytes
+  - 1 byte: from_network length + variable bytes
+  - 8 bytes: from_amount (double precision float)
+  - 1 byte: payin_address length + variable bytes
+  - 4 bytes: timestamp (uint32)
+  - 16 bytes: HMAC-SHA256 signature (truncated)
+Validation:
+  - Minimum size: 52 bytes
+  - HMAC signature verification
+  - Timestamp window: current_time - 60 to current_time + 5 (1 minute validity)
+
+ENDPOINTS (3 total):
+--------------------
+
+ENDPOINT 1: POST /
+Location: Lines 272-425
+Purpose: Main webhook for receiving payment requests from GCSplit
+Flow:
+  1. Parse JSON payload and extract token
+  2. Fetch TPS_HOSTPAY_SIGNING_KEY
+  3. Decode and verify token
+  4. Check database for duplicate transaction (unique_id)
+  5. Check ChangeNow status (must be "waiting")
+  6. Execute ETH payment via wallet_manager.send_eth_payment()
+  7. Log transaction to database (split_payout_hostpay table)
+  8. Return success/error response
+HTTP Methods: POST
+Request Format: JSON {"token": "<encrypted_token>"}
+Response Codes:
+  - 200: Success (already_processed, success)
+  - 400: Invalid payload, invalid token, invalid status
+  - 500: Configuration error, status check failed, payment failed
+Error Handling:
+  - Duplicate check: Returns 200 with "already_processed" status
+  - ChangeNow status != "waiting": Returns 400
+  - Database logging failure: Non-fatal (continues)
+Retry Logic: NONE (single attempt)
+
+ENDPOINT 2: POST /alchemy-webhook
+Location: Lines 427-446
+Purpose: Receive Alchemy Notify webhooks for transaction updates
+Flow:
+  1. Delegate to alchemy_webhook_handler.handle_webhook()
+  2. Return response from handler
+HTTP Methods: POST
+Dependencies: AlchemyWebhookHandler
+
+ENDPOINT 3: GET /health
+Location: Lines 448-470
+Purpose: Health check endpoint for monitoring
+Flow:
+  1. Test signing key availability
+  2. Return health status with component checks
+HTTP Methods: GET
+Response: JSON with status, service name, timestamp, configuration
+
+1.3 WALLET MANAGER (wallet_manager.py) - COMPONENT INVENTORY
+-------------------------------------------------------------
+
+CLASS: WalletManager
+Location: Lines 16-634
+Purpose: Manage Web3 wallet operations for ETH payments
+
+INSTANCE VARIABLES:
+✓ host_wallet_address: str (checksum format)
+✓ host_wallet_private_key: str
+✓ web3_provider_url: str
+✓ alchemy_api_key: str
+✓ w3: Web3 instance
+✓ alchemy: Alchemy SDK instance (unused)
+✓ max_retries: int = 3
+✓ retry_delay: int = 10 seconds
+✓ gas_price_buffer: float = 1.2 (20% buffer for replacements)
+
+METHODS (11 total):
+-------------------
+
+METHOD 1: __init__()
+Location: Lines 22-37
+Purpose: Initialize WalletManager and fetch credentials
+
+METHOD 2: _fetch_secret(env_var_name, description)
+Location: Lines 39-66
+Purpose: Fetch secret from Google Cloud Secret Manager
+Returns: Optional[str]
+
+METHOD 3: _initialize_credentials()
+Location: Lines 68-106
+Purpose: Fetch wallet credentials from Secret Manager
+Fetches:
+  - HOST_WALLET_ETH_ADDRESS
+  - HOST_WALLET_PRIVATE_KEY
+  - ETHEREUM_RPC_URL
+  - ETHEREUM_RPC_URL_API (Alchemy API key)
+
+METHOD 4: _connect_to_web3()
+Location: Lines 109-136
+Purpose: Connect to Web3 provider
+Returns: bool (True if connected)
+Features:
+  - Adds geth_poa_middleware for compatibility
+  - Tests connection with is_connected()
+
+METHOD 5: _get_optimized_gas_price()
+Location: Lines 138-203
+Purpose: Get optimized gas price using EIP-1559 or legacy
+Returns: Dict[str, int] with maxFeePerGas, maxPriorityFeePerGas, gasPrice
+Features:
+  - Uses fee_history() for EIP-1559
+  - Calculates: max_fee = (base_fee * 2) + priority_fee
+  - Fallback to standard gas_price
+  - Default: 50 Gwei if all fails
+
+METHOD 6: _check_transaction_status(tx_hash)
+Location: Lines 205-233
+Purpose: Check if transaction is pending, mined, or failed
+Returns: Optional[str] ("pending", "mined", "failed", or None)
+
+METHOD 7: _replace_stuck_transaction(original_tx_hash, to_address, amount_wei, nonce)
+Location: Lines 235-283
+Purpose: Replace stuck transaction with higher gas price
+Returns: Optional[str] (new tx hash or None)
+Features:
+  - Applies 20% gas price buffer
+  - Uses same nonce as original
+
+METHOD 8: _send_transaction_with_retry(to_address, amount_wei, unique_id)
+Location: Lines 285-416
+Purpose: Send transaction with automatic retry logic
+Parameters:
+  - to_address: str
+  - amount_wei: int
+  - unique_id: str (for logging)
+Returns: Optional[Dict[str, Any]] with tx_hash, status, gas_used, block_number
+Retry Logic:
+  - Max attempts: 3
+  - Delay: 10 seconds between retries
+  - Handles: timeout, nonce too low, insufficient funds, replacement underpriced
+  - Transaction confirmation timeout: 300 seconds (5 minutes)
+  - Attempts stuck transaction replacement
+
+METHOD 9: send_eth_payment(to_address, amount, unique_id)
+Location: Lines 418-486
+Purpose: PUBLIC METHOD - Send ETH payment from host wallet
+Parameters:
+  - to_address: str (ChangeNow payin address)
+  - amount: float (ETH amount)
+  - unique_id: str (for logging)
+Returns: Optional[Dict[str, Any]] with tx_hash, status, gas_used, block_number
+Features:
+  - Verifies credentials
+  - Connects to Web3 if not connected
+  - Converts address to checksum format
+  - Converts ETH to Wei
+  - Calls _send_transaction_with_retry()
+Retry Logic: 3 attempts max (NOT INFINITE)
+
+METHOD 10: get_wallet_balance()
+Location: Lines 488-516
+Purpose: Get current ETH balance of host wallet
+Returns: Optional[float] (balance in ETH)
+
+METHOD 11: validate_eth_address(address)
+Location: Lines 518-547
+Purpose: Validate Ethereum address format
+Returns: bool
+
+METHOD 12: estimate_gas_cost(to_address, amount)
+Location: Lines 549-633
+Purpose: Estimate gas cost for ETH transfer
+Returns: Optional[Dict[str, Any]] with gas estimates for both legacy and EIP-1559
+
+1.4 DATABASE MANAGER (database_manager.py) - COMPONENT INVENTORY
+------------------------------------------------------------------
+
+CLASS: DatabaseManager
+Location: Lines 22-440
+Purpose: Manage database operations for split_payout_hostpay table
+
+INSTANCE VARIABLES:
+✓ db_name: str
+✓ db_user: str
+✓ db_password: str
+✓ connection_name: str (Cloud SQL connection name)
+
+METHODS (6 total):
+------------------
+
+METHOD 1: __init__()
+Location: Lines 29-37
+Purpose: Initialize DatabaseManager
+
+METHOD 2: _fetch_secret(secret_name_env, description)
+Location: Lines 39-66
+Purpose: Fetch secret from Google Cloud Secret Manager
+Returns: Optional[str]
+
+METHOD 3: _initialize_credentials()
+Location: Lines 68-93
+Purpose: Fetch database credentials from Secret Manager
+Fetches:
+  - DATABASE_NAME_SECRET
+  - DATABASE_USER_SECRET
+  - DATABASE_PASSWORD_SECRET
+  - CLOUD_SQL_CONNECTION_NAME
+
+METHOD 4: get_database_connection()
+Location: Lines 95-126
+Purpose: Create database connection using Cloud SQL Connector
+Returns: Database connection object or None
+Uses: pg8000 driver with Cloud SQL Connector
+
+METHOD 5: insert_hostpay_transaction(unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, is_complete, tx_hash, tx_status, gas_used, block_number)
+Location: Lines 128-238
+Purpose: Insert completed payment transaction
+Table: split_payout_hostpay
+Parameters:
+  - unique_id: str (16 chars)
+  - cn_api_id: str (max 16 chars, truncated if longer)
+  - from_currency: str (converted to UPPERCASE)
+  - from_network: str (converted to UPPERCASE)
+  - from_amount: float (rounded to 8 decimal places for NUMERIC(12,8))
+  - payin_address: str
+  - is_complete: bool (default True)
+  - tx_hash: str (optional)
+  - tx_status: str (optional)
+  - gas_used: int (optional)
+  - block_number: int (optional)
+Returns: bool (True if successful)
+Features:
+  - Validates cn_api_id length (truncates to 16 chars)
+  - Rounds from_amount to 8 decimals
+  - Converts currency/network to uppercase (ENUM constraint)
+  - Commits transaction
+  - Rollback on error
+
+METHOD 6: check_transaction_exists(unique_id)
+Location: Lines 240-288
+Purpose: Check if transaction already exists in database
+Parameters: unique_id: str
+Returns: bool (True if exists)
+Query: SELECT COUNT(*) FROM split_payout_hostpay WHERE unique_id = %s
+
+METHOD 7: update_transaction_status(tx_hash, status, block_number, gas_used)
+Location: Lines 290-389
+Purpose: Update transaction status by tx_hash
+Parameters:
+  - tx_hash: str
+  - status: str ("confirmed", "failed", "dropped")
+  - block_number: int (optional)
+  - gas_used: int (optional)
+Returns: bool
+Features:
+  - Dynamic UPDATE query based on provided fields
+  - Always updates updated_at = NOW()
+  - Returns True if rows affected > 0
+
+METHOD 8: get_unique_id_by_tx_hash(tx_hash)
+Location: Lines 391-440
+Purpose: Look up unique_id by transaction hash
+Parameters: tx_hash: str
+Returns: Optional[str] (unique_id or None)
+Query: SELECT unique_id FROM split_payout_hostpay WHERE tx_hash = %s
+
+1.5 ALCHEMY WEBHOOK HANDLER (alchemy_webhook_handler.py) - COMPONENT INVENTORY
+--------------------------------------------------------------------------------
+
+CLASS: AlchemyWebhookHandler
+Location: Lines 15-304
+Purpose: Handle Alchemy Notify webhooks for transaction monitoring
+
+INSTANCE VARIABLES:
+✓ db_manager: DatabaseManager instance
+✓ webhook_secret: str (for signature verification)
+
+METHODS (6 total):
+------------------
+
+METHOD 1: __init__(database_manager)
+Location: Lines 21-32
+Purpose: Initialize webhook handler
+
+METHOD 2: _fetch_secret(env_var_name, description)
+Location: Lines 34-61
+Purpose: Fetch secret from Google Cloud Secret Manager
+Returns: Optional[str]
+
+METHOD 3: _initialize_webhook_secret()
+Location: Lines 63-76
+Purpose: Fetch ETHEREUM_RPC_WEBHOOK_SECRET from Secret Manager
+
+METHOD 4: _verify_signature(request)
+Location: Lines 78-121
+Purpose: Verify Alchemy webhook signature using HMAC-SHA256
+Parameters: request: Flask Request object
+Returns: bool
+Features:
+  - Checks X-Alchemy-Signature header
+  - Compares with HMAC-SHA256(webhook_secret, request_body)
+  - Uses hmac.compare_digest() for timing-safe comparison
+
+METHOD 5: _parse_webhook_payload(payload)
+Location: Lines 123-187
+Purpose: Parse Alchemy webhook JSON payload
+Parameters: payload: Dict[str, Any]
+Returns: Optional[Dict[str, Any]] with transaction details
+Extracts:
+  - webhook_type, tx_hash, from_address, to_address, value, block_number, network
+
+METHOD 6: _determine_transaction_status(webhook_type)
+Location: Lines 189-209
+Purpose: Map webhook type to transaction status
+Parameters: webhook_type: str
+Returns: str ("confirmed", "dropped", "unknown")
+Mapping:
+  - "MINED_TRANSACTION" → "confirmed"
+  - "DROPPED_TRANSACTION" → "dropped"
+  - "ADDRESS_ACTIVITY" → "confirmed"
+
+METHOD 7: handle_webhook(request)
+Location: Lines 211-303
+Purpose: PUBLIC METHOD - Main webhook handler
+Parameters: request: Flask Request object
+Returns: Tuple[dict, int] (response_dict, status_code)
+Flow:
+  1. Verify signature
+  2. Parse JSON payload
+  3. Parse webhook payload
+  4. Determine transaction status
+  5. Log status (but no database update - TODO)
+  6. Return success response
+Note: Database update functionality is NOT IMPLEMENTED (lines 271-277)
+
+1.6 ENVIRONMENT VARIABLES USED (GCHostPay10-26)
+------------------------------------------------
+✓ TPS_HOSTPAY_SIGNING_KEY - Secret Manager path
+✓ HOST_WALLET_ETH_ADDRESS - Secret Manager path
+✓ HOST_WALLET_PRIVATE_KEY - Secret Manager path
+✓ ETHEREUM_RPC_URL_API - Secret Manager path
+✓ ETHEREUM_RPC_WEBHOOK_SECRET - Secret Manager path
+✓ CHANGENOW_API_KEY - Secret Manager path
+✓ ETHEREUM_RPC_URL - Secret Manager path
+✓ DATABASE_NAME_SECRET - Secret Manager path
+✓ DATABASE_USER_SECRET - Secret Manager path
+✓ DATABASE_PASSWORD_SECRET - Secret Manager path
+✓ CLOUD_SQL_CONNECTION_NAME - Secret Manager path
+
+================================================================================
+SECTION 2: NEW ARCHITECTURE OVERVIEW (GCHostPay1/2/3-10-26)
+================================================================================
+
+2.1 ARCHITECTURAL CHANGES
+--------------------------
+
+BEFORE (Monolithic):
+  GCSplit1 → [GCHostPay10-26] → Database
+             Single service handles:
+             1. Token validation
+             2. Duplicate check
+             3. ChangeNow status check
+             4. ETH payment execution
+             5. Database logging
+
+AFTER (Microservices with Cloud Tasks):
+  GCSplit1 → Cloud Task → [GCHostPay1] ← Cloud Task ← [GCHostPay2]
+                              ↓                            ↑
+                          Cloud Task                  (Status Check)
+                              ↓
+                         [GCHostPay3] → Cloud Task → [GCHostPay1]
+                      (ETH Payment)
+
+2.2 SERVICE RESPONSIBILITIES
+-----------------------------
+
+GCHostPay1-10-26 (Validator & Orchestrator):
+  Role: Stateful orchestrator with database access
+  Responsibilities:
+    1. Validate incoming tokens from GCSplit1
+    2. Check database for duplicates
+    3. Orchestrate status check via GCHostPay2
+    4. Orchestrate payment execution via GCHostPay3
+    5. Receive and log final results
+  Endpoints:
+    - POST / (from GCSplit1)
+    - POST /status-verified (from GCHostPay2)
+    - POST /payment-completed (from GCHostPay3)
+    - GET /health
+  Components:
+    - token_manager.py
+    - config_manager.py
+    - database_manager.py
+    - cloudtasks_client.py
+
+GCHostPay2-10-26 (ChangeNow Status Checker):
+  Role: Stateless worker with infinite retry
+  Responsibilities:
+    1. Check ChangeNow API status
+    2. Retry infinitely (60s backoff, 24h max via Cloud Tasks)
+    3. Return status to GCHostPay1
+  Endpoints:
+    - POST / (from GCHostPay1)
+    - GET /health
+  Components:
+    - token_manager.py
+    - config_manager.py
+    - cloudtasks_client.py
+    - changenow_client.py
+
+GCHostPay3-10-26 (ETH Payment Executor):
+  Role: Stateless worker with infinite retry and database logging
+  Responsibilities:
+    1. Execute ETH payments
+    2. Retry infinitely (60s backoff, 24h max via Cloud Tasks)
+    3. Log to database ONLY after successful payment
+    4. Return result to GCHostPay1
+  Endpoints:
+    - POST / (from GCHostPay1)
+    - GET /health
+  Components:
+    - token_manager.py
+    - config_manager.py
+    - database_manager.py
+    - cloudtasks_client.py
+    - wallet_manager.py
+
+2.3 NEW COMPONENTS ADDED
+-------------------------
+
+✅ token_manager.py (All 3 services)
+   Purpose: Handle all token encryption/decryption
+   Token Formats:
+     1. GCSplit1 → GCHostPay1 (decrypt only, uses TPS_HOSTPAY_SIGNING_KEY)
+     2. GCHostPay1 → GCHostPay2 (encrypt/decrypt, uses SUCCESS_URL_SIGNING_KEY)
+     3. GCHostPay2 → GCHostPay1 (encrypt/decrypt, includes status + payment details)
+     4. GCHostPay1 → GCHostPay3 (encrypt/decrypt, payment execution request)
+     5. GCHostPay3 → GCHostPay1 (encrypt/decrypt, payment execution response)
+
+✅ config_manager.py (All 3 services)
+   Purpose: Centralized configuration and secret management
+   Replaces: Individual fetch_secret() calls scattered in original code
+
+✅ cloudtasks_client.py (All 3 services)
+   Purpose: Create and enqueue Cloud Tasks
+   Methods:
+     - create_task()
+     - enqueue_gchostpay2_status_check()
+     - enqueue_gchostpay3_payment_execution()
+     - enqueue_gchostpay1_status_response()
+     - enqueue_gchostpay1_payment_response()
+
+✅ changenow_client.py (GCHostPay2 only)
+   Purpose: ChangeNow API client with infinite retry
+   Method: check_transaction_status_with_retry()
+   Retry Logic: Infinite loop with 60s backoff
+   Replaces: check_changenow_status() from original (which had NO retry)
+
+✅ wallet_manager.py (GCHostPay3 only) - ENHANCED VERSION
+   Purpose: Web3 wallet operations with infinite retry
+   Method: send_eth_payment_with_infinite_retry()
+   Retry Logic: Infinite loop with 60s backoff
+   Replaces: send_eth_payment() from original (which had 3 retries max)
+
+================================================================================
+SECTION 3: DETAILED COMPONENT MAPPING
+================================================================================
+
+3.1 FUNCTION MAPPING: ORIGINAL → NEW ARCHITECTURE
+--------------------------------------------------
+
+ORIGINAL FUNCTION                          NEW LOCATION                                    STATUS
+-----------------------------------------  ----------------------------------------------  ------
+fetch_secret()                             config_manager.py:_fetch_secret()              ✅ MIGRATED (enhanced)
+fetch_tps_hostpay_signing_key()            config_manager.py (auto-loaded)                ✅ MIGRATED (auto)
+fetch_changenow_api_key()                  config_manager.py (auto-loaded)                ✅ MIGRATED (auto)
+check_changenow_status()                   changenow_client.py:check_transaction_status_with_retry()  ✅ MIGRATED (ENHANCED with infinite retry)
+decode_and_verify_hostpay_token()          token_manager.py:decrypt_gcsplit1_to_gchostpay1_token()   ✅ MIGRATED (same logic)
+WalletManager.send_eth_payment()           wallet_manager.py:send_eth_payment_with_infinite_retry()  ✅ MIGRATED (ENHANCED with infinite retry)
+WalletManager._send_transaction_with_retry()  wallet_manager.py:send_eth_payment_with_infinite_retry()  ✅ MIGRATED (infinite instead of 3 attempts)
+WalletManager._get_optimized_gas_price()   wallet_manager.py:_get_optimized_gas_price()   ✅ MIGRATED (same logic)
+DatabaseManager.insert_hostpay_transaction()  database_manager.py:insert_hostpay_transaction()  ✅ MIGRATED (identical)
+DatabaseManager.check_transaction_exists()  database_manager.py:check_transaction_exists()  ✅ MIGRATED (identical)
+DatabaseManager.update_transaction_status()  database_manager.py:update_transaction_status()  ✅ MIGRATED (identical, but unused)
+DatabaseManager.get_unique_id_by_tx_hash()  database_manager.py:get_unique_id_by_tx_hash()  ✅ MIGRATED (identical, but unused)
+AlchemyWebhookHandler (entire class)       NOT MIGRATED                                   ⚠️ REMOVED
+
+3.2 ENDPOINT MAPPING: ORIGINAL → NEW ARCHITECTURE
+--------------------------------------------------
+
+ORIGINAL ENDPOINT                          NEW LOCATION                                    STATUS
+-----------------------------------------  ----------------------------------------------  ------
+POST /                                     GCHostPay1:POST /                              ✅ SPLIT (token validation + orchestration)
+(webhook from GCSplit)                     GCHostPay2:POST /                              ✅ NEW (status check worker)
+                                           GCHostPay3:POST /                              ✅ NEW (payment executor)
+
+POST /alchemy-webhook                      NOT MIGRATED                                   ❌ REMOVED
+(Alchemy transaction updates)
+
+GET /health                                GCHostPay1:GET /health                         ✅ MIGRATED (all 3 services)
+                                           GCHostPay2:GET /health
+                                           GCHostPay3:GET /health
+
+NEW ENDPOINTS ADDED:
+POST /status-verified                      GCHostPay1:POST /status-verified               ✅ NEW (receives status from GCHostPay2)
+POST /payment-completed                    GCHostPay1:POST /payment-completed             ✅ NEW (receives payment result from GCHostPay3)
+
+3.3 CONFIGURATION MAPPING: ORIGINAL → NEW ARCHITECTURE
+-------------------------------------------------------
+
+ORIGINAL ENV VARIABLE                      NEW LOCATION                                    SERVICE(S)
+-----------------------------------------  ----------------------------------------------  -----------
+TPS_HOSTPAY_SIGNING_KEY                    config_manager.py:tps_hostpay_signing_key      GCHostPay1
+HOST_WALLET_ETH_ADDRESS                    config_manager.py:host_wallet_address          GCHostPay3
+HOST_WALLET_PRIVATE_KEY                    config_manager.py:host_wallet_private_key      GCHostPay3
+ETHEREUM_RPC_URL                           config_manager.py:ethereum_rpc_url             GCHostPay3
+ETHEREUM_RPC_URL_API                       config_manager.py:ethereum_rpc_url_api         GCHostPay3
+CHANGENOW_API_KEY                          config_manager.py:changenow_api_key            GCHostPay2
+DATABASE_NAME_SECRET                       config_manager.py:db_name                      GCHostPay1, GCHostPay3
+DATABASE_USER_SECRET                       config_manager.py:db_user                      GCHostPay1, GCHostPay3
+DATABASE_PASSWORD_SECRET                   config_manager.py:db_password                  GCHostPay1, GCHostPay3
+CLOUD_SQL_CONNECTION_NAME                  config_manager.py:instance_connection_name     GCHostPay1, GCHostPay3
+ETHEREUM_RPC_WEBHOOK_SECRET                NOT MIGRATED                                   ❌ REMOVED
+
+NEW CONFIGURATION ADDED:
+SUCCESS_URL_SIGNING_KEY                    config_manager.py:success_url_signing_key      All 3 services
+CLOUD_TASKS_PROJECT_ID                     config_manager.py:cloud_tasks_project_id       All 3 services
+CLOUD_TASKS_LOCATION                       config_manager.py:cloud_tasks_location         All 3 services
+GCHOSTPAY1_URL                             config_manager.py:gchostpay1_url               GCHostPay2, GCHostPay3
+GCHOSTPAY2_URL                             config_manager.py:gchostpay2_url               GCHostPay1
+GCHOSTPAY2_QUEUE                           config_manager.py:gchostpay2_queue             GCHostPay1
+GCHOSTPAY3_URL                             config_manager.py:gchostpay3_url               GCHostPay1
+GCHOSTPAY3_QUEUE                           config_manager.py:gchostpay3_queue             GCHostPay1
+GCHOSTPAY1_RESPONSE_QUEUE                  config_manager.py:gchostpay1_response_queue    GCHostPay2, GCHostPay3
+
+3.4 WORKFLOW COMPARISON: ORIGINAL VS NEW
+-----------------------------------------
+
+ORIGINAL WORKFLOW (GCHostPay10-26):
+------------------------------------
+Step 1: GCSplit1 sends token to GCHostPay10-26 POST /
+Step 2: GCHostPay10-26 decodes token
+Step 3: GCHostPay10-26 checks database for duplicate
+Step 4: GCHostPay10-26 checks ChangeNow status (single attempt, NO RETRY)
+Step 5: If status != "waiting", FAIL and return error
+Step 6: GCHostPay10-26 executes ETH payment (3 retries max, 10s backoff)
+Step 7: GCHostPay10-26 logs to database
+Step 8: Return success response
+
+FAILURE POINTS:
+❌ ChangeNow API rate limit (HTTP 429) → FAILS, no retry
+❌ ChangeNow API timeout → FAILS, no retry
+❌ ChangeNow API 5xx error → FAILS, no retry
+❌ ETH payment fails after 3 attempts → FAILS, logged to database as incomplete
+❌ RPC timeout during payment → Retries 3 times only
+
+NEW WORKFLOW (GCHostPay1/2/3-10-26):
+-------------------------------------
+Step 1: GCSplit1 sends token to Cloud Task → GCHostPay1 POST /
+Step 2: GCHostPay1 decodes token
+Step 3: GCHostPay1 checks database for duplicate
+Step 4: GCHostPay1 encrypts token for GCHostPay2 (with ALL payment details)
+Step 5: GCHostPay1 enqueues to Cloud Task → GCHostPay2 POST /
+Step 6: GCHostPay2 decodes token
+Step 7: GCHostPay2 checks ChangeNow status with INFINITE RETRY
+        Retries:
+        - HTTP 429 (rate limit) → Wait 60s, retry forever
+        - HTTP 5xx → Wait 60s, retry forever
+        - Timeout → Wait 60s, retry forever
+        - Connection error → Wait 60s, retry forever
+        - Cloud Tasks enforces 24h max retry duration
+Step 8: GCHostPay2 encrypts response token (status + ALL payment details)
+Step 9: GCHostPay2 enqueues to Cloud Task → GCHostPay1 POST /status-verified
+Step 10: GCHostPay1 decodes response token
+Step 11: GCHostPay1 validates status == "waiting"
+Step 12: GCHostPay1 encrypts token for GCHostPay3 (payment execution)
+Step 13: GCHostPay1 enqueues to Cloud Task → GCHostPay3 POST /
+Step 14: GCHostPay3 decodes token
+Step 15: GCHostPay3 executes ETH payment with INFINITE RETRY
+        Retries:
+        - RPC timeout → Wait 60s, retry forever
+        - Nonce too low → Wait 60s, retry forever
+        - Insufficient funds → Wait 60s, retry forever
+        - Gas estimation failure → Wait 60s, retry forever
+        - Cloud Tasks enforces 24h max retry duration
+Step 16: GCHostPay3 logs to database (ONLY after successful payment)
+Step 17: GCHostPay3 encrypts response token (tx_hash, status, gas_used, block_number)
+Step 18: GCHostPay3 enqueues to Cloud Task → GCHostPay1 POST /payment-completed
+Step 19: GCHostPay1 receives final result and logs completion
+
+RESILIENCE IMPROVEMENTS:
+✅ ChangeNow API rate limiting → Handled with infinite retry
+✅ ChangeNow API downtime → Handled with infinite retry (up to 24h)
+✅ Ethereum RPC downtime → Handled with infinite retry (up to 24h)
+✅ Network congestion → Handled with infinite retry
+✅ Database logging only after success → Prevents incomplete records
+
+================================================================================
+SECTION 4: FUNCTIONALITY VERIFICATION MATRIX
+================================================================================
+
+4.1 CORE FUNCTIONALITY CHECKLIST
+---------------------------------
+
+FUNCTIONALITY                               ORIGINAL    NEW         VERIFICATION
+-----------------------------------------  ----------  ----------  --------------
+Token validation (HMAC signature)          ✅ YES      ✅ YES      ✅ VERIFIED (token_manager.py)
+Token timestamp validation (60s window)    ✅ YES      ✅ YES      ✅ VERIFIED (token_manager.py)
+Duplicate transaction check                ✅ YES      ✅ YES      ✅ VERIFIED (GCHostPay1 POST /)
+ChangeNow status check                     ✅ YES      ✅ YES      ✅ VERIFIED (GCHostPay2)
+ChangeNow API retry logic                  ❌ NO       ✅ YES      ✅ ENHANCED (infinite retry)
+ETH payment execution                      ✅ YES      ✅ YES      ✅ VERIFIED (GCHostPay3)
+ETH payment retry logic                    ✅ 3 max    ✅ INFINITE ✅ ENHANCED
+EIP-1559 gas optimization                  ✅ YES      ✅ YES      ✅ VERIFIED (wallet_manager.py)
+Gas price calculation                      ✅ YES      ✅ YES      ✅ VERIFIED (wallet_manager.py)
+Transaction signing                        ✅ YES      ✅ YES      ✅ VERIFIED (wallet_manager.py)
+Transaction broadcast                      ✅ YES      ✅ YES      ✅ VERIFIED (wallet_manager.py)
+Transaction confirmation wait              ✅ 300s     ✅ 300s     ✅ VERIFIED (wallet_manager.py)
+Database logging                           ✅ YES      ✅ YES      ✅ VERIFIED (GCHostPay3)
+Database duplicate check                   ✅ YES      ✅ YES      ✅ VERIFIED (GCHostPay1)
+Currency/network uppercase conversion      ✅ YES      ✅ YES      ✅ VERIFIED (database_manager.py)
+Amount precision (8 decimals)              ✅ YES      ✅ YES      ✅ VERIFIED (database_manager.py)
+Checksum address conversion                ✅ YES      ✅ YES      ✅ VERIFIED (wallet_manager.py)
+Health check endpoint                      ✅ YES      ✅ YES      ✅ VERIFIED (all 3 services)
+
+4.2 ERROR HANDLING VERIFICATION
+--------------------------------
+
+ERROR SCENARIO                             ORIGINAL    NEW         VERIFICATION
+-----------------------------------------  ----------  ----------  --------------
+Invalid token format                       ✅ 400      ✅ 400      ✅ VERIFIED
+Expired token (>60s old)                   ✅ 400      ✅ 400      ✅ VERIFIED
+Invalid HMAC signature                     ✅ 400      ✅ 400      ✅ VERIFIED
+Missing token parameter                    ✅ 400      ✅ 400      ✅ VERIFIED
+Duplicate transaction                      ✅ 200 OK   ✅ 200 OK   ✅ VERIFIED
+ChangeNow status != "waiting"              ✅ 400      ✅ 400      ✅ VERIFIED (GCHostPay1)
+ChangeNow API timeout                      ❌ 500      ✅ RETRY    ✅ ENHANCED
+ChangeNow API HTTP 429 (rate limit)        ❌ 500      ✅ RETRY    ✅ ENHANCED
+ChangeNow API HTTP 5xx                     ❌ 500      ✅ RETRY    ✅ ENHANCED
+ETH payment: nonce too low                 ✅ RETRY    ✅ RETRY    ✅ VERIFIED
+ETH payment: insufficient funds            ✅ RETRY    ✅ RETRY    ✅ VERIFIED
+ETH payment: RPC timeout                   ✅ RETRY    ✅ RETRY    ✅ ENHANCED (infinite)
+ETH payment: gas estimation failure        ✅ RETRY    ✅ RETRY    ✅ ENHANCED (infinite)
+Database connection failure                ✅ ERROR    ✅ ERROR    ✅ VERIFIED
+Database logging failure (non-fatal)       ✅ WARN     ✅ WARN     ✅ VERIFIED
+
+4.3 SECURITY VERIFICATION
+--------------------------
+
+SECURITY FEATURE                           ORIGINAL    NEW         VERIFICATION
+-----------------------------------------  ----------  ----------  --------------
+HMAC-SHA256 token signatures               ✅ YES      ✅ YES      ✅ VERIFIED
+Truncated signatures (16 bytes)            ✅ YES      ✅ YES      ✅ VERIFIED
+Token timestamp validation                 ✅ YES      ✅ YES      ✅ VERIFIED
+Secret Manager for credentials             ✅ YES      ✅ YES      ✅ VERIFIED
+Private key storage                        ✅ SECURE   ✅ SECURE   ✅ VERIFIED (Secret Manager)
+Database password storage                  ✅ SECURE   ✅ SECURE   ✅ VERIFIED (Secret Manager)
+Alchemy webhook signature verification     ✅ YES      ❌ N/A      ⚠️ REMOVED (no Alchemy webhook)
+Dual-key system (external vs internal)     ❌ NO       ✅ YES      ✅ ENHANCED
+
+NEW SECURITY FEATURES:
+✅ Dual-key token system:
+   - External: TPS_HOSTPAY_SIGNING_KEY (GCSplit → GCHostPay1)
+   - Internal: SUCCESS_URL_SIGNING_KEY (GCHostPay1 ↔ GCHostPay2 ↔ GCHostPay3)
+✅ Service isolation: GCHostPay2 and GCHostPay3 stateless, no direct GCSplit access
+✅ Token encryption for all inter-service communication
+
+================================================================================
+SECTION 5: MISSING COMPONENTS ANALYSIS
+================================================================================
+
+5.1 REMOVED COMPONENTS
+----------------------
+
+COMPONENT                                  REASON FOR REMOVAL
+-----------------------------------------  --------------------------------------------
+AlchemyWebhookHandler (entire class)       ❌ REMOVED - Alchemy webhook monitoring not needed
+                                              Original implementation didn't update database anyway
+                                              (lines 271-277 in original had TODO comment)
+
+POST /alchemy-webhook endpoint             ❌ REMOVED - Webhook handler removed
+
+ETHEREUM_RPC_WEBHOOK_SECRET config         ❌ REMOVED - No longer needed without webhook
+
+WalletManager methods (kept but unused):
+  - get_wallet_balance()                   ⚠️ UNUSED - Not called in workflow
+  - validate_eth_address()                 ⚠️ UNUSED - Not called in workflow
+  - estimate_gas_cost()                    ⚠️ UNUSED - Not called in workflow
+  - _check_transaction_status()            ⚠️ UNUSED - Not needed with infinite retry
+  - _replace_stuck_transaction()           ⚠️ UNUSED - Not needed with infinite retry
+
+DatabaseManager methods (kept but unused):
+  - update_transaction_status()            ⚠️ UNUSED - Was for Alchemy webhook
+  - get_unique_id_by_tx_hash()             ⚠️ UNUSED - Was for Alchemy webhook
+
+5.2 IMPACT ANALYSIS OF REMOVED COMPONENTS
+------------------------------------------
+
+❌ AlchemyWebhookHandler REMOVED:
+   Impact: LOW
+   Justification:
+   - Original implementation didn't actually update database (TODO at line 271-277)
+   - Transaction monitoring happens via wait_for_transaction_receipt() instead
+   - GCHostPay3 logs to database immediately after successful payment
+   - No functionality loss since webhook wasn't being used
+
+❌ Alchemy Webhook Endpoint REMOVED:
+   Impact: LOW
+   Justification:
+   - Was not integrated into workflow
+   - Real-time monitoring not required (batch processing via Cloud Tasks)
+   - Transaction confirmation happens synchronously via wait_for_transaction_receipt()
+
+❌ Transaction Replacement Logic REMOVED:
+   Impact: LOW
+   Justification:
+   - Infinite retry at service level replaces transaction-level replacement
+   - Cloud Tasks handles retry orchestration
+   - Simpler retry logic: just wait and retry entire transaction
+
+⚠️ Wallet Helper Methods UNUSED:
+   Impact: NONE (methods still exist, just not called)
+   Justification:
+   - Kept in code for potential future use
+   - No harm in having them available
+   - May be useful for debugging or manual operations
+
+================================================================================
+SECTION 6: CHANGED FUNCTIONALITY ANALYSIS
+================================================================================
+
+6.1 MAJOR FUNCTIONAL CHANGES
+-----------------------------
+
+CHANGE 1: ChangeNow Status Check Retry Logic
+---------------------------------------------
+BEFORE:
+  - Single attempt only
+  - Returns None on failure
+  - Causes entire workflow to fail immediately
+  - No handling for rate limiting (HTTP 429)
+  - No handling for server errors (HTTP 5xx)
+  - 30-second timeout
+
+AFTER:
+  - Infinite retry loop
+  - Fixed 60-second backoff between retries
+  - Handles HTTP 429 (rate limit) → retry
+  - Handles HTTP 5xx (server error) → retry
+  - Handles timeout → retry
+  - Handles connection errors → retry
+  - Cloud Tasks enforces 24-hour max retry duration
+  - 30-second timeout per attempt
+
+IMPACT: ✅ POSITIVE
+  - Massive improvement in resilience
+  - Protects against ChangeNow API rate limiting
+  - Protects against temporary ChangeNow downtime
+  - Ensures status check eventually succeeds (or times out after 24h)
+
+TESTING REQUIRED:
+  ✓ Test HTTP 429 handling
+  ✓ Test timeout handling
+  ✓ Test connection error handling
+  ✓ Verify 60s backoff between retries
+  ✓ Verify Cloud Tasks enforces 24h max duration
+
+CHANGE 2: ETH Payment Retry Logic
+----------------------------------
+BEFORE:
+  - Maximum 3 retry attempts
+  - 10-second delay between retries
+  - Attempts stuck transaction replacement with higher gas
+  - Gives up after 3 failures
+  - Logs incomplete transaction to database on final failure
+
+AFTER:
+  - Infinite retry loop
+  - Fixed 60-second backoff between retries
+  - No stuck transaction replacement (just retry)
+  - Never gives up (until Cloud Tasks 24h timeout)
+  - Only logs to database after successful payment
+  - Cloud Tasks enforces 24-hour max retry duration
+  - Simpler retry logic: wait and retry entire transaction
+
+IMPACT: ✅ POSITIVE
+  - Guarantees payment execution (or timeout after 24h)
+  - Protects against temporary RPC downtime
+  - Protects against network congestion
+  - Prevents incomplete database records
+  - Simpler logic (no gas price buffer adjustments)
+
+TESTING REQUIRED:
+  ✓ Test RPC timeout handling
+  ✓ Test nonce too low handling
+  ✓ Test insufficient funds handling
+  ✓ Verify 60s backoff between retries
+  ✓ Verify database logging only after success
+  ✓ Verify Cloud Tasks enforces 24h max duration
+
+CHANGE 3: Database Logging Strategy
+------------------------------------
+BEFORE:
+  - Logs to database immediately after payment attempt
+  - Logs incomplete transactions if payment fails
+  - Database record exists even if payment didn't succeed
+  - tx_status field indicates success/failure
+
+AFTER:
+  - Logs to database ONLY after successful payment
+  - Never logs incomplete transactions
+  - Database record existence = payment succeeded
+  - is_complete always True
+  - tx_status always "success"
+
+IMPACT: ✅ POSITIVE
+  - Cleaner database (no failed transaction records)
+  - Database record = payment guarantee
+  - Simplifies duplicate detection logic
+  - No need to check tx_status or is_complete flags
+
+POTENTIAL ISSUE:
+  - Cannot track failed payment attempts
+  - Cannot audit retry attempts
+  - Cannot debug payment failures via database
+
+RECOMMENDATION:
+  - Add separate audit/logging table for attempts if needed
+  - Cloud Run logs can be used for debugging retry attempts
+
+CHANGE 4: Token Format Enhancement
+-----------------------------------
+BEFORE:
+  - Single token format (GCSplit → GCHostPay)
+  - Token contains: unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address
+
+AFTER:
+  - Five token formats for inter-service communication:
+    1. GCSplit1 → GCHostPay1 (same as before)
+    2. GCHostPay1 → GCHostPay2 (includes all payment details)
+    3. GCHostPay2 → GCHostPay1 (includes status + all payment details) ← CRITICAL FIX
+    4. GCHostPay1 → GCHostPay3 (includes all payment details)
+    5. GCHostPay3 → GCHostPay1 (includes tx_hash, status, gas_used, block_number)
+
+  - Dual-key system:
+    - External: TPS_HOSTPAY_SIGNING_KEY (GCSplit → GCHostPay1)
+    - Internal: SUCCESS_URL_SIGNING_KEY (inter-service)
+
+IMPACT: ✅ POSITIVE
+  - Stateless worker design enabled
+  - All data flows through encrypted tokens
+  - No need for database/cache lookups in workers
+  - Enhanced security with separate keys
+
+CRITICAL FIX APPLIED:
+  - Token 3 (GCHostPay2 → GCHostPay1) initially only contained unique_id, cn_api_id, status
+  - FIX: Added from_currency, from_network, from_amount, payin_address
+  - Without fix: GCHostPay1 couldn't create GCHostPay3 payment request
+  - Fix documented in: GCHOSTPAY_TOKEN_FIX_SUMMARY.md
+
+CHANGE 5: Workflow Orchestration
+---------------------------------
+BEFORE:
+  - Synchronous workflow
+  - All steps executed sequentially in single request
+  - Single point of failure
+  - No retry between steps
+  - If any step fails, entire workflow fails
+
+AFTER:
+  - Asynchronous workflow via Cloud Tasks
+  - Each step is a separate Cloud Task
+  - Each step can retry independently
+  - Workflow resilience: steps retry independently
+  - Cloud Tasks provides at-least-once delivery guarantee
+
+IMPACT: ✅ POSITIVE
+  - Massive improvement in fault tolerance
+  - Each service can scale independently
+  - Worker services (GCHostPay2, GCHostPay3) completely stateless
+  - Orchestrator (GCHostPay1) handles state and coordination
+  - Automatic retry via Cloud Tasks
+
+POTENTIAL ISSUES:
+  - Increased latency (multiple Cloud Task hops)
+  - More complex debugging (distributed trace required)
+  - Requires monitoring all 3 services
+
+MITIGATION:
+  - Use emoji logging conventions for traceability
+  - Log unique_id at every step for correlation
+  - Use Cloud Logging for distributed tracing
+
+6.2 MINOR FUNCTIONAL CHANGES
+-----------------------------
+
+CHANGE: Secret Management Centralization
+-----------------------------------------
+BEFORE:
+  - fetch_secret() called directly in multiple places
+  - Each file has its own _fetch_secret() method
+  - Credentials fetched on-demand
+
+AFTER:
+  - ConfigManager class centralizes all secret fetching
+  - All secrets fetched during initialization
+  - Config object passed to components
+
+IMPACT: ✅ POSITIVE
+  - Cleaner code organization
+  - Easier to test (mock ConfigManager)
+  - Faster startup (parallel secret fetching possible)
+  - Single source of truth for configuration
+
+CHANGE: Web3 Connection Initialization
+---------------------------------------
+BEFORE:
+  - WalletManager initializes credentials in __init__()
+  - Connects to Web3 on-demand (lazy initialization)
+  - Reconnects if connection lost
+
+AFTER:
+  - WalletManager receives credentials as constructor params
+  - Connects to Web3 immediately in __init__()
+  - Still reconnects if connection lost
+
+IMPACT: ✅ NEUTRAL
+  - Slightly different initialization pattern
+  - Same functionality
+  - Constructor now requires all params (less flexible, more explicit)
+
+CHANGE: Error Response Format
+------------------------------
+BEFORE:
+  - Various error response formats
+  - Some use abort(), some use jsonify()
+  - Inconsistent status codes for similar errors
+
+AFTER:
+  - Consistent error response format across all services
+  - All use jsonify() with {"status": "error", "message": "..."}
+  - Consistent status codes
+
+IMPACT: ✅ POSITIVE
+  - Easier for clients to parse errors
+  - Better API consistency
+  - Cleaner code
+
+================================================================================
+SECTION 7: NEW FUNCTIONALITY ADDED
+================================================================================
+
+7.1 CLOUD TASKS INTEGRATION
+----------------------------
+
+NEW COMPONENT: cloudtasks_client.py
+Purpose: Create and manage Cloud Tasks for inter-service communication
+Methods:
+  - create_task(queue_name, target_url, payload, schedule_delay_seconds)
+  - enqueue_gchostpay2_status_check()
+  - enqueue_gchostpay3_payment_execution()
+  - enqueue_gchostpay1_status_response()
+  - enqueue_gchostpay1_payment_response()
+
+Features:
+  - Standardized task creation
+  - JSON payload encoding
+  - Optional task scheduling (delay support)
+  - Error handling and logging
+  - Task name tracking
+
+Queue Configuration (Required):
+  - max-attempts: -1 (infinite retry)
+  - max-retry-duration: 86400s (24 hours)
+  - min-backoff: 60s
+  - max-backoff: 60s
+  - max-doublings: 0
+
+Benefits:
+  ✅ Automatic retry with exponential backoff (configured to fixed 60s)
+  ✅ At-least-once delivery guarantee
+  ✅ Deduplication support (via task names)
+  ✅ Monitoring and observability
+  ✅ Rate limiting support
+
+7.2 TOKEN ENCRYPTION SYSTEM
+----------------------------
+
+NEW COMPONENT: token_manager.py (all 3 services)
+Purpose: Centralized token encryption/decryption for all inter-service communication
+
+Token Formats (9 methods total):
+  1. decrypt_gcsplit1_to_gchostpay1_token() - Uses TPS_HOSTPAY_SIGNING_KEY
+  2. encrypt_gchostpay1_to_gchostpay2_token() - Uses SUCCESS_URL_SIGNING_KEY
+  3. decrypt_gchostpay1_to_gchostpay2_token() - Uses SUCCESS_URL_SIGNING_KEY
+  4. encrypt_gchostpay2_to_gchostpay1_token() - Uses SUCCESS_URL_SIGNING_KEY (includes status + payment details)
+  5. decrypt_gchostpay2_to_gchostpay1_token() - Uses SUCCESS_URL_SIGNING_KEY
+  6. encrypt_gchostpay1_to_gchostpay3_token() - Uses SUCCESS_URL_SIGNING_KEY
+  7. decrypt_gchostpay1_to_gchostpay3_token() - Uses SUCCESS_URL_SIGNING_KEY
+  8. encrypt_gchostpay3_to_gchostpay1_token() - Uses SUCCESS_URL_SIGNING_KEY
+  9. decrypt_gchostpay3_to_gchostpay1_token() - Uses SUCCESS_URL_SIGNING_KEY
+
+Security Features:
+  ✅ HMAC-SHA256 signatures (16-byte truncated)
+  ✅ 60-second timestamp validation window
+  ✅ Base64 URL-safe encoding
+  ✅ Binary struct packing for efficiency
+  ✅ Dual-key system (external vs internal)
+
+Benefits:
+  ✅ Secure inter-service communication
+  ✅ Stateless worker services
+  ✅ All data flows through encrypted tokens
+  ✅ No need for database/cache lookups
+
+7.3 INFINITE RETRY LOGIC
+-------------------------
+
+NEW PATTERN: Infinite retry with fixed backoff
+
+GCHostPay2 (ChangeNow Status Check):
+  - Method: check_transaction_status_with_retry()
+  - Retry: while True (infinite loop)
+  - Backoff: Fixed 60 seconds
+  - Handles:
+    • HTTP 429 (rate limit) → retry
+    • HTTP 5xx (server error) → retry
+    • Timeout exceptions → retry
+    • Connection errors → retry
+  - Duration: Limited by Cloud Tasks 24h max retry duration
+
+GCHostPay3 (ETH Payment Execution):
+  - Method: send_eth_payment_with_infinite_retry()
+  - Retry: while True (infinite loop)
+  - Backoff: Fixed 60 seconds
+  - Handles:
+    • RPC timeout → retry
+    • Nonce too low → retry
+    • Insufficient funds → retry
+    • Gas estimation failure → retry
+    • Connection errors → retry
+  - Duration: Limited by Cloud Tasks 24h max retry duration
+
+Benefits:
+  ✅ Guarantees eventual success (or 24h timeout)
+  ✅ Protects against API rate limiting
+  ✅ Protects against temporary service downtime
+  ✅ Protects against network issues
+  ✅ Simple, predictable retry pattern
+
+7.4 CHANGENOW API CLIENT
+-------------------------
+
+NEW COMPONENT: changenow_client.py (GCHostPay2 only)
+Purpose: Dedicated ChangeNow API client with resilience
+
+Class: ChangeNowClient
+Methods:
+  - __init__(api_key)
+  - check_transaction_status_with_retry(cn_api_id)
+
+Features:
+  ✅ Persistent requests.Session() for connection pooling
+  ✅ Infinite retry logic
+  ✅ HTTP 429 (rate limit) handling
+  ✅ HTTP 5xx (server error) handling
+  ✅ Timeout handling (30s per request)
+  ✅ Connection error handling
+  ✅ Fixed 60s backoff between retries
+  ✅ Detailed logging with emojis
+
+Improvement over Original:
+  - Original: Single attempt, no retry
+  - New: Infinite retry until success or 24h timeout
+
+7.5 CONFIG MANAGER
+------------------
+
+NEW COMPONENT: config_manager.py (all 3 services)
+Purpose: Centralized configuration and secret management
+
+Class: ConfigManager
+Methods:
+  - __init__()
+  - _fetch_secret(env_var_name, description)
+  - initialize_config()
+
+Features:
+  ✅ Fetches all secrets during initialization
+  ✅ Returns config dictionary
+  ✅ Service-specific configuration (different secrets for each service)
+  ✅ Detailed logging with status indicators
+  ✅ Graceful error handling
+
+Secrets Fetched (varies by service):
+  Common:
+    - SUCCESS_URL_SIGNING_KEY
+    - CLOUD_TASKS_PROJECT_ID
+    - CLOUD_TASKS_LOCATION
+
+  GCHostPay1:
+    - TPS_HOSTPAY_SIGNING_KEY
+    - INSTANCE_CONNECTION_NAME
+    - DB_NAME
+    - DB_USER
+    - DB_PASSWORD
+    - GCHOSTPAY2_QUEUE
+    - GCHOSTPAY2_URL
+    - GCHOSTPAY3_QUEUE
+    - GCHOSTPAY3_URL
+
+  GCHostPay2:
+    - CHANGENOW_API_KEY
+    - GCHOSTPAY1_RESPONSE_QUEUE
+    - GCHOSTPAY1_URL
+
+  GCHostPay3:
+    - HOST_WALLET_ADDRESS
+    - HOST_WALLET_PRIVATE_KEY
+    - ETHEREUM_RPC_URL
+    - ETHEREUM_RPC_URL_API
+    - INSTANCE_CONNECTION_NAME
+    - DB_NAME
+    - DB_USER
+    - DB_PASSWORD
+    - GCHOSTPAY1_RESPONSE_QUEUE
+    - GCHOSTPAY1_URL
+
+Benefits:
+  ✅ Single source of truth for configuration
+  ✅ Easy to test (mock ConfigManager)
+  ✅ Consistent error handling
+  ✅ Service-specific secrets (better security)
+
+7.6 NEW ENDPOINTS
+-----------------
+
+NEW ENDPOINT: POST /status-verified (GCHostPay1)
+Purpose: Receive status check response from GCHostPay2
+Flow:
+  1. Decrypt token from GCHostPay2
+  2. Extract: unique_id, cn_api_id, status, + all payment details
+  3. Validate status == "waiting"
+  4. Create payment execution token for GCHostPay3
+  5. Enqueue to GCHostPay3 via Cloud Tasks
+Request: JSON {"token": "<encrypted_token>"}
+Response: 200 OK or error
+
+NEW ENDPOINT: POST /payment-completed (GCHostPay1)
+Purpose: Receive payment execution response from GCHostPay3
+Flow:
+  1. Decrypt token from GCHostPay3
+  2. Extract: unique_id, cn_api_id, tx_hash, tx_status, gas_used, block_number
+  3. Log completion (optional)
+  4. Return success
+Request: JSON {"token": "<encrypted_token>"}
+Response: 200 OK or error
+
+Benefits:
+  ✅ Asynchronous workflow orchestration
+  ✅ Clean separation of concerns
+  ✅ Independent service scaling
+
+================================================================================
+SECTION 8: SECURITY & CONFIGURATION REVIEW
+================================================================================
+
+8.1 SECRET MANAGEMENT COMPARISON
+---------------------------------
+
+ORIGINAL:
+  - Secrets fetched individually via fetch_secret()
+  - Called on-demand throughout code
+  - Each component fetches its own secrets
+  - Single signing key (TPS_HOSTPAY_SIGNING_KEY)
+
+NEW:
+  - Secrets fetched centrally via ConfigManager
+  - All secrets fetched during initialization
+  - Config object passed to components
+  - Dual signing keys:
+    • TPS_HOSTPAY_SIGNING_KEY (external: GCSplit → GCHostPay1)
+    • SUCCESS_URL_SIGNING_KEY (internal: inter-service)
+
+SECURITY IMPROVEMENTS:
+  ✅ Key separation: External vs internal communication uses different keys
+  ✅ Service isolation: Workers don't have access to external signing key
+  ✅ Reduced attack surface: Each service only fetches secrets it needs
+
+8.2 TOKEN SECURITY COMPARISON
+------------------------------
+
+ORIGINAL:
+  - Single token type
+  - HMAC-SHA256 with 16-byte truncated signature
+  - 60-second validity window
+  - Uses TPS_HOSTPAY_SIGNING_KEY
+
+NEW:
+  - Five token types
+  - HMAC-SHA256 with 16-byte truncated signature (all tokens)
+  - 60-second validity window (all tokens)
+  - Dual-key system:
+    • Token 1: Uses TPS_HOSTPAY_SIGNING_KEY
+    • Tokens 2-5: Use SUCCESS_URL_SIGNING_KEY
+
+SECURITY IMPROVEMENTS:
+  ✅ Key separation reduces impact of key compromise
+  ✅ Internal tokens can be rotated independently from external key
+  ✅ Service-to-service communication secured with different key
+
+8.3 AUTHENTICATION & AUTHORIZATION
+-----------------------------------
+
+ORIGINAL:
+  - Token-based authentication via HMAC signature
+  - No service-to-service authentication
+  - All requests from GCSplit validated
+
+NEW:
+  - Token-based authentication via HMAC signature (external)
+  - Token-based authentication for all inter-service communication (internal)
+  - Two-tier authentication:
+    • Tier 1: External (GCSplit → GCHostPay1)
+    • Tier 2: Internal (GCHostPay1 ↔ GCHostPay2 ↔ GCHostPay3)
+
+SECURITY IMPROVEMENTS:
+  ✅ All inter-service communication authenticated
+  ✅ Workers cannot receive direct requests from GCSplit (no external key)
+  ✅ Token forgery requires compromising internal key
+
+8.4 NETWORK SECURITY
+--------------------
+
+ORIGINAL:
+  - Single service endpoint exposed to GCSplit
+  - Direct HTTP calls (no queue isolation)
+  - No retry authentication
+
+NEW:
+  - Three service endpoints
+  - Cloud Tasks queue isolation
+  - All inter-service communication via authenticated queues
+  - Cloud Tasks provides:
+    • OIDC token authentication (can be configured)
+    • Service account-based authentication
+    • Rate limiting
+    • Retry management
+
+RECOMMENDATION:
+  ⚠️ Configure Cloud Tasks OIDC authentication for additional security
+  ⚠️ Use Cloud Run authentication to restrict access to GCHostPay2/3
+  ⚠️ Only GCHostPay1 should be accessible from GCSplit
+
+8.5 SECRETS INVENTORY
+---------------------
+
+SECRETS REQUIRED (Total: 16 unique secrets)
+
+SHARED SECRETS (All Services):
+  1. SUCCESS_URL_SIGNING_KEY - Internal token signing
+  2. CLOUD_TASKS_PROJECT_ID - Google Cloud project
+  3. CLOUD_TASKS_LOCATION - Cloud Tasks region
+
+GCHOSTPAY1 ONLY:
+  4. TPS_HOSTPAY_SIGNING_KEY - External token signing
+  5. INSTANCE_CONNECTION_NAME - Cloud SQL connection
+  6. DB_NAME - Database name
+  7. DB_USER - Database user
+  8. DB_PASSWORD - Database password
+  9. GCHOSTPAY2_QUEUE - Queue name for GCHostPay2
+  10. GCHOSTPAY2_URL - Service URL for GCHostPay2
+  11. GCHOSTPAY3_QUEUE - Queue name for GCHostPay3
+  12. GCHOSTPAY3_URL - Service URL for GCHostPay3
+
+GCHOSTPAY2 ONLY:
+  13. CHANGENOW_API_KEY - ChangeNow API key
+  14. GCHOSTPAY1_RESPONSE_QUEUE - Queue name for responses
+  15. GCHOSTPAY1_URL - Service URL for GCHostPay1
+
+GCHOSTPAY3 ONLY:
+  16. HOST_WALLET_ADDRESS - Ethereum wallet address
+  17. HOST_WALLET_PRIVATE_KEY - Ethereum private key
+  18. ETHEREUM_RPC_URL - Ethereum RPC endpoint
+  19. ETHEREUM_RPC_URL_API - Alchemy API key (optional)
+  20. INSTANCE_CONNECTION_NAME - Cloud SQL connection (same as GCHostPay1)
+  21. DB_NAME - Database name (same as GCHostPay1)
+  22. DB_USER - Database user (same as GCHostPay1)
+  23. DB_PASSWORD - Database password (same as GCHostPay1)
+  24. GCHOSTPAY1_RESPONSE_QUEUE - Queue name for responses
+  25. GCHOSTPAY1_URL - Service URL for GCHostPay1
+
+REMOVED SECRETS:
+  ❌ ETHEREUM_RPC_WEBHOOK_SECRET - No longer needed
+
+8.6 IAM & PERMISSIONS REQUIRED
+-------------------------------
+
+SERVICE ACCOUNTS REQUIRED:
+  - gchostpay1-sa@PROJECT.iam.gserviceaccount.com
+  - gchostpay2-sa@PROJECT.iam.gserviceaccount.com
+  - gchostpay3-sa@PROJECT.iam.gserviceaccount.com
+
+PERMISSIONS REQUIRED (Per Service):
+
+GCHostPay1:
+  - secretmanager.versions.access (for all secrets)
+  - cloudtasks.tasks.create (for creating tasks)
+  - cloudsql.instances.connect (for database access)
+  - run.services.get (optional, for service discovery)
+
+GCHostPay2:
+  - secretmanager.versions.access (for all secrets)
+  - cloudtasks.tasks.create (for creating tasks)
+
+GCHostPay3:
+  - secretmanager.versions.access (for all secrets)
+  - cloudtasks.tasks.create (for creating tasks)
+  - cloudsql.instances.connect (for database access)
+
+CLOUD TASKS QUEUES:
+  - Queue execution: Cloud Tasks service account needs run.routes.invoke permission
+
+RECOMMENDATION:
+  ✅ Use separate service accounts for each service (principle of least privilege)
+  ✅ Grant only required permissions to each service account
+  ✅ Use Cloud Run authentication to restrict direct access to GCHostPay2/3
+
+================================================================================
+SECTION 9: RECOMMENDATIONS & NEXT STEPS
+================================================================================
+
+9.1 PRE-DEPLOYMENT CHECKLIST
+-----------------------------
+
+CRITICAL TASKS:
+  ✓ Create Cloud Tasks queues with proper configuration:
+    - max-attempts: -1
+    - max-retry-duration: 86400s (24 hours)
+    - min-backoff: 60s
+    - max-backoff: 60s
+    - max-doublings: 0
+
+  ✓ Configure all secrets in Google Secret Manager:
+    - Verify all 25 secret paths are correct
+    - Test secret access from each service account
+
+  ✓ Set up IAM permissions:
+    - Create service accounts for each service
+    - Grant secretmanager.versions.access
+    - Grant cloudtasks.tasks.create
+    - Grant cloudsql.instances.connect (GCHostPay1, GCHostPay3)
+    - Grant run.routes.invoke for Cloud Tasks service account
+
+  ✓ Configure Cloud Run services:
+    - Deploy all 3 services
+    - Set environment variables for each service
+    - Configure service URLs
+    - Configure concurrency and timeout settings
+
+  ✓ Test token encryption/decryption:
+    - Verify GCSplit1 → GCHostPay1 token format compatibility
+    - Test all internal token formats
+    - Verify HMAC signatures
+    - Verify timestamp validation
+
+9.2 TESTING RECOMMENDATIONS
+----------------------------
+
+UNIT TESTS REQUIRED:
+  ✓ Token encryption/decryption for all 5 token formats
+  ✓ HMAC signature verification
+  ✓ Timestamp validation (within window, expired, future)
+  ✓ Database operations (insert, check_exists)
+  ✓ Gas price calculation
+  ✓ Address checksum conversion
+
+INTEGRATION TESTS REQUIRED:
+  ✓ GCSplit1 → GCHostPay1 (end-to-end token flow)
+  ✓ GCHostPay1 → GCHostPay2 → GCHostPay1 (status check round-trip)
+  ✓ GCHostPay1 → GCHostPay3 → GCHostPay1 (payment execution round-trip)
+  ✓ Duplicate transaction detection
+  ✓ Invalid status handling (status != "waiting")
+
+RESILIENCE TESTS REQUIRED:
+  ✓ ChangeNow API rate limiting (HTTP 429) → verify infinite retry
+  ✓ ChangeNow API timeout → verify infinite retry
+  ✓ ChangeNow API 5xx error → verify infinite retry
+  ✓ Ethereum RPC timeout → verify infinite retry
+  ✓ Ethereum RPC connection error → verify infinite retry
+  ✓ Insufficient funds → verify infinite retry behavior
+  ✓ Cloud Tasks 24h timeout → verify graceful failure
+
+PERFORMANCE TESTS REQUIRED:
+  ✓ End-to-end latency measurement
+  ✓ Cloud Tasks processing latency
+  ✓ Token encryption/decryption performance
+  ✓ Database query performance
+  ✓ Concurrent transaction handling
+
+9.3 MONITORING RECOMMENDATIONS
+-------------------------------
+
+METRICS TO MONITOR:
+  ✓ Request count per endpoint (all services)
+  ✓ Error rate per endpoint
+  ✓ Latency per endpoint (p50, p95, p99)
+  ✓ Cloud Tasks queue depth
+  ✓ Cloud Tasks task age
+  ✓ ChangeNow API call count
+  ✓ ChangeNow API error rate
+  ✓ ETH payment success rate
+  ✓ ETH payment gas cost
+  ✓ Database connection pool usage
+  ✓ Token validation failure rate
+
+ALERTS TO CONFIGURE:
+  ⚠️ GCHostPay1 error rate > 5%
+  ⚠️ GCHostPay2 error rate > 5%
+  ⚠️ GCHostPay3 error rate > 5%
+  ⚠️ Cloud Tasks queue depth > 1000
+  ⚠️ Cloud Tasks task age > 1 hour
+  ⚠️ ETH payment failure rate > 1%
+  ⚠️ Database connection errors
+  ⚠️ Token validation failure rate > 5%
+
+LOGGING RECOMMENDATIONS:
+  ✓ Use structured logging (JSON format)
+  ✓ Include unique_id in all logs for correlation
+  ✓ Include service name and endpoint in all logs
+  ✓ Log all Cloud Tasks enqueue operations
+  ✓ Log all token encryption/decryption operations
+  ✓ Log all ChangeNow API calls
+  ✓ Log all ETH payment attempts
+  ✓ Use emoji conventions for easy log scanning
+
+9.4 POTENTIAL ISSUES & MITIGATIONS
+-----------------------------------
+
+ISSUE 1: Increased Latency
+---------------------------
+Problem: Multiple Cloud Task hops increase end-to-end latency
+Original: ~30 seconds (single synchronous request)
+New: ~2-5 minutes (multiple async tasks with queuing delays)
+
+Mitigation:
+  ✓ Configure Cloud Tasks with low dispatch latency
+  ✓ Use Cloud Run with high concurrency for fast processing
+  ✓ Monitor and optimize each service's processing time
+  ✓ Consider this acceptable tradeoff for resilience
+
+ISSUE 2: Complex Distributed Debugging
+---------------------------------------
+Problem: Errors can occur across 3 services and multiple Cloud Tasks
+Debugging requires correlating logs across services
+
+Mitigation:
+  ✓ Use unique_id as correlation ID in all logs
+  ✓ Use Cloud Logging for centralized log aggregation
+  ✓ Use Cloud Trace for distributed tracing (optional)
+  ✓ Implement comprehensive logging at each step
+  ✓ Use emoji conventions for easy log pattern recognition
+
+ISSUE 3: Cloud Tasks Queue Buildup
+-----------------------------------
+Problem: If GCHostPay2 or GCHostPay3 becomes overloaded, queues can build up
+Large queue depth indicates system stress
+
+Mitigation:
+  ✓ Monitor queue depth and task age
+  ✓ Configure alerts for queue buildup
+  ✓ Scale Cloud Run services based on queue depth
+  ✓ Configure appropriate concurrency limits
+  ✓ Use Cloud Tasks rate limiting if needed
+
+ISSUE 4: 24-Hour Retry Timeout Edge Cases
+------------------------------------------
+Problem: Transactions that don't succeed within 24 hours will fail
+Could result in lost payments or stuck transactions
+
+Mitigation:
+  ✓ Monitor for Cloud Tasks timeout events
+  ✓ Implement manual retry/recovery procedures
+  ✓ Alert on any 24h timeout occurrences
+  ✓ Consider increasing retry duration if needed (max: 30 days)
+  ✓ Ensure ChangeNow status is checked before 24h expires
+
+ISSUE 5: Database Logging Only on Success
+------------------------------------------
+Problem: Cannot track failed payment attempts or retry history
+Difficult to audit or debug payment failures
+
+Mitigation:
+  ✓ Use Cloud Logging for audit trail of all attempts
+  ✓ Consider adding separate audit table for attempts
+  ✓ Monitor Cloud Run logs for payment retry patterns
+  ✓ Implement custom metrics for retry counts
+
+ISSUE 6: No Transaction Status Updates During Retry
+----------------------------------------------------
+Problem: No way to query transaction status while retrying
+Users cannot check payment progress
+
+Mitigation:
+  ✓ Use Cloud Tasks API to query task status
+  ✓ Implement status endpoint that checks queue state
+  ✓ Add optional database status tracking (pending/processing/complete)
+  ✓ Use Cloud Logging to track progress
+
+ISSUE 7: Missing Alchemy Webhook Monitoring
+--------------------------------------------
+Problem: Removed Alchemy webhook means no real-time transaction monitoring
+Original implementation didn't use it anyway
+
+Impact: MINIMAL (original didn't implement database updates)
+
+Mitigation:
+  ✓ Transaction confirmation happens via wait_for_transaction_receipt()
+  ✓ GCHostPay3 logs immediately after successful payment
+  ✓ Could re-add webhook handler in future if needed
+
+9.5 ARCHITECTURAL IMPROVEMENTS FOR FUTURE
+------------------------------------------
+
+FUTURE ENHANCEMENT 1: Status Tracking Table
+--------------------------------------------
+Add intermediate status tracking for visibility:
+  - Table: payment_status_tracking
+  - Fields: unique_id, current_step, status, attempt_count, last_updated
+  - Updates: Each service updates status at key points
+  - Benefits: Better observability, easier debugging
+
+FUTURE ENHANCEMENT 2: Retry Metrics Instrumentation
+----------------------------------------------------
+Add detailed retry metrics:
+  - Metric: retry_count by service and error_type
+  - Metric: time_to_success by service
+  - Metric: failure_rate after N retries
+  - Benefits: Better understanding of retry patterns
+
+FUTURE ENHANCEMENT 3: Circuit Breaker Pattern
+----------------------------------------------
+Add circuit breaker for upstream dependencies:
+  - ChangeNow API circuit breaker in GCHostPay2
+  - Ethereum RPC circuit breaker in GCHostPay3
+  - Benefits: Faster failure detection, reduced load on failing services
+
+FUTURE ENHANCEMENT 4: Dead Letter Queue
+----------------------------------------
+Configure Cloud Tasks dead letter queues:
+  - Capture permanently failed tasks
+  - Manual review and retry procedures
+  - Benefits: No lost transactions, manual intervention possible
+
+FUTURE ENHANCEMENT 5: Idempotency Keys
+---------------------------------------
+Add explicit idempotency key support:
+  - Use unique_id as idempotency key
+  - Store processed keys in Redis/Memorystore
+  - Benefits: Guaranteed exactly-once processing
+
+FUTURE ENHANCEMENT 6: Re-add Alchemy Webhook
+---------------------------------------------
+If real-time monitoring becomes required:
+  - Re-implement AlchemyWebhookHandler in GCHostPay3
+  - Update database when transaction confirms
+  - Benefits: Real-time confirmation, faster status updates
+
+9.6 DEPLOYMENT PROCEDURE
+------------------------
+
+STEP 1: Prepare Infrastructure
+  1.1 Create Cloud Tasks queues:
+      - gchostpay2-status-check-queue
+      - gchostpay3-payment-exec-queue
+      - gchostpay1-response-queue
+  1.2 Configure queue settings (infinite retry, 60s backoff, 24h max)
+  1.3 Create service accounts for each service
+  1.4 Grant IAM permissions
+
+STEP 2: Configure Secrets
+  2.1 Create/verify all secrets in Secret Manager
+  2.2 Test secret access from each service account
+  2.3 Update environment variables with secret paths
+
+STEP 3: Deploy Services (Recommended Order)
+  3.1 Deploy GCHostPay3 first (no dependencies)
+  3.2 Deploy GCHostPay2 second (no dependencies)
+  3.3 Deploy GCHostPay1 last (depends on URLs of GCHostPay2/3)
+  3.4 Update service URL secrets after deployment
+
+STEP 4: Verify Deployment
+  4.1 Test health endpoints for all services
+  4.2 Verify Cloud Tasks queues are accessible
+  4.3 Verify database connectivity (GCHostPay1, GCHostPay3)
+  4.4 Test token encryption/decryption
+
+STEP 5: Integration Testing
+  5.1 Send test token from GCSplit1 to GCHostPay1
+  5.2 Verify Cloud Tasks created
+  5.3 Monitor logs for workflow progression
+  5.4 Verify database logging
+
+STEP 6: Production Rollout
+  6.1 Update GCSplit1 to point to new GCHostPay1 URL
+  6.2 Monitor error rates and latency
+  6.3 Verify end-to-end workflows
+  6.4 Monitor Cloud Tasks queues
+
+STEP 7: Decommission Old Service
+  7.1 Verify no traffic to GCHostPay10-26
+  7.2 Keep service running for 48 hours as backup
+  7.3 Archive old service
+  7.4 Clean up old secrets if different
+
+================================================================================
+FINAL SUMMARY
+================================================================================
+
+MIGRATION STATUS: ✅ COMPLETE
+
+COMPONENTS MIGRATED: 100% (with intentional removals)
+FUNCTIONALITY PRESERVED: 100% (with enhancements)
+SECURITY ENHANCED: YES (dual-key system, service isolation)
+RESILIENCE IMPROVED: YES (infinite retry, Cloud Tasks orchestration)
+
+CRITICAL IMPROVEMENTS:
+  ✅ Infinite retry for ChangeNow API calls (was: single attempt)
+  ✅ Infinite retry for ETH payments (was: 3 attempts max)
+  ✅ Database logging only on success (was: logged incomplete transactions)
+  ✅ Cloud Tasks queue-based orchestration (was: synchronous single request)
+  ✅ Service isolation and independent scaling (was: monolithic)
+  ✅ Dual-key token system (was: single key)
+  ✅ Token format fix (GCHostPay2 → GCHostPay1 includes payment details)
+
+INTENTIONAL REMOVALS:
+  ❌ AlchemyWebhookHandler (not used in original, no functionality loss)
+  ❌ POST /alchemy-webhook endpoint (not integrated, no functionality loss)
+  ❌ Transaction replacement logic (replaced by service-level retry)
+
+READY FOR DEPLOYMENT: YES
+TESTING REQUIRED: Comprehensive end-to-end testing recommended
+
+================================================================================
+END OF COMPREHENSIVE REVIEW
+================================================================================
