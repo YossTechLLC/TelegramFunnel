@@ -5,20 +5,25 @@ Receives encrypted tokens from GCWebhook1 via Cloud Tasks,
 sends Telegram one-time invitation links to users.
 Implements infinite retry via Cloud Tasks (60s fixed backoff, 24h max duration).
 
-IMPORTANT - Async Route Architecture:
-The main endpoint is defined as async to properly handle the python-telegram-bot's
-async API calls. This prevents connection pool exhaustion that occurs when using
-asyncio.run() within a synchronous Flask route.
+ARCHITECTURE - Sync Route with asyncio.run():
+This service uses a SYNCHRONOUS Flask route with asyncio.run() to handle
+python-telegram-bot's async API calls. This approach is optimal for Cloud Run.
 
-Why async route instead of asyncio.run():
-- Flask 3.0+ supports native async routes
-- Each asyncio.run() creates a NEW event loop
-- python-telegram-bot uses httpx with connection pooling PER event loop
-- Creating multiple event loops causes connection pool exhaustion
-- Async route reuses the same event loop and connection pool across requests
-- Result: Proper connection management and no pool timeout errors
+Why sync route with asyncio.run():
+- Creates a fresh, isolated event loop for EACH request
+- Prevents "Event loop is closed" errors in serverless environments
+- Each request gets a fresh Bot instance with new httpx connection pool
+- Event loop lifecycle is contained within the request scope
+- Cloud Run's stateless model works perfectly with this pattern
+- Previous async route approach failed because event loops closed between requests
+
+Key Implementation:
+- Bot instance created per-request (not at module level)
+- asyncio.run() creates isolated event loop for async telegram operations
+- Event loop and connections properly cleaned up after each request
 """
 import time
+import asyncio
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
 from telegram.error import TelegramError
@@ -45,16 +50,15 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize token manager: {e}")
     token_manager = None
 
-# Initialize Telegram bot
+# Store bot token at module level (Bot instance created per-request)
 try:
     bot_token = config.get('telegram_bot_token')
     if not bot_token:
         raise ValueError("TELEGRAM_BOT_TOKEN not available")
-    telegram_bot = Bot(bot_token)
-    print(f"✅ [APP] Telegram bot initialized")
+    print(f"✅ [APP] Telegram bot token loaded (Bot instance will be created per-request)")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Telegram bot: {e}")
-    telegram_bot = None
+    print(f"❌ [APP] Failed to load Telegram bot token: {e}")
+    bot_token = None
 
 
 # ============================================================================
@@ -62,16 +66,18 @@ except Exception as e:
 # ============================================================================
 
 @app.route("/", methods=["POST"])
-async def send_telegram_invite():
+def send_telegram_invite():
     """
     Main endpoint for sending Telegram invites.
 
     Flow:
     1. Decrypt token from GCWebhook1
-    2. Create Telegram invite link
-    3. Send invite message to user
-    4. Return 200 (Cloud Tasks marks success)
-    5. If error: Return 500 (Cloud Tasks retries after 60s)
+    2. Create fresh Bot instance for this request
+    3. Use asyncio.run() to execute async telegram operations in isolated event loop
+    4. Create Telegram invite link
+    5. Send invite message to user
+    6. Return 200 (Cloud Tasks marks success)
+    7. If error: Return 500 (Cloud Tasks retries after 60s)
 
     Returns:
         JSON response with status
@@ -107,33 +113,63 @@ async def send_telegram_invite():
             print(f"❌ [ENDPOINT] Token validation error: {e}")
             abort(400, f"Token error: {e}")
 
-        # Send Telegram invite
-        if not telegram_bot:
-            print(f"❌ [ENDPOINT] Telegram bot not available")
-            abort(500, "Telegram bot unavailable")
+        # Check bot token availability
+        if not bot_token:
+            print(f"❌ [ENDPOINT] Telegram bot token not available")
+            abort(500, "Telegram bot configuration error")
 
+        # Define async function to handle telegram operations
+        async def send_invite_async():
+            """
+            Async function to handle telegram bot operations.
+            Creates fresh Bot instance with isolated httpx connection pool.
+            """
+            # Create fresh Bot instance for this request
+            bot = Bot(bot_token)
+
+            try:
+                print(f"📨 [ENDPOINT] Creating Telegram invite link for channel {closed_channel_id}")
+
+                # Create one-time invite link (expires in 1 hour, 1 use only)
+                invite = await bot.create_chat_invite_link(
+                    chat_id=closed_channel_id,
+                    expire_date=int(time.time()) + 3600,
+                    member_limit=1
+                )
+                print(f"✅ [ENDPOINT] Invite link created: {invite.invite_link}")
+
+                # Send invite message to user
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        "✅ You've been granted access!\n"
+                        "Here is your one-time invite link:\n"
+                        f"{invite.invite_link}"
+                    ),
+                    disable_web_page_preview=True
+                )
+                print(f"✅ [ENDPOINT] Invite message sent to user {user_id}")
+
+                return {
+                    "success": True,
+                    "invite_link": invite.invite_link
+                }
+
+            except TelegramError as te:
+                # Telegram API error - Cloud Tasks will retry
+                print(f"❌ [ENDPOINT] Telegram API error: {te}")
+                print(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
+                raise
+
+            except Exception as e:
+                # Other error - Cloud Tasks will retry
+                print(f"❌ [ENDPOINT] Unexpected error sending invite: {e}")
+                print(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
+                raise
+
+        # Execute async function in isolated event loop
         try:
-            print(f"📨 [ENDPOINT] Creating Telegram invite link for channel {closed_channel_id}")
-
-            # Create one-time invite link (expires in 1 hour, 1 use only)
-            invite = await telegram_bot.create_chat_invite_link(
-                chat_id=closed_channel_id,
-                expire_date=int(time.time()) + 3600,
-                member_limit=1
-            )
-            print(f"✅ [ENDPOINT] Invite link created: {invite.invite_link}")
-
-            # Send invite message to user
-            await telegram_bot.send_message(
-                chat_id=user_id,
-                text=(
-                    "✅ You've been granted access!\n"
-                    "Here is your one-time invite link:\n"
-                    f"{invite.invite_link}"
-                ),
-                disable_web_page_preview=True
-            )
-            print(f"✅ [ENDPOINT] Invite message sent to user {user_id}")
+            result = asyncio.run(send_invite_async())
 
             print(f"🎉 [ENDPOINT] Telegram invite completed successfully")
             return jsonify({
@@ -144,15 +180,11 @@ async def send_telegram_invite():
             }), 200
 
         except TelegramError as te:
-            # Telegram API error - Cloud Tasks will retry
-            print(f"❌ [ENDPOINT] Telegram API error: {te}")
-            print(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
+            # Telegram API error - return 500 for Cloud Tasks retry
             abort(500, f"Telegram API error: {te}")
 
         except Exception as e:
-            # Other error - Cloud Tasks will retry
-            print(f"❌ [ENDPOINT] Unexpected error sending invite: {e}")
-            print(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
+            # Other error - return 500 for Cloud Tasks retry
             abort(500, f"Error sending invite: {e}")
 
     except Exception as e:
@@ -177,7 +209,7 @@ def health_check():
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
-                "telegram_bot": "healthy" if telegram_bot else "unhealthy"
+                "bot_token": "healthy" if bot_token else "unhealthy"
             }
         }), 200
 
