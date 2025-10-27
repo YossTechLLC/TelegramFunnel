@@ -1,0 +1,1347 @@
+================================================================================
+GCHOSTPAY CLOUD TASKS ARCHITECTURE REFACTORING PROPOSAL
+================================================================================
+Date: 2025-10-27
+Author: Claude Code Analysis
+Purpose: Propose Cloud Tasks architecture for GCHostPay service following
+         established patterns from GCSplit and GCWebhook services
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. Executive Summary
+2. Current Architecture Analysis
+3. Identified Pain Points & Risks
+4. Proposed Architecture
+5. Service Breakdown
+6. Token Encryption Schema
+7. Queue Configuration
+8. Data Flow Diagrams
+9. Benefits & Trade-offs
+10. Implementation Roadmap
+11. Rollback Strategy
+12. Monitoring & Observability
+
+================================================================================
+1. EXECUTIVE SUMMARY
+================================================================================
+
+OBJECTIVE:
+Refactor GCHostPay10-26 into a multi-service Cloud Tasks architecture to:
+- Improve resilience against ChangeNow API downtime
+- Handle Ethereum RPC failures gracefully
+- Prevent payment failures due to external service issues
+- Align with established GCSplit/GCWebhook patterns
+- Enable independent scaling of validation, checking, and execution
+
+RECOMMENDATION:
+Split GCHostPay10-26 into THREE microservices:
+- GCHostPay1-10-26: Token Validator & Orchestrator
+- GCHostPay2-10-26: ChangeNow Status Checker (with infinite retry)
+- GCHostPay3-10-26: ETH Payment Executor (with infinite retry)
+
+ALIGNMENT WITH EXISTING PATTERNS:
+✅ Follows GCSplit 3-service pattern (orchestrator + 2 workers)
+✅ Uses token encryption like GCSplit/GCWebhook
+✅ Implements infinite retry with 60s fixed backoff
+✅ Uses same emoji conventions and logging patterns
+✅ Integrates with existing Secret Manager configuration
+✅ Maintains database schema compatibility
+
+================================================================================
+2. CURRENT ARCHITECTURE ANALYSIS
+================================================================================
+
+CURRENT FLOW (GCHostPay10-26 - Monolithic):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GCSplit1
+    ↓ (Cloud Task with encrypted token)
+GCHostPay10-26 POST /
+    ├─ Step 1: Decode & verify token
+    ├─ Step 2: Check database for duplicate transaction
+    ├─ Step 3: Call ChangeNow API to check transaction status
+    │           └─ External API call (SINGLE ATTEMPT)
+    ├─ Step 4: Validate status == "waiting"
+    ├─ Step 5: Execute ETH payment via wallet_manager
+    │           └─ Ethereum RPC call (SINGLE ATTEMPT)
+    ├─ Step 6: Log to database (split_payout_hostpay)
+    └─ Return success/failure
+
+Alchemy Webhook Handler (separate endpoint):
+    POST /alchemy-webhook
+        └─ Receives blockchain event notifications
+        └─ Updates transaction status in database
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CURRENT FILE STRUCTURE:
+GCHostPay10-26/
+├── tphp10-26.py                    (Main Flask app - 3 endpoints)
+├── database_manager.py              (Database operations)
+├── wallet_manager.py                (Ethereum wallet & RPC interactions)
+├── alchemy_webhook_handler.py       (Alchemy webhook processing)
+├── Dockerfile
+└── requirements.txt
+
+KEY OBSERVATIONS:
+1. All operations happen synchronously in a single request
+2. No retry logic for ChangeNow API calls
+3. No retry logic for Ethereum RPC failures
+4. Single point of failure for external service dependencies
+5. Token validation is tightly coupled with execution
+6. Cannot scale validation and execution independently
+
+================================================================================
+3. IDENTIFIED PAIN POINTS & RISKS
+================================================================================
+
+🚨 CRITICAL RISKS (High Priority):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RISK 1: ChangeNow API Downtime
+- Current: Single attempt to check transaction status
+- Impact: If ChangeNow API is down, payment fails entirely
+- Consequence: Client's ETH swap transaction becomes orphaned
+- Severity: HIGH - Direct financial impact
+
+RISK 2: Ethereum RPC Failures
+- Current: Single attempt to submit ETH transaction
+- Impact: If RPC provider (Alchemy/Infura) is down, payment fails
+- Consequence: ChangeNow transaction expires, client loses payment
+- Severity: HIGH - Direct financial impact + customer support overhead
+
+RISK 3: Rate Limiting
+- Current: No handling for ChangeNow rate limits (HTTP 429)
+- Impact: During high volume, API calls fail
+- Consequence: Payment pipeline backs up, customer complaints
+- Severity: MEDIUM - Operational impact
+
+RISK 4: Network Timeouts
+- Current: 30-second timeout, no retry
+- Impact: Transient network issues cause permanent failures
+- Consequence: Unnecessary payment failures
+- Severity: MEDIUM - Customer experience degradation
+
+⚠️ OPERATIONAL CONCERNS (Medium Priority):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONCERN 1: Lack of Separation of Concerns
+- Validation, checking, and execution all in one service
+- Difficult to debug which step failed
+- Cannot scale components independently
+
+CONCERN 2: Limited Observability
+- All operations logged in single service
+- Difficult to track progress through pipeline
+- No visibility into retry attempts
+
+CONCERN 3: Tight Coupling
+- Database, ChangeNow API, and Ethereum RPC all in one service
+- Changes to one component require full redeployment
+- Testing is complex and requires all dependencies
+
+CONCERN 4: Inconsistent Architecture
+- GCSplit uses 3-service Cloud Tasks pattern
+- GCWebhook uses 2-service Cloud Tasks pattern
+- GCHostPay uses monolithic pattern
+- Team confusion about architectural standards
+
+================================================================================
+4. PROPOSED ARCHITECTURE
+================================================================================
+
+NEW FLOW (GCHostPay Split into 3 Services):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GCSplit1
+    ↓ (Cloud Task with TPS_HOSTPAY token)
+GCHostPay1-10-26 (Validator & Orchestrator)
+    ├─ POST / - Main webhook endpoint
+    │   ├─ Decode & verify TPS_HOSTPAY token
+    │   ├─ Extract: unique_id, cn_api_id, from_currency, etc.
+    │   ├─ Check database for duplicate (quick local check)
+    │   ├─ Encrypt internal token for GCHostPay2
+    │   └─ Enqueue → GCHostPay2 (via Cloud Task)
+    │
+    ├─ POST /status-verified - Receives confirmation from GCHostPay2
+    │   ├─ Decrypt token from GCHostPay2
+    │   ├─ Validate status == "waiting"
+    │   ├─ Encrypt token for GCHostPay3
+    │   └─ Enqueue → GCHostPay3 (via Cloud Task)
+    │
+    └─ POST /payment-completed - Receives confirmation from GCHostPay3
+        ├─ Decrypt token from GCHostPay3
+        ├─ Log final status
+        └─ Complete workflow
+
+GCHostPay2-10-26 (ChangeNow Status Checker)
+    └─ POST / - Status check endpoint
+        ├─ Decrypt token from GCHostPay1
+        ├─ Call ChangeNow API: GET /v2/exchange/by-id
+        │   └─ INFINITE RETRY (60s backoff, 24h max)
+        │       ├─ Retry on HTTP 429 (rate limit)
+        │       ├─ Retry on HTTP 5xx (server error)
+        │       ├─ Retry on timeout
+        │       └─ Retry on connection error
+        ├─ Extract status field
+        ├─ Validate status == "waiting"
+        ├─ Encrypt response token
+        └─ Enqueue → GCHostPay1 /status-verified
+
+GCHostPay3-10-26 (ETH Payment Executor)
+    └─ POST / - Payment execution endpoint
+        ├─ Decrypt token from GCHostPay1
+        ├─ Execute ETH payment via wallet_manager
+        │   └─ INFINITE RETRY (60s backoff, 24h max)
+        │       ├─ Retry on RPC timeout
+        │       ├─ Retry on connection error
+        │       ├─ Retry on gas estimation failure
+        │       └─ Retry on nonce issues
+        ├─ Log to database (split_payout_hostpay)
+        ├─ Encrypt response token
+        └─ Enqueue → GCHostPay1 /payment-completed
+
+GCHostPay4-10-26 (Alchemy Webhook Handler) [OPTIONAL]
+    └─ POST / - Alchemy blockchain event notifications
+        ├─ Verify webhook signature
+        ├─ Extract transaction hash & status
+        └─ Update split_payout_hostpay table
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DESIGN RATIONALE:
+This 3-service split follows the EXACT pattern established by GCSplit:
+- Service 1: Orchestrator (like GCSplit1)
+- Service 2: External API worker with retry (like GCSplit2)
+- Service 3: External API/blockchain worker with retry (like GCSplit3)
+
+The Alchemy webhook handler can remain in GCHostPay1 or be split into
+GCHostPay4 for complete separation (recommended for production).
+
+================================================================================
+5. SERVICE BREAKDOWN
+================================================================================
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ SERVICE 1: GCHostPay1-10-26 (Validator & Orchestrator)                     │
+└────────────────────────────────────────────────────────────────────────────┘
+
+RESPONSIBILITY:
+- Token validation and orchestration ONLY
+- No external API calls
+- Fast response to Cloud Tasks
+- Database operations (duplication check, final logging)
+
+ENDPOINTS:
+1. POST / - Initial webhook from GCSplit1
+2. POST /status-verified - Response from GCHostPay2
+3. POST /payment-completed - Response from GCHostPay3
+4. GET /health - Health check
+
+FILES:
+GCHostPay1-10-26/
+├── tphp1-10-26.py              (Main Flask app - 4 endpoints)
+├── config_manager.py            (Secret Manager integration)
+├── database_manager.py          (Database operations)
+├── token_manager.py             (Token encryption/decryption)
+├── cloudtasks_client.py         (Cloud Tasks operations)
+├── Dockerfile
+├── requirements.txt
+└── .dockerignore
+
+DEPENDENCIES:
+- Google Cloud Secret Manager (configuration)
+- Cloud SQL (database)
+- Cloud Tasks (queue operations)
+- NO external APIs
+
+CHARACTERISTICS:
+✅ Stateful (database access)
+✅ Fast response (<200ms typical)
+✅ Low CPU/memory requirements
+✅ Orchestration logic only
+
+SECRETS REQUIRED:
+- TPS_HOSTPAY_SIGNING_KEY (for incoming tokens from GCSplit1)
+- HOSTPAY_INTERNAL_SIGNING_KEY (for internal tokens between services)
+- CLOUD_SQL_CONNECTION_NAME
+- DATABASE_NAME_SECRET
+- DATABASE_USER_SECRET
+- DATABASE_PASSWORD_SECRET
+- CLOUD_TASKS_PROJECT_ID
+- CLOUD_TASKS_LOCATION
+- GCHOSTPAY2_QUEUE, GCHOSTPAY2_URL
+- GCHOSTPAY3_QUEUE, GCHOSTPAY3_URL
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ SERVICE 2: GCHostPay2-10-26 (ChangeNow Status Checker)                     │
+└────────────────────────────────────────────────────────────────────────────┘
+
+RESPONSIBILITY:
+- Check ChangeNow transaction status ONLY
+- Infinite retry on failures
+- No database access (stateless)
+- No blockchain operations
+
+ENDPOINTS:
+1. POST / - Status check request from GCHostPay1
+2. GET /health - Health check
+
+FILES:
+GCHostPay2-10-26/
+├── tphp2-10-26.py              (Main Flask app - 2 endpoints)
+├── config_manager.py            (Secret Manager integration)
+├── changenow_client.py          (ChangeNow API with retry logic)
+├── token_manager.py             (Token encryption/decryption)
+├── cloudtasks_client.py         (Cloud Tasks operations)
+├── Dockerfile
+├── requirements.txt
+└── .dockerignore
+
+DEPENDENCIES:
+- Google Cloud Secret Manager (configuration)
+- ChangeNow API (external - with retry)
+- Cloud Tasks (queue operations)
+- NO database
+
+CHARACTERISTICS:
+✅ Stateless (no database)
+✅ Infinite retry (60s backoff)
+✅ Low memory requirements
+✅ Single external API dependency
+
+SECRETS REQUIRED:
+- HOSTPAY_INTERNAL_SIGNING_KEY
+- CHANGENOW_API_KEY
+- CLOUD_TASKS_PROJECT_ID
+- CLOUD_TASKS_LOCATION
+- GCHOSTPAY1_RESPONSE_QUEUE
+- GCHOSTPAY1_URL
+
+RETRY LOGIC:
+def check_changenow_status_with_retry(cn_api_id: str):
+    """
+    Check ChangeNow transaction status with infinite retry.
+
+    Retry Conditions:
+    - HTTP 429 (Rate Limit) → 60s wait → retry
+    - HTTP 5xx (Server Error) → 60s wait → retry
+    - Timeout → 60s wait → retry
+    - Connection Error → 60s wait → retry
+
+    Max Duration: 24 hours (Cloud Tasks limit)
+    """
+    attempt = 0
+    while True:
+        attempt += 1
+        print(f"🔄 [STATUS_CHECK] Attempt #{attempt}")
+
+        try:
+            response = call_changenow_api(cn_api_id)
+
+            if response.status_code == 200:
+                status = response.json().get('status')
+                print(f"✅ [STATUS_CHECK] Status: {status}")
+                return status
+
+            elif response.status_code == 429:
+                print(f"⏰ [STATUS_CHECK] Rate limited, waiting 60s...")
+                time.sleep(60)
+
+            elif 500 <= response.status_code < 600:
+                print(f"❌ [STATUS_CHECK] Server error, waiting 60s...")
+                time.sleep(60)
+
+        except (Timeout, ConnectionError) as e:
+            print(f"❌ [STATUS_CHECK] Network error: {e}, waiting 60s...")
+            time.sleep(60)
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ SERVICE 3: GCHostPay3-10-26 (ETH Payment Executor)                         │
+└────────────────────────────────────────────────────────────────────────────┘
+
+RESPONSIBILITY:
+- Execute ETH payments ONLY
+- Infinite retry on blockchain failures
+- Database logging after success
+- No ChangeNow API calls
+
+ENDPOINTS:
+1. POST / - Payment execution request from GCHostPay1
+2. GET /health - Health check
+
+FILES:
+GCHostPay3-10-26/
+├── tphp3-10-26.py              (Main Flask app - 2 endpoints)
+├── config_manager.py            (Secret Manager integration)
+├── database_manager.py          (Database operations)
+├── wallet_manager.py            (Ethereum wallet & RPC with retry)
+├── token_manager.py             (Token encryption/decryption)
+├── cloudtasks_client.py         (Cloud Tasks operations)
+├── Dockerfile
+├── requirements.txt
+└── .dockerignore
+
+DEPENDENCIES:
+- Google Cloud Secret Manager (configuration)
+- Ethereum RPC (Alchemy/Infura - with retry)
+- Cloud SQL (database - for logging only)
+- Cloud Tasks (queue operations)
+
+CHARACTERISTICS:
+✅ Stateful (database for logging)
+✅ Infinite retry (60s backoff)
+✅ High-value operations (blockchain transactions)
+✅ Single external dependency (Ethereum RPC)
+
+SECRETS REQUIRED:
+- HOSTPAY_INTERNAL_SIGNING_KEY
+- HOST_WALLET_ETH_ADDRESS
+- HOST_WALLET_PRIVATE_KEY
+- ETHEREUM_RPC_URL
+- ETHEREUM_RPC_URL_API
+- CLOUD_SQL_CONNECTION_NAME
+- DATABASE_NAME_SECRET
+- DATABASE_USER_SECRET
+- DATABASE_PASSWORD_SECRET
+- CLOUD_TASKS_PROJECT_ID
+- CLOUD_TASKS_LOCATION
+- GCHOSTPAY1_RESPONSE_QUEUE
+- GCHOSTPAY1_URL
+
+RETRY LOGIC:
+def send_eth_payment_with_retry(payin_address, amount, unique_id):
+    """
+    Send ETH payment with infinite retry.
+
+    Retry Conditions:
+    - RPC timeout → 60s wait → retry
+    - Connection error → 60s wait → retry
+    - Gas estimation failure → 60s wait → retry
+    - Nonce conflict → 60s wait → retry
+    - Insufficient balance → Log error and fail (no retry)
+
+    Max Duration: 24 hours (Cloud Tasks limit)
+    """
+    attempt = 0
+    while True:
+        attempt += 1
+        print(f"🔄 [PAYMENT] Attempt #{attempt}")
+
+        try:
+            tx_result = wallet_manager.send_eth_payment(
+                payin_address, amount, unique_id
+            )
+
+            if tx_result and tx_result.get('tx_hash'):
+                print(f"✅ [PAYMENT] Success: {tx_result['tx_hash']}")
+                return tx_result
+
+            else:
+                print(f"⚠️ [PAYMENT] No tx_hash, retrying in 60s...")
+                time.sleep(60)
+
+        except InsufficientBalanceError:
+            print(f"❌ [PAYMENT] Insufficient balance - FATAL")
+            raise  # Don't retry on insufficient balance
+
+        except (Timeout, ConnectionError, GasEstimationError) as e:
+            print(f"❌ [PAYMENT] Error: {e}, waiting 60s...")
+            time.sleep(60)
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│ SERVICE 4: GCHostPay4-10-26 (Alchemy Webhook Handler) [OPTIONAL]           │
+└────────────────────────────────────────────────────────────────────────────┘
+
+RECOMMENDATION: OPTIONAL - Can remain in GCHostPay1 for simplicity
+
+RESPONSIBILITY:
+- Receive Alchemy blockchain event notifications ONLY
+- Update transaction status in database
+- No payment execution
+
+ENDPOINTS:
+1. POST / - Alchemy webhook notifications
+2. GET /health - Health check
+
+FILES:
+GCHostPay4-10-26/
+├── tphp4-10-26.py              (Main Flask app - 2 endpoints)
+├── config_manager.py            (Secret Manager integration)
+├── database_manager.py          (Database operations)
+├── alchemy_webhook_handler.py   (Webhook verification & processing)
+├── Dockerfile
+├── requirements.txt
+└── .dockerignore
+
+CHARACTERISTICS:
+✅ Stateful (database for updates)
+✅ Independent from payment flow
+✅ Can be scaled separately
+✅ No retry needed (webhook delivery handled by Alchemy)
+
+DECISION: Keep this in GCHostPay1 initially, split later if needed
+
+================================================================================
+6. TOKEN ENCRYPTION SCHEMA
+================================================================================
+
+All inter-service communication uses encrypted binary tokens with HMAC-SHA256
+signatures, following the exact pattern established by GCSplit services.
+
+NEW SIGNING KEY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- HOSTPAY_INTERNAL_SIGNING_KEY (new secret for internal GCHostPay tokens)
+- Purpose: Secure communication between GCHostPay1 ↔ GCHostPay2 ↔ GCHostPay3
+- Storage: Google Cloud Secret Manager
+- Length: 64+ characters (same as SUCCESS_URL_SIGNING_KEY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOKEN 1: GCHostPay1 → GCHostPay2 (Status Check Request)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Binary Structure:
+- 16 bytes: unique_id (UTF-8, fixed, padded with nulls)
+- 1 byte: cn_api_id length + variable bytes (ChangeNow transaction ID)
+- 1 byte: from_currency length + variable bytes
+- 1 byte: from_network length + variable bytes
+- 8 bytes: from_amount (double precision float)
+- 1 byte: payin_address length + variable bytes
+- 4 bytes: timestamp (unix timestamp as uint32)
+- 16 bytes: HMAC-SHA256 signature (truncated)
+
+Purpose: Minimal data needed for status check
+Validity: 24 hours (to accommodate retry delays)
+Encoding: Base64 URL-safe (padding stripped)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOKEN 2: GCHostPay2 → GCHostPay1 (Status Check Response)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Binary Structure:
+- 16 bytes: unique_id (UTF-8, fixed, padded)
+- 1 byte: cn_api_id length + variable bytes
+- 1 byte: status length + variable bytes (e.g., "waiting")
+- 1 byte: from_currency length + variable bytes
+- 1 byte: from_network length + variable bytes
+- 8 bytes: from_amount (double)
+- 1 byte: payin_address length + variable bytes
+- 4 bytes: timestamp (uint32)
+- 16 bytes: HMAC-SHA256 signature (truncated)
+
+Purpose: Return status confirmation to orchestrator
+Validity: 24 hours
+Encoding: Base64 URL-safe
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOKEN 3: GCHostPay1 → GCHostPay3 (Payment Execution Request)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Binary Structure:
+- 16 bytes: unique_id (UTF-8, fixed, padded)
+- 1 byte: cn_api_id length + variable bytes
+- 1 byte: from_currency length + variable bytes
+- 1 byte: from_network length + variable bytes
+- 8 bytes: from_amount (double)
+- 1 byte: payin_address length + variable bytes
+- 4 bytes: timestamp (uint32)
+- 16 bytes: HMAC-SHA256 signature (truncated)
+
+Purpose: Trigger ETH payment execution
+Validity: 24 hours
+Encoding: Base64 URL-safe
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOKEN 4: GCHostPay3 → GCHostPay1 (Payment Execution Response)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Binary Structure:
+- 16 bytes: unique_id (UTF-8, fixed, padded)
+- 1 byte: cn_api_id length + variable bytes
+- 1 byte: tx_hash length + variable bytes (Ethereum transaction hash)
+- 1 byte: tx_status length + variable bytes (e.g., "success")
+- 8 bytes: gas_used (double)
+- 8 bytes: block_number (uint64)
+- 4 bytes: timestamp (uint32)
+- 16 bytes: HMAC-SHA256 signature (truncated)
+
+Purpose: Return payment confirmation to orchestrator
+Validity: 24 hours
+Encoding: Base64 URL-safe
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TOKEN FORMAT CONSISTENCY:
+✅ Same encryption methodology as GCSplit services
+✅ Same HMAC-SHA256 truncation (16 bytes)
+✅ Same Base64 URL-safe encoding
+✅ Same 24-hour validity window
+✅ Same struct packing (big-endian)
+
+================================================================================
+7. QUEUE CONFIGURATION
+================================================================================
+
+NEW CLOUD TASKS QUEUES (3 queues):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. gchostpay-status-check-queue
+   - Source: GCHostPay1 → GCHostPay2
+   - Purpose: Trigger ChangeNow status checks
+   - Rate: 10 requests/second (conservative for ChangeNow API)
+
+2. gchostpay-status-response-queue
+   - Source: GCHostPay2 → GCHostPay1
+   - Purpose: Return status check results
+   - Rate: 10 requests/second
+
+3. gchostpay-payment-execute-queue
+   - Source: GCHostPay1 → GCHostPay3
+   - Purpose: Trigger ETH payment execution
+   - Rate: 5 requests/second (conservative for blockchain RPC)
+
+4. gchostpay-payment-response-queue
+   - Source: GCHostPay3 → GCHostPay1
+   - Purpose: Return payment execution results
+   - Rate: 5 requests/second
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+QUEUE CONFIGURATION (ALL queues use IDENTICAL settings):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+gcloud tasks queues create <queue_name> \
+  --location=us-central1 \
+  --max-dispatches-per-second=10 \
+  --max-concurrent-dispatches=50 \
+  --max-attempts=-1 \
+  --max-retry-duration=86400s \
+  --min-backoff=60s \
+  --max-backoff=60s \
+  --max-doublings=0
+
+Parameter Explanations:
+- max-attempts=-1           → Infinite retries (until max-retry-duration)
+- max-retry-duration=86400s → 24 hours maximum retry window
+- min-backoff=60s           → Fixed 60-second wait between retries
+- max-backoff=60s           → No exponential backoff (fixed 60s)
+- max-doublings=0           → Disable exponential backoff multiplier
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EXISTING QUEUE (NO CHANGES REQUIRED):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- gcsplit-hostpay-trigger-queue (GCSplit1 → GCHostPay1)
+  - Already exists in current architecture
+  - No changes needed
+  - Continue using TPS_HOSTPAY_SIGNING_KEY for tokens
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALIGNMENT WITH EXISTING QUEUES:
+✅ Same 24-hour retry window as GCSplit queues
+✅ Same 60-second fixed backoff as GCSplit queues
+✅ Same infinite retry pattern as GCSplit queues
+✅ Consistent naming convention: gchostpay-*-queue
+
+================================================================================
+8. DATA FLOW DIAGRAMS
+================================================================================
+
+COMPLETE END-TO-END FLOW (With New GCHostPay Architecture):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Step 1: Payment Split Complete
+    GCSplit1 /eth-client-swap
+        ↓
+    Builds TPS_HOSTPAY token (existing format)
+        ↓
+    Enqueues to gcsplit-hostpay-trigger-queue
+        ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 2: Token Validation & Orchestration
+    GCHostPay1 POST /
+        ├─ Receive TPS_HOSTPAY token from GCSplit1
+        ├─ Decode & verify token (TPS_HOSTPAY_SIGNING_KEY)
+        ├─ Extract: unique_id, cn_api_id, from_currency,
+        │           from_network, from_amount, payin_address
+        ├─ Log: "🎯 [HOSTPAY1] Payment request received"
+        │   └─ "🆔 Unique ID: {unique_id}"
+        │   └─ "🆔 ChangeNow ID: {cn_api_id}"
+        │   └─ "💰 Amount: {from_amount} {from_currency}"
+        │
+        ├─ Check database for duplicate (local operation)
+        │   └─ Query: SELECT * FROM split_payout_hostpay
+        │              WHERE unique_id = {unique_id}
+        │   └─ If exists: Return 200 "already_processed"
+        │   └─ If not: Continue
+        │
+        ├─ Build encrypted token for GCHostPay2
+        │   └─ Using HOSTPAY_INTERNAL_SIGNING_KEY
+        │   └─ Include: unique_id, cn_api_id, from_currency,
+        │                from_network, from_amount, payin_address
+        │
+        └─ Enqueue to gchostpay-status-check-queue
+            └─ Payload: {"token": "<encrypted>"}
+            └─ Target: GCHostPay2 POST /
+            └─ Log: "✅ [HOSTPAY1] Enqueued to status checker"
+        ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 3: ChangeNow Status Check (With Infinite Retry)
+    GCHostPay2 POST /
+        ├─ Receive token from GCHostPay1
+        ├─ Decrypt token (HOSTPAY_INTERNAL_SIGNING_KEY)
+        ├─ Extract: cn_api_id
+        ├─ Log: "🔍 [HOSTPAY2] Checking ChangeNow status"
+        │   └─ "🆔 ChangeNow ID: {cn_api_id}"
+        │
+        ├─ Call ChangeNow API with infinite retry:
+        │   ┌─────────────────────────────────────────────┐
+        │   │ RETRY LOOP (Up to 24 hours)                 │
+        │   ├─────────────────────────────────────────────┤
+        │   │ attempt = 0                                 │
+        │   │ while True:                                 │
+        │   │     attempt += 1                            │
+        │   │     Log: "🔄 [HOSTPAY2] Attempt #{attempt}" │
+        │   │                                             │
+        │   │     try:                                    │
+        │   │         GET https://api.changenow.io/...   │
+        │   │                                             │
+        │   │         if status_code == 200:              │
+        │   │             return response.json()          │
+        │   │         elif status_code == 429:            │
+        │   │             Log: "⏰ Rate limited, wait 60s" │
+        │   │             sleep(60); continue             │
+        │   │         elif 500 <= status_code < 600:      │
+        │   │             Log: "❌ Server error, wait 60s" │
+        │   │             sleep(60); continue             │
+        │   │                                             │
+        │   │     except (Timeout, ConnectionError):      │
+        │   │         Log: "❌ Network error, wait 60s"    │
+        │   │         sleep(60); continue                 │
+        │   └─────────────────────────────────────────────┘
+        │
+        ├─ Extract status from response
+        ├─ Validate status == "waiting"
+        │   └─ If not "waiting":
+        │       └─ Log: "⚠️ [HOSTPAY2] Invalid status: {status}"
+        │       └─ Return 400 (Cloud Tasks won't retry)
+        │
+        ├─ Build encrypted response token for GCHostPay1
+        │   └─ Include: unique_id, cn_api_id, status, from_currency,
+        │                from_network, from_amount, payin_address
+        │
+        └─ Enqueue to gchostpay-status-response-queue
+            └─ Payload: {"token": "<encrypted>"}
+            └─ Target: GCHostPay1 POST /status-verified
+            └─ Log: "✅ [HOSTPAY2] Status confirmed: {status}"
+        ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 4: Status Verified, Trigger Payment
+    GCHostPay1 POST /status-verified
+        ├─ Receive token from GCHostPay2
+        ├─ Decrypt token (HOSTPAY_INTERNAL_SIGNING_KEY)
+        ├─ Extract: unique_id, cn_api_id, status, etc.
+        ├─ Log: "✅ [HOSTPAY1] Status verified: {status}"
+        │
+        ├─ Validate status == "waiting"
+        │   └─ If not: Log error and return 400
+        │
+        ├─ Build encrypted token for GCHostPay3
+        │   └─ Include: unique_id, cn_api_id, from_currency,
+        │                from_network, from_amount, payin_address
+        │
+        └─ Enqueue to gchostpay-payment-execute-queue
+            └─ Payload: {"token": "<encrypted>"}
+            └─ Target: GCHostPay3 POST /
+            └─ Log: "🚀 [HOSTPAY1] Enqueued to payment executor"
+        ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 5: ETH Payment Execution (With Infinite Retry)
+    GCHostPay3 POST /
+        ├─ Receive token from GCHostPay1
+        ├─ Decrypt token (HOSTPAY_INTERNAL_SIGNING_KEY)
+        ├─ Extract: unique_id, cn_api_id, from_amount, payin_address
+        ├─ Log: "💰 [HOSTPAY3] Executing ETH payment"
+        │   └─ "🆔 Unique ID: {unique_id}"
+        │   └─ "💸 Amount: {from_amount} ETH"
+        │   └─ "🏦 To: {payin_address}"
+        │
+        ├─ Execute ETH payment with infinite retry:
+        │   ┌─────────────────────────────────────────────┐
+        │   │ RETRY LOOP (Up to 24 hours)                 │
+        │   ├─────────────────────────────────────────────┤
+        │   │ attempt = 0                                 │
+        │   │ while True:                                 │
+        │   │     attempt += 1                            │
+        │   │     Log: "🔄 [HOSTPAY3] Attempt #{attempt}" │
+        │   │                                             │
+        │   │     try:                                    │
+        │   │         tx_result = send_eth_payment(...)   │
+        │   │                                             │
+        │   │         if tx_result.tx_hash:               │
+        │   │             return tx_result                │
+        │   │                                             │
+        │   │     except InsufficientBalanceError:        │
+        │   │         Log: "❌ Insufficient balance"       │
+        │   │         raise (FATAL - no retry)            │
+        │   │                                             │
+        │   │     except (Timeout, ConnectionError,       │
+        │   │             GasEstimationError):            │
+        │   │         Log: "❌ RPC error, wait 60s"        │
+        │   │         sleep(60); continue                 │
+        │   └─────────────────────────────────────────────┘
+        │
+        ├─ Log: "✅ [HOSTPAY3] Payment successful"
+        │   └─ "🔗 TX Hash: {tx_result.tx_hash}"
+        │   └─ "⛽ Gas Used: {tx_result.gas_used}"
+        │   └─ "📦 Block: {tx_result.block_number}"
+        │
+        ├─ Insert into database (split_payout_hostpay)
+        │   └─ All transaction details
+        │
+        ├─ Build encrypted response token for GCHostPay1
+        │   └─ Include: unique_id, cn_api_id, tx_hash, tx_status,
+        │                gas_used, block_number
+        │
+        └─ Enqueue to gchostpay-payment-response-queue
+            └─ Payload: {"token": "<encrypted>"}
+            └─ Target: GCHostPay1 POST /payment-completed
+            └─ Log: "✅ [HOSTPAY3] Response enqueued"
+        ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 6: Payment Completed Confirmation
+    GCHostPay1 POST /payment-completed
+        ├─ Receive token from GCHostPay3
+        ├─ Decrypt token (HOSTPAY_INTERNAL_SIGNING_KEY)
+        ├─ Extract: unique_id, cn_api_id, tx_hash, tx_status, etc.
+        ├─ Log: "🎉 [HOSTPAY1] Payment workflow completed!"
+        │   └─ "🆔 Unique ID: {unique_id}"
+        │   └─ "🔗 TX Hash: {tx_hash}"
+        │   └─ "✅ Status: {tx_status}"
+        │
+        └─ (Optional) Update orchestrator database table
+            └─ Final workflow status tracking
+        ↓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Async Step: Alchemy Blockchain Event Notifications
+    GCHostPay1 POST /alchemy-webhook (or GCHostPay4 POST /)
+        ├─ Receive blockchain event from Alchemy
+        ├─ Verify webhook signature
+        ├─ Extract: tx_hash, status, confirmations
+        ├─ Update split_payout_hostpay table
+        │   └─ SET tx_status = {status},
+        │         confirmations = {confirmations}
+        │       WHERE tx_hash = {tx_hash}
+        │
+        └─ Log: "🔔 [ALCHEMY] Transaction update"
+            └─ "🔗 TX Hash: {tx_hash}"
+            └─ "✅ Status: {status}"
+            └─ "🔢 Confirmations: {confirmations}"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RESILIENCE SCENARIOS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Scenario 1: ChangeNow API is down for 2 hours
+    GCHostPay2 retries every 60s for 2 hours (120 attempts)
+    When API comes back online, status check succeeds
+    Payment flow continues automatically
+    Result: ✅ Payment completes successfully (delayed by 2 hours)
+
+Scenario 2: Ethereum RPC has intermittent failures
+    GCHostPay3 retries every 60s until RPC stabilizes
+    Eventually succeeds and logs transaction
+    Result: ✅ Payment completes successfully
+
+Scenario 3: Both ChangeNow AND Ethereum RPC are down
+    GCHostPay2 retries on ChangeNow for up to 12 hours
+    GCHostPay3 retries on Ethereum RPC for up to 12 hours
+    Result: ✅ Payment completes when both services recover
+            (as long as within 24-hour window)
+
+Scenario 4: 24-hour retry window expires
+    Cloud Tasks terminates the task
+    Manual investigation required
+    Result: ⚠️ Manual intervention needed (rare edge case)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+================================================================================
+9. BENEFITS & TRADE-OFFS
+================================================================================
+
+✅ BENEFITS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. RESILIENCE
+   - ChangeNow API downtime: NO IMPACT (infinite retry)
+   - Ethereum RPC failures: NO IMPACT (infinite retry)
+   - Rate limiting: HANDLED AUTOMATICALLY (60s backoff)
+   - Network timeouts: RECOVERED AUTOMATICALLY
+
+2. SEPARATION OF CONCERNS
+   - Validation logic: GCHostPay1
+   - Status checking: GCHostPay2
+   - Payment execution: GCHostPay3
+   - Easy to debug which component failed
+   - Clear responsibility boundaries
+
+3. INDEPENDENT SCALING
+   - Status checker can scale separately (API-bound)
+   - Payment executor can scale separately (blockchain-bound)
+   - Orchestrator can scale separately (orchestration-bound)
+
+4. ARCHITECTURAL CONSISTENCY
+   - Matches GCSplit pattern exactly (orchestrator + 2 workers)
+   - Matches GCWebhook pattern (separation of concerns)
+   - Team familiarity with architecture
+   - Consistent token encryption methodology
+   - Consistent queue configuration
+
+5. OBSERVABILITY
+   - Clear logs at each service boundary
+   - Can track progress through pipeline
+   - Retry attempts visible in logs
+   - Easy to identify bottlenecks
+
+6. TESTABILITY
+   - Each service can be tested independently
+   - Mock external APIs easily
+   - Integration tests focus on token flow
+
+7. OPERATIONAL BENEFITS
+   - Rolling updates per service
+   - Gradual rollout capabilities
+   - Easy to add monitoring per service
+   - Alert on specific service failures
+
+⚠️ TRADE-OFFS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. INCREASED COMPLEXITY
+   - More services to deploy (3 vs 1)
+   - More queues to manage (4 new queues)
+   - More tokens to encrypt/decrypt
+   - More inter-service coordination
+
+   MITIGATION: Standard patterns already established in GCSplit
+
+2. HIGHER LATENCY (under normal conditions)
+   - Current: Single service call (~2-3 seconds)
+   - New: Multiple service hops (~5-10 seconds)
+   - Impact: Acceptable for payment flow (not user-facing)
+
+   MITIGATION: Async processing already in place via Cloud Tasks
+
+3. MORE INFRASTRUCTURE COST
+   - 3 Cloud Run services (vs 1)
+   - 4 Cloud Tasks queues (vs 1)
+   - More Secret Manager access calls
+   - Estimated: +$20-30/month
+
+   MITIGATION: Cost justified by reduced payment failures
+
+4. OPERATIONAL OVERHEAD
+   - More services to monitor
+   - More logs to aggregate
+   - More deployment complexity
+
+   MITIGATION: Infrastructure-as-code, automated deployments
+
+5. DEBUGGING COMPLEXITY
+   - Trace flows across multiple services
+   - Correlate logs by unique_id
+   - More potential failure points
+
+   MITIGATION: Comprehensive logging with unique_id in all logs
+
+❓ WHEN NOT TO REFACTOR:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Consider keeping monolithic architecture if:
+- Payment volume is very low (<10/day)
+- ChangeNow API has 99.99% uptime SLA
+- Ethereum RPC provider has dedicated support
+- Team is very small and prefers simplicity
+- Cost optimization is critical
+
+RECOMMENDATION: PROCEED WITH REFACTORING
+Rationale: Payment reliability is critical, architectural consistency
+           is valuable, and patterns are already proven in GCSplit.
+
+================================================================================
+10. IMPLEMENTATION ROADMAP
+================================================================================
+
+PHASE 1: PREPARATION (Week 1)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tasks:
+□ Create HOSTPAY_INTERNAL_SIGNING_KEY in Secret Manager
+    └─ Generate 64-character random string
+    └─ Add to Secret Manager
+    └─ Document in team password manager
+
+□ Design token_manager.py for GCHostPay services
+    └─ Copy from GCSplit1 token_manager.py as template
+    └─ Modify for 4 new token formats
+    └─ Add unit tests
+
+□ Create cloudtasks_client.py for GCHostPay services
+    └─ Copy from GCSplit1 cloudtasks_client.py as template
+    └─ Add 4 new queue methods
+    └─ Add unit tests
+
+□ Update database_manager.py if needed
+    └─ Review split_payout_hostpay table schema
+    └─ Add any missing indexes
+    └─ Add new query methods if needed
+
+□ Review changenow_client.py from GCSplit2
+    └─ Copy retry logic for status check
+    └─ Adapt for /v2/exchange/by-id endpoint
+    └─ Add unit tests
+
+□ Review wallet_manager.py from current GCHostPay
+    └─ Add retry wrapper around send_eth_payment
+    └─ Add exception handling for specific errors
+    └─ Add unit tests
+
+Duration: 5-7 days
+Risk: LOW - All components are templates from existing services
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 2: SERVICE DEVELOPMENT (Week 2-3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tasks:
+□ Develop GCHostPay1-10-26 (Orchestrator)
+    └─ Create directory structure
+    └─ Implement tphp1-10-26.py (4 endpoints)
+    └─ Add config_manager.py
+    └─ Add database_manager.py
+    └─ Add token_manager.py
+    └─ Add cloudtasks_client.py
+    └─ Write Dockerfile
+    └─ Write requirements.txt
+    └─ Local testing with mock queues
+
+□ Develop GCHostPay2-10-26 (Status Checker)
+    └─ Create directory structure
+    └─ Implement tphp2-10-26.py (2 endpoints)
+    └─ Add config_manager.py
+    └─ Add changenow_client.py (with retry)
+    └─ Add token_manager.py
+    └─ Add cloudtasks_client.py
+    └─ Write Dockerfile
+    └─ Write requirements.txt
+    └─ Local testing with mock ChangeNow API
+
+□ Develop GCHostPay3-10-26 (Payment Executor)
+    └─ Create directory structure
+    └─ Implement tphp3-10-26.py (2 endpoints)
+    └─ Add config_manager.py
+    └─ Add database_manager.py
+    └─ Add wallet_manager.py (with retry)
+    └─ Add token_manager.py
+    └─ Add cloudtasks_client.py
+    └─ Write Dockerfile
+    └─ Write requirements.txt
+    └─ Local testing with testnet
+
+□ Integration testing (local)
+    └─ Test token encryption/decryption
+    └─ Test end-to-end flow with mocks
+    └─ Test retry logic
+
+Duration: 10-14 days
+Risk: MEDIUM - New code, but patterns are proven
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 3: INFRASTRUCTURE SETUP (Week 3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tasks:
+□ Create Cloud Tasks queues
+    └─ gchostpay-status-check-queue
+    └─ gchostpay-status-response-queue
+    └─ gchostpay-payment-execute-queue
+    └─ gchostpay-payment-response-queue
+
+□ Create Secret Manager entries
+    └─ GCHOSTPAY1_URL (placeholder initially)
+    └─ GCHOSTPAY2_URL (placeholder initially)
+    └─ GCHOSTPAY3_URL (placeholder initially)
+    └─ GCHOSTPAY2_QUEUE
+    └─ GCHOSTPAY3_QUEUE
+    └─ GCHOSTPAY1_RESPONSE_QUEUE (x2)
+
+□ Update IAM permissions
+    └─ Cloud Run service accounts
+    └─ Cloud Tasks invoker permissions
+    └─ Secret Manager accessor permissions
+
+□ Create deployment scripts
+    └─ deploy_gchostpay1.sh
+    └─ deploy_gchostpay2.sh
+    └─ deploy_gchostpay3.sh
+    └─ setup_gchostpay_queues.sh
+    └─ setup_gchostpay_secrets.sh
+
+Duration: 2-3 days
+Risk: LOW - Standard GCP operations
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 4: DEPLOYMENT (Week 4)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tasks:
+□ Deploy GCHostPay1 (first deployment)
+    └─ Get Cloud Run URL
+    └─ Update GCHOSTPAY1_URL secret
+
+□ Deploy GCHostPay2 (first deployment)
+    └─ Get Cloud Run URL
+    └─ Update GCHOSTPAY2_URL secret
+
+□ Deploy GCHostPay3 (first deployment)
+    └─ Get Cloud Run URL
+    └─ Update GCHOSTPAY3_URL secret
+
+□ Re-deploy all services with correct URLs
+    └─ GCHostPay1 (with GCHostPay2/3 URLs)
+    └─ GCHostPay2 (with GCHostPay1 URL)
+    └─ GCHostPay3 (with GCHostPay1 URL)
+
+□ Update GCSplit1 configuration
+    └─ Update HOSTPAY_WEBHOOK_URL to point to GCHostPay1
+
+□ Test in staging environment
+    └─ Submit test payment through GCWebhook
+    └─ Verify full flow completes
+    └─ Check all logs
+    └─ Verify database writes
+
+Duration: 3-5 days
+Risk: MEDIUM - First production deployment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 5: PRODUCTION ROLLOUT (Week 4-5)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tasks:
+□ Enable monitoring & alerts
+    └─ Cloud Run service monitoring
+    └─ Cloud Tasks queue depth alerts
+    └─ Error rate alerts
+    └─ Latency alerts
+
+□ Test retry scenarios
+    └─ Simulate ChangeNow API downtime
+    └─ Simulate Ethereum RPC failures
+    └─ Verify 60-second backoff
+    └─ Verify infinite retry
+
+□ Gradual rollout (if possible)
+    └─ Route 10% of traffic to new services
+    └─ Monitor for 24 hours
+    └─ Route 50% of traffic
+    └─ Monitor for 24 hours
+    └─ Route 100% of traffic
+
+□ Keep old GCHostPay10-26 running (parallel)
+    └─ Can rollback if needed
+    └─ Monitor for 1 week
+    └─ Decommission after confidence
+
+Duration: 5-7 days
+Risk: MEDIUM - Production changes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE 6: OPTIMIZATION (Week 5-6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tasks:
+□ Optimize queue configurations
+    └─ Adjust max-dispatches-per-second based on volume
+    └─ Adjust max-concurrent-dispatches
+    └─ Tune backoff settings if needed
+
+□ Optimize service resources
+    └─ Right-size CPU/memory for each service
+    └─ Adjust min/max instances
+
+□ Improve logging & observability
+    └─ Add structured logging
+    └─ Add trace IDs for correlation
+    └─ Create dashboards
+
+□ Documentation
+    └─ Update architecture diagrams
+    └─ Document new services
+    └─ Update runbooks
+
+Duration: 5-7 days
+Risk: LOW - Optimization only
+
+TOTAL ESTIMATED DURATION: 5-6 weeks
+TOTAL ESTIMATED EFFORT: 1-2 engineers
+
+================================================================================
+11. ROLLBACK STRATEGY
+================================================================================
+
+ROLLBACK PLAN:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+If new services fail in production, rollback is straightforward:
+
+Step 1: Update GCSplit1 configuration
+    └─ Revert HOSTPAY_WEBHOOK_URL to old GCHostPay10-26 URL
+    └─ Deploy GCSplit1 with old URL
+
+Step 2: Monitor old GCHostPay10-26
+    └─ Verify payments flow to old service
+    └─ Check logs for normal operation
+
+Step 3: Drain new services
+    └─ Let existing Cloud Tasks complete (up to 24 hours)
+    └─ Monitor queue depths go to zero
+    └─ Stop new services after drain
+
+Step 4: Root cause analysis
+    └─ Review logs from new services
+    └─ Identify failure points
+    └─ Fix issues in development
+    └─ Re-test before retry
+
+ROLLBACK WINDOW: 5 minutes (just update GCSplit1 URL)
+RISK OF DATA LOSS: NONE (database writes are idempotent)
+RISK OF DUPLICATE PAYMENTS: NONE (duplicate check in GCHostPay1)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BACKUP STRATEGY:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Keep old GCHostPay10-26 deployed in parallel for 2 weeks:
+- Can receive traffic if needed
+- Can compare behavior side-by-side
+- Can revert instantly if issues found
+- Decommission only after full confidence
+
+This matches the GCSplit rollout strategy (kept old GCSplit10-26 running).
+
+================================================================================
+12. MONITORING & OBSERVABILITY
+================================================================================
+
+KEY METRICS TO MONITOR:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Cloud Tasks Queue Depth
+   - gchostpay-status-check-queue depth
+   - gchostpay-payment-execute-queue depth
+   - Alert if depth > 100 for > 5 minutes
+
+2. Task Retry Counts
+   - Number of retries per task
+   - Average retry count
+   - Alert if average > 10 retries
+
+3. Service Error Rates
+   - GCHostPay1 error rate
+   - GCHostPay2 error rate (excluding expected retries)
+   - GCHostPay3 error rate (excluding expected retries)
+   - Alert if error rate > 5%
+
+4. Service Latencies
+   - GCHostPay1: p50, p95, p99 latency
+   - GCHostPay2: time to success (including retries)
+   - GCHostPay3: time to success (including retries)
+
+5. External API Health
+   - ChangeNow API success rate
+   - Ethereum RPC success rate
+   - Alert if < 95% success rate
+
+6. Payment Success Rate
+   - End-to-end payment completion rate
+   - Time from GCSplit1 → GCHostPay3 success
+   - Alert if < 99% completion rate
+
+7. Database Operations
+   - Write latency to split_payout_hostpay
+   - Duplicate check latency
+   - Alert if latency > 1 second
+
+LOGGING STANDARDS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+All logs must include:
+- unique_id (for tracing across services)
+- service_name (e.g., "GCHostPay1-10-26")
+- endpoint (e.g., "POST /")
+- attempt_number (for retry loops)
+- timestamp
+- emoji prefix (matching existing conventions)
+
+Example log line:
+"✅ [HOSTPAY1] Payment workflow completed | unique_id=abc123 |
+ cn_api_id=xyz789 | tx_hash=0x... | duration=45.2s"
+
+DASHBOARDS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Create Google Cloud Monitoring dashboards for:
+1. GCHostPay Service Health
+   - All 3 service health status
+   - Error rates
+   - Request rates
+   - Latencies
+
+2. Cloud Tasks Health
+   - Queue depths over time
+   - Task execution rates
+   - Retry counts
+   - Task age distribution
+
+3. Payment Flow
+   - End-to-end completion rate
+   - Average completion time
+   - Failure points (which service)
+   - Retry breakdown by service
+
+ALERTS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Configure alerts for:
+- Queue depth > 100 for > 5 minutes
+- Service error rate > 5% for > 5 minutes
+- Payment completion rate < 99% for > 10 minutes
+- Task retry count > 20 (approaching 24-hour limit)
+- ChangeNow API availability < 90% for > 5 minutes
+- Ethereum RPC availability < 90% for > 5 minutes
+
+================================================================================
+CONCLUSION & RECOMMENDATION
+================================================================================
+
+RECOMMENDATION: PROCEED WITH REFACTORING
+
+RATIONALE:
+1. ✅ Aligns with established GCSplit/GCWebhook architecture
+2. ✅ Significantly improves payment reliability (resilience to API failures)
+3. ✅ Follows proven patterns already in production
+4. ✅ Clear separation of concerns improves maintainability
+5. ✅ Independent scaling enables cost optimization
+6. ✅ Improved observability across service boundaries
+7. ✅ Rollback strategy is simple and safe
+8. ✅ Cost increase is justified by reliability improvement
+
+CONFIDENCE LEVEL: HIGH
+- Pattern is proven in GCSplit services
+- Team has experience with Cloud Tasks architecture
+- Rollback plan is straightforward
+- Risk of payment failures is mitigated
+
+NEXT STEPS:
+1. Review this proposal with team
+2. Approve budget for additional infrastructure
+3. Allocate 1-2 engineers for 5-6 weeks
+4. Begin Phase 1 (Preparation)
+5. Set up staging environment for testing
+6. Plan production rollout schedule
+
+QUESTIONS FOR TEAM:
+1. Should Alchemy webhook handler be split into GCHostPay4?
+2. What is acceptable payment latency increase (5-10 seconds)?
+3. Should we implement gradual rollout or all-at-once?
+4. What is the budget for additional Cloud Run/Tasks costs?
+
+================================================================================
+END OF PROPOSAL
+================================================================================
+Document created: 2025-10-27
+Last updated: 2025-10-27
+Version: 1.0
+Status: PENDING REVIEW
