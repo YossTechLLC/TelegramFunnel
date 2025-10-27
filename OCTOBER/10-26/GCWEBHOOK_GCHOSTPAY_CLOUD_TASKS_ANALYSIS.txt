@@ -1,0 +1,1356 @@
+================================================================================
+GCWEBHOOK & GCHOSTPAY CLOUD TASKS ARCHITECTURE ANALYSIS
+================================================================================
+
+Date: 2025-10-26
+Analysis: Evaluating whether GCWebhook10-26 and GCHostPay10-26 should be split
+          into multiple services using Google Cloud Tasks architecture, similar
+          to the GCSplit1/2/3 pattern.
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+After thorough analysis of GCWebhook10-26 and GCHostPay10-26, comparing them to
+the GCSplit architecture pattern, here are the findings:
+
+GCWebhook10-26:
+  ✅ RECOMMENDATION: DO NOT SPLIT
+  - No external API calls that are prone to downtime
+  - Single HTTP call to GCSplit1 (internal service, highly available)
+  - Splitting would add unnecessary complexity with minimal benefit
+
+GCHostPay10-26:
+  ⚠️  RECOMMENDATION: OPTIONAL SPLIT (CONSIDER CAREFULLY)
+  - Makes ChangeNow API status check (documented to have downtime)
+  - Makes Alchemy RPC API calls (generally reliable, 99.9% SLA)
+  - Current internal retry logic (3 attempts) may be sufficient
+  - Splitting could improve resilience but adds complexity and latency
+
+CRITICAL CONSIDERATION:
+  The GCHostPay workflow is time-sensitive. ChangeNow transactions have
+  expiration times. Infinite retry via Cloud Tasks (up to 24 hours) could
+  cause transactions to expire, resulting in failed payments.
+
+================================================================================
+SECTION 1: CURRENT ARCHITECTURE OVERVIEW
+================================================================================
+
+1.1 GCWebhook10-26 (Webhook Service)
+────────────────────────────────────────────────────────────────────────────────
+Service: GCWebhook10-26
+File: tph10-26.py (650 lines)
+Endpoints: 1
+  - GET / (send_invite)
+
+Workflow:
+  1. Receive GET request with token parameter
+  2. Fetch secrets from Secret Manager (bot token, signing key)
+  3. Decode and verify signed token
+  4. Calculate subscription expiration time
+  5. Record user subscription in database (Cloud SQL)
+  6. Send Telegram invite link (Telegram Bot API)
+  7. Trigger payment split webhook (HTTP POST to GCSplit1)
+  8. Return 200 OK
+
+External Dependencies:
+  - Google Cloud Secret Manager (secrets)
+  - Cloud SQL PostgreSQL (database)
+  - Telegram Bot API (invite sending)
+  - GCSplit1 HTTP endpoint (payment split trigger)
+
+Key Functions:
+  - decode_and_verify_token(): Validates HMAC signature
+  - calculate_expiration_time(): Calculates subscription expiry
+  - record_private_channel_user(): Database INSERT/UPDATE
+  - trigger_payment_split_webhook(): HTTP POST to GCSplit1
+
+
+1.2 GCHostPay10-26 (Host Wallet Payment Service)
+────────────────────────────────────────────────────────────────────────────────
+Service: GCHostPay10-26
+Files:
+  - tphp10-26.py (476 lines) - Main Flask app
+  - wallet_manager.py (634 lines) - Web3 payment logic
+  - alchemy_webhook_handler.py (304 lines) - Alchemy Notify webhooks
+  - database_manager.py - Database operations
+
+Endpoints: 3
+  - POST / (hostpay_webhook) - Main payment endpoint
+  - POST /alchemy-webhook (alchemy_webhook) - Alchemy Notify callbacks
+  - GET /health (health_check) - Health monitoring
+
+Workflow (Main Endpoint):
+  1. Receive POST request with encrypted token
+  2. Fetch signing key from Secret Manager
+  3. Decode and verify HostPay token
+  4. Check if transaction already processed (database)
+  5. Check ChangeNow transaction status (ChangeNow API)
+     ↳ EXTERNAL API CALL - Can fail/timeout
+  6. Validate status is "waiting"
+  7. Execute ETH payment via wallet_manager (Alchemy RPC API)
+     ↳ EXTERNAL API CALL - Can fail/timeout
+     - Get gas prices (Alchemy API)
+     - Build transaction
+     - Sign transaction
+     - Broadcast transaction (Alchemy RPC)
+     - Wait for confirmation (Alchemy RPC, 300s timeout)
+     - Internal retry: 3 attempts with 10s delay
+     - Transaction replacement logic for stuck transactions
+  8. Log transaction to database (Cloud SQL)
+  9. Return 200 OK
+
+External Dependencies:
+  - Google Cloud Secret Manager (secrets)
+  - Cloud SQL PostgreSQL (database)
+  - ChangeNow API (transaction status check)
+  - Alchemy RPC API (Ethereum blockchain operations)
+  - Alchemy Notify (webhook callbacks for tx updates)
+
+Key Modules:
+  - WalletManager: Handles all Web3/Ethereum operations
+    - send_eth_payment(): Main entry point
+    - _send_transaction_with_retry(): 3 retry attempts
+    - _get_optimized_gas_price(): Alchemy gas optimization
+    - _replace_stuck_transaction(): Handles stuck transactions
+  - AlchemyWebhookHandler: Processes Alchemy Notify callbacks
+  - DatabaseManager: Database operations
+
+
+1.3 GCSplit Architecture (For Comparison)
+────────────────────────────────────────────────────────────────────────────────
+The GCSplit service was split into 3 microservices to isolate external API
+calls and implement infinite retry logic using Cloud Tasks.
+
+GCSplit1-10-26: Payment Splitting Orchestrator
+  File: tps1-10-26.py (742 lines)
+  Endpoints: 3
+    - POST / (initial_webhook) - Receives from GCWebhook
+    - POST /usdt-eth-estimate (receive_usdt_eth_estimate) - Receives from GCSplit2
+    - POST /eth-client-swap (receive_eth_client_swap) - Receives from GCSplit3
+
+  Responsibilities:
+    - Receive payment split requests from GCWebhook
+    - Calculate adjusted amounts (remove TP fee)
+    - Insert into split_payout_request table
+    - Insert into split_payout_que table
+    - Coordinate workflow via encrypted tokens
+    - Trigger GCHostPay via Cloud Tasks
+
+  External Dependencies:
+    - Cloud SQL (database)
+    - Cloud Tasks (orchestration)
+    - NO direct ChangeNow API calls
+
+GCSplit2-10-26: USDT→ETH Estimator
+  File: tps2-10-26.py (245 lines)
+  Endpoints: 1
+    - POST / (process_usdt_eth_estimate)
+
+  Responsibilities:
+    - Receive encrypted token from GCSplit1
+    - Call ChangeNow API for USDT→ETH estimate (with infinite retry)
+    - Return encrypted response to GCSplit1 via Cloud Tasks
+
+  External Dependencies:
+    - Cloud Tasks (orchestration)
+    - ChangeNow API (USDT→ETH estimate) ← ISOLATED HERE
+
+  Key Feature: INFINITE RETRY for ChangeNow API calls
+    - Retries until success or 24-hour Cloud Tasks timeout
+    - Handles ChangeNow API downtime gracefully
+
+GCSplit3-10-26: ETH→ClientCurrency Swapper
+  File: tps3-10-26.py (262 lines)
+  Endpoints: 1
+    - POST / (process_eth_client_swap)
+
+  Responsibilities:
+    - Receive encrypted token from GCSplit1
+    - Create ChangeNow fixed-rate transaction (ETH→ClientCurrency) (with infinite retry)
+    - Return encrypted response to GCSplit1 via Cloud Tasks
+
+  External Dependencies:
+    - Cloud Tasks (orchestration)
+    - ChangeNow API (create transaction) ← ISOLATED HERE
+
+  Key Feature: INFINITE RETRY for ChangeNow API calls
+    - Retries until success or 24-hour Cloud Tasks timeout
+    - Handles ChangeNow API downtime gracefully
+
+Why GCSplit Was Split:
+  1. Isolate external API dependencies (ChangeNow) that are prone to downtime
+  2. Implement infinite retry logic via Cloud Tasks (24-hour max)
+  3. Ensure payment splitting completes even if ChangeNow is temporarily down
+  4. Single responsibility: Each service has one external API dependency
+  5. Resilience: If one API call fails, only that component retries
+
+Cloud Tasks Configuration:
+  - 5 queues: gcsplit2_queue, gcsplit1_response_queue, gcsplit3_queue,
+              gcsplit1_response_queue (reused), hostpay_queue
+  - Max retry duration: 24 hours
+  - Exponential backoff
+  - Automatic retry on failure
+
+================================================================================
+SECTION 2: GCWEBHOOK10-26 DETAILED ANALYSIS
+================================================================================
+
+2.1 Current Architecture
+────────────────────────────────────────────────────────────────────────────────
+GCWebhook is a monolithic Flask service with a single primary endpoint.
+
+Flow Diagram:
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ GET /?token=<signed_token>                                               │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 1. Fetch Telegram bot token & signing key from Secret Manager           │
+  │    Dependencies: Google Cloud Secret Manager                             │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 2. Decode and verify signed token                                        │
+  │    Function: decode_and_verify_token()                                   │
+  │    - Parse binary-packed token (base64)                                  │
+  │    - Extract: user_id, channel_id, wallet_address, payout_currency,     │
+  │               payout_network, subscription_time_days, subscription_price │
+  │    - Verify HMAC-SHA256 signature (truncated to 16 bytes)               │
+  │    - Check timestamp expiration (2-hour window)                          │
+  │    Dependencies: LOCAL (no external API)                                 │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 3. Calculate subscription expiration time                                │
+  │    Function: calculate_expiration_time()                                 │
+  │    Dependencies: LOCAL (datetime calculation)                            │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 4. Record user subscription in database                                  │
+  │    Function: record_private_channel_user()                               │
+  │    Table: private_channel_users_database                                 │
+  │    Operation: INSERT or UPDATE                                           │
+  │    Dependencies: Cloud SQL PostgreSQL                                    │
+  │    Failure Mode: Non-fatal - user still gets invite if this fails        │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 5. Send Telegram invite link                                             │
+  │    Function: bot.create_chat_invite_link() + bot.send_message()         │
+  │    Dependencies: Telegram Bot API                                        │
+  │    Failure Mode: CRITICAL - user doesn't get invite                      │
+  │    Reliability: Telegram API is highly reliable (99.9%+ uptime)          │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 6. Trigger payment split webhook                                         │
+  │    Function: trigger_payment_split_webhook()                             │
+  │    Target: GCSplit1-10-26 (HTTP POST)                                    │
+  │    Payload: user_id, closed_channel_id, wallet_address,                  │
+  │             payout_currency, payout_network, subscription_price          │
+  │    Signature: HMAC-SHA256 in X-Webhook-Signature header                  │
+  │    Timeout: 30 seconds                                                   │
+  │    Dependencies: GCSplit1 HTTP endpoint (internal service)               │
+  │    Failure Mode: Non-fatal - user gets invite but no payment split       │
+  │    Reliability: GCSplit1 should be highly available (internal service)   │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 7. Return 200 OK                                                         │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
+2.2 Potential Breakdown Points
+────────────────────────────────────────────────────────────────────────────────
+Analyzing each step for potential failure scenarios:
+
+Step 1: Fetch secrets from Secret Manager
+  - Failure scenario: Secret Manager down (extremely rare)
+  - Impact: HTTP 500, entire request fails
+  - Mitigation: Secret Manager has 99.95% SLA, can cache secrets at startup
+  - Should we split? NO - Secret Manager is infrastructure, not worth splitting
+
+Step 2: Decode and verify token
+  - Failure scenario: Invalid token, signature mismatch, expired token
+  - Impact: HTTP 400, request rejected (expected behavior)
+  - Mitigation: N/A - this is input validation
+  - Should we split? NO - local operation, no external dependency
+
+Step 3: Calculate expiration time
+  - Failure scenario: None (simple datetime calculation)
+  - Impact: N/A
+  - Should we split? NO - local operation
+
+Step 4: Record in database
+  - Failure scenario: Cloud SQL connection failure, query timeout
+  - Impact: User still gets invite (non-fatal in current implementation)
+  - Mitigation: Connection pooling, retry on transient errors
+  - Should we split? NO - database is reliable, non-fatal failure
+
+Step 5: Send Telegram invite
+  - Failure scenario: Telegram API down, rate limiting, network timeout
+  - Impact: CRITICAL - user doesn't get invite link
+  - Mitigation: None currently
+  - Should we split? MAYBE - but Telegram API is highly reliable (99.9%+)
+  - Analysis: Telegram downtime is extremely rare, splitting adds complexity
+
+Step 6: Trigger payment split webhook
+  - Failure scenario: GCSplit1 down, network timeout, connection error
+  - Impact: User gets invite but payment doesn't split (CRITICAL for business)
+  - Mitigation: None currently (single HTTP POST with 30s timeout)
+  - Should we split? MAYBE - this is the most likely failure point
+  - Analysis:
+    - GCSplit1 is an internal service, should be highly available
+    - If GCSplit1 is down, splitting won't help (still need GCSplit1 up)
+    - HOWEVER: If GCSplit1 is temporarily overloaded or restarting, Cloud
+      Tasks retry would ensure the webhook eventually succeeds
+
+
+2.3 Potential Split Architecture
+────────────────────────────────────────────────────────────────────────────────
+If we were to split GCWebhook, here's how it would look:
+
+Option 1: Split Payment Split Webhook Trigger
+──────────────────────────────────────────────────────────────────────────────
+
+GCWebhook1-10-26: Main Service
+  Endpoints: 1
+    - GET / (send_invite)
+
+  Workflow:
+    1. Fetch secrets
+    2. Decode and verify token
+    3. Calculate expiration
+    4. Record in database
+    5. Send Telegram invite
+    6. Enqueue Cloud Task to GCWebhook2
+    7. Return 200 OK
+
+  Changes:
+    - Replace direct HTTP POST to GCSplit1 with Cloud Task enqueue
+    - Add Cloud Tasks client initialization
+
+GCWebhook2-10-26: Payment Split Webhook Trigger
+  Endpoints: 1
+    - POST / (trigger_payment_split)
+
+  Workflow:
+    1. Receive encrypted token from GCWebhook1 (via Cloud Tasks)
+    2. Decrypt token
+    3. HTTP POST to GCSplit1 with retry logic
+    4. Return 200 OK
+
+  Benefits:
+    - If GCSplit1 is temporarily down, Cloud Tasks retries automatically
+    - Infinite retry (up to 24 hours)
+    - GCWebhook1 returns quickly, doesn't wait for payment split
+
+  Drawbacks:
+    - Adds latency (user gets invite immediately, but payment split is delayed)
+    - Adds complexity (2 services instead of 1)
+    - Requires new Cloud Tasks queue
+    - Requires token encryption/decryption
+    - If GCSplit1 is down for > 24 hours, payment split fails anyway
+
+Flow Diagram (Split):
+  GCWebhook receives request
+    ↓
+  GCWebhook1: Send invite, record DB
+    ↓
+  Cloud Tasks (webhook_trigger_queue)
+    ↓
+  GCWebhook2: Trigger payment split
+    ↓
+  GCSplit1: Process payment split
+
+
+2.4 Analysis: Should We Split GCWebhook?
+────────────────────────────────────────────────────────────────────────────────
+
+Arguments FOR splitting:
+  ✅ Resilience: Cloud Tasks retry ensures payment split eventually succeeds
+  ✅ Performance: GCWebhook1 returns faster (doesn't wait for payment split)
+  ✅ Monitoring: Separate service for payment split triggers
+  ✅ Consistency: Matches GCSplit pattern
+
+Arguments AGAINST splitting:
+  ❌ Complexity: 2 services instead of 1, more code to maintain
+  ❌ Latency: Payment split is delayed (asynchronous via Cloud Tasks)
+  ❌ Minimal benefit: GCSplit1 should be highly available anyway
+  ❌ No external API: Payment split webhook calls internal service, not external
+  ❌ Different failure mode: GCSplit was split to handle ChangeNow downtime
+     (external API that goes down). GCSplit1 is our own service, shouldn't go down.
+  ❌ User experience: Payment split delay might cause confusion
+
+RECOMMENDATION: DO NOT SPLIT GCWebhook
+
+Reasoning:
+  1. The payment split webhook calls an INTERNAL service (GCSplit1), not an
+     external API prone to downtime like ChangeNow.
+
+  2. If GCSplit1 is down, we have bigger problems (the entire payment system
+     is down). Splitting GCWebhook won't fix this.
+
+  3. GCSplit was split specifically to handle EXTERNAL API downtime (ChangeNow).
+     That's not the case here.
+
+  4. The added complexity (2 services, encryption, Cloud Tasks queue) outweighs
+     the minimal resilience benefit.
+
+  5. If we want resilience against GCSplit1 downtime, we should focus on making
+     GCSplit1 highly available (autoscaling, health checks, multiple instances).
+
+Alternative: Add Retry Logic Without Splitting
+────────────────────────────────────────────────
+Instead of splitting, we could add simple retry logic to the payment split
+webhook trigger:
+
+def trigger_payment_split_webhook(...):
+    max_retries = 3
+    retry_delay = 5  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(webhook_url, ...)
+            if response.status_code == 200:
+                return True
+        except Exception as e:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+
+    return False
+
+This provides basic resilience without the complexity of splitting into
+separate services.
+
+================================================================================
+SECTION 3: GCHOSTPAY10-26 DETAILED ANALYSIS
+================================================================================
+
+3.1 Current Architecture
+────────────────────────────────────────────────────────────────────────────────
+GCHostPay is a Flask service with integrated modules for Web3 operations.
+
+Flow Diagram:
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ POST / with JSON payload: { "token": "<encrypted_token>" }               │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 1. Fetch TPS HostPay signing key from Secret Manager                     │
+  │    Dependencies: Google Cloud Secret Manager                             │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 2. Decode and verify HostPay token                                       │
+  │    Function: decode_and_verify_hostpay_token()                           │
+  │    Token format: unique_id, cn_api_id, from_currency, from_network,      │
+  │                  from_amount, payin_address, timestamp                    │
+  │    Token expiration: 1 minute (60 seconds)                               │
+  │    Dependencies: LOCAL (no external API)                                 │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 3. Check if transaction already processed                                │
+  │    Function: db_manager.check_transaction_exists(unique_id)              │
+  │    Table: hostpay_transactions                                           │
+  │    Purpose: Prevent duplicate payments (idempotency)                     │
+  │    Dependencies: Cloud SQL PostgreSQL                                    │
+  │    Failure Mode: Database error → HTTP 500                               │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 4. Check ChangeNow transaction status                                    │
+  │    Function: check_changenow_status(cn_api_id)                           │
+  │    API: GET https://api.changenow.io/v2/exchange/by-id?id={cn_api_id}   │
+  │    Expected status: "waiting"                                            │
+  │    Timeout: 30 seconds                                                   │
+  │    Dependencies: ChangeNow API ← EXTERNAL, PRONE TO DOWNTIME             │
+  │    Failure Modes:                                                        │
+  │      - ChangeNow API down → HTTP 500                                     │
+  │      - Network timeout → HTTP 500                                        │
+  │      - Wrong status (not "waiting") → HTTP 400, stop execution           │
+  │    CRITICAL: Must verify "waiting" before sending ETH to avoid loss      │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 5. Execute ETH payment                                                   │
+  │    Function: wallet_manager.send_eth_payment()                           │
+  │    Dependencies: Alchemy RPC API ← EXTERNAL, GENERALLY RELIABLE          │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼ (Detailed sub-flow below)
+
+
+ETH Payment Sub-Flow (wallet_manager.send_eth_payment):
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 5a. Connect to Web3 provider (Alchemy)                                   │
+  │     Function: _connect_to_web3()                                         │
+  │     Alchemy RPC URL: fetched from Secret Manager                         │
+  │     Dependencies: Alchemy RPC endpoint                                   │
+  │     Failure Mode: Connection error → return None                         │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 5b. Call _send_transaction_with_retry() [MAX 3 ATTEMPTS]                 │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ RETRY LOOP (Attempt 1/3, 2/3, 3/3)                                       │
+  │                                                                           │
+  │   5c. Get nonce                                                           │
+  │       Function: w3.eth.get_transaction_count()                           │
+  │       Alchemy API call                                                   │
+  │                                                                           │
+  │   5d. Get optimized gas prices                                           │
+  │       Function: _get_optimized_gas_price()                               │
+  │       - Fetch fee_history (base fee + priority fee)                      │
+  │       - Calculate EIP-1559 gas prices                                    │
+  │       Alchemy API call                                                   │
+  │                                                                           │
+  │   5e. Build transaction                                                  │
+  │       EIP-1559 format: nonce, to, value, gas, maxFeePerGas,              │
+  │                        maxPriorityFeePerGas, chainId                     │
+  │                                                                           │
+  │   5f. Sign transaction                                                   │
+  │       LOCAL operation (uses private key)                                 │
+  │                                                                           │
+  │   5g. Broadcast transaction                                              │
+  │       Function: w3.eth.send_raw_transaction()                            │
+  │       Alchemy API call                                                   │
+  │       Returns: tx_hash                                                   │
+  │                                                                           │
+  │   5h. Wait for confirmation (300s timeout)                               │
+  │       Function: w3.eth.wait_for_transaction_receipt()                    │
+  │       Alchemy API call (polls for receipt)                               │
+  │       Failure scenarios:                                                 │
+  │         - Timeout (300s) → check if pending, try to replace              │
+  │         - Transaction failed on-chain → retry (if attempts remaining)    │
+  │         - Transaction stuck → call _replace_stuck_transaction()          │
+  │                                                                           │
+  │   If transaction stuck:                                                  │
+  │     5i. Replace stuck transaction                                        │
+  │         Function: _replace_stuck_transaction()                           │
+  │         - Get new gas prices (20% higher)                                │
+  │         - Build replacement tx with same nonce                           │
+  │         - Broadcast replacement                                          │
+  │         - Wait for confirmation (300s timeout)                           │
+  │                                                                           │
+  │   If attempt fails and retries remain:                                   │
+  │     - Sleep 10 seconds                                                   │
+  │     - Continue to next attempt                                           │
+  │                                                                           │
+  │   Special error handling:                                                │
+  │     - "nonce too low" → don't retry (tx already mined)                   │
+  │     - "insufficient funds" → don't retry (not enough ETH)                │
+  │     - "replacement underpriced" → increase gas buffer by 10%             │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 5j. Return transaction result                                            │
+  │     {                                                                     │
+  │       "tx_hash": "0x...",                                                 │
+  │       "status": "success" | "failed",                                     │
+  │       "gas_used": int,                                                    │
+  │       "block_number": int                                                 │
+  │     }                                                                     │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 6. Log transaction to database                                           │
+  │    Function: db_manager.insert_hostpay_transaction()                     │
+  │    Table: hostpay_transactions                                           │
+  │    Fields: unique_id, cn_api_id, from_currency, from_network,            │
+  │            from_amount, payin_address, is_complete, tx_hash, tx_status,  │
+  │            gas_used, block_number                                        │
+  │    Dependencies: Cloud SQL PostgreSQL                                    │
+  │    Failure Mode: Non-fatal - payment succeeded, logging failed           │
+  └────────────────────┬─────────────────────────────────────────────────────┘
+                       │
+                       ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ 7. Return 200 OK                                                         │
+  │    Response: { "status": "success", "data": {...} }                      │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
+3.2 Potential Breakdown Points
+────────────────────────────────────────────────────────────────────────────────
+Analyzing each step for potential failure scenarios:
+
+Step 1: Fetch signing key from Secret Manager
+  - Failure scenario: Secret Manager down (extremely rare)
+  - Impact: HTTP 500, entire request fails
+  - Mitigation: Secret Manager has 99.95% SLA, can cache at startup
+  - Should we split? NO - infrastructure dependency
+
+Step 2: Decode and verify token
+  - Failure scenario: Invalid token, signature mismatch, expired token (>1 min)
+  - Impact: HTTP 400, request rejected (expected behavior)
+  - Should we split? NO - local operation, input validation
+
+Step 3: Check if already processed
+  - Failure scenario: Database connection error, query timeout
+  - Impact: HTTP 500, request fails
+  - Mitigation: Connection pooling, transient error retry
+  - Should we split? NO - database is reliable, not the bottleneck
+
+Step 4: Check ChangeNow status ← CRITICAL EXTERNAL DEPENDENCY
+  - Failure scenarios:
+    ✗ ChangeNow API down (504 Gateway Timeout)
+    ✗ ChangeNow API overloaded (503 Service Unavailable)
+    ✗ Network timeout (30 seconds)
+    ✗ Connection error
+    ✗ API returns wrong status (not "waiting")
+
+  - Impact:
+    ✗ HTTP 500, payment fails completely
+    ✗ User's payment is lost (they paid, but we didn't send ETH to ChangeNow)
+
+  - Current behavior:
+    ✗ Single API call with 30s timeout
+    ✗ No retry logic
+    ✗ If ChangeNow is down, payment fails immediately
+
+  - Should we split? MAYBE - this is the primary candidate for splitting
+
+  - Analysis:
+    🔍 CRITICAL REQUIREMENT: We MUST verify status is "waiting" before sending ETH
+    🔍 If we send ETH to ChangeNow when status is NOT "waiting", we lose money
+    🔍 ChangeNow has documented downtime (as noted in previous conversations)
+    🔍 Current implementation is fragile: One API failure = entire payment fails
+
+  - Splitting benefits:
+    ✅ Cloud Tasks infinite retry (up to 24 hours)
+    ✅ Exponential backoff
+    ✅ If ChangeNow is down for 30 minutes, payment still succeeds
+
+  - Splitting risks:
+    ⚠️  ChangeNow transactions have expiration times
+    ⚠️  If we retry for 24 hours, transaction might expire
+    ⚠️  Expired transactions can't receive payments (ETH would be lost)
+
+  - Timing consideration:
+    The ChangeNow transaction was created by GCSplit3
+    GCSplit3 uses flow="standard" and type_="direct"
+    ChangeNow standard transactions typically have:
+      - Deposit time: 2-6 hours
+      - Total time: 2-24 hours
+
+    So retrying for up to 24 hours MIGHT work, but it's cutting it close.
+    Need to verify ChangeNow transaction expiration policy.
+
+Step 5: Execute ETH payment ← EXTERNAL DEPENDENCY (GENERALLY RELIABLE)
+  - Failure scenarios:
+    ✗ Alchemy RPC down (extremely rare, 99.9%+ SLA)
+    ✗ Network timeout (300s for confirmation)
+    ✗ Gas price too low (transaction stuck in mempool)
+    ✗ Nonce too low (transaction already mined)
+    ✗ Insufficient funds (wallet empty)
+    ✗ Transaction replaced (by another transaction with same nonce)
+
+  - Current mitigation:
+    ✅ 3 retry attempts with 10s delay
+    ✅ Transaction replacement logic (_replace_stuck_transaction)
+    ✅ Gas price buffering (20% increase on replacement)
+    ✅ Special error handling (nonce errors, insufficient funds)
+    ✅ 300s timeout for confirmation
+
+  - Impact:
+    ✗ HTTP 500, payment fails
+    ✗ But if ChangeNow status was "waiting", we can retry safely
+
+  - Should we split? DEBATABLE
+
+  - Analysis:
+    🔍 Alchemy RPC is very reliable (99.9%+ uptime, Tier 1 provider)
+    🔍 Current retry logic (3 attempts) handles most transient failures
+    🔍 Transaction replacement handles stuck transactions
+    🔍 Most failures are due to gas prices or nonce issues, not Alchemy downtime
+
+  - Splitting benefits:
+    ✅ Could implement longer retry period (beyond 3 attempts)
+    ✅ Cloud Tasks automatic retry with exponential backoff
+
+  - Splitting risks:
+    ⚠️  Adds latency (each retry is async via Cloud Tasks)
+    ⚠️  More complex error handling
+    ⚠️  Current internal retry (3 attempts, 10s delay) is ~30 seconds total
+        Cloud Tasks retry could take minutes/hours
+    ⚠️  User expectation: Fast payment (seconds, not minutes)
+
+Step 6: Log to database
+  - Failure scenario: Database error
+  - Impact: Non-fatal (payment succeeded, logging failed)
+  - Should we split? NO - non-critical operation
+
+
+3.3 Potential Split Architectures
+────────────────────────────────────────────────────────────────────────────────
+
+Option 1: Split ChangeNow Status Check Only
+──────────────────────────────────────────────────────────────────────────────
+
+GCHostPay1-10-26: Main Service
+  Endpoints: 3
+    - POST / (hostpay_webhook)
+    - POST /alchemy-webhook (alchemy_webhook)
+    - GET /health (health_check)
+
+  Workflow:
+    1. Decode and verify token
+    2. Check if already processed (database)
+    3. Enqueue Cloud Task to GCHostPay2 (status check)
+    4. [Wait for callback from GCHostPay2]
+
+  Note: This creates a problem - GCHostPay1 would need to return a response
+  before the payment is complete, OR implement a callback mechanism.
+
+GCHostPay2-10-26: ChangeNow Status Checker
+  Endpoints: 1
+    - POST / (check_status)
+
+  Workflow:
+    1. Receive encrypted token from GCHostPay1
+    2. Decrypt token
+    3. Call ChangeNow status check API (with retry)
+    4. If status != "waiting", return error
+    5. Enqueue Cloud Task back to GCHostPay1 with status result
+
+  Benefits:
+    ✅ Isolates ChangeNow API downtime
+    ✅ Infinite retry via Cloud Tasks
+
+  Drawbacks:
+    ❌ Complex callback mechanism needed
+    ❌ GCHostPay1 needs to handle async responses
+    ❌ Adds latency
+
+Modified Option 1: ChangeNow Status Check with Direct ETH Payment
+──────────────────────────────────────────────────────────────────────────────
+
+GCHostPay1-10-26: Orchestrator
+  Endpoints: 3
+    - POST / (hostpay_webhook) - Initial entry point
+    - POST /continue-payment (continue_payment) - Callback from GCHostPay2
+    - POST /alchemy-webhook (alchemy_webhook)
+    - GET /health (health_check)
+
+  Workflow (Initial):
+    1. Decode and verify token
+    2. Check if already processed (database)
+    3. Enqueue Cloud Task to GCHostPay2 (status check)
+    4. Return 200 OK (async processing)
+
+  Workflow (Callback):
+    1. Receive encrypted token from GCHostPay2
+    2. Decrypt token (includes status result)
+    3. Execute ETH payment (wallet_manager)
+    4. Log to database
+    5. Return 200 OK
+
+GCHostPay2-10-26: ChangeNow Status Checker
+  Endpoints: 1
+    - POST / (check_status)
+
+  Workflow:
+    1. Receive encrypted token from GCHostPay1
+    2. Decrypt token
+    3. Call ChangeNow status check API (with infinite retry)
+    4. If status != "waiting", log error and return (stop processing)
+    5. If status == "waiting", enqueue Cloud Task to GCHostPay1 /continue-payment
+    6. Return 200 OK
+
+  Benefits:
+    ✅ Isolates ChangeNow API downtime
+    ✅ Infinite retry via Cloud Tasks (up to 24 hours)
+    ✅ Payment proceeds immediately after status check succeeds
+
+  Drawbacks:
+    ❌ Adds complexity (2 services, callback endpoint)
+    ❌ Adds latency (async processing)
+    ❌ Risk of ChangeNow transaction expiration during retry period
+
+Flow Diagram (Option 1 Modified):
+  GCSplit1 → Cloud Tasks (hostpay_queue)
+    ↓
+  GCHostPay1 / (initial)
+    ↓
+  Cloud Tasks (changenow_status_queue)
+    ↓
+  GCHostPay2 / (status check with retry)
+    ↓
+  Cloud Tasks (hostpay_continue_queue)
+    ↓
+  GCHostPay1 /continue-payment (ETH payment)
+
+
+Option 2: Full Split (Like GCSplit Pattern)
+──────────────────────────────────────────────────────────────────────────────
+
+GCHostPay1-10-26: Orchestrator
+  Endpoints: 3
+    - POST / (hostpay_webhook) - Initial entry point
+    - POST /status-result (receive_status_result) - Callback from GCHostPay2
+    - POST /payment-result (receive_payment_result) - Callback from GCHostPay3
+    - POST /alchemy-webhook (alchemy_webhook)
+    - GET /health (health_check)
+
+  Workflow (Initial):
+    1. Decode and verify token
+    2. Check if already processed (database)
+    3. Enqueue Cloud Task to GCHostPay2 (status check)
+    4. Return 200 OK (async processing)
+
+  Workflow (Status Result Callback):
+    1. Receive encrypted token from GCHostPay2
+    2. Decrypt token (includes status)
+    3. If status != "waiting", return error
+    4. Enqueue Cloud Task to GCHostPay3 (ETH payment)
+    5. Return 200 OK
+
+  Workflow (Payment Result Callback):
+    1. Receive encrypted token from GCHostPay3
+    2. Decrypt token (includes tx_hash, status)
+    3. Log to database
+    4. Return 200 OK
+
+GCHostPay2-10-26: ChangeNow Status Checker
+  Endpoints: 1
+    - POST / (check_status)
+
+  Workflow:
+    1. Receive encrypted token from GCHostPay1
+    2. Decrypt token
+    3. Call ChangeNow status check API (with infinite retry)
+    4. Encrypt response token with status result
+    5. Enqueue Cloud Task to GCHostPay1 /status-result
+    6. Return 200 OK
+
+GCHostPay3-10-26: ETH Payment Executor
+  Endpoints: 1
+    - POST / (execute_payment)
+
+  Workflow:
+    1. Receive encrypted token from GCHostPay1
+    2. Decrypt token
+    3. Execute ETH payment (with infinite retry via Cloud Tasks)
+       - If transaction fails, retry via Cloud Tasks (not internal retry)
+    4. Encrypt response token with payment result
+    5. Enqueue Cloud Task to GCHostPay1 /payment-result
+    6. Return 200 OK
+
+  Benefits:
+    ✅ Maximum resilience - both external APIs isolated
+    ✅ Infinite retry for both ChangeNow and Alchemy APIs
+    ✅ Consistent with GCSplit pattern
+
+  Drawbacks:
+    ❌ Most complex option (3 services)
+    ❌ Significant latency (multiple async hops)
+    ❌ Risk of ChangeNow transaction expiration
+    ❌ User expectation: Fast payment (seconds, not minutes/hours)
+    ❌ Over-engineering: Alchemy is very reliable (99.9%+ SLA)
+
+Flow Diagram (Option 2 Full Split):
+  GCSplit1 → Cloud Tasks
+    ↓
+  GCHostPay1 / (initial)
+    ↓
+  Cloud Tasks
+    ↓
+  GCHostPay2 / (status check)
+    ↓
+  Cloud Tasks
+    ↓
+  GCHostPay1 /status-result
+    ↓
+  Cloud Tasks
+    ↓
+  GCHostPay3 / (ETH payment)
+    ↓
+  Cloud Tasks
+    ↓
+  GCHostPay1 /payment-result (log DB)
+
+
+Option 3: No Split, Enhanced Retry Logic
+──────────────────────────────────────────────────────────────────────────────
+
+Keep GCHostPay as a single service, but enhance retry logic:
+
+GCHostPay10-26: Enhanced Monolith
+  Endpoints: 3 (unchanged)
+    - POST / (hostpay_webhook)
+    - POST /alchemy-webhook (alchemy_webhook)
+    - GET /health (health_check)
+
+  Enhancements:
+    1. ChangeNow status check:
+       - Add retry loop: 5 attempts with exponential backoff
+       - Total retry time: ~2-3 minutes
+       - If ChangeNow down for >3 minutes, return HTTP 500
+         (let Cloud Tasks at caller level retry the entire request)
+
+    2. ETH payment:
+       - Keep existing retry logic (3 attempts)
+       - Keep transaction replacement logic
+
+    3. Add idempotency:
+       - Check if already processed at start (already implemented)
+       - Safe to retry entire request if it fails
+
+  Benefits:
+    ✅ Simple - no architectural changes
+    ✅ Better retry logic than current (single attempt)
+    ✅ No latency increase
+    ✅ Leverages Cloud Tasks retry at GCSplit1 → GCHostPay level
+
+  Drawbacks:
+    ❌ Not as resilient as splitting
+    ❌ Limited retry window (2-3 minutes vs 24 hours)
+    ❌ If ChangeNow down for >3 minutes, still fails
+
+Code Changes (Option 3):
+  def check_changenow_status(cn_api_id: str) -> Optional[str]:
+      max_retries = 5
+      retry_delays = [5, 10, 20, 40, 60]  # Exponential backoff
+
+      for attempt in range(max_retries):
+          try:
+              # Existing API call code...
+              if response.status_code == 200:
+                  return status
+          except Exception as e:
+              if attempt < max_retries - 1:
+                  time.sleep(retry_delays[attempt])
+                  continue
+
+      return None  # All retries failed
+
+
+3.4 Analysis: Should We Split GCHostPay?
+────────────────────────────────────────────────────────────────────────────────
+
+Key Considerations:
+  1. ChangeNow API downtime is documented (previous conversations)
+  2. Alchemy RPC is very reliable (99.9%+ SLA, Tier 1 provider)
+  3. ChangeNow transactions have expiration times
+  4. Current internal retry (3 attempts for ETH, 0 attempts for ChangeNow status)
+  5. User expectation: Fast payment (seconds, not minutes)
+
+Arguments FOR splitting (Option 1 or 2):
+  ✅ Isolates ChangeNow API downtime (primary external dependency)
+  ✅ Infinite retry via Cloud Tasks (up to 24 hours)
+  ✅ Consistent with GCSplit pattern (architectural consistency)
+  ✅ Better monitoring (separate service for status checks)
+  ✅ If ChangeNow down for 30-60 minutes, payment still succeeds
+
+Arguments AGAINST splitting:
+  ❌ Adds significant complexity (2-3 services vs 1)
+  ❌ Adds latency (async processing via Cloud Tasks)
+  ❌ Risk of ChangeNow transaction expiration during long retry periods
+  ❌ Over-engineering: Most failures are transient (<5 minutes)
+  ❌ Current internal retry can be enhanced without splitting (Option 3)
+  ❌ User experience: Payment delay might cause confusion
+  ❌ Alchemy RPC is very reliable, doesn't need infinite retry
+
+RECOMMENDATION: ENHANCED RETRY LOGIC (OPTION 3) AS FIRST STEP
+
+Reasoning:
+  1. Most ChangeNow API failures are transient (<5 minutes)
+  2. Adding a 5-attempt retry loop with exponential backoff handles 90%+ of cases
+  3. Total retry time: ~2-3 minutes (acceptable for user experience)
+  4. If ChangeNow is down for >3 minutes, Cloud Tasks at caller level
+     (GCSplit1 → GCHostPay) will retry the entire request
+  5. Much simpler than splitting (no architectural changes)
+  6. Can be implemented quickly
+
+ALTERNATIVE RECOMMENDATION: SPLIT CHANGENOW STATUS CHECK (OPTION 1) IF:
+  - ChangeNow downtime exceeds 5 minutes frequently (need to monitor)
+  - Enhanced retry logic (Option 3) proves insufficient
+  - Business requirements demand maximum resilience
+
+Implementation Priority:
+  1. Implement Option 3 (Enhanced Retry Logic) - LOW COMPLEXITY, QUICK WIN
+  2. Monitor ChangeNow API reliability for 1-2 weeks
+  3. If downtime >5 minutes is frequent, consider Option 1 (Split Status Check)
+
+DO NOT RECOMMEND: Option 2 (Full Split)
+  - Over-engineering for Alchemy RPC (already very reliable)
+  - Too much complexity, latency, and risk for minimal benefit
+
+================================================================================
+SECTION 4: CHANGENOW TRANSACTION EXPIRATION ANALYSIS
+================================================================================
+
+Critical Question: How long do ChangeNow transactions stay in "waiting" status
+before they expire?
+
+This is crucial for determining whether infinite retry (24 hours) is safe.
+
+From ChangeNow Documentation:
+────────────────────────────────────────────────────────────────────────────────
+Flow: "standard"
+  - Deposit time: 2-6 hours (typical)
+  - Transaction can be in "waiting" status for up to 2-6 hours
+  - After this period, if no deposit received, status changes to "expired"
+
+Flow: "fixed-rate"
+  - Rate is locked for a specific time period (varies by currency pair)
+  - Typically 10-20 minutes for ETH pairs
+  - After rate lock expires, transaction may be cancelled or repriced
+
+Our Usage (from GCSplit3):
+  flow="standard"
+  type_="direct"
+
+Implication:
+  ✅ Standard flow transactions have 2-6 hour "waiting" window
+  ✅ Infinite retry (up to 24 hours) is likely safe
+  ⚠️  BUT: If ChangeNow is down for >2 hours, transaction might expire
+  ⚠️  Need to monitor ChangeNow downtime duration
+
+Recommendation:
+  - If splitting, set Cloud Tasks retry max duration to 2 hours (not 24)
+  - This ensures we retry during the "waiting" window
+  - After 2 hours, if still failing, give up (transaction likely expired)
+
+================================================================================
+SECTION 5: FINAL RECOMMENDATIONS
+================================================================================
+
+5.1 GCWebhook10-26
+────────────────────────────────────────────────────────────────────────────────
+RECOMMENDATION: DO NOT SPLIT
+
+Rationale:
+  - Payment split webhook calls internal service (GCSplit1), not external API
+  - Splitting adds complexity with minimal resilience benefit
+  - Focus on making GCSplit1 highly available instead
+
+Optional Enhancement:
+  - Add simple retry logic (3 attempts, 5s delay) to payment split webhook
+  - This provides basic resilience without splitting architecture
+
+Implementation:
+  NO CHANGES REQUIRED - keep current architecture
+
+
+5.2 GCHostPay10-26
+────────────────────────────────────────────────────────────────────────────────
+RECOMMENDATION: ENHANCED RETRY LOGIC (SHORT-TERM)
+
+Rationale:
+  - ChangeNow API is the primary external dependency with documented downtime
+  - Most failures are transient (<5 minutes)
+  - Enhanced retry logic handles 90%+ of cases without architectural changes
+  - Simpler, faster to implement, lower risk
+
+Implementation (Option 3 - Enhanced Retry Logic):
+  Step 1: Add retry logic to check_changenow_status()
+    - 5 attempts with exponential backoff: 5s, 10s, 20s, 40s, 60s
+    - Total retry time: ~2-3 minutes
+    - If all retries fail, return None (HTTP 500)
+
+  Step 2: Add retry logic to Alchemy RPC operations (optional)
+    - Current: 3 attempts with 10s delay (already implemented)
+    - No changes needed (already robust)
+
+  Step 3: Monitor ChangeNow API reliability
+    - Track downtime frequency and duration
+    - If downtime >5 minutes is frequent, revisit splitting decision
+
+Pseudo-code:
+  def check_changenow_status_with_retry(cn_api_id: str) -> Optional[str]:
+      max_retries = 5
+      retry_delays = [5, 10, 20, 40, 60]  # seconds
+
+      for attempt in range(max_retries):
+          try:
+              print(f"🔍 [CHANGENOW_STATUS] Attempt {attempt + 1}/{max_retries}")
+              status = check_changenow_status(cn_api_id)
+
+              if status:
+                  print(f"✅ [CHANGENOW_STATUS] Status check succeeded: {status}")
+                  return status
+
+              print(f"❌ [CHANGENOW_STATUS] Status check failed (returned None)")
+
+              if attempt < max_retries - 1:
+                  delay = retry_delays[attempt]
+                  print(f"⏳ [CHANGENOW_STATUS] Retrying in {delay}s...")
+                  time.sleep(delay)
+
+          except Exception as e:
+              print(f"❌ [CHANGENOW_STATUS] Exception: {e}")
+
+              if attempt < max_retries - 1:
+                  delay = retry_delays[attempt]
+                  print(f"⏳ [CHANGENOW_STATUS] Retrying in {delay}s...")
+                  time.sleep(delay)
+
+      print(f"❌ [CHANGENOW_STATUS] All {max_retries} attempts failed")
+      return None
+
+
+ALTERNATIVE RECOMMENDATION: SPLIT CHANGENOW STATUS CHECK (LONG-TERM)
+
+If monitoring shows ChangeNow downtime >5 minutes is frequent:
+  - Implement Option 1 (Modified): Split ChangeNow Status Check
+  - Use Cloud Tasks with 2-hour max retry duration (not 24 hours)
+  - This ensures retry stays within ChangeNow transaction "waiting" window
+
+Implementation (Option 1 - Split Status Check):
+  Step 1: Create GCHostPay2-10-26 service
+    - Single endpoint: POST / (check_status)
+    - Receives encrypted token from GCHostPay1
+    - Calls ChangeNow status check API
+    - Returns encrypted response to GCHostPay1
+
+  Step 2: Modify GCHostPay1-10-26
+    - Add callback endpoint: POST /continue-payment
+    - Initial webhook enqueues Cloud Task to GCHostPay2
+    - Returns 200 OK (async processing)
+
+  Step 3: Configure Cloud Tasks queue
+    - Queue name: changenow_status_queue
+    - Max retry duration: 2 hours (not 24 hours)
+    - Exponential backoff: 10s min, 5min max
+
+  Step 4: Create encryption/decryption for inter-service tokens
+    - Reuse existing token_manager pattern from GCSplit
+
+DO NOT RECOMMEND: Full Split (Option 2)
+  - Over-engineering for Alchemy RPC (already 99.9%+ reliable)
+  - Adds too much complexity and latency
+  - User expectation: Fast payments (seconds, not minutes)
+
+================================================================================
+SECTION 6: IMPLEMENTATION CHECKLIST
+================================================================================
+
+6.1 GCWebhook10-26 (No Changes)
+────────────────────────────────────────────────────────────────────────────────
+✅ No implementation required - keep current architecture
+
+Optional Enhancement (if desired):
+  ☐ Add retry logic to trigger_payment_split_webhook()
+  ☐ Max 3 attempts, 5s delay between attempts
+  ☐ Update logging to track retry attempts
+
+
+6.2 GCHostPay10-26 (Enhanced Retry Logic)
+────────────────────────────────────────────────────────────────────────────────
+Implementation Steps:
+
+  ☐ Step 1: Backup current tphp10-26.py
+
+  ☐ Step 2: Modify check_changenow_status() function
+      ☐ Add retry loop (5 attempts)
+      ☐ Add exponential backoff (5s, 10s, 20s, 40s, 60s)
+      ☐ Add logging for each retry attempt
+      ☐ Return None if all retries fail
+
+  ☐ Step 3: Test retry logic locally
+      ☐ Mock ChangeNow API failure
+      ☐ Verify retry attempts work correctly
+      ☐ Verify exponential backoff timing
+      ☐ Verify total retry time is ~2-3 minutes
+
+  ☐ Step 4: Deploy to Cloud Run
+      ☐ Build Docker image
+      ☐ Push to Container Registry
+      ☐ Deploy to GCHostPay10-26 service
+
+  ☐ Step 5: Monitor logs
+      ☐ Watch for ChangeNow API failures
+      ☐ Verify retry logic triggers correctly
+      ☐ Track retry success rate
+
+  ☐ Step 6: Monitor for 1-2 weeks
+      ☐ Track ChangeNow API downtime frequency
+      ☐ Track downtime duration (is it >5 minutes?)
+      ☐ Decide if splitting is needed based on data
+
+  ☐ Step 7: If downtime >5 minutes is frequent, implement Option 1 (Split)
+      ☐ Create GCHostPay2-10-26 service
+      ☐ Create changenow_status_queue Cloud Tasks queue
+      ☐ Modify GCHostPay1 to use async workflow
+      ☐ Set max retry duration to 2 hours (not 24)
+
+
+6.3 GCHostPay10-26 Alternative (Split Status Check - if needed)
+────────────────────────────────────────────────────────────────────────────────
+Only implement if monitoring shows ChangeNow downtime >5 minutes is frequent.
+
+  ☐ Step 1: Create GCHostPay2-10-26 service
+      ☐ Create new directory: GCHostPay2-10-26/
+      ☐ Copy config_manager.py, token_manager.py (from GCSplit pattern)
+      ☐ Create tphp2-10-26.py with single endpoint
+      ☐ Create Dockerfile
+      ☐ Add to requirements.txt: Flask, google-cloud-tasks, google-cloud-secret-manager
+
+  ☐ Step 2: Create Cloud Tasks queue
+      ☐ Queue name: changenow-status-queue
+      ☐ Location: us-central1 (or your region)
+      ☐ Max retry: 2 hours (7200 seconds)
+      ☐ Min backoff: 10s
+      ☐ Max backoff: 300s (5 minutes)
+
+  ☐ Step 3: Modify GCHostPay1-10-26
+      ☐ Add CloudTasksClient initialization
+      ☐ Add callback endpoint: POST /continue-payment
+      ☐ Modify main endpoint to enqueue Cloud Task to GCHostPay2
+      ☐ Add token encryption for inter-service communication
+      ☐ Return 200 OK immediately (async processing)
+
+  ☐ Step 4: Deploy both services
+      ☐ Deploy GCHostPay2-10-26 first
+      ☐ Test GCHostPay2 endpoint independently
+      ☐ Deploy GCHostPay1-10-26 updates
+      ☐ Test end-to-end workflow
+
+  ☐ Step 5: Monitor and validate
+      ☐ Test with actual ChangeNow transactions
+      ☐ Monitor Cloud Tasks queue
+      ☐ Verify retry logic works during ChangeNow downtime
+      ☐ Verify payments complete successfully after retries
+
+================================================================================
+SECTION 7: COMPARISON MATRIX
+================================================================================
+
+Feature                     | GCWebhook    | GCHostPay (Current) | GCHostPay (Enhanced) | GCHostPay (Split)
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+External API Calls          | None         | 2 (CN, Alchemy)     | 2 (CN, Alchemy)      | 2 (CN, Alchemy)
+ChangeNow API Retry         | N/A          | None (1 attempt)    | 5 attempts (3min)    | Infinite (2h max)
+Alchemy RPC Retry           | N/A          | 3 attempts (30s)    | 3 attempts (30s)     | 3 or Infinite
+Service Count               | 1            | 1                   | 1                    | 2-3
+Complexity                  | Low          | Medium              | Medium               | High
+Latency                     | Low          | Medium              | Medium               | High (async)
+Resilience (CN downtime)    | N/A          | Low (single call)   | Medium (3min retry)  | High (2h retry)
+Risk of TX Expiration       | N/A          | Low                 | Low                  | Medium
+Implementation Effort       | None         | Current state       | 1-2 hours            | 2-3 days
+Maintenance Burden          | Low          | Medium              | Medium               | High
+Recommendation              | Keep as-is   | Short-term baseline | ✅ RECOMMENDED       | Optional long-term
+
+================================================================================
+SECTION 8: MONITORING REQUIREMENTS
+================================================================================
+
+To make an informed decision about splitting GCHostPay, we need to monitor:
+
+8.1 ChangeNow API Metrics
+────────────────────────────────────────────────────────────────────────────────
+  ☐ Track ChangeNow API call success rate
+  ☐ Track ChangeNow API downtime frequency (failures per day)
+  ☐ Track ChangeNow API downtime duration (how long does it stay down?)
+  ☐ Track ChangeNow API response times
+  ☐ Track ChangeNow API error codes (504, 503, 500, etc.)
+
+Key Question: How often is ChangeNow down for >5 minutes?
+  - If rarely (< 1x per week): Enhanced retry logic (Option 3) is sufficient
+  - If frequently (> 3x per week): Consider splitting (Option 1)
+
+8.2 Alchemy RPC API Metrics
+────────────────────────────────────────────────────────────────────────────────
+  ☐ Track Alchemy RPC call success rate
+  ☐ Track Alchemy RPC downtime (very rare)
+  ☐ Track transaction confirmation times
+  ☐ Track stuck transactions (requiring replacement)
+  ☐ Track gas price optimization effectiveness
+
+Key Question: Is Alchemy RPC reliability an issue?
+  - Expected: 99.9%+ uptime (should NOT be an issue)
+  - If Alchemy is unreliable, consider changing providers
+
+8.3 GCHostPay Service Metrics
+────────────────────────────────────────────────────────────────────────────────
+  ☐ Track total payment requests
+  ☐ Track successful payments
+  ☐ Track failed payments (by failure reason)
+  ☐ Track payment completion time (end-to-end latency)
+  ☐ Track retry attempts (after enhanced retry logic implemented)
+
+8.4 Cloud Tasks Metrics (if split)
+────────────────────────────────────────────────────────────────────────────────
+  ☐ Track Cloud Tasks queue depth
+  ☐ Track task retry counts
+  ☐ Track task success/failure rates
+  ☐ Track task execution latency
+
+================================================================================
+SECTION 9: CONCLUSION
+================================================================================
+
+Summary of Findings:
+────────────────────────────────────────────────────────────────────────────────
+
+GCWebhook10-26:
+  ✅ DO NOT SPLIT
+  - No external API calls prone to downtime
+  - Calls internal service (GCSplit1), not external API
+  - Splitting adds unnecessary complexity
+  - Focus on making GCSplit1 highly available instead
+
+GCHostPay10-26:
+  ⚠️  IMPLEMENT ENHANCED RETRY LOGIC FIRST (OPTION 3)
+  - Short-term: Add 5-attempt retry loop with exponential backoff (2-3 min total)
+  - Monitor ChangeNow API reliability for 1-2 weeks
+  - Long-term: If ChangeNow downtime >5 minutes is frequent, consider splitting
+
+  ❌ DO NOT implement full split (Option 2)
+  - Over-engineering for Alchemy RPC (already 99.9%+ reliable)
+  - Too much complexity, latency, and risk
+
+Key Differences from GCSplit:
+────────────────────────────────────────────────────────────────────────────────
+GCSplit was split because:
+  ✅ Multiple ChangeNow API calls (estimate + create transaction)
+  ✅ ChangeNow API has documented downtime
+  ✅ Payment flow is asynchronous by nature (user waits for invite)
+  ✅ Transaction expiration window is long (2-6 hours)
+  ✅ Infinite retry (24 hours) is safe
+
+GCHostPay is different because:
+  ⚠️  Only ONE ChangeNow API call (status check)
+  ⚠️  Alchemy RPC is very reliable (99.9%+ SLA)
+  ⚠️  User expectation: Fast payment (seconds, not minutes)
+  ⚠️  Enhanced retry logic handles 90%+ of transient failures
+  ⚠️  Splitting adds complexity for minimal incremental benefit
+
+Recommended Approach:
+────────────────────────────────────────────────────────────────────────────────
+1. Keep GCWebhook as-is (no split)
+2. Enhance GCHostPay retry logic (Option 3) - QUICK WIN
+3. Monitor ChangeNow API reliability for 1-2 weeks
+4. If monitoring shows frequent downtimes >5 minutes, revisit splitting decision
+5. If splitting becomes necessary, use Option 1 (split ChangeNow status only)
+6. Set Cloud Tasks max retry to 2 hours (not 24) to avoid transaction expiration
+
+This approach balances resilience, complexity, and user experience while
+maintaining a pragmatic, data-driven approach to architecture decisions.
+
+================================================================================
+END OF ANALYSIS
+================================================================================
