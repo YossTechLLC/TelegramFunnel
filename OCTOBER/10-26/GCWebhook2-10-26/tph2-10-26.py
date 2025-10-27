@@ -4,9 +4,21 @@ GCWebhook2-10-26: Telegram Invite Sender Service
 Receives encrypted tokens from GCWebhook1 via Cloud Tasks,
 sends Telegram one-time invitation links to users.
 Implements infinite retry via Cloud Tasks (60s fixed backoff, 24h max duration).
+
+IMPORTANT - Async Route Architecture:
+The main endpoint is defined as async to properly handle the python-telegram-bot's
+async API calls. This prevents connection pool exhaustion that occurs when using
+asyncio.run() within a synchronous Flask route.
+
+Why async route instead of asyncio.run():
+- Flask 3.0+ supports native async routes
+- Each asyncio.run() creates a NEW event loop
+- python-telegram-bot uses httpx with connection pooling PER event loop
+- Creating multiple event loops causes connection pool exhaustion
+- Async route reuses the same event loop and connection pool across requests
+- Result: Proper connection management and no pool timeout errors
 """
 import time
-import asyncio
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
 from telegram.error import TelegramError
@@ -50,7 +62,7 @@ except Exception as e:
 # ============================================================================
 
 @app.route("/", methods=["POST"])
-def send_telegram_invite():
+async def send_telegram_invite():
     """
     Main endpoint for sending Telegram invites.
 
@@ -103,35 +115,25 @@ def send_telegram_invite():
         try:
             print(f"📨 [ENDPOINT] Creating Telegram invite link for channel {closed_channel_id}")
 
-            async def create_and_send_invite():
-                """
-                Async function to create invite link and send message.
+            # Create one-time invite link (expires in 1 hour, 1 use only)
+            invite = await telegram_bot.create_chat_invite_link(
+                chat_id=closed_channel_id,
+                expire_date=int(time.time()) + 3600,
+                member_limit=1
+            )
+            print(f"✅ [ENDPOINT] Invite link created: {invite.invite_link}")
 
-                Raises:
-                    TelegramError: If Telegram API call fails
-                """
-                # Create one-time invite link (expires in 1 hour, 1 use only)
-                invite = await telegram_bot.create_chat_invite_link(
-                    chat_id=closed_channel_id,
-                    expire_date=int(time.time()) + 3600,
-                    member_limit=1
-                )
-                print(f"✅ [ENDPOINT] Invite link created: {invite.invite_link}")
-
-                # Send invite message to user
-                await telegram_bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        "✅ You've been granted access!\n"
-                        "Here is your one-time invite link:\n"
-                        f"{invite.invite_link}"
-                    ),
-                    disable_web_page_preview=True
-                )
-                print(f"✅ [ENDPOINT] Invite message sent to user {user_id}")
-
-            # Run async function
-            asyncio.run(create_and_send_invite())
+            # Send invite message to user
+            await telegram_bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "✅ You've been granted access!\n"
+                    "Here is your one-time invite link:\n"
+                    f"{invite.invite_link}"
+                ),
+                disable_web_page_preview=True
+            )
+            print(f"✅ [ENDPOINT] Invite message sent to user {user_id}")
 
             print(f"🎉 [ENDPOINT] Telegram invite completed successfully")
             return jsonify({
