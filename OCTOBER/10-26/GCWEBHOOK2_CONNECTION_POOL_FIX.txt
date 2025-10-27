@@ -111,6 +111,7 @@ Pre-Deployment:
   [✓] Changed function signature to async
   [✓] Removed asyncio.run() wrapper
   [✓] Direct await calls for Telegram API
+  [✓] Updated requirements.txt to Flask[async]==3.0.3
   [✓] Error handling preserved (TelegramError, generic Exception)
   [✓] Cloud Tasks retry logic intact (HTTP 500 on error)
   [✓] Comprehensive documentation added
@@ -187,12 +188,17 @@ RELATED FILES
 
 Modified:
   - GCWebhook2-10-26/tph2-10-26.py (main service)
+  - GCWebhook2-10-26/requirements.txt (added Flask async extras)
 
-Dependencies (unchanged):
+Dependencies:
   - GCWebhook2-10-26/requirements.txt
-    Flask==3.0.3 (already supports async routes)
+    Flask[async]==3.0.3 (UPDATED: added [async] extras for async route support)
     python-telegram-bot==20.7 (async by default)
     google-cloud-secret-manager==2.16.3
+
+  IMPORTANT: Flask[async] installs additional dependencies (asgiref) required
+  for async view support on WSGI servers. Without this, you'll get:
+  "RuntimeError: Install Flask with the 'async' extra in order to use async views."
 
   - GCWebhook2-10-26/config_manager.py
   - GCWebhook2-10-26/token_manager.py
@@ -236,6 +242,25 @@ LESSONS LEARNED
 TROUBLESHOOTING
 ================================================================================
 
+If You See "Install Flask with the 'async' extra" Error:
+
+ERROR: RuntimeError: Install Flask with the 'async' extra in order to use async views.
+
+CAUSE: requirements.txt has Flask==3.0.3 instead of Flask[async]==3.0.3
+
+FIX:
+1. Update requirements.txt:
+   Flask[async]==3.0.3
+
+2. Rebuild and redeploy:
+   gcloud run deploy gcwebhook2-10-26 --source . --region us-central1
+
+EXPLANATION:
+Flask supports async routes but requires additional dependencies (asgiref) to run
+them on WSGI servers. Flask[async] automatically installs these dependencies.
+
+================================================================================
+
 If Connection Pool Errors Still Occur:
 
 1. Verify deployment:
@@ -250,17 +275,21 @@ If Connection Pool Errors Still Occur:
    grep -n "asyncio.run" GCWebhook2-10-26/tph2-10-26.py
    # Should return no results
 
-4. Monitor connection metrics:
+4. Verify Flask[async] in requirements.txt:
+   grep -n "Flask\[async\]" GCWebhook2-10-26/requirements.txt
+   # Should return: Flask[async]==3.0.3
+
+5. Monitor connection metrics:
    # Check Cloud Run metrics for connection pool usage
    # Should see steady state, not growing linearly
 
-5. Increase Cloud Run resources if needed:
+6. Increase Cloud Run resources if needed:
    gcloud run services update gcwebhook2-10-26 \
      --region us-central1 \
      --memory 512Mi \
      --cpu 2
 
-6. Reduce Cloud Tasks dispatch rate if needed:
+7. Reduce Cloud Tasks dispatch rate if needed:
    gcloud tasks queues update gcwebhook-telegram-invite-queue \
      --location us-central1 \
      --max-dispatches-per-second=5 \
