@@ -27,16 +27,16 @@ class DatabaseManager:
         self.instance_connection_name = config.get('instance_connection_name')
         self.db_name = config.get('db_name')
         self.db_user = config.get('db_user')
-        self.db_password = config.get('db_password')
+        self.database_password = config.get('database_password')
         self.connector = Connector()
 
         # Validate credentials
-        if not all([self.instance_connection_name, self.db_name, self.db_user, self.db_password]):
+        if not all([self.instance_connection_name, self.db_name, self.db_user, self.database_password]):
             print(f"❌ [DATABASE] Missing required credentials")
             print(f"   Instance: {'✅' if self.instance_connection_name else '❌'}")
             print(f"   DB Name: {'✅' if self.db_name else '❌'}")
             print(f"   DB User: {'✅' if self.db_user else '❌'}")
-            print(f"   DB Password: {'✅' if self.db_password else '❌'}")
+            print(f"   DB Password: {'✅' if self.database_password else '❌'}")
             raise RuntimeError("Database credentials incomplete")
 
         print(f"🔗 [DATABASE] DatabaseManager initialized")
@@ -55,7 +55,7 @@ class DatabaseManager:
                 self.instance_connection_name,
                 "pg8000",
                 user=self.db_user,
-                password=self.db_password,
+                password=self.database_password,
                 db=self.db_name
             )
             print(f"✅ [DATABASE] Connection established")
