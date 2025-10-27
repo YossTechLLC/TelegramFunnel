@@ -184,7 +184,7 @@ class ConfigManager:
             'instance_connection_name': cloud_sql_connection_name,
             'db_name': database_name,
             'db_user': database_user,
-            'database_password': database_password
+            'db_password': database_password
         }
 
         # Log configuration status
@@ -203,6 +203,6 @@ class ConfigManager:
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")
-        print(f"   DATABASE_PASSWORD_SECRET: {'✅' if config['database_password'] else '❌'}")
+        print(f"   DATABASE_PASSWORD_SECRET: {'✅' if config['db_password'] else '❌'}")
 
         return config
