@@ -210,10 +210,10 @@ class DatabaseManager:
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """
         Insert a new channel configuration into the database.
-        
+
         Args:
             channel_data: Dictionary containing channel configuration data
-            
+
         Returns:
             True if successful, False otherwise
         """
@@ -233,7 +233,7 @@ class DatabaseManager:
             channel_data.get("client_wallet_address", ""),
             channel_data.get("client_payout_currency", "USD"),
         )
-        
+
         try:
             conn = self.get_connection()
             with conn, conn.cursor() as cur:
@@ -250,6 +250,118 @@ class DatabaseManager:
             return True
         except Exception as e:
             print(f"❌ DB error: {e}")
+            return False
+
+    def fetch_channel_by_id(self, open_channel_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch a complete channel configuration by open_channel_id.
+
+        Args:
+            open_channel_id: The open channel ID to look up
+
+        Returns:
+            Dictionary with all channel data if found, None otherwise
+        """
+        try:
+            with self.get_connection() as conn, conn.cursor() as cur:
+                print(f"🔍 [DB] Fetching channel config for open_channel_id: {open_channel_id}")
+                cur.execute(
+                    """SELECT open_channel_id, open_channel_title, open_channel_description,
+                              closed_channel_id, closed_channel_title, closed_channel_description,
+                              sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time,
+                              client_wallet_address, client_payout_currency, client_payout_network
+                       FROM main_clients_database
+                       WHERE open_channel_id = %s""",
+                    (str(open_channel_id),)
+                )
+                result = cur.fetchone()
+
+                if result:
+                    channel_data = {
+                        "open_channel_id": result[0],
+                        "open_channel_title": result[1],
+                        "open_channel_description": result[2],
+                        "closed_channel_id": result[3],
+                        "closed_channel_title": result[4],
+                        "closed_channel_description": result[5],
+                        "sub_1_price": result[6],
+                        "sub_1_time": result[7],
+                        "sub_2_price": result[8],
+                        "sub_2_time": result[9],
+                        "sub_3_price": result[10],
+                        "sub_3_time": result[11],
+                        "client_wallet_address": result[12],
+                        "client_payout_currency": result[13],
+                        "client_payout_network": result[14],
+                    }
+                    print(f"✅ [DB] Channel config found for {open_channel_id}")
+                    return channel_data
+                else:
+                    print(f"❌ [DB] No channel config found for {open_channel_id}")
+                    return None
+
+        except Exception as e:
+            print(f"❌ [DB] Error fetching channel config: {e}")
+            return None
+
+    def update_channel_config(self, open_channel_id: str, channel_data: Dict[str, Any]) -> bool:
+        """
+        Update an existing channel configuration in the database.
+
+        Args:
+            open_channel_id: The open channel ID to update
+            channel_data: Dictionary containing updated channel data
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.get_connection() as conn, conn.cursor() as cur:
+                print(f"💾 [DB] Updating channel config for {open_channel_id}")
+                cur.execute(
+                    """UPDATE main_clients_database
+                       SET open_channel_title = %s,
+                           open_channel_description = %s,
+                           closed_channel_id = %s,
+                           closed_channel_title = %s,
+                           closed_channel_description = %s,
+                           sub_1_price = %s,
+                           sub_1_time = %s,
+                           sub_2_price = %s,
+                           sub_2_time = %s,
+                           sub_3_price = %s,
+                           sub_3_time = %s,
+                           client_wallet_address = %s,
+                           client_payout_currency = %s
+                       WHERE open_channel_id = %s""",
+                    (
+                        channel_data.get("open_channel_title"),
+                        channel_data.get("open_channel_description"),
+                        channel_data.get("closed_channel_id"),
+                        channel_data.get("closed_channel_title"),
+                        channel_data.get("closed_channel_description"),
+                        channel_data.get("sub_1_price"),
+                        channel_data.get("sub_1_time"),
+                        channel_data.get("sub_2_price"),
+                        channel_data.get("sub_2_time"),
+                        channel_data.get("sub_3_price"),
+                        channel_data.get("sub_3_time"),
+                        channel_data.get("client_wallet_address"),
+                        channel_data.get("client_payout_currency"),
+                        str(open_channel_id),
+                    )
+                )
+                rows_affected = cur.rowcount
+
+                if rows_affected > 0:
+                    print(f"✅ [DB] Channel config updated successfully for {open_channel_id}")
+                    return True
+                else:
+                    print(f"⚠️ [DB] No rows updated for {open_channel_id}")
+                    return False
+
+        except Exception as e:
+            print(f"❌ [DB] Error updating channel config: {e}")
             return False
     
     def fetch_expired_subscriptions(self) -> List[Tuple[int, int, str, str]]:

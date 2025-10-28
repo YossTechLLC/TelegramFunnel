@@ -1,0 +1,896 @@
+================================================================================
+CUSTOM DOMAIN SETUP GUIDE
+Mapping www.paygateprime.com to GCRegister10-26 Cloud Run Service
+================================================================================
+
+Service: GCRegister10-26
+Current URL: https://gcregister10-26-291176869049.us-central1.run.app
+Custom Domain: www.paygateprime.com
+DNS Provider: Cloudflare
+Date: 2025-10-27
+
+================================================================================
+OVERVIEW
+================================================================================
+
+This guide walks you through mapping your custom domain (www.paygateprime.com)
+to your Google Cloud Run service (GCRegister10-26). The process involves:
+
+1. Configuring domain mapping in Google Cloud Run
+2. Setting up DNS records in Cloudflare
+3. Verifying domain ownership
+4. Updating application configuration (if needed)
+5. Testing and verification
+
+Estimated Time: 15-30 minutes (plus DNS propagation time: 5-60 minutes)
+
+================================================================================
+PREREQUISITES
+================================================================================
+
+✅ Domain registered and owned: www.paygateprime.com
+✅ Domain verified in Google Search Console (Domain Property)
+✅ Cloudflare account with domain management access
+✅ Google Cloud Platform access with appropriate permissions
+✅ gcloud CLI installed (recommended but not required)
+
+Required GCP Permissions:
+- run.services.update
+- run.domainmappings.create
+- compute.networkEndpointGroups.use
+
+================================================================================
+PART 1: GOOGLE CLOUD RUN DOMAIN MAPPING
+================================================================================
+
+OPTION A: Using Google Cloud Console (Recommended for beginners)
+--------------------------------------------------------------------------------
+
+1. Navigate to Cloud Run Console:
+   https://console.cloud.google.com/run
+
+2. Select your service:
+   - Service: gcregister10-26
+   - Region: us-central1
+
+3. Go to "Manage Custom Domains":
+   - Click on the "gcregister10-26" service
+   - Click the "MANAGE CUSTOM DOMAINS" button at the top
+   - Or click the "..." (three dots) menu → "Manage custom domains"
+
+4. Add Custom Domain:
+   - Click "ADD MAPPING"
+   - Select service: gcregister10-26 (us-central1)
+   - Click "CONTINUE"
+
+5. Enter Domain Information:
+   - Select "Map a custom domain"
+   - Domain: www.paygateprime.com
+   - Click "CONTINUE"
+
+6. Verify Domain Ownership:
+   Since you've already verified the domain in Google Search Console,
+   Google Cloud should recognize the ownership automatically.
+
+   If prompted for verification:
+   - Select "I've already verified ownership"
+   - Or follow the verification process using one of these methods:
+     a) HTML file upload
+     b) TXT record in DNS
+     c) Meta tag in HTML
+
+7. DNS Configuration Instructions:
+   Google Cloud will provide you with DNS records to add.
+
+   IMPORTANT: You will receive records similar to:
+
+   Type: CNAME
+   Name: www
+   Value: ghs.googlehosted.com
+
+   Type: A (for root domain if needed)
+   Name: @
+   Value: [IP addresses provided by Google]
+
+   COPY THESE RECORDS - You'll need them for Cloudflare configuration.
+
+8. Click "CONTINUE" and then "DONE"
+
+9. Domain Status:
+   - Status will show as "Pending" initially
+   - This is normal - it will update after DNS configuration
+
+
+OPTION B: Using gcloud CLI (Advanced)
+--------------------------------------------------------------------------------
+
+1. Set your project:
+   gcloud config set project YOUR_PROJECT_ID
+
+2. Create domain mapping:
+   gcloud run domain-mappings create \
+     --service=gcregister10-26 \
+     --region=us-central1 \
+     --domain=www.paygateprime.com
+
+3. Verify the mapping:
+   gcloud run domain-mappings describe \
+     --domain=www.paygateprime.com \
+     --region=us-central1
+
+4. Get DNS configuration:
+   The output will show the DNS records you need to configure.
+
+
+================================================================================
+PART 2: CLOUDFLARE DNS CONFIGURATION
+================================================================================
+
+STEP 1: Access Cloudflare DNS Management
+--------------------------------------------------------------------------------
+
+1. Log in to Cloudflare: https://dash.cloudflare.com/
+
+2. Select your domain: paygateprime.com
+
+3. Click "DNS" in the left sidebar (or top menu)
+
+
+STEP 2: Configure DNS Records
+--------------------------------------------------------------------------------
+
+You need to add the DNS records provided by Google Cloud Run.
+
+Standard Configuration (Most Common):
+--------------------------------------
+
+1. Add CNAME Record for www subdomain:
+
+   Type: CNAME
+   Name: www
+   Target: ghs.googlehosted.com
+   TTL: Auto
+   Proxy status: 🟠 DNS only (IMPORTANT: Turn OFF proxy initially)
+
+   Steps:
+   - Click "Add record"
+   - Select "CNAME" from Type dropdown
+   - Enter "www" in Name field
+   - Enter "ghs.googlehosted.com" in Target field
+   - Set Proxy status to "DNS only" (gray cloud)
+   - Click "Save"
+
+   ⚠️  CRITICAL: Set proxy status to "DNS only" (gray cloud)
+   Do NOT use "Proxied" (orange cloud) initially. You can enable it later
+   after verifying the domain mapping works.
+
+
+2. (Optional) Add Root Domain Redirect:
+
+   If you want paygateprime.com (without www) to redirect to www.paygateprime.com:
+
+   a) Add A records (if Google provided them):
+      Type: A
+      Name: @
+      IPv4 address: [IP provided by Google Cloud]
+      TTL: Auto
+      Proxy status: DNS only
+
+   b) OR use Cloudflare Page Rules (recommended):
+      - Go to "Rules" → "Page Rules"
+      - Create rule to redirect paygateprime.com/* to www.paygateprime.com/$1
+      - Status: 301 Permanent Redirect
+
+
+STEP 3: Remove Conflicting Records
+--------------------------------------------------------------------------------
+
+IMPORTANT: Check for and remove any existing DNS records that might conflict:
+
+1. Check for existing CNAME/A records for "www":
+   - If you see "www" pointing to a different location, remove it
+   - Only keep the new CNAME record pointing to ghs.googlehosted.com
+
+2. Check for wildcard (*) records:
+   - If there's a wildcard record, it might interfere
+   - Consider removing or adjusting it
+
+3. Save all changes
+
+
+STEP 4: SSL/TLS Configuration in Cloudflare
+--------------------------------------------------------------------------------
+
+1. Go to "SSL/TLS" section in Cloudflare
+
+2. Set SSL/TLS encryption mode:
+   - Recommended: "Full" or "Full (strict)"
+   - Do NOT use "Flexible" (causes infinite redirect loops)
+
+3. Always Use HTTPS:
+   - Go to "SSL/TLS" → "Edge Certificates"
+   - Enable "Always Use HTTPS"
+   - This redirects all HTTP traffic to HTTPS
+
+4. Minimum TLS Version:
+   - Set to TLS 1.2 or higher for security
+
+
+STEP 5: Verify DNS Propagation
+--------------------------------------------------------------------------------
+
+Wait 5-15 minutes for DNS changes to propagate, then verify:
+
+1. Online DNS Checker:
+   https://dnschecker.org/
+   - Enter: www.paygateprime.com
+   - Select: CNAME
+   - Verify it resolves to ghs.googlehosted.com
+
+2. Command Line Verification:
+
+   Windows (PowerShell):
+   nslookup www.paygateprime.com
+
+   Linux/Mac:
+   dig www.paygateprime.com CNAME
+
+   Expected output:
+   www.paygateprime.com → ghs.googlehosted.com
+
+
+================================================================================
+PART 3: VERIFY GOOGLE CLOUD RUN DOMAIN MAPPING
+================================================================================
+
+STEP 1: Check Domain Mapping Status
+--------------------------------------------------------------------------------
+
+1. Return to Google Cloud Console:
+   https://console.cloud.google.com/run
+
+2. Click "MANAGE CUSTOM DOMAINS"
+
+3. Check status of www.paygateprime.com:
+   - "Active" (green checkmark) = Success!
+   - "Pending" = Still waiting for DNS propagation
+   - "Failed" = DNS configuration issue
+
+4. If status is "Pending" for more than 1 hour:
+   - Verify Cloudflare DNS records are correct
+   - Ensure proxy is set to "DNS only" (not proxied)
+   - Check for DNS conflicts
+   - Wait longer (can take up to 24 hours in rare cases)
+
+
+STEP 2: Request SSL Certificate
+--------------------------------------------------------------------------------
+
+Google Cloud Run automatically provisions a managed SSL certificate for your
+custom domain. This happens automatically after domain mapping is verified.
+
+1. Certificate provisioning takes 15-60 minutes
+2. You don't need to do anything manually
+3. Check certificate status in Cloud Run console
+
+
+STEP 3: Test Custom Domain Access
+--------------------------------------------------------------------------------
+
+1. Open browser in incognito/private mode (avoid cache issues)
+
+2. Visit: https://www.paygateprime.com
+
+3. Verify:
+   ✅ Page loads successfully
+   ✅ Shows same content as gcregister10-26-291176869049.us-central1.run.app
+   ✅ URL bar shows "https://www.paygateprime.com" with padlock icon
+   ✅ Registration form works correctly
+   ✅ Form submission works
+   ✅ CAPTCHA works
+   ✅ Success page displays correctly
+
+4. Test HTTP redirect:
+   - Visit: http://www.paygateprime.com (note: HTTP not HTTPS)
+   - Should automatically redirect to https://www.paygateprime.com
+
+
+================================================================================
+PART 4: APPLICATION CONFIGURATION UPDATES (IF NEEDED)
+================================================================================
+
+GOOD NEWS: Your GCRegister10-26 service should work with the custom domain
+WITHOUT code changes because:
+
+✅ Flask uses relative URLs via url_for()
+✅ No hardcoded URLs detected in the codebase
+✅ Session cookies work with any domain
+✅ CSRF protection is domain-agnostic
+✅ Static files use relative paths
+
+However, for PRODUCTION SECURITY and best practices, consider these OPTIONAL
+enhancements:
+
+
+OPTIONAL ENHANCEMENT 1: Session Cookie Configuration
+--------------------------------------------------------------------------------
+
+File: /OCTOBER/10-26/GCRegister10-26/tpr10-26.py
+
+Add after line 24 (after app.config['WTF_CSRF_ENABLED'] = True):
+
+```python
+# Session cookie security for production
+app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # No JavaScript access
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+app.config['SESSION_COOKIE_DOMAIN'] = '.paygateprime.com'  # Allow subdomains
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour session
+```
+
+Why:
+- SESSION_COOKIE_SECURE: Prevents cookie theft over HTTP
+- SESSION_COOKIE_HTTPONLY: Prevents XSS attacks
+- SESSION_COOKIE_SAMESITE: Prevents CSRF attacks
+- SESSION_COOKIE_DOMAIN: Allows cookies to work across subdomains
+
+
+OPTIONAL ENHANCEMENT 2: Security Headers
+--------------------------------------------------------------------------------
+
+File: /OCTOBER/10-26/GCRegister10-26/tpr10-26.py
+
+Add security headers middleware (after app initialization):
+
+```python
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
+```
+
+Why:
+- Protects against common web vulnerabilities
+- Enforces HTTPS usage
+- Prevents clickjacking
+- Prevents XSS attacks
+
+
+OPTIONAL ENHANCEMENT 3: Update Environment-Specific Configuration
+--------------------------------------------------------------------------------
+
+If you want to enforce that the service only responds to the custom domain:
+
+File: /OCTOBER/10-26/GCRegister10-26/tpr10-26.py
+
+Add domain validation (after app initialization):
+
+```python
+ALLOWED_HOSTS = ['www.paygateprime.com', 'paygateprime.com',
+                 'gcregister10-26-291176869049.us-central1.run.app']  # Keep Cloud Run URL for health checks
+
+@app.before_request
+def validate_host():
+    """Validate request host to prevent DNS rebinding attacks."""
+    if request.host not in ALLOWED_HOSTS:
+        print(f"⚠️  [SECURITY] Invalid host: {request.host}")
+        abort(403)
+```
+
+Why:
+- Prevents DNS rebinding attacks
+- Ensures traffic only comes through approved domains
+
+
+OPTIONAL ENHANCEMENT 4: Add Canonical URL Meta Tag
+--------------------------------------------------------------------------------
+
+File: /OCTOBER/10-26/GCRegister10-26/templates/base.html
+
+Add in the <head> section:
+
+```html
+<link rel="canonical" href="https://www.paygateprime.com{{ request.path }}" />
+```
+
+Why:
+- Helps search engines understand the primary URL
+- Prevents duplicate content issues
+
+
+OPTIONAL ENHANCEMENT 5: Update Rate Limiting (When Re-enabled)
+--------------------------------------------------------------------------------
+
+File: /OCTOBER/10-26/GCRegister10-26/tpr10-26.py
+
+When you re-enable rate limiting (currently commented out), use Redis storage
+instead of memory storage for production:
+
+```python
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="redis://YOUR_REDIS_HOST:6379"  # Use Redis for production
+)
+```
+
+Why:
+- Memory storage resets on container restart in Cloud Run
+- Redis persists rate limit data across restarts
+
+
+================================================================================
+PART 5: ENABLE CLOUDFLARE PROXY (OPTIONAL BUT RECOMMENDED)
+================================================================================
+
+After verifying everything works with "DNS only" mode, you can enable
+Cloudflare's proxy features for additional benefits:
+
+
+STEP 1: Enable Cloudflare Proxy
+--------------------------------------------------------------------------------
+
+1. Go to Cloudflare DNS settings
+2. Find your CNAME record for www.paygateprime.com
+3. Click the cloud icon to change from 🟠 DNS only → 🟠 Proxied
+4. Click "Save"
+
+
+STEP 2: Configure Cloudflare Security & Performance
+--------------------------------------------------------------------------------
+
+1. SSL/TLS Settings:
+   - Mode: Full (strict)
+   - Always Use HTTPS: On
+   - Automatic HTTPS Rewrites: On
+
+2. Firewall Settings:
+   - Go to "Security" → "WAF"
+   - Enable managed rules for protection
+
+3. Caching:
+   - Go to "Caching" → "Configuration"
+   - Set cache level to "Standard"
+   - Set browser cache TTL to appropriate value
+
+4. Speed Optimization:
+   - Go to "Speed" → "Optimization"
+   - Enable Auto Minify (HTML, CSS, JS)
+   - Enable Brotli compression
+   - Enable Rocket Loader (optional)
+
+5. Page Rules (Recommended):
+   - Go to "Rules" → "Page Rules"
+   - Create rule for www.paygateprime.com/*
+   - Settings:
+     * Cache Level: Cache Everything
+     * Edge Cache TTL: 2 hours (for static assets)
+     * Browser Cache TTL: 4 hours
+
+
+Benefits of Cloudflare Proxy:
+-------------------------------
+✅ DDoS protection
+✅ WAF (Web Application Firewall)
+✅ CDN caching for faster load times
+✅ SSL/TLS certificate management
+✅ Analytics and threat monitoring
+✅ Bot protection
+
+
+================================================================================
+PART 6: TESTING & VERIFICATION CHECKLIST
+================================================================================
+
+Complete Testing Checklist:
+--------------------------------------------------------------------------------
+
+Domain Access:
+□ https://www.paygateprime.com loads successfully
+□ http://www.paygateprime.com redirects to HTTPS
+□ SSL certificate shows valid (green padlock)
+□ Certificate issued by Google Trust Services
+
+Page Functionality:
+□ Registration form displays correctly
+□ CSS styles load properly
+□ JavaScript functions work (tier selection, dynamic dropdowns)
+□ CAPTCHA generates and validates
+□ Form validation works (client-side and server-side)
+□ Error messages display correctly
+□ Success page displays after registration
+
+Database Operations:
+□ Form submission writes to database successfully
+□ Currency/network mappings API endpoint works
+□ Data persists correctly
+
+Performance:
+□ Page load time < 3 seconds
+□ No console errors in browser developer tools
+□ Static assets load quickly
+
+Security:
+□ HTTPS enforced (HTTP redirects to HTTPS)
+□ Security headers present (check with securityheaders.com)
+□ Session cookies have Secure flag
+□ CSRF protection working
+
+Cross-Browser Testing:
+□ Chrome/Edge (Chromium)
+□ Firefox
+□ Safari
+□ Mobile browsers
+
+
+Tools for Testing:
+--------------------------------------------------------------------------------
+
+1. SSL Certificate Check:
+   https://www.ssllabs.com/ssltest/analyze.html?d=www.paygateprime.com
+
+2. Security Headers Check:
+   https://securityheaders.com/?q=www.paygateprime.com
+
+3. Page Speed Check:
+   https://pagespeed.web.dev/
+   Enter: https://www.paygateprime.com
+
+4. DNS Propagation Check:
+   https://dnschecker.org/
+   Enter: www.paygateprime.com
+
+5. Browser Developer Tools:
+   - Press F12 in browser
+   - Check Console for errors
+   - Check Network tab for failed requests
+   - Check Application → Cookies for proper cookie settings
+
+
+================================================================================
+PART 7: TROUBLESHOOTING COMMON ISSUES
+================================================================================
+
+ISSUE 1: "DNS_PROBE_FINISHED_NXDOMAIN" Error
+--------------------------------------------------------------------------------
+Symptoms: Domain doesn't resolve at all
+
+Solutions:
+1. Verify CNAME record exists in Cloudflare:
+   - Type: CNAME
+   - Name: www
+   - Target: ghs.googlehosted.com
+
+2. Wait for DNS propagation (can take up to 48 hours, usually 5-60 minutes)
+
+3. Clear DNS cache:
+   Windows: ipconfig /flushdns
+   Mac: sudo dscacheutil -flushcache
+   Linux: sudo systemd-resolve --flush-caches
+
+4. Try different DNS server:
+   - Google DNS: 8.8.8.8
+   - Cloudflare DNS: 1.1.1.1
+
+
+ISSUE 2: "ERR_TOO_MANY_REDIRECTS" (Redirect Loop)
+--------------------------------------------------------------------------------
+Symptoms: Page keeps redirecting infinitely
+
+Solutions:
+1. Check Cloudflare SSL/TLS mode:
+   - Should be: Full or Full (strict)
+   - NOT: Flexible
+
+2. Disable Cloudflare proxy temporarily:
+   - Set CNAME to "DNS only" (gray cloud)
+   - Wait 5 minutes
+   - Test again
+
+3. Check for conflicting redirect rules:
+   - Cloudflare Page Rules
+   - Cloud Run configuration
+
+
+ISSUE 3: "NET::ERR_CERT_COMMON_NAME_INVALID" (SSL Certificate Error)
+--------------------------------------------------------------------------------
+Symptoms: SSL certificate doesn't match domain
+
+Solutions:
+1. Wait for Google to provision SSL certificate (can take 15-60 minutes)
+
+2. Verify domain mapping is "Active" in Cloud Run console
+
+3. Check certificate status:
+   - Cloud Run console → Service → Custom Domains
+   - Certificate should show "Active"
+
+4. Force certificate refresh:
+   - Remove domain mapping
+   - Wait 5 minutes
+   - Re-add domain mapping
+
+
+ISSUE 4: Page Loads But Styles/Scripts Don't Work
+--------------------------------------------------------------------------------
+Symptoms: Page loads but looks broken, no CSS
+
+Solutions:
+1. Check browser console for errors (F12)
+
+2. Verify static files path:
+   - Should use relative paths: /static/css/style.css
+   - NOT absolute: https://old-domain.com/static/...
+
+3. Clear browser cache:
+   - Ctrl+Shift+Delete (Chrome)
+   - Test in incognito mode
+
+4. Check Cloudflare caching:
+   - Go to Cloudflare → Caching
+   - Click "Purge Everything"
+   - Wait 1 minute, test again
+
+
+ISSUE 5: Session/CAPTCHA Not Working
+--------------------------------------------------------------------------------
+Symptoms: CAPTCHA doesn't persist, form resets randomly
+
+Solutions:
+1. Check session cookie settings in Flask:
+   - Ensure SESSION_COOKIE_SECURE = True for HTTPS
+   - Ensure SESSION_COOKIE_DOMAIN matches your domain
+
+2. Verify cookies are being set:
+   - F12 → Application → Cookies
+   - Should see session cookie for www.paygateprime.com
+
+3. Check Cloudflare settings:
+   - Disable "Rocket Loader" if enabled
+   - Disable "Auto Minify" for HTML temporarily
+
+
+ISSUE 6: Domain Mapping Shows "Pending" for Hours
+--------------------------------------------------------------------------------
+Symptoms: Google Cloud Run shows domain as "Pending"
+
+Solutions:
+1. Verify DNS records:
+   - CNAME: www → ghs.googlehosted.com
+   - No conflicting A records
+
+2. Check Cloudflare proxy status:
+   - Should be "DNS only" (gray cloud) initially
+   - NOT "Proxied" (orange cloud)
+
+3. Remove and re-add domain mapping:
+   - Cloud Run → Manage Custom Domains
+   - Delete mapping
+   - Wait 10 minutes
+   - Re-add mapping
+
+4. Contact Google Cloud Support:
+   - If pending for more than 24 hours
+   - Provide domain name and service details
+
+
+ISSUE 7: Database Connection Issues After Domain Change
+--------------------------------------------------------------------------------
+Symptoms: "Database unavailable" errors
+
+Solutions:
+1. Database configuration is NOT affected by domain change
+
+2. If issues occur, verify Cloud SQL connection:
+   - Check CLOUD_SQL_CONNECTION_NAME secret
+   - Verify service account permissions
+   - Check Cloud SQL instance is running
+
+3. Review Cloud Run logs:
+   gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=gcregister10-26" --limit 50
+
+
+ISSUE 8: Form Submissions Fail After Domain Change
+--------------------------------------------------------------------------------
+Symptoms: Form submits but shows error or doesn't save
+
+Solutions:
+1. Check CSRF token:
+   - Flask CSRF tokens should work automatically
+   - If issues, verify WTF_CSRF_ENABLED = True
+
+2. Check allowed origins:
+   - If you added host validation, ensure www.paygateprime.com is in ALLOWED_HOSTS
+
+3. Review application logs:
+   - Cloud Run console → Logs
+   - Look for CSRF or validation errors
+
+
+================================================================================
+PART 8: MONITORING & MAINTENANCE
+================================================================================
+
+Post-Deployment Monitoring:
+--------------------------------------------------------------------------------
+
+1. Set Up Cloud Run Monitoring:
+   - Go to Cloud Run → Service → Metrics
+   - Monitor:
+     * Request count
+     * Request latency
+     * Error rate
+     * Container instance count
+
+2. Configure Alerting:
+   - Cloud Console → Monitoring → Alerting
+   - Create alerts for:
+     * Error rate > 5%
+     * Latency > 5 seconds
+     * Service unavailable
+
+3. Cloudflare Analytics:
+   - Monitor traffic patterns
+   - Review security events
+   - Check cache hit ratio
+
+4. Regular Checks:
+   - Weekly: Review error logs
+   - Monthly: Check SSL certificate expiration
+   - Quarterly: Review security headers
+
+
+Domain Renewal:
+--------------------------------------------------------------------------------
+
+1. Set domain auto-renewal in your registrar
+2. Calendar reminder 60 days before expiration
+3. Verify contact email is current
+
+
+SSL Certificate:
+--------------------------------------------------------------------------------
+
+1. Google-managed certificates auto-renew
+2. No manual intervention required
+3. Monitor certificate expiration in Cloud Run console
+
+
+================================================================================
+PART 9: ROLLBACK PROCEDURE (IF NEEDED)
+================================================================================
+
+If you need to revert to the original Cloud Run URL:
+
+1. Remove Custom Domain Mapping:
+   - Cloud Run → Manage Custom Domains
+   - Select www.paygateprime.com
+   - Click "Delete" or "Remove mapping"
+
+2. Update Cloudflare DNS:
+   - Remove or pause CNAME record for www
+   - Or point to different destination
+
+3. Revert Code Changes (if made):
+   - Remove custom domain configurations from tpr10-26.py
+   - Redeploy service
+
+4. Verify Original URL Works:
+   - Test: https://gcregister10-26-291176869049.us-central1.run.app
+
+
+================================================================================
+PART 10: NEXT STEPS & RECOMMENDATIONS
+================================================================================
+
+After Successful Domain Mapping:
+--------------------------------------------------------------------------------
+
+1. Update Documentation:
+   □ Update any internal documentation with new URL
+   □ Update API documentation
+   □ Update integration guides
+
+2. Communication:
+   □ Notify users of new domain (if applicable)
+   □ Update social media links
+   □ Update email signatures
+
+3. SEO:
+   □ Submit sitemap to Google Search Console
+   □ Update robots.txt if needed
+   □ Add structured data (Schema.org)
+   □ Set up Google Analytics (optional)
+
+4. Future Enhancements:
+   □ Add additional subdomains (api.paygateprime.com, etc.)
+   □ Implement rate limiting with Redis
+   □ Add user authentication system
+   □ Set up email notifications
+   □ Add analytics dashboard
+
+
+Custom Domain Best Practices:
+--------------------------------------------------------------------------------
+
+✅ Use HTTPS everywhere
+✅ Enable Cloudflare proxy after initial testing
+✅ Set up monitoring and alerts
+✅ Regular security audits
+✅ Keep SSL certificates valid
+✅ Monitor domain expiration
+✅ Regular backups of DNS configuration
+✅ Document all custom configurations
+
+
+================================================================================
+SUPPORT & RESOURCES
+================================================================================
+
+Google Cloud Documentation:
+- https://cloud.google.com/run/docs/mapping-custom-domains
+
+Cloudflare Documentation:
+- https://developers.cloudflare.com/dns/
+
+Flask Security Best Practices:
+- https://flask.palletsprojects.com/en/latest/security/
+
+Contact Information:
+- Google Cloud Support: https://cloud.google.com/support
+- Cloudflare Support: https://support.cloudflare.com/
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+Implementation Steps (Quick Reference):
+1. ✅ Google Cloud Run → Manage Custom Domains → Add www.paygateprime.com
+2. ✅ Cloudflare → DNS → Add CNAME: www → ghs.googlehosted.com (DNS only)
+3. ✅ Wait 5-60 minutes for DNS propagation
+4. ✅ Verify domain mapping shows "Active" in Cloud Run
+5. ✅ Test https://www.paygateprime.com
+6. ✅ (Optional) Enable Cloudflare proxy for additional protection
+7. ✅ (Optional) Add security enhancements to code
+8. ✅ Monitor and maintain
+
+Estimated Total Time: 30-90 minutes (including DNS propagation)
+
+Status Indicators:
+- 🟢 Active = Success! Domain is working
+- 🟡 Pending = Waiting for DNS propagation (normal, wait 5-60 min)
+- 🔴 Failed = Configuration error (review troubleshooting section)
+
+
+================================================================================
+IMPORTANT REMINDERS
+================================================================================
+
+⚠️  DO NOT enable Cloudflare proxy (orange cloud) until domain mapping is verified
+⚠️  DO NOT use SSL/TLS "Flexible" mode - causes infinite redirects
+⚠️  DO wait for DNS propagation before troubleshooting (5-60 minutes)
+⚠️  DO keep the Cloud Run URL accessible for health checks
+⚠️  DO test in incognito mode to avoid cache issues
+⚠️  DO backup your DNS configuration before making changes
+
+✅ Your application code should work WITHOUT modifications
+✅ Optional security enhancements are recommended for production
+✅ Google manages SSL certificates automatically - no manual renewal needed
+✅ Cloudflare proxy provides additional DDoS protection (enable after testing)
+
+
+================================================================================
+END OF GUIDE
+================================================================================
+
+Questions or issues? Review the Troubleshooting section (Part 7) or consult
+Google Cloud and Cloudflare support documentation.
+
+Good luck with your custom domain setup! 🚀

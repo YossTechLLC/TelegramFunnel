@@ -14,7 +14,11 @@ from database import DatabaseManager, receive_sub3_time_db
     SUB2_TIME_INPUT,
     SUB3_TIME_INPUT,
     DONATION_AMOUNT_INPUT,
-) = range(9)
+    # New states for inline form editing
+    DATABASE_CHANNEL_ID_INPUT,
+    DATABASE_EDITING,
+    DATABASE_FIELD_INPUT,
+) = range(12)
 
 class InputHandlers:
     def __init__(self, db_manager: DatabaseManager):
@@ -52,6 +56,29 @@ class InputHandlers:
             return False
         parts = text.split(".")
         return len(parts) == 1 or len(parts[1]) <= 2
+
+    @staticmethod
+    def _valid_channel_title(text: str) -> bool:
+        """Validate channel title (1-100 characters)"""
+        return 1 <= len(text.strip()) <= 100
+
+    @staticmethod
+    def _valid_channel_description(text: str) -> bool:
+        """Validate channel description (1-500 characters)"""
+        return 1 <= len(text.strip()) <= 500
+
+    @staticmethod
+    def _valid_wallet_address(text: str) -> bool:
+        """Validate wallet address (basic format check)"""
+        # Basic validation: non-empty, reasonable length
+        stripped = text.strip()
+        return 10 <= len(stripped) <= 200
+
+    @staticmethod
+    def _valid_currency(text: str) -> bool:
+        """Validate currency code (3-10 uppercase letters)"""
+        stripped = text.strip().upper()
+        return 2 <= len(stripped) <= 10 and stripped.replace("-", "").replace("_", "").isalpha()
     
     async def start_database(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data.clear()
@@ -287,3 +314,171 @@ class InputHandlers:
         ctx.user_data.clear()
         await update.message.reply_text("❌ Operation cancelled.")
         return ConversationHandler.END
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  NEW DATABASE FLOW - Inline Form Editing
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def start_database_v2(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Entry point for new DATABASE inline form flow."""
+        print(f"💾 [DATABASE_V2] Starting new database flow for user {update.effective_user.id if update.effective_user else 'Unknown'}")
+        ctx.user_data.clear()
+
+        # Handle both callback query and direct message
+        if update.callback_query:
+            await update.callback_query.answer()
+            await update.callback_query.message.reply_text(
+                "💾 *DATABASE CONFIGURATION*\n\n"
+                "Enter *open_channel_id* (≤14 chars integer):",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                "💾 *DATABASE CONFIGURATION*\n\n"
+                "Enter *open_channel_id* (≤14 chars integer):",
+                parse_mode="Markdown"
+            )
+
+        return DATABASE_CHANNEL_ID_INPUT
+
+    async def receive_channel_id_v2(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Receive and validate channel ID, fetch from database."""
+        channel_id_text = update.message.text.strip()
+        print(f"🔍 [DATABASE_V2] Received channel ID: {channel_id_text}")
+
+        # Validate channel ID format
+        if not self._valid_channel_id(channel_id_text):
+            await update.message.reply_text(
+                "❌ Invalid channel ID format.\n\n"
+                "Must be ≤14 chars integer (can start with -).\n"
+                "Try again:"
+            )
+            return DATABASE_CHANNEL_ID_INPUT
+
+        # Fetch from database
+        channel_data = self.db_manager.fetch_channel_by_id(channel_id_text)
+
+        if channel_data:
+            # Channel found - initialize editing session
+            print(f"✅ [DATABASE_V2] Channel found, initializing editing session")
+            ctx.user_data["editing_channel_id"] = channel_id_text
+            ctx.user_data["channel_data"] = channel_data
+            ctx.user_data["current_form"] = "main"
+
+            # Import here to avoid circular dependency
+            from menu_handlers import MenuHandlers
+            # Show main edit menu
+            menu_handlers = ctx.bot_data.get('menu_handlers')
+            if menu_handlers:
+                await menu_handlers.show_main_edit_menu(update, ctx, edit_message=False)
+            else:
+                await update.message.reply_text("❌ Error: menu handlers not initialized")
+                return ConversationHandler.END
+
+            return DATABASE_EDITING
+
+        else:
+            # Channel not found - offer to create new
+            print(f"⚠️ [DATABASE_V2] Channel not found")
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Create New", callback_data="CREATE_NEW_CHANNEL"),
+                    InlineKeyboardButton("❌ Cancel", callback_data="CANCEL_DATABASE"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(
+                f"⚠️ Channel ID `{channel_id_text}` not found in database.\n\n"
+                f"Would you like to create a new entry?",
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+
+            # Store channel ID for creation
+            ctx.user_data["pending_channel_id"] = channel_id_text
+
+            return DATABASE_EDITING
+
+    async def receive_field_input_v2(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Receive and validate field input during inline editing."""
+        user_input = update.message.text.strip()
+        awaiting_field = ctx.user_data.get("awaiting_input_for")
+
+        print(f"📝 [FIELD_INPUT] Received input for field: {awaiting_field} = {user_input}")
+
+        if not awaiting_field:
+            await update.message.reply_text("❌ Unexpected input. Please use the buttons.")
+            return DATABASE_EDITING
+
+        # Validate based on field type
+        is_valid = False
+        error_msg = ""
+
+        if "channel_id" in awaiting_field.lower():
+            is_valid = self._valid_channel_id(user_input)
+            error_msg = "Invalid channel ID (must be ≤14 chars integer)"
+        elif "title" in awaiting_field.lower():
+            is_valid = self._valid_channel_title(user_input)
+            error_msg = "Invalid title (must be 1-100 characters)"
+        elif "desc" in awaiting_field.lower():
+            is_valid = self._valid_channel_description(user_input)
+            error_msg = "Invalid description (must be 1-500 characters)"
+        elif "wallet_address" in awaiting_field.lower():
+            is_valid = self._valid_wallet_address(user_input)
+            error_msg = "Invalid wallet address (must be 10-200 characters)"
+        elif "currency" in awaiting_field.lower():
+            is_valid = self._valid_currency(user_input)
+            error_msg = "Invalid currency (must be 2-10 letters)"
+        elif "price" in awaiting_field.lower():
+            is_valid = self._valid_sub(user_input)
+            error_msg = "Invalid price (must be 0-9999.99)"
+            if is_valid:
+                user_input = float(user_input)
+        elif "time" in awaiting_field.lower():
+            is_valid = self._valid_time(user_input)
+            error_msg = "Invalid time (must be 1-999 days)"
+            if is_valid:
+                user_input = int(user_input)
+
+        if not is_valid:
+            await update.message.reply_text(f"❌ {error_msg}\n\nTry again:")
+            return DATABASE_FIELD_INPUT
+
+        # Valid input - update channel_data
+        ctx.user_data["channel_data"][awaiting_field] = user_input
+        print(f"✅ [FIELD_INPUT] Updated {awaiting_field} = {user_input}")
+
+        # Handle sequential tier input (price → time)
+        if "tier_" in awaiting_field and "_price" in awaiting_field:
+            # Ask for time next
+            tier_num = awaiting_field.split("_")[1]
+            ctx.user_data["awaiting_input_for"] = f"sub_{tier_num}_time"
+            await update.message.reply_text(
+                f"✅ Price set to ${user_input:.2f}\n\n"
+                f"Now enter *time* for this tier (1-999 days):",
+                parse_mode="Markdown"
+            )
+            return DATABASE_FIELD_INPUT
+
+        # Clear awaiting flag
+        ctx.user_data["awaiting_input_for"] = None
+
+        # Re-display appropriate form
+        current_form = ctx.user_data.get("current_form", "main")
+        menu_handlers = ctx.bot_data.get('menu_handlers')
+
+        if menu_handlers:
+            if current_form == "open_channel":
+                await menu_handlers.show_open_channel_form(update, ctx, edit_message=False)
+            elif current_form == "private_channel":
+                await menu_handlers.show_private_channel_form(update, ctx, edit_message=False)
+            elif current_form == "payment_tiers":
+                await menu_handlers.show_payment_tiers_form(update, ctx, edit_message=False)
+            elif current_form == "wallet":
+                await menu_handlers.show_wallet_form(update, ctx, edit_message=False)
+            else:
+                await menu_handlers.show_main_edit_menu(update, ctx, edit_message=False)
+
+        return DATABASE_EDITING

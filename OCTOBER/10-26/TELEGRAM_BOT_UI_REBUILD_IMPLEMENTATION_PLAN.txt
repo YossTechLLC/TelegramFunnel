@@ -1,0 +1,721 @@
+═══════════════════════════════════════════════════════════════════════════════
+   TELEGRAM BOT UI/UX REBUILD - COMPREHENSIVE IMPLEMENTATION PLAN
+═══════════════════════════════════════════════════════════════════════════════
+
+📅 Created: 2025-10-28
+🎯 Goal: Rebuild @PayGatePrime_bot /start command with nested inline forms
+📁 Target Folder: TelePay10-26/
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 1: CURRENT STATE ANALYSIS
+═══════════════════════════════════════════════════════════════════════════════
+
+Current Implementation:
+- /start command shows hamburger ReplyKeyboardMarkup menu with 4 buttons
+- /database command triggers ConversationHandler with 8 sequential text input states
+- User types responses in chat (clunky, not user-friendly)
+- /donate command is visible and accessible
+- No REGISTER button exists
+
+Current Files:
+├── telepay10-26.py         (Main orchestrator)
+├── bot_manager.py          (Handler setup, ConversationHandler registration)
+├── menu_handlers.py        (Menu callbacks, /start handler, hamburger menu)
+├── input_handlers.py       (ConversationHandler states, text input validation)
+└── database.py             (Database operations, Secret Manager integration)
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 2: NEW ARCHITECTURE DESIGN
+═══════════════════════════════════════════════════════════════════════════════
+
+New /start Menu Structure:
+┌─────────────────────────────────────────────────────┐
+│  Hi @username! 👋                                    │
+│  Choose an option:                                   │
+│                                                       │
+│  [ 💾 DATABASE ]        [ 💳 PAYMENT GATEWAY ]      │
+│  [ 🌐 REGISTER ]                                     │
+└─────────────────────────────────────────────────────┘
+
+Key Changes:
+✅ /start command hidden from user (no BotCommand registration)
+✅ /donate command hidden from user (no BotCommand registration)
+✅ Inline keyboard with InlineKeyboardButton instead of ReplyKeyboardMarkup
+✅ REGISTER button points to www.paygateprime.com (URL button)
+✅ DATABASE button triggers new nested form flow
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 3: DATABASE BUTTON FLOW (NESTED FORMS)
+═══════════════════════════════════════════════════════════════════════════════
+
+Step 1: Ask for open_channel_id
+─────────────────────────────────
+User clicks [ 💾 DATABASE ]
+Bot sends: "Enter open_channel_id (≤14 chars integer):"
+User types channel ID in chat
+Bot validates and stores in context.user_data["editing_channel_id"]
+
+Step 2: Fetch data from database
+─────────────────────────────────
+Query: SELECT * FROM main_clients_database WHERE open_channel_id = ?
+Store all fetched data in context.user_data["channel_data"]
+
+Step 3: Show main edit menu
+─────────────────────────────────
+┌─────────────────────────────────────────────────────┐
+│  Editing Channel: {open_channel_id}                 │
+│                                                       │
+│  [ 📢 OPEN CHANNEL ]      [ 🔒 PRIVATE CHANNEL ]   │
+│  [ 💰 PAYMENT TIERS ]     [ 💳 WALLET ADDRESS ]    │
+│                                                       │
+│  [ ✅ SAVE ALL CHANGES ]  [ ❌ CANCEL ]             │
+└─────────────────────────────────────────────────────┘
+
+Step 4: Nested Form - OPEN CHANNEL
+─────────────────────────────────
+User clicks [ 📢 OPEN CHANNEL ]
+Bot shows current values with edit buttons:
+
+┌─────────────────────────────────────────────────────┐
+│  📢 OPEN CHANNEL CONFIGURATION                      │
+│                                                       │
+│  Channel ID: {open_channel_id}                      │
+│  [ ✏️ Edit ID ]                                      │
+│                                                       │
+│  Title: {open_channel_title}                        │
+│  [ ✏️ Edit Title ]                                   │
+│                                                       │
+│  Description: {open_channel_description}            │
+│  [ ✏️ Edit Description ]                            │
+│                                                       │
+│  [ 💾 SUBMIT OPEN CHANNEL ]  [ ⬅️ BACK ]           │
+└─────────────────────────────────────────────────────┘
+
+When user clicks [ ✏️ Edit ID ]:
+- Bot sends: "Enter new open_channel_id (≤14 chars):"
+- User types new value in chat
+- Bot validates and updates context.user_data["channel_data"]["open_channel_id"]
+- Bot re-displays form with updated value
+
+When user clicks [ 💾 SUBMIT OPEN CHANNEL ]:
+- Data stored in session (context.user_data)
+- Bot returns to main edit menu
+- Changes NOT written to DB yet (only on [ ✅ SAVE ALL CHANGES ])
+
+Step 5: Nested Form - PRIVATE CHANNEL
+─────────────────────────────────
+User clicks [ 🔒 PRIVATE CHANNEL ]
+Bot shows current values with edit buttons:
+
+┌─────────────────────────────────────────────────────┐
+│  🔒 PRIVATE CHANNEL CONFIGURATION                   │
+│                                                       │
+│  Channel ID: {closed_channel_id}                    │
+│  [ ✏️ Edit ID ]                                      │
+│                                                       │
+│  Title: {closed_channel_title}                      │
+│  [ ✏️ Edit Title ]                                   │
+│                                                       │
+│  Description: {closed_channel_description}          │
+│  [ ✏️ Edit Description ]                            │
+│                                                       │
+│  [ 💾 SUBMIT PRIVATE CHANNEL ]  [ ⬅️ BACK ]        │
+└─────────────────────────────────────────────────────┘
+
+Step 6: Nested Form - PAYMENT TIERS
+─────────────────────────────────
+User clicks [ 💰 PAYMENT TIERS ]
+Bot shows all 3 tiers with color coding:
+
+┌─────────────────────────────────────────────────────┐
+│  💰 PAYMENT TIERS CONFIGURATION                     │
+│                                                       │
+│  🥇 Tier 1 (Gold) - {status_emoji}                  │
+│  Price: ${sub_1_price} | Days: {sub_1_time}         │
+│  [ ☑️ Enable/Disable ]  [ ✏️ Edit Tier 1 ]          │
+│                                                       │
+│  🥈 Tier 2 (Silver) - {status_emoji}                │
+│  Price: ${sub_2_price} | Days: {sub_2_time}         │
+│  [ ☑️ Enable/Disable ]  [ ✏️ Edit Tier 2 ]          │
+│                                                       │
+│  🥉 Tier 3 (Bronze) - {status_emoji}                │
+│  Price: ${sub_3_price} | Days: {sub_3_time}         │
+│  [ ☑️ Enable/Disable ]  [ ✏️ Edit Tier 3 ]          │
+│                                                       │
+│  [ 💾 SUBMIT PAYMENT TIERS ]  [ ⬅️ BACK ]          │
+└─────────────────────────────────────────────────────┘
+
+Color/Status Logic:
+- ✅ (Green checkmark) = Tier enabled (sub_x_price != NULL && sub_x_time != NULL)
+- ❌ (Red X) = Tier disabled (sub_x_price == NULL || sub_x_time == NULL)
+
+When user clicks [ ☑️ Enable/Disable ]:
+- If currently enabled: Set sub_x_price = NULL, sub_x_time = NULL
+- If currently disabled: Bot asks for price and time via chat
+- Bot re-displays form with updated status
+
+When user clicks [ ✏️ Edit Tier X ]:
+- Bot sends: "Enter new price for Tier X (0-9999.99):"
+- User types price
+- Bot sends: "Enter new time for Tier X (1-999 days):"
+- User types time
+- Bot validates and updates context.user_data["channel_data"]
+- Bot re-displays form with updated values
+
+Step 7: Nested Form - WALLET ADDRESS
+─────────────────────────────────
+User clicks [ 💳 WALLET ADDRESS ]
+Bot shows current values with edit buttons:
+
+┌─────────────────────────────────────────────────────┐
+│  💳 WALLET ADDRESS CONFIGURATION                    │
+│                                                       │
+│  Wallet Address: {client_wallet_address}            │
+│  [ ✏️ Edit Wallet ]                                  │
+│                                                       │
+│  Currency Type: {client_payout_currency}            │
+│  [ ✏️ Edit Currency ]                                │
+│                                                       │
+│  [ 💾 SUBMIT WALLET ADDRESS ]  [ ⬅️ BACK ]         │
+└─────────────────────────────────────────────────────┘
+
+Step 8: Save All Changes
+─────────────────────────────────
+User clicks [ ✅ SAVE ALL CHANGES ] from main edit menu
+Bot executes:
+  UPDATE main_clients_database
+  SET open_channel_title = ?,
+      open_channel_description = ?,
+      closed_channel_id = ?,
+      closed_channel_title = ?,
+      closed_channel_description = ?,
+      sub_1_price = ?,
+      sub_1_time = ?,
+      sub_2_price = ?,
+      sub_2_time = ?,
+      sub_3_price = ?,
+      sub_3_time = ?,
+      client_wallet_address = ?,
+      client_payout_currency = ?
+  WHERE open_channel_id = ?
+
+Bot sends confirmation: "✅ All changes saved successfully!"
+Clear context.user_data
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 4: TECHNICAL IMPLEMENTATION DETAILS
+═══════════════════════════════════════════════════════════════════════════════
+
+4.1 Callback Query Patterns
+─────────────────────────────────
+Each button has a unique callback_data pattern:
+
+Main Menu:
+- "CMD_DATABASE"        → Start database flow
+- "CMD_GATEWAY"         → Trigger payment gateway (existing)
+- "CMD_REGISTER"        → Not needed (URL button)
+
+Main Edit Menu:
+- "EDIT_OPEN_CHANNEL"   → Show open channel form
+- "EDIT_PRIVATE_CHANNEL" → Show private channel form
+- "EDIT_PAYMENT_TIERS"  → Show payment tiers form
+- "EDIT_WALLET"         → Show wallet address form
+- "SAVE_ALL_CHANGES"    → Commit changes to database
+- "CANCEL_EDIT"         → Cancel and clear session
+
+Open Channel Form:
+- "EDIT_OPEN_CHANNEL_ID"    → Ask for new open_channel_id
+- "EDIT_OPEN_CHANNEL_TITLE" → Ask for new open_channel_title
+- "EDIT_OPEN_CHANNEL_DESC"  → Ask for new open_channel_description
+- "SUBMIT_OPEN_CHANNEL"     → Return to main edit menu
+- "BACK_TO_MAIN"            → Return to main edit menu
+
+Private Channel Form:
+- "EDIT_PRIVATE_CHANNEL_ID"    → Ask for new closed_channel_id
+- "EDIT_PRIVATE_CHANNEL_TITLE" → Ask for new closed_channel_title
+- "EDIT_PRIVATE_CHANNEL_DESC"  → Ask for new closed_channel_description
+- "SUBMIT_PRIVATE_CHANNEL"     → Return to main edit menu
+- "BACK_TO_MAIN"               → Return to main edit menu
+
+Payment Tiers Form:
+- "TOGGLE_TIER_1"       → Enable/disable tier 1
+- "EDIT_TIER_1"         → Edit tier 1 price/time
+- "TOGGLE_TIER_2"       → Enable/disable tier 2
+- "EDIT_TIER_2"         → Edit tier 2 price/time
+- "TOGGLE_TIER_3"       → Enable/disable tier 3
+- "EDIT_TIER_3"         → Edit tier 3 price/time
+- "SUBMIT_PAYMENT_TIERS" → Return to main edit menu
+- "BACK_TO_MAIN"        → Return to main edit menu
+
+Wallet Address Form:
+- "EDIT_WALLET_ADDRESS" → Ask for new client_wallet_address
+- "EDIT_WALLET_CURRENCY" → Ask for new client_payout_currency
+- "SUBMIT_WALLET"       → Return to main edit menu
+- "BACK_TO_MAIN"        → Return to main edit menu
+
+4.2 State Management Strategy
+─────────────────────────────────
+Use context.user_data to store editing session:
+
+context.user_data = {
+    "editing_channel_id": str,           # Current channel being edited
+    "current_form": str,                 # Which form is open (main/open_channel/private_channel/tiers/wallet)
+    "awaiting_input_for": str,           # Which field we're waiting for user input
+    "channel_data": {                     # In-memory copy of database row
+        "open_channel_id": str,
+        "open_channel_title": str,
+        "open_channel_description": str,
+        "closed_channel_id": str,
+        "closed_channel_title": str,
+        "closed_channel_description": str,
+        "sub_1_price": float | None,
+        "sub_1_time": int | None,
+        "sub_2_price": float | None,
+        "sub_2_time": int | None,
+        "sub_3_price": float | None,
+        "sub_3_time": int | None,
+        "client_wallet_address": str,
+        "client_payout_currency": str,
+        "client_payout_network": str
+    }
+}
+
+4.3 ConversationHandler States
+─────────────────────────────────
+New conversation states needed:
+
+DATABASE_CHANNEL_ID_INPUT = 100    # Waiting for open_channel_id
+DATABASE_EDITING = 101             # In editing mode (no text input expected)
+DATABASE_FIELD_INPUT = 102         # Waiting for specific field input
+
+Conversation flow:
+1. User clicks DATABASE button → Enter DATABASE_CHANNEL_ID_INPUT
+2. User types channel ID → Validate → Fetch from DB → Enter DATABASE_EDITING
+3. User clicks edit button → Set awaiting_input_for → Enter DATABASE_FIELD_INPUT
+4. User types new value → Validate → Update channel_data → Return to DATABASE_EDITING
+5. User clicks SAVE ALL → Write to DB → End conversation
+
+4.4 File Modifications Required
+─────────────────────────────────
+
+File: input_handlers.py
+Actions:
+- Add new conversation states (DATABASE_CHANNEL_ID_INPUT, DATABASE_EDITING, DATABASE_FIELD_INPUT)
+- Create new start_database_v2() function (replaces old start_database)
+- Create receive_channel_id() handler for initial channel ID input
+- Create receive_field_input() handler for inline form text inputs
+- Create field-specific validation functions
+
+File: menu_handlers.py
+Actions:
+- Modify start_bot() to show new inline keyboard (remove hamburger menu)
+- Create show_main_edit_menu() function
+- Create show_open_channel_form() function
+- Create show_private_channel_form() function
+- Create show_payment_tiers_form() function
+- Create show_wallet_form() function
+- Create handle_database_callbacks() dispatcher function
+
+File: bot_manager.py
+Actions:
+- Update database_handler ConversationHandler entry_points and states
+- Add new CallbackQueryHandler for all new callback patterns
+- Remove hamburger menu message handler
+- Update setup_handlers() to register new handlers
+
+File: database.py
+Actions:
+- Add fetch_channel_by_id(open_channel_id) function
+- Add update_channel_config(open_channel_id, channel_data) function
+- Modify existing functions if needed
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 5: IMPLEMENTATION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+Phase 1: Core Infrastructure (Foundation)
+──────────────────────────────────────────
+☐ 1.1  Add new conversation states to input_handlers.py
+       - DATABASE_CHANNEL_ID_INPUT = 100
+       - DATABASE_EDITING = 101
+       - DATABASE_FIELD_INPUT = 102
+
+☐ 1.2  Create database helper functions in database.py
+       - fetch_channel_by_id(open_channel_id) → Dict
+       - update_channel_config(open_channel_id, channel_data) → bool
+
+☐ 1.3  Create state management helper class in new file: edit_session_manager.py
+       - initialize_session(context, open_channel_id, channel_data)
+       - update_field(context, field_name, value)
+       - get_current_form(context) → str
+       - clear_session(context)
+
+Phase 2: New /start Menu (Entry Point)
+──────────────────────────────────────────
+☐ 2.1  Modify menu_handlers.py → start_bot() function
+       - Replace ReplyKeyboardMarkup with InlineKeyboardMarkup
+       - Create inline buttons: DATABASE, PAYMENT GATEWAY, REGISTER
+       - REGISTER button uses URL type pointing to www.paygateprime.com
+
+☐ 2.2  Remove hamburger menu creation and handler
+       - Delete create_hamburger_menu() function
+       - Delete handle_menu_selection() function
+
+☐ 2.3  Update bot_manager.py → setup_handlers()
+       - Remove hamburger menu MessageHandler
+       - Ensure /start and /donate commands NOT registered with BotCommand
+
+Phase 3: DATABASE Flow - Initial Channel Selection
+──────────────────────────────────────────
+☐ 3.1  Create input_handlers.py → start_database_v2() function
+       - Entry point for DATABASE button
+       - Send message: "Enter open_channel_id (≤14 chars integer):"
+       - Return DATABASE_CHANNEL_ID_INPUT state
+
+☐ 3.2  Create input_handlers.py → receive_channel_id() function
+       - Validate channel ID format
+       - Fetch channel data from database using fetch_channel_by_id()
+       - If found: Initialize session, show main edit menu
+       - If not found: Ask if user wants to create new entry
+       - Return DATABASE_EDITING state
+
+Phase 4: Main Edit Menu (Hub)
+──────────────────────────────────────────
+☐ 4.1  Create menu_handlers.py → show_main_edit_menu() function
+       - Display current channel_data summary
+       - Create inline keyboard with 4 edit buttons + SAVE + CANCEL
+       - Buttons: OPEN CHANNEL, PRIVATE CHANNEL, PAYMENT TIERS, WALLET ADDRESS
+       - Send/edit message with this menu
+
+☐ 4.2  Create menu_handlers.py → handle_main_menu_callback() function
+       - Route callback queries to appropriate form functions:
+         * EDIT_OPEN_CHANNEL → show_open_channel_form()
+         * EDIT_PRIVATE_CHANNEL → show_private_channel_form()
+         * EDIT_PAYMENT_TIERS → show_payment_tiers_form()
+         * EDIT_WALLET → show_wallet_form()
+         * SAVE_ALL_CHANGES → save_all_changes()
+         * CANCEL_EDIT → cancel_edit()
+
+Phase 5: Open Channel Form
+──────────────────────────────────────────
+☐ 5.1  Create menu_handlers.py → show_open_channel_form() function
+       - Retrieve channel_data from context
+       - Display current values: open_channel_id, title, description
+       - Create inline keyboard with Edit buttons for each field
+       - Add SUBMIT and BACK buttons
+
+☐ 5.2  Create menu_handlers.py → handle_open_channel_callback() function
+       - Handle EDIT_OPEN_CHANNEL_ID: Set awaiting_input_for, ask for input
+       - Handle EDIT_OPEN_CHANNEL_TITLE: Set awaiting_input_for, ask for input
+       - Handle EDIT_OPEN_CHANNEL_DESC: Set awaiting_input_for, ask for input
+       - Handle SUBMIT_OPEN_CHANNEL: Return to main edit menu
+       - Handle BACK_TO_MAIN: Return to main edit menu
+
+☐ 5.3  Create input_handlers.py → receive_field_input() function
+       - Check context.user_data["awaiting_input_for"]
+       - Validate input based on field type
+       - Update context.user_data["channel_data"][field_name]
+       - Clear awaiting_input_for
+       - Re-display appropriate form
+       - Return DATABASE_EDITING state
+
+Phase 6: Private Channel Form
+──────────────────────────────────────────
+☐ 6.1  Create menu_handlers.py → show_private_channel_form() function
+       - Similar to open channel form
+       - Display: closed_channel_id, title, description
+       - Create inline keyboard with Edit buttons
+
+☐ 6.2  Create menu_handlers.py → handle_private_channel_callback() function
+       - Similar to open channel callback handler
+       - Handle EDIT_PRIVATE_CHANNEL_ID, TITLE, DESC
+       - Handle SUBMIT_PRIVATE_CHANNEL and BACK_TO_MAIN
+
+Phase 7: Payment Tiers Form (Most Complex)
+──────────────────────────────────────────
+☐ 7.1  Create menu_handlers.py → show_payment_tiers_form() function
+       - Loop through 3 tiers (sub_1, sub_2, sub_3)
+       - For each tier:
+         * Display status emoji (✅ enabled / ❌ disabled)
+         * Display medal emoji (🥇 gold, 🥈 silver, 🥉 bronze)
+         * Display current price and time
+         * Create TOGGLE and EDIT buttons
+       - Add SUBMIT PAYMENT TIERS and BACK buttons
+
+☐ 7.2  Create menu_handlers.py → handle_payment_tiers_callback() function
+       - Handle TOGGLE_TIER_X:
+         * If enabled: Set sub_x_price = None, sub_x_time = None
+         * If disabled: Set awaiting_input_for = "tier_X_price", ask for price
+       - Handle EDIT_TIER_X:
+         * Set awaiting_input_for = "tier_X_price", ask for price
+       - Handle SUBMIT_PAYMENT_TIERS: Return to main edit menu
+       - Handle BACK_TO_MAIN: Return to main edit menu
+
+☐ 7.3  Update input_handlers.py → receive_field_input() function
+       - Add special handling for tier price/time sequential input:
+         * If awaiting "tier_X_price": Validate, store, ask for "tier_X_time"
+         * If awaiting "tier_X_time": Validate, store, return to tiers form
+
+Phase 8: Wallet Address Form
+──────────────────────────────────────────
+☐ 8.1  Create menu_handlers.py → show_wallet_form() function
+       - Display: client_wallet_address, client_payout_currency
+       - Create inline keyboard with Edit buttons for each field
+       - Add SUBMIT WALLET and BACK buttons
+
+☐ 8.2  Create menu_handlers.py → handle_wallet_callback() function
+       - Handle EDIT_WALLET_ADDRESS: Set awaiting_input_for, ask for input
+       - Handle EDIT_WALLET_CURRENCY: Set awaiting_input_for, ask for input
+       - Handle SUBMIT_WALLET: Return to main edit menu
+       - Handle BACK_TO_MAIN: Return to main edit menu
+
+Phase 9: Save and Cancel Operations
+──────────────────────────────────────────
+☐ 9.1  Create menu_handlers.py → save_all_changes() function
+       - Retrieve channel_data from context
+       - Call database.update_channel_config()
+       - Send confirmation message
+       - Clear session (context.user_data.clear())
+       - Return ConversationHandler.END
+
+☐ 9.2  Create menu_handlers.py → cancel_edit() function
+       - Send cancellation message
+       - Clear session (context.user_data.clear())
+       - Return ConversationHandler.END
+
+Phase 10: Bot Manager Integration
+──────────────────────────────────────────
+☐ 10.1 Update bot_manager.py → setup_handlers() function
+       - Replace old database_handler ConversationHandler
+       - New entry_points: [CallbackQueryHandler with pattern "^CMD_DATABASE$"]
+       - New states:
+         * DATABASE_CHANNEL_ID_INPUT: [MessageHandler for text input]
+         * DATABASE_EDITING: [CallbackQueryHandler for all edit callbacks]
+         * DATABASE_FIELD_INPUT: [MessageHandler for text input]
+       - New fallbacks: [CommandHandler("cancel")]
+
+☐ 10.2 Create callback query dispatcher
+       - Single CallbackQueryHandler that routes to appropriate functions
+       - Pattern matching for all callback_data patterns
+       - Organized by form type (main/open/private/tiers/wallet)
+
+Phase 11: Testing and Validation
+──────────────────────────────────────────
+☐ 11.1 Test /start command
+       - Verify inline keyboard appears
+       - Verify buttons are clickable
+       - Verify REGISTER button opens www.paygateprime.com
+
+☐ 11.2 Test DATABASE flow - Happy path
+       - Enter valid open_channel_id
+       - Verify main edit menu appears with correct data
+       - Edit one field in each form
+       - Verify changes reflected in forms
+       - Click SAVE ALL CHANGES
+       - Verify database updated correctly
+
+☐ 11.3 Test DATABASE flow - Edge cases
+       - Enter invalid open_channel_id format
+       - Enter non-existent open_channel_id
+       - Toggle payment tiers on/off
+       - Cancel editing mid-flow
+       - Test BACK buttons
+
+☐ 11.4 Test existing features still work
+       - Verify PAYMENT GATEWAY button works
+       - Verify subscription payment flow works
+       - Verify donation flow works (if kept)
+
+☐ 11.5 Test error handling
+       - Database connection failure
+       - Invalid user input
+       - Network timeouts
+       - Concurrent edits (multiple users)
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 6: CALLBACK QUERY PATTERN REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+Main Menu Patterns:
+├── CMD_DATABASE              → Start database flow
+├── CMD_GATEWAY               → Trigger payment gateway
+└── (CMD_REGISTER)            → Not used (URL button)
+
+Main Edit Menu Patterns:
+├── EDIT_OPEN_CHANNEL         → Show open channel form
+├── EDIT_PRIVATE_CHANNEL      → Show private channel form
+├── EDIT_PAYMENT_TIERS        → Show payment tiers form
+├── EDIT_WALLET               → Show wallet form
+├── SAVE_ALL_CHANGES          → Commit to database
+└── CANCEL_EDIT               → Cancel and exit
+
+Open Channel Form Patterns:
+├── EDIT_OPEN_CHANNEL_ID      → Ask for open_channel_id
+├── EDIT_OPEN_CHANNEL_TITLE   → Ask for open_channel_title
+├── EDIT_OPEN_CHANNEL_DESC    → Ask for open_channel_description
+├── SUBMIT_OPEN_CHANNEL       → Return to main menu
+└── BACK_TO_MAIN              → Return to main menu
+
+Private Channel Form Patterns:
+├── EDIT_PRIVATE_CHANNEL_ID   → Ask for closed_channel_id
+├── EDIT_PRIVATE_CHANNEL_TITLE → Ask for closed_channel_title
+├── EDIT_PRIVATE_CHANNEL_DESC → Ask for closed_channel_description
+├── SUBMIT_PRIVATE_CHANNEL    → Return to main menu
+└── BACK_TO_MAIN              → Return to main menu
+
+Payment Tiers Form Patterns:
+├── TOGGLE_TIER_1             → Enable/disable tier 1
+├── EDIT_TIER_1               → Edit tier 1
+├── TOGGLE_TIER_2             → Enable/disable tier 2
+├── EDIT_TIER_2               → Edit tier 2
+├── TOGGLE_TIER_3             → Enable/disable tier 3
+├── EDIT_TIER_3               → Edit tier 3
+├── SUBMIT_PAYMENT_TIERS      → Return to main menu
+└── BACK_TO_MAIN              → Return to main menu
+
+Wallet Form Patterns:
+├── EDIT_WALLET_ADDRESS       → Ask for client_wallet_address
+├── EDIT_WALLET_CURRENCY      → Ask for client_payout_currency
+├── SUBMIT_WALLET             → Return to main menu
+└── BACK_TO_MAIN              → Return to main menu
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 7: EMOJI REFERENCE (CONTINUE EXISTING PATTERNS)
+═══════════════════════════════════════════════════════════════════════════════
+
+Status Emojis:
+✅  Success / Enabled / Confirmation
+❌  Error / Disabled / Cancellation
+⚠️  Warning / Attention needed
+ℹ️  Information
+🔍  Search / Looking up
+📋  Results / List
+📝  Writing / Editing
+💾  Save / Database
+🔗  Connection / Link
+⚙️  Configuration / Settings
+
+Action Emojis:
+✏️  Edit
+💰  Money / Payment / Tiers
+💳  Wallet / Payment method
+📢  Open channel / Public
+🔒  Private channel / Locked
+🥇  Gold tier (Tier 1)
+🥈  Silver tier (Tier 2)
+🥉  Bronze tier (Tier 3)
+⬅️  Back
+🚀  Start / Launch
+🌐  Website / URL / Register
+
+Debug Emojis (keep existing patterns):
+🎯  Target / Focus
+🏁  Completion
+🔄  Retry / Loop
+⏳  Waiting
+🕒  Time
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 8: CODE STRUCTURE EXAMPLE
+═══════════════════════════════════════════════════════════════════════════════
+
+Example: show_main_edit_menu() function
+────────────────────────────────────────
+
+async def show_main_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edit_message: bool = True):
+    """Display the main editing menu with current channel data summary."""
+    channel_data = context.user_data.get("channel_data", {})
+    open_channel_id = context.user_data.get("editing_channel_id", "Unknown")
+
+    # Build summary text
+    summary_text = (
+        f"📝 *Editing Channel: {open_channel_id}*\n\n"
+        f"📢 Open: {channel_data.get('open_channel_title', 'Not set')}\n"
+        f"🔒 Private: {channel_data.get('closed_channel_title', 'Not set')}\n"
+        f"💰 Tiers: "
+    )
+
+    # Add tier status
+    tier_status = []
+    for i in range(1, 4):
+        price = channel_data.get(f"sub_{i}_price")
+        time = channel_data.get(f"sub_{i}_time")
+        status = "✅" if (price is not None and time is not None) else "❌"
+        tier_status.append(status)
+    summary_text += " ".join(tier_status)
+
+    summary_text += f"\n💳 Wallet: {channel_data.get('client_payout_currency', 'Not set')}"
+
+    # Build inline keyboard
+    keyboard = [
+        [
+            InlineKeyboardButton("📢 Open Channel", callback_data="EDIT_OPEN_CHANNEL"),
+            InlineKeyboardButton("🔒 Private Channel", callback_data="EDIT_PRIVATE_CHANNEL"),
+        ],
+        [
+            InlineKeyboardButton("💰 Payment Tiers", callback_data="EDIT_PAYMENT_TIERS"),
+            InlineKeyboardButton("💳 Wallet Address", callback_data="EDIT_WALLET"),
+        ],
+        [
+            InlineKeyboardButton("✅ Save All Changes", callback_data="SAVE_ALL_CHANGES"),
+            InlineKeyboardButton("❌ Cancel", callback_data="CANCEL_EDIT"),
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Edit existing message or send new one
+    if edit_message and update.callback_query:
+        await update.callback_query.edit_message_text(
+            text=summary_text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=summary_text,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 9: VALIDATION FUNCTIONS REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+Existing validation functions in input_handlers.py:
+- _valid_channel_id(text) → bool
+- _valid_sub(text) → bool
+- _valid_time(text) → bool
+
+New validation functions needed:
+- _valid_channel_title(text) → bool       (1-100 characters)
+- _valid_channel_description(text) → bool (1-500 characters)
+- _valid_wallet_address(text) → bool      (crypto address format)
+- _valid_currency(text) → bool            (valid currency code)
+
+═══════════════════════════════════════════════════════════════════════════════
+   SECTION 10: DATABASE SCHEMA REFERENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+Table: main_clients_database
+Columns:
+- unique_user_id            (SERIAL PRIMARY KEY)
+- open_channel_id           (VARCHAR) - User input, ≤14 chars
+- open_channel_title        (VARCHAR) - User input, ≤100 chars
+- open_channel_description  (TEXT) - User input, ≤500 chars
+- closed_channel_id         (VARCHAR) - User input, ≤14 chars
+- closed_channel_title      (VARCHAR) - User input, ≤100 chars
+- closed_channel_description (TEXT) - User input, ≤500 chars
+- sub_1_price               (DECIMAL) - User input, 0-9999.99, nullable
+- sub_1_time                (INTEGER) - User input, 1-999, nullable
+- sub_2_price               (DECIMAL) - User input, 0-9999.99, nullable
+- sub_2_time                (INTEGER) - User input, 1-999, nullable
+- sub_3_price               (DECIMAL) - User input, 0-9999.99, nullable
+- sub_3_time                (INTEGER) - User input, 1-999, nullable
+- client_wallet_address     (VARCHAR) - User input, crypto address
+- client_payout_currency    (VARCHAR) - User input, currency code
+- client_payout_network     (VARCHAR) - User input, network name
+
+═══════════════════════════════════════════════════════════════════════════════
+   END OF IMPLEMENTATION PLAN
+═══════════════════════════════════════════════════════════════════════════════

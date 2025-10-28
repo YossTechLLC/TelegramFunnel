@@ -1,0 +1,2576 @@
+================================================================================
+REGISTRATION WEBSITE REQUIREMENTS OUTLINE
+TelegramFunnel Payment Platform - GCRegister Enhancement
+Version: 1.0
+Date: 2025-10-27
+================================================================================
+
+EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+This document outlines the complete requirements for a comprehensive registration
+website for the TelegramFunnel payment platform. The current GCRegister10-26
+service provides basic channel registration functionality. This outline expands
+that into a full-featured content creator platform with user accounts, analytics,
+payment management, and comprehensive tools for monetizing Telegram channels.
+
+Target Users: Telegram channel owners who want to monetize their content through
+cryptocurrency-based subscriptions.
+
+
+================================================================================
+SECTION 1: CORE ARCHITECTURE & TECHNOLOGY STACK
+================================================================================
+
+1.1 FRONTEND FRAMEWORK
+--------------------------------------------------------------------------------
+Primary Framework: React.js or Next.js (recommended for SEO and SSR)
+UI Component Library: Material-UI (MUI) or Tailwind CSS + Headless UI
+State Management: Redux Toolkit or Zustand
+Form Handling: React Hook Form with Yup validation
+Charts/Analytics: Recharts or Chart.js
+QR Code Generation: qrcode.react
+
+Key Pages Structure:
+├── Public Pages
+│   ├── Landing Page (/)
+│   ├── Features (/features)
+│   ├── Pricing (/pricing)
+│   ├── Documentation (/docs)
+│   ├── Login (/login)
+│   └── Register (/register)
+│
+└── Authenticated Pages (Dashboard)
+    ├── Dashboard Home (/dashboard)
+    ├── Channel Management (/dashboard/channels)
+    ├── Analytics (/dashboard/analytics)
+    ├── Earnings (/dashboard/earnings)
+    ├── Subscribers (/dashboard/subscribers)
+    ├── Integration Tools (/dashboard/tools)
+    ├── Account Settings (/dashboard/settings)
+    └── Support (/dashboard/support)
+
+1.2 BACKEND FRAMEWORK
+--------------------------------------------------------------------------------
+Framework: Flask (Python) - consistent with existing services
+API Style: RESTful API with JWT authentication
+Database: PostgreSQL (same instance as main system)
+ORM: SQLAlchemy
+Caching: Redis for session management and rate limiting
+Background Jobs: Celery with Redis broker (for email, analytics, reports)
+File Storage: Google Cloud Storage (for profile images, documents)
+
+API Structure:
+├── /api/v1/auth
+│   ├── POST /register
+│   ├── POST /login
+│   ├── POST /logout
+│   ├── POST /refresh-token
+│   ├── POST /forgot-password
+│   ├── POST /reset-password
+│   └── POST /verify-email
+│
+├── /api/v1/channels
+│   ├── GET /channels (list user's channels)
+│   ├── POST /channels (create new channel)
+│   ├── GET /channels/{id} (get channel details)
+│   ├── PUT /channels/{id} (update channel)
+│   ├── DELETE /channels/{id} (delete channel)
+│   └── GET /channels/{id}/stats (channel statistics)
+│
+├── /api/v1/subscriptions
+│   ├── GET /subscriptions (list all subscriptions)
+│   ├── GET /subscriptions/{id} (subscription details)
+│   ├── GET /subscriptions/active (active subscriptions)
+│   ├── GET /subscriptions/expired (expired subscriptions)
+│   └── POST /subscriptions/{id}/refund (process refund)
+│
+├── /api/v1/earnings
+│   ├── GET /earnings/summary (earnings overview)
+│   ├── GET /earnings/history (transaction history)
+│   ├── GET /earnings/analytics (revenue analytics)
+│   ├── POST /earnings/payout-request (request payout)
+│   └── GET /earnings/payouts (payout history)
+│
+├── /api/v1/integration
+│   ├── GET /integration/links (generate subscription links)
+│   ├── GET /integration/qr-codes (generate QR codes)
+│   ├── POST /integration/webhooks (webhook configuration)
+│   └── GET /integration/api-keys (API key management)
+│
+├── /api/v1/support
+│   ├── POST /support/tickets (create support ticket)
+│   ├── GET /support/tickets (list tickets)
+│   └── PUT /support/tickets/{id} (update ticket)
+│
+└── /api/v1/admin (admin only)
+    ├── GET /admin/users (list all users)
+    ├── GET /admin/channels (list all channels)
+    ├── GET /admin/revenue (platform revenue)
+    └── PUT /admin/config (update platform config)
+
+1.3 DATABASE SCHEMA EXTENSIONS
+--------------------------------------------------------------------------------
+New Tables Required:
+
+Table: platform_users
+--------------------------------------------------------------------------------
+Primary Key: user_id (SERIAL)
+Columns:
+  - user_id: INTEGER PRIMARY KEY
+  - email: VARCHAR(255) UNIQUE NOT NULL
+  - password_hash: VARCHAR(255) NOT NULL (bcrypt hashed)
+  - full_name: VARCHAR(255)
+  - telegram_username: VARCHAR(255)
+  - profile_image_url: TEXT
+  - account_status: ENUM('active', 'suspended', 'pending_verification')
+  - email_verified: BOOLEAN DEFAULT FALSE
+  - email_verification_token: VARCHAR(255)
+  - password_reset_token: VARCHAR(255)
+  - password_reset_expires: TIMESTAMP
+  - created_at: TIMESTAMP DEFAULT NOW()
+  - last_login: TIMESTAMP
+  - timezone: VARCHAR(50) DEFAULT 'UTC'
+  - language: VARCHAR(10) DEFAULT 'en'
+  - two_factor_enabled: BOOLEAN DEFAULT FALSE
+  - two_factor_secret: VARCHAR(255)
+Indexes:
+  - email (UNIQUE)
+  - email_verification_token
+  - password_reset_token
+
+
+Table: channel_ownership
+--------------------------------------------------------------------------------
+Links platform_users to main_clients_database channels
+Primary Key: ownership_id (SERIAL)
+Columns:
+  - ownership_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - open_channel_id: VARCHAR(50) REFERENCES main_clients_database(open_channel_id)
+  - role: ENUM('owner', 'editor', 'viewer') DEFAULT 'owner'
+  - created_at: TIMESTAMP DEFAULT NOW()
+  - is_primary: BOOLEAN DEFAULT TRUE
+Indexes:
+  - user_id, open_channel_id (UNIQUE COMPOSITE)
+  - open_channel_id
+
+
+Table: earnings_summary
+--------------------------------------------------------------------------------
+Cached earnings data for quick dashboard loads
+Primary Key: summary_id (SERIAL)
+Columns:
+  - summary_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - open_channel_id: VARCHAR(50) REFERENCES main_clients_database(open_channel_id)
+  - period_start: DATE
+  - period_end: DATE
+  - total_revenue: DECIMAL(15,2)
+  - total_subscriptions: INTEGER
+  - active_subscriptions: INTEGER
+  - new_subscriptions: INTEGER
+  - expired_subscriptions: INTEGER
+  - refunded_subscriptions: INTEGER
+  - platform_fee: DECIMAL(15,2)
+  - net_earnings: DECIMAL(15,2)
+  - last_updated: TIMESTAMP DEFAULT NOW()
+Indexes:
+  - user_id, period_start, period_end
+  - open_channel_id, period_start, period_end
+
+
+Table: payout_requests
+--------------------------------------------------------------------------------
+Tracks creator payout requests
+Primary Key: payout_id (SERIAL)
+Columns:
+  - payout_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - amount_requested: DECIMAL(15,2) NOT NULL
+  - currency: VARCHAR(10) NOT NULL
+  - network: VARCHAR(20) NOT NULL
+  - wallet_address: VARCHAR(255) NOT NULL
+  - status: ENUM('pending', 'processing', 'completed', 'failed', 'cancelled')
+  - transaction_hash: VARCHAR(255)
+  - requested_at: TIMESTAMP DEFAULT NOW()
+  - processed_at: TIMESTAMP
+  - completed_at: TIMESTAMP
+  - failure_reason: TEXT
+  - notes: TEXT
+Indexes:
+  - user_id, status
+  - requested_at
+
+
+Table: subscription_links
+--------------------------------------------------------------------------------
+Tracks generated subscription links for analytics
+Primary Key: link_id (SERIAL)
+Columns:
+  - link_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - open_channel_id: VARCHAR(50) REFERENCES main_clients_database(open_channel_id)
+  - link_hash: VARCHAR(255) UNIQUE NOT NULL
+  - subscription_tier: INTEGER (1, 2, or 3)
+  - price: DECIMAL(10,2)
+  - duration_days: INTEGER
+  - link_type: ENUM('standard', 'custom', 'promotional')
+  - utm_source: VARCHAR(100)
+  - utm_medium: VARCHAR(100)
+  - utm_campaign: VARCHAR(100)
+  - clicks: INTEGER DEFAULT 0
+  - conversions: INTEGER DEFAULT 0
+  - revenue: DECIMAL(15,2) DEFAULT 0
+  - created_at: TIMESTAMP DEFAULT NOW()
+  - expires_at: TIMESTAMP
+  - is_active: BOOLEAN DEFAULT TRUE
+Indexes:
+  - link_hash (UNIQUE)
+  - user_id, open_channel_id
+  - created_at
+
+
+Table: support_tickets
+--------------------------------------------------------------------------------
+Primary Key: ticket_id (SERIAL)
+Columns:
+  - ticket_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - subject: VARCHAR(255) NOT NULL
+  - category: ENUM('technical', 'billing', 'account', 'feature_request', 'other')
+  - priority: ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium'
+  - status: ENUM('open', 'in_progress', 'waiting_user', 'resolved', 'closed')
+  - description: TEXT NOT NULL
+  - created_at: TIMESTAMP DEFAULT NOW()
+  - updated_at: TIMESTAMP DEFAULT NOW()
+  - resolved_at: TIMESTAMP
+  - assigned_to: INTEGER (admin user ID)
+Indexes:
+  - user_id, status
+  - status, priority
+
+
+Table: ticket_messages
+--------------------------------------------------------------------------------
+Primary Key: message_id (SERIAL)
+Columns:
+  - message_id: INTEGER PRIMARY KEY
+  - ticket_id: INTEGER REFERENCES support_tickets(ticket_id)
+  - sender_id: INTEGER REFERENCES platform_users(user_id)
+  - sender_type: ENUM('user', 'admin')
+  - message: TEXT NOT NULL
+  - attachments: JSONB
+  - created_at: TIMESTAMP DEFAULT NOW()
+Indexes:
+  - ticket_id, created_at
+
+
+Table: platform_notifications
+--------------------------------------------------------------------------------
+In-app notifications for users
+Primary Key: notification_id (SERIAL)
+Columns:
+  - notification_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - type: ENUM('subscription', 'payment', 'system', 'support', 'security')
+  - title: VARCHAR(255) NOT NULL
+  - message: TEXT NOT NULL
+  - link: TEXT
+  - is_read: BOOLEAN DEFAULT FALSE
+  - created_at: TIMESTAMP DEFAULT NOW()
+  - read_at: TIMESTAMP
+Indexes:
+  - user_id, is_read, created_at
+
+
+Table: api_keys
+--------------------------------------------------------------------------------
+For advanced users who want programmatic access
+Primary Key: key_id (SERIAL)
+Columns:
+  - key_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - key_name: VARCHAR(100) NOT NULL
+  - key_hash: VARCHAR(255) NOT NULL
+  - key_prefix: VARCHAR(20) NOT NULL (for display: "pk_abc...")
+  - permissions: JSONB (array of allowed operations)
+  - last_used: TIMESTAMP
+  - created_at: TIMESTAMP DEFAULT NOW()
+  - expires_at: TIMESTAMP
+  - is_active: BOOLEAN DEFAULT TRUE
+Indexes:
+  - key_hash (UNIQUE)
+  - user_id, is_active
+
+
+Table: audit_logs
+--------------------------------------------------------------------------------
+Track important user actions for security
+Primary Key: log_id (SERIAL)
+Columns:
+  - log_id: INTEGER PRIMARY KEY
+  - user_id: INTEGER REFERENCES platform_users(user_id)
+  - action: VARCHAR(100) NOT NULL
+  - resource_type: VARCHAR(50)
+  - resource_id: VARCHAR(100)
+  - ip_address: VARCHAR(45)
+  - user_agent: TEXT
+  - metadata: JSONB
+  - created_at: TIMESTAMP DEFAULT NOW()
+Indexes:
+  - user_id, created_at
+  - action, created_at
+
+
+Table: platform_config
+--------------------------------------------------------------------------------
+System-wide configuration (admin controlled)
+Primary Key: config_key (VARCHAR)
+Columns:
+  - config_key: VARCHAR(100) PRIMARY KEY
+  - config_value: TEXT NOT NULL
+  - description: TEXT
+  - updated_at: TIMESTAMP DEFAULT NOW()
+  - updated_by: INTEGER REFERENCES platform_users(user_id)
+
+Example configs:
+  - platform_fee_percentage: "3.0"
+  - min_payout_amount: "50.0"
+  - max_subscription_tiers: "3"
+  - email_from_address: "noreply@platform.com"
+  - support_email: "support@platform.com"
+  - maintenance_mode: "false"
+
+
+================================================================================
+SECTION 2: USER AUTHENTICATION & ACCOUNT MANAGEMENT
+================================================================================
+
+2.1 REGISTRATION FLOW
+--------------------------------------------------------------------------------
+Page: /register
+
+Requirements:
+1. User fills registration form:
+   - Email address (required, validated format)
+   - Password (min 12 chars, complexity requirements)
+   - Confirm password (must match)
+   - Full name (required)
+   - Telegram username (optional, validated @username format)
+   - Accept Terms of Service (checkbox, required)
+   - Accept Privacy Policy (checkbox, required)
+   - reCAPTCHA v3 (spam protection)
+
+2. Backend validation:
+   - Check email uniqueness
+   - Validate password strength (uppercase, lowercase, number, special char)
+   - Rate limit: 5 attempts per IP per hour
+   - Generate email verification token
+   - Hash password using bcrypt (cost factor 12)
+   - Store user with account_status='pending_verification'
+
+3. Send verification email:
+   - Beautiful HTML email template
+   - Verification link: https://platform.com/verify-email?token={token}
+   - Link expires in 24 hours
+   - Include platform logo and branding
+
+4. Email verification:
+   - User clicks link
+   - Backend validates token
+   - Update email_verified=TRUE
+   - Update account_status='active'
+   - Auto-login and redirect to /dashboard/onboarding
+
+5. Onboarding flow (first-time users):
+   - Welcome screen
+   - Quick tutorial (3-4 screens with illustrations)
+   - Prompt to register first channel
+   - Skip option available
+
+
+2.2 LOGIN FLOW
+--------------------------------------------------------------------------------
+Page: /login
+
+Requirements:
+1. Standard login:
+   - Email address
+   - Password
+   - "Remember me" checkbox (extends session to 30 days)
+   - reCAPTCHA v3 for suspicious logins
+
+2. Security features:
+   - Rate limit: 5 failed attempts = 15 minute lockout
+   - Log IP address and user agent
+   - Send email notification for new device login
+   - Track last_login timestamp
+
+3. Session management:
+   - JWT tokens with RS256 signing
+   - Access token: 15 minutes expiry
+   - Refresh token: 7 days expiry (30 days if "remember me")
+   - Store refresh tokens in Redis with user_id key
+   - Implement token rotation on refresh
+
+4. Failed login handling:
+   - Generic error message (don't reveal if email exists)
+   - After 3 fails: show CAPTCHA on login form
+   - After 5 fails: 15 minute account lockout
+   - Send security alert email after lockout
+
+
+2.3 PASSWORD RESET FLOW
+--------------------------------------------------------------------------------
+Page: /forgot-password
+
+Requirements:
+1. User enters email address
+2. Backend generates password reset token (expires 1 hour)
+3. Send password reset email with link
+4. User clicks link → redirect to /reset-password?token={token}
+5. User enters new password (validate strength)
+6. Backend validates token and updates password
+7. Invalidate all existing sessions (force re-login)
+8. Send confirmation email
+
+
+2.4 TWO-FACTOR AUTHENTICATION (2FA)
+--------------------------------------------------------------------------------
+Optional security feature for users
+
+Page: /dashboard/settings/security
+
+Requirements:
+1. Setup flow:
+   - User enables 2FA
+   - Backend generates TOTP secret
+   - Display QR code (Google Authenticator compatible)
+   - User scans QR code
+   - User enters verification code to confirm setup
+   - Generate backup codes (10 single-use codes)
+
+2. Login with 2FA:
+   - After password verification
+   - Prompt for 6-digit code
+   - Validate code
+   - Rate limit: 3 attempts before lockout
+
+3. Backup codes:
+   - Display once during setup
+   - Force user to download/copy
+   - Each code can be used once
+   - Option to regenerate codes
+
+
+2.5 ACCOUNT SETTINGS
+--------------------------------------------------------------------------------
+Page: /dashboard/settings
+
+Sections:
+
+A. Profile Settings:
+   - Full name (editable)
+   - Email (editable, requires re-verification)
+   - Telegram username (editable)
+   - Profile image upload (max 2MB, crop/resize to 256x256)
+   - Timezone selection (affects analytics display)
+   - Language preference
+
+B. Security Settings:
+   - Change password
+   - Enable/disable 2FA
+   - View active sessions (with option to revoke)
+   - Download account activity log
+
+C. Notification Settings:
+   - Email notifications:
+     - New subscription
+     - Subscription expiring soon
+     - Payment received
+     - Payout completed
+     - Support ticket updates
+   - In-app notifications (toggle per type)
+   - Notification frequency (instant, daily digest, weekly)
+
+D. Payment Settings:
+   - Default payout wallet address
+   - Default payout currency
+   - Default payout network
+   - Minimum payout threshold
+   - Auto-payout enabled/disabled
+
+E. API Access:
+   - Generate API keys
+   - View existing keys
+   - Set permissions per key
+   - Revoke keys
+
+F. Account Actions:
+   - Export account data (GDPR compliance)
+   - Delete account (with confirmation and grace period)
+
+
+================================================================================
+SECTION 3: CHANNEL MANAGEMENT
+================================================================================
+
+3.1 CHANNEL REGISTRATION
+--------------------------------------------------------------------------------
+Page: /dashboard/channels/new
+
+Enhanced from current GCRegister10-26 functionality
+
+Requirements:
+
+Step 1: Channel Information
+---------------------------
+- Open Channel ID (required)
+  - Input field with validation (≤14 chars, numeric)
+  - Helper text: "Get this from your public Telegram channel"
+  - Link to documentation on how to find channel ID
+  - Real-time validation with visual feedback
+
+- Open Channel Title (required)
+  - Input field, 100 char max
+  - Auto-populated if possible (future: Telegram API integration)
+
+- Open Channel Description (required)
+  - Textarea, 500 char max
+  - Character counter
+  - Markdown support with preview
+
+- Closed Channel ID (required)
+  - Input field with validation (≤14 chars, numeric, can be negative)
+  - Helper text: "This is your private/paid channel"
+  - Validation: must be different from open channel ID
+
+- Closed Channel Title (required)
+  - Input field, 100 char max
+
+- Closed Channel Description (required)
+  - Textarea, 500 char max
+  - This is shown to users before purchase
+
+
+Step 2: Subscription Tiers Configuration
+-----------------------------------------
+Improved UI compared to current implementation
+
+- Number of tiers selector:
+  - Radio buttons: 1, 2, or 3 tiers
+  - Visual preview of tier structure
+  - Recommended: 3 tiers for maximum conversion
+
+- For each tier (shown/hidden based on selection):
+
+  Tier 1 (Gold):
+  - Price (USD): 0.01 - 9999.99, 2 decimal precision
+  - Duration (days): 1 - 999
+  - Tier name: Editable (default "Gold")
+  - Tier description: Optional, 200 chars
+  - Tier color: Color picker (for branding)
+
+  Tier 2 (Silver):
+  - Same fields as Tier 1
+  - Default name "Silver"
+
+  Tier 3 (Bronze):
+  - Same fields as Tier 1
+  - Default name "Bronze"
+
+- Live preview:
+  - Show how subscription buttons will look in Telegram
+  - Display calculated per-day cost
+  - Show what user receives
+
+
+Step 3: Payout Configuration
+-----------------------------
+Enhanced wallet management
+
+- Client Wallet Address (required)
+  - Input field with ENS support (future)
+  - Format validation based on selected network
+  - "Test address" button to validate on blockchain
+  - Save to user profile option (for quick re-use)
+
+- Payout Currency (required)
+  - Searchable dropdown with icons
+  - Popular currencies at top (ETH, BTC, USDT, USDC)
+  - Full list of supported currencies from ChangeNow
+  - Real-time network compatibility check
+
+- Payout Network (required)
+  - Dropdown filtered based on selected currency
+  - Show network fees estimate
+  - Warning for expensive networks
+  - Recommended network highlighted
+
+- Network compatibility validation:
+  - Real-time check if currency supports network
+  - API call to database table: currency_network_mappings
+  - Visual feedback (green checkmark or red X)
+
+
+Step 4: Advanced Settings (Optional, Collapsible)
+--------------------------------------------------
+- Custom success message after purchase
+- Redirect URL after purchase (optional)
+- Webhook URL for subscription events (optional)
+- UTM parameters for link tracking
+- Trial period (days, 0 = no trial)
+- Subscriber limit (0 = unlimited)
+- Channel active/inactive toggle
+- Channel visibility (public/unlisted)
+
+
+Step 5: Review & Submit
+------------------------
+- Summary card showing all configuration
+- Terms reminder (platform fee, payout terms)
+- Submit button
+- On success:
+  - Redirect to channel detail page
+  - Show success message
+  - Display subscription links immediately
+  - Offer quick copy buttons
+
+
+3.2 CHANNEL LISTING & OVERVIEW
+--------------------------------------------------------------------------------
+Page: /dashboard/channels
+
+Requirements:
+
+Display Format:
+- Card grid layout (responsive: 1 col mobile, 2 col tablet, 3 col desktop)
+- Each card shows:
+  - Channel title (open channel)
+  - Subscriber count (active subscriptions)
+  - Monthly revenue
+  - Conversion rate
+  - Quick stats (today/this week)
+  - Status badge (active/inactive)
+  - Quick action buttons (view, edit, analytics, share)
+
+Sorting Options:
+- By revenue (high to low)
+- By subscribers (high to low)
+- By conversion rate
+- By creation date (newest first)
+- Alphabetically
+
+Filtering:
+- Active channels only
+- Inactive channels only
+- By tier count (1, 2, or 3 tiers)
+- By revenue range
+
+Search:
+- By channel title or ID
+- Real-time filtering
+
+Bulk Actions:
+- Select multiple channels
+- Activate/deactivate selected
+- Export analytics for selected
+- Delete selected (with confirmation)
+
+Empty State:
+- If no channels: prominent "Register Your First Channel" CTA
+- Show example channels/mockups to inspire
+
+
+3.3 CHANNEL DETAIL VIEW
+--------------------------------------------------------------------------------
+Page: /dashboard/channels/{id}
+
+Layout: Tabbed interface
+
+Tab 1: Overview
+---------------
+- Channel header:
+  - Open channel title and ID
+  - Closed channel title and ID
+  - Status toggle (active/inactive)
+  - Last updated timestamp
+  - Edit button
+
+- Quick Stats Grid (4 metrics):
+  - Active subscribers
+  - Total revenue (all time)
+  - This month's revenue
+  - Conversion rate
+
+- Subscription Tiers Display:
+  - Card for each configured tier
+  - Price, duration, subscriber count per tier
+  - Revenue per tier
+  - Edit tier button
+
+- Payout Information:
+  - Wallet address (truncated, click to copy full)
+  - Currency and network
+  - Edit button
+
+- Recent Activity Feed:
+  - Last 10 subscription events
+  - Timestamp, user ID (masked), tier, amount
+  - Real-time updates (WebSocket or polling)
+
+
+Tab 2: Subscribers
+------------------
+- Subscriber table:
+  - User ID (masked for privacy: "User #12345")
+  - Subscription tier
+  - Start date
+  - Expiration date
+  - Status (active/expired/cancelled)
+  - Amount paid
+  - Actions (view, refund, extend)
+
+- Filters:
+  - Status (active/expired/all)
+  - Tier (1, 2, 3)
+  - Date range
+
+- Search:
+  - By user ID
+  - By transaction ID
+
+- Export:
+  - CSV download
+  - Include filters in export
+
+- Pagination:
+  - 25/50/100 per page
+
+
+Tab 3: Analytics
+----------------
+- Date range selector (last 7/30/90 days, custom)
+
+- Revenue Chart:
+  - Line chart showing daily revenue
+  - Comparison to previous period (% change)
+  - Hover tooltip with exact values
+
+- Subscriber Growth Chart:
+  - Line chart showing subscriber count over time
+  - Show active vs. expired
+
+- Conversion Funnel:
+  - Link clicks
+  - Payment page views
+  - Completed payments
+  - Conversion rate at each step
+
+- Tier Performance:
+  - Bar chart comparing tiers
+  - Revenue per tier
+  - Subscriber count per tier
+  - Average subscription length
+
+- Revenue Breakdown:
+  - Pie chart: revenue by tier
+  - Table: detailed breakdown
+
+- Top Performing Links:
+  - If using link tracking
+  - Show which promotional links convert best
+
+
+Tab 4: Integration Tools
+-------------------------
+See Section 5 below for details
+
+
+Tab 5: Settings
+---------------
+- Edit all channel configuration
+- Same form as registration, pre-filled
+- Validation on save
+- Confirmation before changing critical fields (channel IDs)
+
+
+3.4 CHANNEL DELETION
+--------------------------------------------------------------------------------
+Requirements:
+- Soft delete (mark as deleted, don't actually remove from DB)
+- Confirmation modal with warnings:
+  - Active subscribers will lose access
+  - Revenue data will be archived
+  - Subscription links will stop working
+  - Action cannot be undone (or: "can be restored within 30 days")
+- Require typing channel name to confirm
+- Option to export data before deletion
+- Send notification to active subscribers (via Telegram bot)
+
+
+================================================================================
+SECTION 4: SUBSCRIBER & SUBSCRIPTION MANAGEMENT
+================================================================================
+
+4.1 SUBSCRIBER OVERVIEW
+--------------------------------------------------------------------------------
+Page: /dashboard/subscribers
+
+All subscribers across all channels
+
+Requirements:
+
+- Summary Cards (top of page):
+  - Total active subscribers
+  - New subscribers this month
+  - Churn rate
+  - Average subscription length
+
+- Subscriber Table:
+  - User ID (masked)
+  - Channel name
+  - Subscription tier
+  - Start date
+  - Expiration date
+  - Status
+  - Amount paid
+  - Actions
+
+- Advanced Filters:
+  - Channel (dropdown)
+  - Status (active/expired/cancelled)
+  - Tier (1/2/3)
+  - Date range (subscribed between X and Y)
+  - Amount paid (range)
+
+- Bulk Actions:
+  - Export selected
+  - Send notification to selected (via Telegram bot)
+
+- Search:
+  - By user ID
+  - By transaction hash
+  - By channel name
+
+
+4.2 SUBSCRIPTION DETAIL VIEW
+--------------------------------------------------------------------------------
+Page: /dashboard/subscriptions/{id}
+
+Requirements:
+
+- Subscription Information:
+  - User ID (masked, e.g., "User #742891")
+  - Channel name (linked)
+  - Subscription tier
+  - Amount paid (USD)
+  - Payment date/time
+  - Start date
+  - Expiration date
+  - Status
+  - Days remaining (if active)
+
+- Payment Information:
+  - Original payment amount
+  - Payment currency (crypto used)
+  - Transaction hash (linked to blockchain explorer)
+  - Platform fee deducted
+  - Net earnings to creator
+
+- Timeline:
+  - Visual timeline of subscription lifecycle
+  - Events: created, payment confirmed, access granted, expiring soon, expired
+
+- Actions:
+  - Extend subscription (add days)
+  - Cancel subscription (refund not implemented yet)
+  - Send message to subscriber (via Telegram bot)
+  - View transaction on blockchain (link)
+
+- Notes Section:
+  - Creator can add private notes about this subscription
+  - Useful for tracking special cases or issues
+
+
+4.3 REFUND HANDLING (Future Implementation)
+--------------------------------------------------------------------------------
+Page: /dashboard/subscriptions/{id}/refund
+
+Requirements:
+- Refund reasons (dropdown):
+  - Subscriber requested
+  - Technical issue
+  - Duplicate payment
+  - Fraud
+  - Other (text field)
+
+- Refund amount:
+  - Full refund or partial
+  - Calculate platform fee implications
+  - Show net impact to creator earnings
+
+- Confirmation:
+  - Warning about crypto refund complexity
+  - Requires admin approval (future)
+  - Send notification to subscriber
+
+- Integration:
+  - Would require integration with ChangeNow or manual processing
+  - Track refund status
+  - Update earnings calculations
+
+
+================================================================================
+SECTION 5: INTEGRATION TOOLS & LINK GENERATION
+================================================================================
+
+5.1 SUBSCRIPTION LINK GENERATOR
+--------------------------------------------------------------------------------
+Page: /dashboard/tools/links or /dashboard/channels/{id} (Integration tab)
+
+Requirements:
+
+A. Link Builder Interface:
+   - Channel selector (if on main tools page)
+   - Tier selector (1, 2, 3, or custom)
+   - Custom pricing (override tier pricing):
+     - Price in USD
+     - Duration in days
+   - Link type:
+     - Standard (use tier settings)
+     - Custom (override pricing)
+     - Promotional (for campaigns)
+   - UTM Parameters (collapsible advanced section):
+     - utm_source (e.g., "twitter", "email", "instagram")
+     - utm_medium (e.g., "social", "cpc", "email")
+     - utm_campaign (e.g., "summer_sale", "launch")
+   - Expiration date (optional):
+     - Date picker
+     - Link becomes invalid after date
+   - Click limit (optional):
+     - Number input
+     - Link becomes invalid after X clicks
+
+B. Generated Link:
+   - Full URL display (with copy button)
+   - Short URL option (bit.ly integration or custom shortener)
+   - QR code preview (generated in real-time)
+   - Download QR code (PNG, SVG formats)
+
+C. Link Preview:
+   - Show how link will appear in Telegram
+   - Preview button text
+   - Preview channel description
+   - Preview pricing
+
+D. Link Management:
+   - Save generated links for tracking
+   - List of all generated links for this channel
+   - View analytics per link:
+     - Total clicks
+     - Unique clicks
+     - Conversions
+     - Revenue generated
+   - Edit/deactivate links
+
+
+5.2 QR CODE GENERATOR
+--------------------------------------------------------------------------------
+Integrated with link generator above
+
+Additional Features:
+- Customization options:
+  - Color (foreground and background)
+  - Logo in center (upload brand logo)
+  - Size (small, medium, large, custom)
+  - Error correction level (L, M, Q, H)
+- Multiple format downloads:
+  - PNG (various sizes: 256px, 512px, 1024px, 2048px)
+  - SVG (vector, scalable)
+  - PDF (for print materials)
+- QR code templates:
+  - Pre-designed styles for different use cases
+  - Business card template
+  - Poster template
+  - Social media template
+
+
+5.3 EMBEDDABLE WIDGETS (Future)
+--------------------------------------------------------------------------------
+For creators with websites
+
+Requirements:
+- Widget types:
+  - Subscription button
+  - Channel card (with preview)
+  - Pricing table (compare tiers)
+- Customization:
+  - Colors (match website branding)
+  - Size
+  - Button text
+  - Layout (horizontal/vertical)
+- Generated code:
+  - HTML iframe
+  - JavaScript widget
+  - Copy button
+  - Preview widget in modal
+
+
+5.4 WEBHOOK CONFIGURATION (Advanced)
+--------------------------------------------------------------------------------
+Page: /dashboard/tools/webhooks
+
+For creators who want real-time notifications
+
+Requirements:
+- Add webhook URL:
+  - Input field for endpoint URL
+  - URL validation (must be https://)
+  - Test webhook button (send test payload)
+
+- Event subscriptions (checkboxes):
+  - New subscription
+  - Subscription expiring soon
+  - Subscription expired
+  - Payment received
+  - Refund processed
+
+- Webhook security:
+  - Generate signing secret
+  - Display secret (copy button)
+  - Webhook payload includes signature
+  - Documentation on how to verify signature
+
+- Webhook logs:
+  - Table showing recent webhook deliveries
+  - Timestamp, event type, status (success/failed)
+  - Retry failed webhooks
+  - View request/response details
+
+- Webhook testing:
+  - Send test events
+  - View raw payload
+  - Debug failed deliveries
+
+
+5.5 API KEY MANAGEMENT
+--------------------------------------------------------------------------------
+Page: /dashboard/tools/api
+
+For advanced users who want programmatic access
+
+Requirements:
+- API Key List:
+  - Table of existing keys
+  - Key name, prefix (e.g., "pk_abc..."), created date, last used
+  - Active/inactive status
+  - Permissions
+
+- Create New Key:
+  - Key name (required)
+  - Select permissions (checkboxes):
+     - Read channels
+     - Create channels
+     - Update channels
+     - Read subscriptions
+     - Read earnings
+     - Create links
+     - Full access (all permissions)
+  - Expiration (optional):
+     - Never expire (default)
+     - 30/60/90/365 days
+     - Custom date
+  - Generate button
+
+- Display Created Key:
+  - Show full key ONCE (cannot be retrieved again)
+  - Large warning: "Copy this key now, you won't see it again"
+  - Copy button
+  - Dismiss (hides key forever)
+
+- Key Actions:
+  - Revoke key (with confirmation)
+  - Edit permissions (some restrictions)
+  - View usage logs
+  - Regenerate key (creates new, invalidates old)
+
+- API Documentation Link:
+  - Link to comprehensive API docs
+  - Code examples in multiple languages
+  - Postman collection download
+
+
+================================================================================
+SECTION 6: ANALYTICS & REPORTING
+================================================================================
+
+6.1 DASHBOARD HOME
+--------------------------------------------------------------------------------
+Page: /dashboard
+
+Requirements:
+
+A. Welcome Header:
+   - Personalized greeting: "Welcome back, {Name}!"
+   - Current date/time
+   - Quick action buttons:
+     - Register new channel
+     - View earnings
+     - Generate link
+
+B. Key Performance Indicators (KPI Cards):
+   Row 1 (Revenue Metrics):
+   - Today's revenue (comparison to yesterday)
+   - This week's revenue (comparison to last week)
+   - This month's revenue (comparison to last month)
+   - All-time revenue
+
+   Row 2 (Subscriber Metrics):
+   - Active subscribers (across all channels)
+   - New subscribers today
+   - New subscribers this week
+   - Churn rate this month
+
+C. Revenue Chart:
+   - Line chart showing revenue over time
+   - Selectable timeframe (7/30/90 days, YTD, all time)
+   - Toggle between total revenue and net revenue
+   - Comparison to previous period (overlay)
+   - Hover tooltips with exact values
+
+D. Channel Performance Table:
+   - List of channels sorted by revenue (this month)
+   - Columns:
+     - Channel name
+     - Active subscribers
+     - This month's revenue
+     - Change from last month (% and arrow)
+     - Quick view button
+   - Show top 5, "View all" link
+
+E. Recent Activity Feed:
+   - Last 10 events across all channels:
+     - New subscription
+     - Payment received
+     - Subscription expiring soon
+     - Support ticket created
+   - Real-time updates (WebSocket or polling every 30s)
+   - Timestamp (relative: "2 minutes ago")
+   - View all link
+
+F. Quick Links Section:
+   - Documentation
+   - Video tutorials
+   - Contact support
+   - Community forum (if available)
+   - What's new / Changelog
+
+
+6.2 EARNINGS DASHBOARD
+--------------------------------------------------------------------------------
+Page: /dashboard/earnings
+
+Comprehensive financial overview
+
+Requirements:
+
+A. Earnings Summary (Top Cards):
+   - Available balance (ready for payout)
+   - Pending balance (recent, not yet cleared)
+   - Total earnings (all time)
+   - Next payout date (if auto-payout enabled)
+
+B. Earnings Chart:
+   - Line chart showing earnings over time
+   - Multiple series:
+     - Gross revenue
+     - Platform fees
+     - Net earnings
+   - Toggle series on/off
+   - Date range selector
+   - Export chart as image
+
+C. Platform Fee Breakdown:
+   - Pie chart or stacked bar chart
+   - Gross revenue vs. net revenue vs. platform fee
+   - Calculation explanation tooltip
+   - Current platform fee percentage displayed
+
+D. Earnings by Channel:
+   - Table or bar chart
+   - Revenue per channel (this month)
+   - Compare to previous month
+   - Contribution to total (percentage)
+
+E. Earnings by Subscription Tier:
+   - Aggregated across all channels
+   - Revenue per tier
+   - Number of subscriptions per tier
+   - Average revenue per subscription per tier
+
+F. Transaction History:
+   - Detailed table of all revenue events
+   - Columns:
+     - Date/time
+     - Channel name
+     - User ID (masked)
+     - Subscription tier
+     - Amount (gross)
+     - Platform fee
+     - Net earnings
+     - Status
+   - Filters:
+     - Date range
+     - Channel
+     - Status (completed/pending/refunded)
+   - Search by user ID or transaction ID
+   - Export to CSV/PDF
+   - Pagination
+
+G. Payout History:
+   - Table of all payouts received
+   - Columns:
+     - Payout date
+     - Amount
+     - Currency/network
+     - Wallet address
+     - Transaction hash (linked to explorer)
+     - Status
+   - View payout details button
+
+
+6.3 PAYOUT REQUEST SYSTEM
+--------------------------------------------------------------------------------
+Page: /dashboard/earnings/request-payout
+
+Requirements:
+
+A. Payout Eligibility Check:
+   - Display available balance
+   - Minimum payout threshold (from platform_config)
+   - If below threshold: show how much more needed
+   - Estimated payout processing time
+
+B. Payout Request Form:
+   - Amount to withdraw:
+     - Input field
+     - "Max" button (withdraws full available balance)
+     - Real-time validation
+     - Must be ≥ minimum threshold
+     - Must be ≤ available balance
+
+   - Payout currency (dropdown):
+     - Popular options: ETH, BTC, USDT, USDC
+     - Full list of supported currencies
+
+   - Payout network (dropdown):
+     - Filtered based on selected currency
+     - Show estimated network fee
+     - Warning for expensive networks
+
+   - Wallet address:
+     - Input field
+     - Validate format based on network
+     - Option to use saved wallet from profile
+     - "Test address" button (validate on blockchain)
+
+   - Payout summary:
+     - Amount requested: $X.XX
+     - Estimated crypto amount: Y.YY ETH
+     - Network fee (estimated): $Z.ZZ
+     - You will receive: ~W.WW ETH
+     - Exchange rate disclaimer
+
+   - Terms & conditions:
+     - Checkbox: "I confirm the wallet address is correct"
+     - Checkbox: "I understand payouts are processed manually"
+     - Checkbox: "I understand crypto amounts may vary"
+
+C. Payout Request Submission:
+   - Submit button
+   - Confirmation modal
+   - Success message
+   - Create entry in payout_requests table (status='pending')
+   - Send email notification to user
+   - Send notification to admin (for processing)
+
+D. Payout Status Tracking:
+   - List of payout requests
+   - Status badges:
+     - Pending (yellow)
+     - Processing (blue)
+     - Completed (green)
+     - Failed (red)
+     - Cancelled (gray)
+   - Estimated completion time for pending requests
+   - Cancel button (only for pending requests)
+   - View details button
+
+
+6.4 ADVANCED ANALYTICS (Premium Feature)
+--------------------------------------------------------------------------------
+Page: /dashboard/analytics
+
+Deep dive analytics for power users
+
+Requirements:
+
+A. Customer Lifetime Value (CLV):
+   - Calculate average CLV across all subscribers
+   - CLV by tier
+   - CLV trend over time
+   - Cohort analysis
+
+B. Retention Analysis:
+   - Retention curves
+   - Churn analysis by cohort
+   - Subscriber lifecycle stages
+   - Subscription renewal rates
+
+C. Conversion Optimization:
+   - Link performance comparison
+   - A/B testing results (if implemented)
+   - Best performing acquisition channels
+   - Conversion rate by traffic source
+
+D. Revenue Forecasting:
+   - Projected revenue for next 30/60/90 days
+   - Based on current growth rate
+   - Best case / worst case scenarios
+   - Seasonality detection
+
+E. Geographic Analytics:
+   - Revenue by country (if data available)
+   - Subscriber distribution map
+   - Timezone analysis
+
+F. Export & Reporting:
+   - Schedule automated reports (daily/weekly/monthly)
+   - Email reports in PDF format
+   - Custom report builder
+   - Export raw data (CSV, JSON)
+
+
+================================================================================
+SECTION 7: SUPPORT & DOCUMENTATION
+================================================================================
+
+7.1 HELP CENTER / DOCUMENTATION
+--------------------------------------------------------------------------------
+Page: /docs or /help
+
+Requirements:
+
+A. Documentation Structure:
+
+   Getting Started:
+   - Welcome to the platform
+   - How it works (overview)
+   - Registration guide
+   - First channel setup
+   - Getting your first subscriber
+
+   Channel Management:
+   - Creating a channel
+   - Configuring subscription tiers
+   - Pricing strategies
+   - Setting up payouts
+   - Managing subscribers
+   - Pausing/resuming channels
+
+   Integration:
+   - Generating subscription links
+   - Creating QR codes
+   - Using embeddable widgets
+   - Webhook integration
+   - API documentation
+   - Telegram bot commands
+
+   Payments & Payouts:
+   - How payments work
+   - Understanding platform fees
+   - Supported cryptocurrencies
+   - Requesting payouts
+   - Payout processing times
+   - Tax considerations
+
+   Analytics:
+   - Understanding your dashboard
+   - Key metrics explained
+   - Exporting data
+   - Revenue forecasting
+
+   Security:
+   - Account security best practices
+   - Two-factor authentication
+   - API key management
+   - Protecting your earnings
+
+   Troubleshooting:
+   - Common issues and solutions
+   - Payment delays
+   - Telegram connection issues
+   - Webhook debugging
+
+   Legal & Compliance:
+   - Terms of Service
+   - Privacy Policy
+   - Refund policy
+   - Acceptable use policy
+   - GDPR compliance
+
+B. Documentation Features:
+   - Search functionality (real-time, typo-tolerant)
+   - Category navigation
+   - Breadcrumbs
+   - Table of contents for long articles
+   - "Was this helpful?" feedback buttons
+   - Related articles suggestions
+   - Last updated timestamp
+   - Estimated reading time
+   - Code syntax highlighting (for technical docs)
+   - Copy code buttons
+   - Screenshots and diagrams
+   - Video tutorials embedded
+
+
+7.2 VIDEO TUTORIALS
+--------------------------------------------------------------------------------
+Page: /tutorials
+
+Requirements:
+- Video library organized by topic
+- Playlists:
+  - Getting Started (5-7 short videos)
+  - Channel Setup
+  - Advanced Features
+  - Troubleshooting
+- Video player with chapters
+- Transcript below each video
+- Related videos sidebar
+- Like/dislike feedback
+- Comments section (moderated)
+
+
+7.3 SUPPORT TICKET SYSTEM
+--------------------------------------------------------------------------------
+Page: /dashboard/support
+
+Requirements:
+
+A. Create New Ticket:
+   - Subject (required, 255 chars)
+   - Category (dropdown):
+     - Technical issue
+     - Billing question
+     - Account issue
+     - Feature request
+     - Other
+   - Priority (auto-assigned or user-selected):
+     - Low
+     - Medium
+     - High
+     - Urgent
+   - Description (required, rich text editor):
+     - Formatting options (bold, italic, lists)
+     - Image upload (screenshots)
+     - File attachments (logs, config files)
+     - Max 5 attachments, 10MB total
+   - Related channel (optional dropdown)
+   - Related transaction (optional, for billing issues)
+
+B. Ticket List View:
+   - Table of all tickets
+   - Columns:
+     - Ticket ID
+     - Subject (truncated)
+     - Category
+     - Priority
+     - Status
+     - Created date
+     - Last updated
+   - Status badges (color-coded)
+   - Filters:
+     - Status (open/in-progress/resolved/closed)
+     - Priority
+     - Category
+   - Sort by date, priority, status
+   - Search tickets
+
+C. Ticket Detail View:
+   - Ticket header:
+     - ID, subject, status, priority, category
+     - Created timestamp
+     - Assigned admin (if any)
+   - Conversation thread:
+     - All messages (user and admin)
+     - Timestamps
+     - Attachments
+   - Reply form:
+     - Message text (rich text)
+     - Attach files
+     - "Mark as resolved" button (for user)
+   - Ticket actions:
+     - Close ticket
+     - Reopen ticket
+     - Edit subject/priority
+
+D. Notifications:
+   - Email notification for new reply
+   - In-app notification
+   - Badge count on support icon (unread replies)
+
+E. Admin Response SLA:
+   - Display expected response time
+   - Based on priority:
+     - Urgent: 4 hours
+     - High: 24 hours
+     - Medium: 48 hours
+     - Low: 72 hours
+
+
+7.4 LIVE CHAT (Future)
+--------------------------------------------------------------------------------
+Widget on all authenticated pages
+
+Requirements:
+- Chat bubble in bottom-right corner
+- Click to expand chat window
+- Connect to support agent
+- Queue system if agents busy
+- Chat history saved to ticket
+- File/image sharing
+- Typing indicators
+- Agent avatar and name
+- Pre-chat survey (brief)
+
+
+7.5 COMMUNITY FORUM (Future)
+--------------------------------------------------------------------------------
+Page: /community
+
+Requirements:
+- Category-based discussions
+- User posts and replies
+- Upvote/downvote system
+- Search forum
+- Tag system
+- User profiles and reputation
+- Moderator controls
+- Official announcements category
+
+
+================================================================================
+SECTION 8: ADMIN PANEL
+================================================================================
+
+8.1 ADMIN AUTHENTICATION
+--------------------------------------------------------------------------------
+Separate admin portal: /admin
+
+Requirements:
+- Separate login from regular users
+- Admin users stored in platform_users with is_admin flag
+- Role-based access control (RBAC):
+  - Super Admin (full access)
+  - Support Admin (support tickets, user management)
+  - Finance Admin (payouts, revenue)
+  - Content Admin (documentation, announcements)
+
+
+8.2 ADMIN DASHBOARD
+--------------------------------------------------------------------------------
+Page: /admin/dashboard
+
+Requirements:
+
+A. Platform Overview:
+   - Total users
+   - Total channels
+   - Total active subscriptions
+   - Today's revenue (all users)
+   - This month's revenue
+   - Platform fees collected
+
+B. Real-Time Activity Feed:
+   - Recent registrations
+   - New channel registrations
+   - Large transactions
+   - Failed payments
+   - Support tickets opened
+   - WebSocket for real-time updates
+
+C. System Health:
+   - Service status indicators:
+     - TelePay10-26 bot (online/offline)
+     - GCWebhook services (health check)
+     - GCSplit services (health check)
+     - GCHostPay services (health check)
+     - Database (connection pool status)
+     - Redis (connection status)
+   - Error rate (last 24 hours)
+   - Average response time
+   - Cloud Tasks queue depths
+
+
+8.3 USER MANAGEMENT
+--------------------------------------------------------------------------------
+Page: /admin/users
+
+Requirements:
+
+A. User List:
+   - Table with all platform users
+   - Columns:
+     - User ID
+     - Email
+     - Full name
+     - Account status
+     - Email verified
+     - Registration date
+     - Last login
+     - Number of channels
+     - Total revenue
+   - Filters:
+     - Account status
+     - Email verified status
+     - Date range (registered between)
+   - Search by email, name, user ID
+
+B. User Detail View:
+   - All user information
+   - List of channels owned
+   - Revenue statistics
+   - Subscription history
+   - Support tickets
+   - Audit log
+   - Actions:
+     - Suspend account (with reason)
+     - Activate account
+     - Reset password (send email)
+     - Verify email manually
+     - Impersonate user (for support)
+     - Delete account (with confirmation)
+
+
+8.4 CHANNEL MODERATION
+--------------------------------------------------------------------------------
+Page: /admin/channels
+
+Requirements:
+
+A. Channel List:
+   - All channels across all users
+   - Columns:
+     - Channel ID
+     - Owner (user email/name)
+     - Open channel title
+     - Subscribers
+     - Revenue
+     - Status
+     - Created date
+   - Filters:
+     - Status (active/inactive)
+     - Revenue range
+     - Date range
+   - Search by channel name, ID, owner
+
+B. Channel Actions:
+   - View channel details
+   - Suspend channel (with reason)
+   - Activate channel
+   - Delete channel (extreme cases)
+   - View owner information
+
+
+8.5 PAYOUT MANAGEMENT
+--------------------------------------------------------------------------------
+Page: /admin/payouts
+
+Requirements:
+
+A. Payout Queue:
+   - List of pending payout requests
+   - Sorted by date (oldest first)
+   - Display:
+     - Request ID
+     - User email/name
+     - Amount
+     - Currency/network
+     - Wallet address
+     - Requested date
+   - Actions per request:
+     - Approve
+     - Reject (with reason)
+     - Mark as processing
+     - Mark as completed (enter tx hash)
+   - Bulk actions:
+     - Approve multiple
+     - Export batch for processing
+
+B. Payout Processing Flow:
+   - Admin reviews request
+   - Validates wallet address
+   - Approves → status='processing'
+   - Admin sends crypto manually (for now)
+   - Enters transaction hash
+   - Mark as completed → status='completed'
+   - System sends notification to user
+   - Updates user's earnings balance
+
+C. Payout History:
+   - All completed payouts
+   - Filters by date, user, status
+   - Export for accounting
+
+
+8.6 REVENUE & REPORTING
+--------------------------------------------------------------------------------
+Page: /admin/revenue
+
+Requirements:
+
+A. Platform Revenue:
+   - Total revenue processed (all users, all time)
+   - Platform fees collected
+   - Net revenue to creators
+   - Revenue this month (with growth %)
+
+B. Revenue Charts:
+   - Revenue over time (daily, weekly, monthly)
+   - Platform fees over time
+   - Revenue by channel tier configuration
+   - Top earning users
+
+C. Financial Reports:
+   - Generate monthly report (PDF/CSV)
+   - Breakdown by user
+   - Payout reconciliation
+   - Export for accounting
+
+
+8.7 SUPPORT MANAGEMENT
+--------------------------------------------------------------------------------
+Page: /admin/support
+
+Requirements:
+
+A. Ticket Queue:
+   - All open support tickets
+   - Grouped by priority and status
+   - Assign tickets to support admins
+   - Response SLA tracking (red if overdue)
+
+B. Ticket Management:
+   - View ticket details
+   - Reply to tickets (admin responses)
+   - Assign to admin
+   - Change priority
+   - Merge tickets
+   - Close ticket
+   - Reopen ticket
+   - Internal notes (not visible to user)
+
+C. Support Analytics:
+   - Average response time
+   - Average resolution time
+   - Tickets per category
+   - Admin performance metrics
+
+
+8.8 SYSTEM CONFIGURATION
+--------------------------------------------------------------------------------
+Page: /admin/settings
+
+Requirements:
+
+A. Platform Settings:
+   - Platform fee percentage
+   - Minimum payout amount
+   - Maximum subscription tiers allowed
+   - Email configuration (SMTP settings)
+   - Support email address
+   - Maintenance mode toggle
+
+B. Feature Flags:
+   - Enable/disable 2FA
+   - Enable/disable API access
+   - Enable/disable webhooks
+   - Enable/disable live chat
+
+C. Email Templates:
+   - Edit email templates (HTML)
+   - Variables available: {user_name}, {platform_name}, etc.
+   - Preview email
+   - Test send email
+
+D. Announcement System:
+   - Create platform-wide announcements
+   - Display banner to all users
+   - Dismissible or persistent
+   - Schedule announcements
+
+
+8.9 AUDIT LOGS
+--------------------------------------------------------------------------------
+Page: /admin/audit
+
+Requirements:
+- Complete audit trail of all admin actions
+- Filters:
+  - Admin user
+  - Action type
+  - Resource type
+  - Date range
+- Search by user affected, resource ID
+- Export logs
+- Compliance with data regulations
+
+
+================================================================================
+SECTION 9: EMAIL NOTIFICATIONS
+================================================================================
+
+9.1 EMAIL INFRASTRUCTURE
+--------------------------------------------------------------------------------
+Requirements:
+- Email service: SendGrid, Amazon SES, or Mailgun
+- SPF, DKIM, DMARC configuration for deliverability
+- Dedicated IP address (for high volume)
+- Beautiful HTML email templates (responsive)
+- Plain text fallback
+- Unsubscribe link in all marketing emails
+- Preference center for notification types
+
+9.2 TRANSACTIONAL EMAILS
+--------------------------------------------------------------------------------
+Triggered by user actions, cannot be unsubscribed from:
+
+A. Account-related:
+   - Welcome email (after registration)
+   - Email verification
+   - Password reset
+   - Password changed confirmation
+   - Email changed confirmation
+   - 2FA enabled/disabled
+   - New device login alert
+   - Account suspended notification
+   - Account reactivated notification
+
+B. Channel-related:
+   - Channel approved (if moderation)
+   - Channel suspended notification
+   - Channel deleted confirmation
+
+C. Subscription-related:
+   - New subscription (to creator)
+   - Subscription expiring soon (to creator and subscriber)
+   - Subscription expired (to creator and subscriber)
+   - Payment received (to creator)
+
+D. Payout-related:
+   - Payout request received
+   - Payout processing
+   - Payout completed (with tx hash)
+   - Payout failed
+
+E. Support-related:
+   - Support ticket created
+   - Support ticket reply
+   - Support ticket resolved
+   - Support ticket closed
+
+9.3 MARKETING EMAILS (Optional, Opt-in)
+--------------------------------------------------------------------------------
+- Weekly/monthly revenue summary
+- Platform updates and new features
+- Best practices and tips
+- Case studies from successful creators
+- Promotional campaigns
+
+
+================================================================================
+SECTION 10: SECURITY & COMPLIANCE
+================================================================================
+
+10.1 SECURITY MEASURES
+--------------------------------------------------------------------------------
+
+A. Application Security:
+   - HTTPS everywhere (enforce SSL)
+   - HSTS headers
+   - Content Security Policy (CSP)
+   - XSS protection headers
+   - CSRF protection (token-based)
+   - SQL injection prevention (parameterized queries)
+   - Rate limiting (all endpoints)
+   - Input validation and sanitization
+   - Output encoding
+   - Secure session management
+   - JWT token security (signing, expiration, rotation)
+   - Secrets stored in environment variables / Secret Manager
+   - Regular security audits
+   - Dependency vulnerability scanning
+
+B. Password Security:
+   - Bcrypt hashing (cost factor 12)
+   - Minimum password length (12 characters)
+   - Password complexity requirements
+   - Password strength meter (on registration)
+   - Prevent common/leaked passwords (haveibeenpwned API)
+   - Password history (prevent reuse of last 5 passwords)
+
+C. Authentication Security:
+   - Account lockout after failed attempts
+   - CAPTCHA for suspicious activity
+   - 2FA support (TOTP)
+   - Session timeout (15 minutes idle, force re-auth)
+   - Device fingerprinting
+   - Anomaly detection (unusual login locations)
+
+D. Data Security:
+   - Encryption at rest (database encryption)
+   - Encryption in transit (TLS 1.3)
+   - Sensitive data masking (user IDs, wallet addresses)
+   - Secure backup procedures
+   - Regular penetration testing
+
+E. API Security:
+   - API key authentication
+   - Rate limiting per API key
+   - Webhook signature verification
+   - Input validation
+   - Output filtering (don't leak sensitive data)
+
+
+10.2 COMPLIANCE
+--------------------------------------------------------------------------------
+
+A. GDPR (General Data Protection Regulation):
+   - Privacy policy (comprehensive)
+   - Cookie policy and consent banner
+   - Data processing agreements
+   - User consent tracking
+   - Right to access data (data export)
+   - Right to erasure (account deletion)
+   - Right to rectification (edit profile)
+   - Data portability
+   - Data breach notification procedures
+   - Data Protection Officer contact
+
+B. CCPA (California Consumer Privacy Act):
+   - Privacy policy compliance
+   - Do not sell my information
+   - Data disclosure requirements
+   - Opt-out mechanisms
+
+C. KYC/AML (Know Your Customer / Anti-Money Laundering):
+   - For now: basic information collection
+   - Future: identity verification for large transactions
+   - Transaction monitoring for suspicious activity
+   - Reporting requirements
+
+D. Tax Compliance:
+   - User tax information collection (future)
+   - 1099 form generation (US users, future)
+   - VAT handling (EU, future)
+   - Tax reporting to authorities
+
+E. Terms of Service:
+   - User agreements
+   - Creator agreements
+   - Acceptable use policy
+   - Refund policy
+   - Liability limitations
+   - Dispute resolution
+   - Governing law
+
+
+10.3 BACKUP & DISASTER RECOVERY
+--------------------------------------------------------------------------------
+- Automated daily backups (database, Redis, file storage)
+- Backup retention: 30 days
+- Backup testing (monthly restore test)
+- Disaster recovery plan documented
+- RTO (Recovery Time Objective): 4 hours
+- RPO (Recovery Point Objective): 24 hours
+- Hot standby database (read replicas)
+- Multi-region deployment (future)
+
+
+================================================================================
+SECTION 11: PERFORMANCE & SCALABILITY
+================================================================================
+
+11.1 FRONTEND OPTIMIZATION
+--------------------------------------------------------------------------------
+- Code splitting (load only what's needed)
+- Lazy loading (images, components)
+- Image optimization (WebP format, responsive sizes)
+- CDN for static assets
+- Caching strategies (service workers)
+- Minification (JS, CSS)
+- Tree shaking (remove unused code)
+- Bundle size monitoring
+- Lighthouse score target: 90+
+
+11.2 BACKEND OPTIMIZATION
+--------------------------------------------------------------------------------
+- Database query optimization (indexes, query plans)
+- Connection pooling
+- Caching (Redis):
+  - User sessions
+  - Frequently accessed data
+  - API responses (where appropriate)
+  - Rate limiting counters
+- API response pagination
+- Async operations (Celery for background jobs)
+- Database read replicas
+- Load balancing (Cloud Run auto-scaling)
+- Monitoring and alerting (Cloud Monitoring)
+
+11.3 SCALABILITY CONSIDERATIONS
+--------------------------------------------------------------------------------
+- Horizontal scaling (Cloud Run auto-scales)
+- Database sharding (future, if needed)
+- Microservices already in place
+- Message queue for async operations
+- CDN for global distribution
+- Multi-region deployment (future)
+
+
+================================================================================
+SECTION 12: MONITORING & ANALYTICS
+================================================================================
+
+12.1 APPLICATION MONITORING
+--------------------------------------------------------------------------------
+Tools: Google Cloud Monitoring, Sentry, or DataDog
+
+Metrics to Track:
+- Request rate (per endpoint)
+- Response time (p50, p95, p99)
+- Error rate (per endpoint)
+- Service uptime
+- Database query performance
+- Redis cache hit rate
+- Queue depths (Cloud Tasks)
+- Background job success/failure rate
+
+Alerts:
+- Error rate > 5% (trigger immediately)
+- Response time p95 > 2s
+- Service down (health check fails)
+- Database connection errors
+- High queue depth (>1000 tasks)
+- Failed payment rate > 10%
+
+
+12.2 BUSINESS ANALYTICS
+--------------------------------------------------------------------------------
+Tools: Google Analytics 4, Mixpanel, or custom dashboard
+
+Events to Track:
+- User registration
+- Email verification
+- Channel registration
+- Subscription link generated
+- Link clicked
+- Payment initiated
+- Payment completed
+- Payout requested
+- Support ticket created
+
+Goals:
+- User activation (registered first channel)
+- First revenue milestone ($100)
+- User retention (return after 7/30/90 days)
+
+
+12.3 ERROR TRACKING
+--------------------------------------------------------------------------------
+Tool: Sentry or Rollbar
+
+Requirements:
+- Automatic error capturing
+- Source map upload (for minified code)
+- User context (ID, email) attached to errors
+- Breadcrumbs (user actions leading to error)
+- Release tracking
+- Slack/email notifications for critical errors
+
+
+================================================================================
+SECTION 13: TESTING STRATEGY
+================================================================================
+
+13.1 FRONTEND TESTING
+--------------------------------------------------------------------------------
+- Unit tests (Jest, React Testing Library)
+  - Component rendering
+  - User interactions
+  - State management
+  - Target: 80% code coverage
+
+- Integration tests
+  - Multi-component interactions
+  - API integration
+  - Form submissions
+
+- End-to-end tests (Cypress or Playwright)
+  - Critical user flows:
+    - Registration → email verification → login
+    - Channel registration → link generation
+    - Subscription link click → payment
+  - Run in CI/CD pipeline
+
+13.2 BACKEND TESTING
+--------------------------------------------------------------------------------
+- Unit tests (pytest)
+  - Individual functions
+  - Database operations (with test database)
+  - API endpoint handlers
+  - Target: 80% code coverage
+
+- Integration tests
+  - Full API request/response cycle
+  - Database transactions
+  - External API mocking (ChangeNow, Telegram)
+
+- Load testing (Locust or k6)
+  - Simulate concurrent users
+  - Identify bottlenecks
+  - Test auto-scaling
+
+13.3 SECURITY TESTING
+--------------------------------------------------------------------------------
+- OWASP Top 10 vulnerability scanning
+- Dependency vulnerability scanning (Snyk, Dependabot)
+- Penetration testing (annual, by third party)
+- Bug bounty program (future)
+
+
+================================================================================
+SECTION 14: DEPLOYMENT & DEVOPS
+================================================================================
+
+14.1 CI/CD PIPELINE
+--------------------------------------------------------------------------------
+Tool: GitHub Actions, GitLab CI, or Cloud Build
+
+Pipeline Stages:
+
+1. Code pushed to Git
+2. Linting (ESLint, Pylint)
+3. Unit tests
+4. Integration tests
+5. Build Docker images
+6. Security scanning
+7. Deploy to staging environment
+8. Run E2E tests on staging
+9. Manual approval (for production)
+10. Deploy to production
+11. Run smoke tests
+12. Notify team (Slack)
+
+14.2 DEPLOYMENT STRATEGY
+--------------------------------------------------------------------------------
+- Blue-green deployment (zero downtime)
+- Canary releases (gradual rollout)
+- Automated rollback on failure
+- Database migrations (separate step, before deployment)
+- Feature flags for gradual feature rollout
+
+14.3 ENVIRONMENT MANAGEMENT
+--------------------------------------------------------------------------------
+Environments:
+- Development (local)
+- Staging (cloud, isolated)
+- Production (cloud, high availability)
+
+Configuration:
+- Environment variables (never commit secrets)
+- Google Secret Manager for production secrets
+- .env files for local development (git-ignored)
+
+
+================================================================================
+SECTION 15: FUTURE ENHANCEMENTS
+================================================================================
+
+15.1 SHORT-TERM (3-6 months)
+--------------------------------------------------------------------------------
+- Mobile app (React Native or Flutter)
+- Advanced analytics dashboard
+- Automated payouts (smart contract integration)
+- Telegram bot improvements (more commands)
+- Referral program for creators
+- Webhook retry logic improvements
+- Multi-language support (i18n)
+
+15.2 MEDIUM-TERM (6-12 months)
+--------------------------------------------------------------------------------
+- Creator marketplace (discover channels)
+- Trial subscriptions
+- Subscription gifting
+- Discord integration
+- Automated tax reporting
+- Advanced fraud detection
+- White-label solution for agencies
+- Premium support tier
+
+15.3 LONG-TERM (12+ months)
+--------------------------------------------------------------------------------
+- NFT-gated channels
+- DAO for platform governance
+- DeFi integration (staking, yield)
+- Cross-platform support (beyond Telegram)
+- Smart contract-based payouts (eliminate manual processing)
+- Decentralized identity verification
+- Layer 2 scaling solutions (reduce transaction fees)
+
+
+================================================================================
+SECTION 16: USER ONBOARDING & UX
+================================================================================
+
+16.1 FIRST-TIME USER EXPERIENCE
+--------------------------------------------------------------------------------
+
+A. Landing Page (Public):
+   - Hero section:
+     - Clear value proposition
+     - "Start Earning" CTA button
+     - Animated demo/screenshot
+   - Features section (3-4 key features with icons)
+   - How it works (3-step process)
+   - Testimonials (when available)
+   - Pricing transparency (platform fee disclosure)
+   - FAQ section
+   - Footer with links
+
+B. Registration Onboarding:
+   - Step 1: Create account (email, password)
+   - Step 2: Verify email
+   - Step 3: Welcome screen (animated)
+   - Step 4: Quick tutorial (skippable):
+     - Slide 1: "Monetize your Telegram channel"
+     - Slide 2: "Set up subscription tiers"
+     - Slide 3: "Get paid in crypto"
+     - Slide 4: "Track your earnings"
+   - Step 5: "Create your first channel" prompt
+   - Persistent progress indicator
+
+C. Channel Setup Wizard:
+   - Multi-step wizard (not all at once)
+   - Progress bar (step X of Y)
+   - Clear instructions at each step
+   - Helper tooltips and documentation links
+   - Preview of what user is building
+   - Celebration animation on completion
+
+D. Interactive Tooltips:
+   - First login: highlight key UI elements
+   - Dismissible tooltips
+   - "Don't show this again" option
+   - Onboarding checklist in dashboard
+
+
+16.2 UX BEST PRACTICES
+--------------------------------------------------------------------------------
+- Clear, concise copy (avoid jargon)
+- Consistent design language (Material Design or custom system)
+- Accessibility:
+  - WCAG 2.1 AA compliance
+  - Keyboard navigation
+  - Screen reader support
+  - High contrast mode
+  - Adjustable font sizes
+- Loading states (skeletons, spinners)
+- Empty states (helpful messages, clear CTAs)
+- Error messages (specific, actionable)
+- Success confirmations (visual feedback)
+- Responsive design (mobile-first)
+- Fast page loads (<2s)
+- Smooth animations (60fps)
+
+
+================================================================================
+SECTION 17: BRANDING & DESIGN SYSTEM
+================================================================================
+
+17.1 DESIGN SYSTEM
+--------------------------------------------------------------------------------
+Create a comprehensive design system:
+
+A. Color Palette:
+   - Primary color (brand color)
+   - Secondary color (accent)
+   - Success, warning, error, info colors
+   - Neutral grays (8 shades)
+   - Background colors (light/dark mode)
+
+B. Typography:
+   - Font family (e.g., Inter, Roboto)
+   - Font sizes (scale: 12px to 48px)
+   - Line heights
+   - Font weights (regular, medium, bold)
+   - Heading styles (H1-H6)
+
+C. Spacing System:
+   - Base unit: 4px or 8px
+   - Spacing scale (4px, 8px, 16px, 24px, 32px, 48px, 64px)
+   - Consistent margins and padding
+
+D. Components:
+   - Buttons (primary, secondary, outline, icon)
+   - Forms (inputs, selects, checkboxes, radios)
+   - Cards
+   - Modals
+   - Toasts/notifications
+   - Tables
+   - Charts
+   - Navigation
+   - Tabs
+   - Badges
+   - Tooltips
+   - Dropdowns
+
+E. Icons:
+   - Icon library (e.g., Heroicons, Material Icons)
+   - Consistent sizes (16px, 20px, 24px)
+   - Consistent style (outline or solid)
+
+F. Dark Mode:
+   - Toggle in user settings
+   - Saved preference
+   - Proper color contrast
+   - All components dark-mode compatible
+
+
+17.2 BRANDING GUIDELINES
+--------------------------------------------------------------------------------
+- Logo (multiple formats: SVG, PNG)
+- Logo variations (full, icon-only, white)
+- Brand colors (exact hex/RGB values)
+- Typography guidelines
+- Tone of voice (friendly, professional, helpful)
+- Writing style guide
+- Email signature
+- Social media templates
+
+
+================================================================================
+SECTION 18: LEGAL DOCUMENTS
+================================================================================
+
+18.1 REQUIRED LEGAL PAGES
+--------------------------------------------------------------------------------
+
+A. Terms of Service:
+   - User obligations
+   - Creator obligations
+   - Platform rules
+   - Payment terms
+   - Fees and pricing
+   - Refund policy
+   - Account termination
+   - Intellectual property
+   - Liability limitations
+   - Indemnification
+   - Dispute resolution
+   - Governing law
+   - Changes to terms
+
+B. Privacy Policy:
+   - What data we collect
+   - How we use data
+   - Data sharing (third parties)
+   - Cookies and tracking
+   - User rights (GDPR)
+   - Data retention
+   - Data security
+   - Children's privacy
+   - International transfers
+   - Contact information
+
+C. Cookie Policy:
+   - What cookies we use
+   - Purpose of each cookie
+   - How to disable cookies
+   - Third-party cookies
+
+D. Acceptable Use Policy:
+   - Prohibited content
+   - Prohibited activities
+   - Enforcement
+   - Reporting violations
+
+E. Refund Policy:
+   - Refund eligibility
+   - Refund process
+   - Refund timeline
+   - Exceptions
+
+
+18.2 CONSENT MANAGEMENT
+--------------------------------------------------------------------------------
+- Cookie consent banner (GDPR compliant)
+- Granular consent options
+- Consent preferences saved
+- Easy to withdraw consent
+- Audit trail of consent
+
+
+================================================================================
+SECTION 19: MARKETING & GROWTH
+================================================================================
+
+19.1 ACQUISITION CHANNELS
+--------------------------------------------------------------------------------
+- Content marketing (blog, guides, tutorials)
+- SEO optimization
+- Social media marketing (Twitter, Telegram groups)
+- Influencer partnerships
+- Affiliate program
+- Paid advertising (Google Ads, social ads)
+- Community building
+- PR and media coverage
+
+19.2 CREATOR INCENTIVE PROGRAMS
+--------------------------------------------------------------------------------
+- Referral bonuses (invite other creators)
+- Revenue milestones (rewards for hitting $X)
+- Featured creator spotlight
+- Success story case studies
+- Early adopter benefits
+- Volume discounts (lower fees for high earners)
+
+19.3 USER RETENTION
+--------------------------------------------------------------------------------
+- Email nurture campaigns
+- Regular feature updates
+- Creator community events
+- Educational webinars
+- Creator success resources
+- Performance optimization tips
+- Seasonal promotions
+
+
+================================================================================
+SECTION 20: DEVELOPMENT ROADMAP
+================================================================================
+
+20.1 PHASE 1: MVP (2-3 months)
+--------------------------------------------------------------------------------
+Core features required for launch:
+- User registration and authentication
+- Channel registration (enhanced from current GCRegister10-26)
+- Basic dashboard with key metrics
+- Subscription link generation
+- Earnings overview
+- Basic support system
+- Documentation
+- Admin panel (basic)
+
+20.2 PHASE 2: ENHANCEMENT (1-2 months)
+--------------------------------------------------------------------------------
+- Advanced analytics
+- Payout request system
+- API access
+- Webhook integration
+- Improved onboarding
+- Email notifications
+- Support ticket system
+- Mobile responsive improvements
+
+20.3 PHASE 3: SCALE (2-3 months)
+--------------------------------------------------------------------------------
+- Performance optimizations
+- Advanced security features
+- 2FA implementation
+- Automated payouts
+- Multi-language support
+- Premium analytics
+- White-label options
+- Mobile app (start development)
+
+20.4 PHASE 4: INNOVATION (ongoing)
+--------------------------------------------------------------------------------
+- NFT integration
+- DeFi features
+- Advanced fraud detection
+- AI-powered analytics
+- Smart contract integration
+- Cross-platform expansion
+
+
+================================================================================
+SECTION 21: METRICS & KPIs
+================================================================================
+
+21.1 PRODUCT METRICS
+--------------------------------------------------------------------------------
+- Active users (DAU, WAU, MAU)
+- New user registrations
+- User activation rate (% who register a channel)
+- User retention (D1, D7, D30)
+- Churn rate
+- Channels created
+- Active channels
+- Subscription conversion rate
+- Average revenue per user (ARPU)
+- Lifetime value (LTV)
+- Customer acquisition cost (CAC)
+- LTV:CAC ratio
+
+21.2 BUSINESS METRICS
+--------------------------------------------------------------------------------
+- Total transaction volume
+- Platform revenue (fees collected)
+- Growth rate (MoM, YoY)
+- Payout volume
+- Support ticket volume
+- Average resolution time
+- User satisfaction (NPS score)
+
+21.3 TECHNICAL METRICS
+--------------------------------------------------------------------------------
+- API uptime (target: 99.9%)
+- Average response time
+- Error rate
+- Page load time
+- Time to interactive (TTI)
+- Database query performance
+- Cache hit rate
+
+
+================================================================================
+END OF REQUIREMENTS OUTLINE
+================================================================================
+
+NEXT STEPS:
+-----------
+1. Review and prioritize features based on MVP requirements
+2. Create detailed UI/UX mockups (Figma or similar)
+3. Set up development environment and tooling
+4. Begin Phase 1 development
+5. Establish CI/CD pipeline
+6. Plan beta testing program
+7. Prepare launch marketing materials
+
+NOTES:
+------
+- This outline is comprehensive but should be treated as a living document
+- Regularly update based on user feedback and market changes
+- Consider regulatory changes in crypto/fintech space
+- Stay informed about Telegram's terms of service regarding bots
+- Prioritize security and compliance from day one
+- Build with scale in mind, but don't over-engineer initially
+
+Created: 2025-10-27
+Version: 1.0
+Next Review: After Phase 1 completion
+
+================================================================================

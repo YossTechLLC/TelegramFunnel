@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-from telegram import Update, Message, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, Message, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from broadcast_manager import BroadcastManager
-from input_handlers import OPEN_CHANNEL_INPUT
+from input_handlers import OPEN_CHANNEL_INPUT, DATABASE_CHANNEL_ID_INPUT, DATABASE_EDITING, DATABASE_FIELD_INPUT
 
 class MenuHandlers:
     def __init__(self, input_handlers, payment_gateway_handler):
@@ -92,13 +92,23 @@ class MenuHandlers:
             except Exception as e:
                 await context.bot.send_message(chat_id, f"❌ could not parse command: {e}")
         
-        # Send greeting message with hamburger menu (only if no subscription token)
+        # Send greeting message with inline keyboard menu (only if no subscription token)
         if not context.args:
-            # No subscription token - show hamburger menu
-            reply_markup = self.create_hamburger_menu()
+            # No subscription token - show inline keyboard menu
+            keyboard = [
+                [
+                    InlineKeyboardButton("💾 DATABASE", callback_data="CMD_DATABASE"),
+                    InlineKeyboardButton("💳 PAYMENT GATEWAY", callback_data="CMD_GATEWAY"),
+                ],
+                [
+                    InlineKeyboardButton("🌐 REGISTER", url="https://www.paygateprime.com"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await context.bot.send_message(
                 chat_id,
-                f"Hi {user.mention_html()}! 👋",
+                f"Hi {user.mention_html()}! 👋\n\n"
+                f"Choose an option:",
                 parse_mode="HTML",
                 reply_markup=reply_markup
             )
@@ -244,3 +254,445 @@ class MenuHandlers:
             'open_channel_id': self.global_open_channel_id,
             'sub_time': self.global_sub_time
         }
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  NEW DATABASE FLOW - Inline Form Functions
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def show_main_edit_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE, edit_message: bool = True):
+        """Display the main editing menu with current channel data summary."""
+        channel_data = context.user_data.get("channel_data", {})
+        open_channel_id = context.user_data.get("editing_channel_id", "Unknown")
+
+        # Build summary text
+        summary_text = (
+            f"📝 *Editing Channel: {open_channel_id}*\n\n"
+            f"📢 Open: {channel_data.get('open_channel_title', 'Not set')}\n"
+            f"🔒 Private: {channel_data.get('closed_channel_title', 'Not set')}\n"
+            f"💰 Tiers: "
+        )
+
+        # Add tier status
+        tier_status = []
+        for i in range(1, 4):
+            price = channel_data.get(f"sub_{i}_price")
+            time = channel_data.get(f"sub_{i}_time")
+            status = "✅" if (price is not None and time is not None) else "❌"
+            tier_status.append(status)
+        summary_text += " ".join(tier_status)
+
+        summary_text += f"\n💳 Wallet: {channel_data.get('client_payout_currency', 'Not set')}"
+
+        # Build inline keyboard
+        keyboard = [
+            [
+                InlineKeyboardButton("📢 Open Channel", callback_data="EDIT_OPEN_CHANNEL"),
+                InlineKeyboardButton("🔒 Private Channel", callback_data="EDIT_PRIVATE_CHANNEL"),
+            ],
+            [
+                InlineKeyboardButton("💰 Payment Tiers", callback_data="EDIT_PAYMENT_TIERS"),
+                InlineKeyboardButton("💳 Wallet Address", callback_data="EDIT_WALLET"),
+            ],
+            [
+                InlineKeyboardButton("✅ Save All Changes", callback_data="SAVE_ALL_CHANGES"),
+                InlineKeyboardButton("❌ Cancel", callback_data="CANCEL_EDIT"),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # Edit existing message or send new one
+        if edit_message and update.callback_query:
+            await update.callback_query.edit_message_text(
+                text=summary_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=summary_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+
+    async def show_open_channel_form(self, update: Update, context: ContextTypes.DEFAULT_TYPE, edit_message: bool = True):
+        """Display open channel editing form."""
+        channel_data = context.user_data.get("channel_data", {})
+
+        form_text = (
+            f"📢 *OPEN CHANNEL CONFIGURATION*\n\n"
+            f"Channel ID: `{channel_data.get('open_channel_id', 'Not set')}`\n"
+            f"Title: {channel_data.get('open_channel_title', 'Not set')}\n"
+            f"Description: {channel_data.get('open_channel_description', 'Not set')}"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("✏️ Edit Channel ID", callback_data="EDIT_OPEN_CHANNEL_ID")],
+            [InlineKeyboardButton("✏️ Edit Title", callback_data="EDIT_OPEN_CHANNEL_TITLE")],
+            [InlineKeyboardButton("✏️ Edit Description", callback_data="EDIT_OPEN_CHANNEL_DESC")],
+            [
+                InlineKeyboardButton("💾 Submit", callback_data="SUBMIT_OPEN_CHANNEL"),
+                InlineKeyboardButton("⬅️ Back", callback_data="BACK_TO_MAIN"),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        context.user_data["current_form"] = "open_channel"
+
+        if edit_message and update.callback_query:
+            await update.callback_query.edit_message_text(
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+
+    async def show_private_channel_form(self, update: Update, context: ContextTypes.DEFAULT_TYPE, edit_message: bool = True):
+        """Display private channel editing form."""
+        channel_data = context.user_data.get("channel_data", {})
+
+        form_text = (
+            f"🔒 *PRIVATE CHANNEL CONFIGURATION*\n\n"
+            f"Channel ID: `{channel_data.get('closed_channel_id', 'Not set')}`\n"
+            f"Title: {channel_data.get('closed_channel_title', 'Not set')}\n"
+            f"Description: {channel_data.get('closed_channel_description', 'Not set')}"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("✏️ Edit Channel ID", callback_data="EDIT_PRIVATE_CHANNEL_ID")],
+            [InlineKeyboardButton("✏️ Edit Title", callback_data="EDIT_PRIVATE_CHANNEL_TITLE")],
+            [InlineKeyboardButton("✏️ Edit Description", callback_data="EDIT_PRIVATE_CHANNEL_DESC")],
+            [
+                InlineKeyboardButton("💾 Submit", callback_data="SUBMIT_PRIVATE_CHANNEL"),
+                InlineKeyboardButton("⬅️ Back", callback_data="BACK_TO_MAIN"),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        context.user_data["current_form"] = "private_channel"
+
+        if edit_message and update.callback_query:
+            await update.callback_query.edit_message_text(
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+
+    async def show_payment_tiers_form(self, update: Update, context: ContextTypes.DEFAULT_TYPE, edit_message: bool = True):
+        """Display payment tiers editing form."""
+        channel_data = context.user_data.get("channel_data", {})
+
+        form_text = "💰 *PAYMENT TIERS CONFIGURATION*\n\n"
+
+        medals = ["🥇", "🥈", "🥉"]
+        names = ["Gold", "Silver", "Bronze"]
+
+        for i in range(1, 4):
+            price = channel_data.get(f"sub_{i}_price")
+            time = channel_data.get(f"sub_{i}_time")
+            status = "✅" if (price is not None and time is not None) else "❌"
+            price_display = f"${price:.2f}" if price is not None else "Not set"
+            time_display = f"{time} days" if time is not None else "Not set"
+
+            form_text += (
+                f"{medals[i-1]} *Tier {i} ({names[i-1]})* {status}\n"
+                f"Price: {price_display} | Time: {time_display}\n\n"
+            )
+
+        keyboard = []
+        for i in range(1, 4):
+            price = channel_data.get(f"sub_{i}_price")
+            time = channel_data.get(f"sub_{i}_time")
+            is_enabled = (price is not None and time is not None)
+            toggle_text = "☑️ Disable" if is_enabled else "☑️ Enable"
+
+            keyboard.append([
+                InlineKeyboardButton(toggle_text, callback_data=f"TOGGLE_TIER_{i}"),
+                InlineKeyboardButton(f"✏️ Edit Tier {i}", callback_data=f"EDIT_TIER_{i}"),
+            ])
+
+        keyboard.append([
+            InlineKeyboardButton("💾 Submit", callback_data="SUBMIT_PAYMENT_TIERS"),
+            InlineKeyboardButton("⬅️ Back", callback_data="BACK_TO_MAIN"),
+        ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        context.user_data["current_form"] = "payment_tiers"
+
+        if edit_message and update.callback_query:
+            await update.callback_query.edit_message_text(
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+
+    async def show_wallet_form(self, update: Update, context: ContextTypes.DEFAULT_TYPE, edit_message: bool = True):
+        """Display wallet address editing form."""
+        channel_data = context.user_data.get("channel_data", {})
+
+        form_text = (
+            f"💳 *WALLET ADDRESS CONFIGURATION*\n\n"
+            f"Wallet Address: `{channel_data.get('client_wallet_address', 'Not set')}`\n"
+            f"Currency Type: {channel_data.get('client_payout_currency', 'Not set')}"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("✏️ Edit Wallet Address", callback_data="EDIT_WALLET_ADDRESS")],
+            [InlineKeyboardButton("✏️ Edit Currency Type", callback_data="EDIT_WALLET_CURRENCY")],
+            [
+                InlineKeyboardButton("💾 Submit", callback_data="SUBMIT_WALLET"),
+                InlineKeyboardButton("⬅️ Back", callback_data="BACK_TO_MAIN"),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        context.user_data["current_form"] = "wallet"
+
+        if edit_message and update.callback_query:
+            await update.callback_query.edit_message_text(
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=form_text,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+
+    async def handle_database_callbacks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Master callback handler for all database editing callbacks."""
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+
+        print(f"🔘 [CALLBACK] Received: {data}")
+
+        # Main menu callbacks
+        if data == "EDIT_OPEN_CHANNEL":
+            await self.show_open_channel_form(update, context, edit_message=True)
+        elif data == "EDIT_PRIVATE_CHANNEL":
+            await self.show_private_channel_form(update, context, edit_message=True)
+        elif data == "EDIT_PAYMENT_TIERS":
+            await self.show_payment_tiers_form(update, context, edit_message=True)
+        elif data == "EDIT_WALLET":
+            await self.show_wallet_form(update, context, edit_message=True)
+        elif data == "SAVE_ALL_CHANGES":
+            await self.save_all_changes(update, context)
+        elif data == "CANCEL_EDIT":
+            await self.cancel_edit(update, context)
+
+        # Open channel form callbacks
+        elif data == "EDIT_OPEN_CHANNEL_ID":
+            context.user_data["awaiting_input_for"] = "open_channel_id"
+            await query.message.reply_text("Enter new *open_channel_id* (≤14 chars integer):", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "EDIT_OPEN_CHANNEL_TITLE":
+            context.user_data["awaiting_input_for"] = "open_channel_title"
+            await query.message.reply_text("Enter new *open channel title* (1-100 chars):", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "EDIT_OPEN_CHANNEL_DESC":
+            context.user_data["awaiting_input_for"] = "open_channel_description"
+            await query.message.reply_text("Enter new *open channel description* (1-500 chars):", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "SUBMIT_OPEN_CHANNEL":
+            await self.show_main_edit_menu(update, context, edit_message=True)
+
+        # Private channel form callbacks
+        elif data == "EDIT_PRIVATE_CHANNEL_ID":
+            context.user_data["awaiting_input_for"] = "closed_channel_id"
+            await query.message.reply_text("Enter new *closed_channel_id* (≤14 chars integer):", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "EDIT_PRIVATE_CHANNEL_TITLE":
+            context.user_data["awaiting_input_for"] = "closed_channel_title"
+            await query.message.reply_text("Enter new *private channel title* (1-100 chars):", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "EDIT_PRIVATE_CHANNEL_DESC":
+            context.user_data["awaiting_input_for"] = "closed_channel_description"
+            await query.message.reply_text("Enter new *private channel description* (1-500 chars):", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "SUBMIT_PRIVATE_CHANNEL":
+            await self.show_main_edit_menu(update, context, edit_message=True)
+
+        # Payment tiers callbacks
+        elif data.startswith("TOGGLE_TIER_"):
+            tier_num = int(data.split("_")[-1])
+            channel_data = context.user_data.get("channel_data", {})
+            price = channel_data.get(f"sub_{tier_num}_price")
+            time = channel_data.get(f"sub_{tier_num}_time")
+            is_enabled = (price is not None and time is not None)
+
+            if is_enabled:
+                # Disable tier
+                context.user_data["channel_data"][f"sub_{tier_num}_price"] = None
+                context.user_data["channel_data"][f"sub_{tier_num}_time"] = None
+                print(f"❌ [TIER] Disabled tier {tier_num}")
+                await self.show_payment_tiers_form(update, context, edit_message=True)
+            else:
+                # Enable tier - ask for price
+                context.user_data["awaiting_input_for"] = f"sub_{tier_num}_price"
+                await query.message.reply_text(
+                    f"🥇 *Tier {tier_num} - Enter price* (0-9999.99):",
+                    parse_mode="Markdown"
+                )
+                return DATABASE_FIELD_INPUT
+
+        elif data.startswith("EDIT_TIER_"):
+            tier_num = int(data.split("_")[-1])
+            context.user_data["awaiting_input_for"] = f"sub_{tier_num}_price"
+            await query.message.reply_text(
+                f"🥇 *Tier {tier_num} - Enter price* (0-9999.99):",
+                parse_mode="Markdown"
+            )
+            return DATABASE_FIELD_INPUT
+
+        elif data == "SUBMIT_PAYMENT_TIERS":
+            await self.show_main_edit_menu(update, context, edit_message=True)
+
+        # Wallet form callbacks
+        elif data == "EDIT_WALLET_ADDRESS":
+            context.user_data["awaiting_input_for"] = "client_wallet_address"
+            await query.message.reply_text("Enter new *wallet address*:", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "EDIT_WALLET_CURRENCY":
+            context.user_data["awaiting_input_for"] = "client_payout_currency"
+            await query.message.reply_text("Enter new *payout currency* (e.g., BTC, ETH, USDT):", parse_mode="Markdown")
+            return DATABASE_FIELD_INPUT
+        elif data == "SUBMIT_WALLET":
+            await self.show_main_edit_menu(update, context, edit_message=True)
+
+        # Back button
+        elif data == "BACK_TO_MAIN":
+            await self.show_main_edit_menu(update, context, edit_message=True)
+
+        # Create new channel
+        elif data == "CREATE_NEW_CHANNEL":
+            await self.create_new_channel(update, context)
+
+        # Cancel database
+        elif data == "CANCEL_DATABASE":
+            await self.cancel_edit(update, context)
+
+        return DATABASE_EDITING
+
+    async def save_all_changes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Save all changes to database."""
+        editing_channel_id = context.user_data.get("editing_channel_id")
+        channel_data = context.user_data.get("channel_data", {})
+
+        print(f"💾 [SAVE] Saving changes for channel {editing_channel_id}")
+
+        # Get database manager from bot_data
+        db_manager = context.bot_data.get('db_manager')
+
+        if not db_manager:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error: Database manager not available"
+            )
+            context.user_data.clear()
+            from telegram.ext import ConversationHandler
+            return ConversationHandler.END
+
+        # Update database
+        success = db_manager.update_channel_config(editing_channel_id, channel_data)
+
+        if success:
+            await update.callback_query.edit_message_text(
+                text=(
+                    f"✅ *All changes saved successfully!*\n\n"
+                    f"Channel: `{editing_channel_id}`\n"
+                    f"📢 Open: {channel_data.get('open_channel_title', 'N/A')}\n"
+                    f"🔒 Private: {channel_data.get('closed_channel_title', 'N/A')}\n"
+                    f"💳 Wallet: {channel_data.get('client_payout_currency', 'N/A')}"
+                ),
+                parse_mode="Markdown"
+            )
+        else:
+            await update.callback_query.edit_message_text(
+                text="❌ Failed to save changes to database."
+            )
+
+        context.user_data.clear()
+        from telegram.ext import ConversationHandler
+        return ConversationHandler.END
+
+    async def cancel_edit(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Cancel editing and clear session."""
+        print(f"❌ [CANCEL] User cancelled editing")
+
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text="❌ Editing cancelled. No changes were saved."
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Editing cancelled. No changes were saved."
+            )
+
+        context.user_data.clear()
+        from telegram.ext import ConversationHandler
+        return ConversationHandler.END
+
+    async def create_new_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Create a new channel configuration."""
+        pending_channel_id = context.user_data.get("pending_channel_id")
+
+        print(f"✨ [CREATE] Creating new channel: {pending_channel_id}")
+
+        # Initialize empty channel data
+        channel_data = {
+            "open_channel_id": pending_channel_id,
+            "open_channel_title": "New Channel",
+            "open_channel_description": "Description",
+            "closed_channel_id": "",
+            "closed_channel_title": "Private Channel",
+            "closed_channel_description": "Description",
+            "sub_1_price": None,
+            "sub_1_time": None,
+            "sub_2_price": None,
+            "sub_2_time": None,
+            "sub_3_price": None,
+            "sub_3_time": None,
+            "client_wallet_address": "",
+            "client_payout_currency": "USD",
+            "client_payout_network": "ETH",
+        }
+
+        context.user_data["editing_channel_id"] = pending_channel_id
+        context.user_data["channel_data"] = channel_data
+        context.user_data["current_form"] = "main"
+
+        await update.callback_query.edit_message_text(
+            text=f"✨ Creating new channel configuration for `{pending_channel_id}`\n\n"
+            f"All fields are set to defaults. Please configure them now.",
+            parse_mode="Markdown"
+        )
+
+        await self.show_main_edit_menu(update, context, edit_message=False)
+
+        return DATABASE_EDITING

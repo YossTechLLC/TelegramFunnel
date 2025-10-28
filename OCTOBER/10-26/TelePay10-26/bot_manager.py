@@ -9,7 +9,7 @@ from telegram.ext import (
     ConversationHandler,
     CallbackQueryHandler,
 )
-from input_handlers import InputHandlers, OPEN_CHANNEL_INPUT, CLOSED_CHANNEL_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT
+from input_handlers import InputHandlers, OPEN_CHANNEL_INPUT, CLOSED_CHANNEL_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT, DATABASE_CHANNEL_ID_INPUT, DATABASE_EDITING, DATABASE_FIELD_INPUT
 
 class BotManager:
     def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None):
@@ -24,12 +24,31 @@ class BotManager:
         """Set up all bot handlers"""
         # Get handler functions from input_handlers
         handlers = self.input_handlers.get_handlers()
-        
-        # Accept both /database and CMD_DATABASE button to start conversation
-        database_handler = ConversationHandler(
+
+        # NEW: Database V2 conversation handler with inline forms
+        database_v2_handler = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(self.input_handlers.start_database_v2, pattern="^CMD_DATABASE$"),
+            ],
+            states={
+                DATABASE_CHANNEL_ID_INPUT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_channel_id_v2)
+                ],
+                DATABASE_EDITING: [
+                    CallbackQueryHandler(self.menu_handlers.handle_database_callbacks)
+                ],
+                DATABASE_FIELD_INPUT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_field_input_v2)
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", self.input_handlers.cancel)],
+            per_message=False,
+        )
+
+        # OLD: Keep old database handler for backwards compatibility (accessed via /database command)
+        database_handler_old = ConversationHandler(
             entry_points=[
                 CommandHandler("database", self.input_handlers.start_database),
-                CallbackQueryHandler(self.menu_callback_handler, pattern="^CMD_DATABASE$"),
             ],
             states={
                 OPEN_CHANNEL_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_open_channel)],
@@ -42,7 +61,7 @@ class BotManager:
                 SUB3_TIME_INPUT   : [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_sub3_time)],
             },
             fallbacks=[CommandHandler("cancel", self.input_handlers.cancel)],
-            per_message=False,  # This is default, warning can be ignored or silenced
+            per_message=False,
         )
         
         # Donation conversation handler
@@ -57,18 +76,21 @@ class BotManager:
             per_message=False,
         )
         
-        # Add all handlers
-        application.add_handler(database_handler)
+        # Add all handlers (order matters - more specific first)
+        application.add_handler(database_v2_handler)  # NEW: Inline form database flow
+        application.add_handler(database_handler_old)  # OLD: Keep for /database command
         application.add_handler(donation_handler)
         application.add_handler(CommandHandler("start", self.start_bot_handler))
         application.add_handler(CommandHandler("start_np_gateway_new", self.payment_gateway_handler))
         application.add_handler(CallbackQueryHandler(self.trigger_payment_handler, pattern="^TRIGGER_PAYMENT$"))
-        application.add_handler(CallbackQueryHandler(self.menu_callback_handler, pattern="^(?!CMD_DATABASE|CMD_DONATE|TRIGGER_PAYMENT).*$"))
-        
-        # Add hamburger menu handler
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.Regex("^(🚀 Start|💾 Database|💳 Payment Gateway|💝 Donate)$"),
-            self.menu_handlers.handle_menu_selection
+
+        # Handle CMD_GATEWAY callback for payment gateway
+        application.add_handler(CallbackQueryHandler(self.handle_cmd_gateway, pattern="^CMD_GATEWAY$"))
+
+        # Catch-all for other callbacks (excluding database-related ones which are handled by ConversationHandler)
+        application.add_handler(CallbackQueryHandler(
+            self.menu_callback_handler,
+            pattern="^(?!CMD_DATABASE|CMD_DONATE|TRIGGER_PAYMENT|CMD_GATEWAY|EDIT_|SUBMIT_|BACK_TO_MAIN|SAVE_ALL_CHANGES|CANCEL_EDIT|TOGGLE_TIER_|CREATE_NEW_CHANNEL|CANCEL_DATABASE).*$"
         ))
     
     async def run_telegram_bot(self, telegram_token: str, payment_token: str):
@@ -95,17 +117,36 @@ class BotManager:
     async def trigger_payment_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle TRIGGER_PAYMENT callback - directly invoke payment gateway"""
         print(f"💳 [DEBUG] TRIGGER_PAYMENT callback received from user {update.effective_user.id if update.effective_user else 'Unknown'}")
-        
+
         try:
             # Answer the callback query first
             await context.bot.answer_callback_query(update.callback_query.id)
-            
+
             # Trigger the payment gateway handler directly
             await self.payment_gateway_handler(update, context)
             print(f"✅ [DEBUG] Payment gateway triggered successfully")
-            
+
         except Exception as e:
             print(f"❌ [DEBUG] Error triggering payment gateway: {e}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Error processing payment. Please try again."
+            )
+
+    async def handle_cmd_gateway(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle CMD_GATEWAY callback from inline keyboard"""
+        print(f"💳 [DEBUG] CMD_GATEWAY callback received from user {update.effective_user.id if update.effective_user else 'Unknown'}")
+
+        try:
+            # Answer the callback query first
+            await context.bot.answer_callback_query(update.callback_query.id)
+
+            # Trigger the payment gateway handler directly
+            await self.payment_gateway_handler(update, context)
+            print(f"✅ [DEBUG] Payment gateway triggered from inline button")
+
+        except Exception as e:
+            print(f"❌ [DEBUG] Error triggering payment gateway from inline button: {e}")
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ Error processing payment. Please try again."
