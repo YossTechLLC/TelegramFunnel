@@ -3,3 +3,4 @@
 - Please pay attention to the way in which the debug/error/print statements are written and use emojis, please continue to do so but and only use the emojis that have already been used.
 - MONITOR FOR THIS PACKAGE ERROR - google-cloud-sql-connector is not a package, instead call cloud-sql-python-connector --> it imports as google.cloud.sql.connector.
 - Remember USER : PASS for 'www.paygateprime.com' --> user1user1 : user1TEST$
+- .venv &or /.venv is found in ~/Desktop/2025/.venv AND NO LONGER IN ~/Desktop/2025/TelegramFunnel/.venv

@@ -70,7 +70,11 @@
       "Bash(gcloud secrets versions access:*)",
       "mcp__playwright__browser_wait_for",
       "mcp__playwright__browser_console_messages",
-      "mcp__playwright__browser_close"
+      "mcp__playwright__browser_close",
+      "Bash(gcloud tasks queues:*)",
+      "mcp__observability__list_log_entries",
+      "Bash(gcloud scheduler jobs describe:*)",
+      "Bash(gcloud scheduler jobs list:*)"
     ],
     "deny": [],
     "ask": []
