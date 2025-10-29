@@ -28,6 +28,7 @@ export interface ChannelRegistrationRequest {
   closed_channel_id: string;
   closed_channel_title: string;
   closed_channel_description: string;
+  tier_count: number;
   sub_1_price: number;
   sub_1_time: number;
   sub_2_price?: number | null;

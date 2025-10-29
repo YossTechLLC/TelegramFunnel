@@ -853,6 +853,62 @@ This document records all significant architectural decisions made during the de
 - **Alternative Considered:** Manual SQL via gcloud sql connect (psql not available), Cloud Shell
 - **Outcome:** ✅ Migrations executed successfully, full verification completed
 
+### Decision: RegisterChannelPage with Complete Form UI
+- **Date:** October 29, 2025
+- **Status:** ✅ Implemented
+- **Context:** Users could signup and login but couldn't register channels - buttons existed but did nothing
+- **Decision:** Implement complete RegisterChannelPage.tsx with all form fields from API model
+- **Rationale:**
+  - **Complete User Flow:** Users can now: signup → login → register channel → view dashboard
+  - **Form Complexity:** 20+ fields organized into logical sections (Open Channel, Closed Channel, Tiers, Payment Config, Payout Strategy)
+  - **Dynamic UI:** Tier count dropdown shows/hides Tier 2 and 3 fields based on selection
+  - **Network-Currency Mapping:** Currency dropdown updates based on selected network
+  - **Validation:** Client-side validation before API call (channel ID format, required fields)
+  - **Visual Design:** Color-coded tier sections (Gold=yellow, Silver=gray, Bronze=rose)
+  - **Strategy Toggle:** Instant vs Threshold with conditional threshold amount field
+- **Implementation:**
+  - Created RegisterChannelPage.tsx (470 lines)
+  - Added tier_count field to ChannelRegistrationRequest TypeScript type
+  - Wired dashboard buttons: `onClick={() => navigate('/register')}`
+  - Added /register route to App.tsx with ProtectedRoute wrapper
+  - Fetches currency/network mappings from API on mount
+  - Auto-selects default network (BSC) and currency (SHIB) from database
+- **Form Sections:**
+  1. Open Channel (Public): ID, Title, Description
+  2. Closed Channel (Private/Paid): ID, Title, Description
+  3. Subscription Tiers: Count selector + dynamic tier fields (Price USD, Duration days)
+  4. Payment Configuration: Wallet address, Network dropdown, Currency dropdown
+  5. Payout Strategy: Instant or Threshold + conditional threshold amount
+- **Trade-offs:**
+  - Large component (470 lines) - could be split into smaller components
+  - Inline styles instead of CSS modules - easier to maintain in single file
+  - Network/currency mapping from database - requires API call on page load
+- **Alternative Considered:**
+  - Multi-step wizard (better UX but more complex state management)
+  - Separate pages for each section (worse UX - too many nav steps)
+  - Form library like React Hook Form (overkill for single form)
+- **Testing Results:**
+  - ✅ Form loads correctly with all fields
+  - ✅ Currency dropdown updates when network changes
+  - ✅ Tier 2/3 fields show/hide based on tier count
+  - ✅ Threshold field shows/hides based on strategy
+  - ✅ Channel registered successfully (API logs show 201 Created)
+  - ✅ Dashboard shows registered channel with correct data
+  - ✅ 1/10 channels counter updates correctly
+- **User Flow Verified:**
+  ```
+  Landing Page → Signup → Login → Dashboard (0 channels)
+  → Click "Register Channel" → Fill form → Submit
+  → Redirect to Dashboard → Channel appears (1/10 channels)
+  ```
+- **Outcome:** ✅ Complete user registration flow working end-to-end
+- **Files Modified:**
+  - Created: `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`
+  - Modified: `GCRegisterWeb-10-26/src/App.tsx` (added route)
+  - Modified: `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx` (added onClick handlers)
+  - Modified: `GCRegisterWeb-10-26/src/types/channel.ts` (added tier_count field)
+- **Deployment:** ✅ Deployed to gs://www-paygateprime-com via Cloud CDN
+
 ---
 
 ## Future Considerations

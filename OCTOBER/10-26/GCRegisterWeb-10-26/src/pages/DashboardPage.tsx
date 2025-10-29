@@ -70,7 +70,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700' }}>Your Channels</h1>
           {channelCount < maxChannels && (
-            <button className="btn btn-primary">+ Add Channel</button>
+            <button className="btn btn-primary" onClick={() => navigate('/register')}>+ Add Channel</button>
           )}
         </div>
 
@@ -80,7 +80,7 @@ export default function DashboardPage() {
             <p style={{ color: '#999', marginBottom: '24px' }}>
               Register your first Telegram channel to start accepting payments
             </p>
-            <button className="btn btn-primary">Register Channel</button>
+            <button className="btn btn-primary" onClick={() => navigate('/register')}>Register Channel</button>
           </div>
         ) : (
           <div className="channel-grid">
