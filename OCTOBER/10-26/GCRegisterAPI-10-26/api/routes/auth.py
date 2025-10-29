@@ -24,6 +24,14 @@ def signup():
     Returns: 201 Created with user data and tokens
     """
     try:
+        # Check if request has JSON data
+        if not request.is_json or request.json is None:
+            print(f"❌ Signup error: No JSON data in request. Content-Type: {request.content_type}, Data: {request.data[:200] if request.data else 'None'}")
+            return jsonify({
+                'success': False,
+                'error': 'Request must be JSON with Content-Type: application/json'
+            }), 400
+
         # Validate request data
         signup_data = SignupRequest(**request.json)
 

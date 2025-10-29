@@ -59,7 +59,14 @@
       "Bash(gcloud compute target-http-proxies create:*)",
       "Bash(gcloud compute addresses create:*)",
       "Bash(gcloud compute addresses describe:*)",
-      "Bash(gcloud compute ssl-certificates describe:*)"
+      "Bash(gcloud compute ssl-certificates describe:*)",
+      "Bash(gcloud run services describe:*)",
+      "Bash(pip3 install:*)",
+      "Bash(ACCESS_TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc2MTcyMzUwMSwianRpIjoiNWI2ZWFkNjUtYzhkNy00Y2MyLWI2ZmEtYWJiYzg0NTQ2MTQxIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6IjY2MzJiZWM5LWEyNjItNGUxOS04MjQ5LTE0Nzc5ZjBmZDQzNSIsIm5iZiI6MTc2MTcyMzUwMSwiY3NyZiI6IjEyMTczYjE3LTcwNDAtNDE5Yy1iYzRiLWMyNmViNTM0M2I1MSIsImV4cCI6MTc2MTcyNDQwMSwidXNlcm5hbWUiOiJuZXd0ZXN0In0.zl_bD16XnjYfnJeyQOQoyu8zaqYujRyQpm-BqQdysM0\")",
+      "Bash(ACCESS_TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc2MTcyNDAzNywianRpIjoiZDNhYzE4ZDMtY2Q4Yi00OWQyLThlNDEtNThiMzk4OGE3OTVlIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6IjY2MzJiZWM5LWEyNjItNGUxOS04MjQ5LTE0Nzc5ZjBmZDQzNSIsIm5iZiI6MTc2MTcyNDAzNywiY3NyZiI6Ijg1Y2M0ZDQ4LTM3MWYtNGQwZC1iMGY1LWZlZDAwZWNmYmQ4ZCIsImV4cCI6MTc2MTcyNDkzNywidXNlcm5hbWUiOiJuZXd0ZXN0In0.-xDLUfhysAbNN2TbTF4IM95qKiIQkwLvR6SzgmuH4Jc\")",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_type"
     ],
     "deny": [],
     "ask": []

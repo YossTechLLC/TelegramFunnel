@@ -71,7 +71,6 @@ class ChannelService:
                     closed_channel_id,
                     closed_channel_title,
                     closed_channel_description,
-                    tier_count,
                     sub_1_price,
                     sub_1_time,
                     sub_2_price,
@@ -84,11 +83,9 @@ class ChannelService:
                     payout_strategy,
                     payout_threshold_usd,
                     client_id,
-                    created_by,
-                    created_at,
-                    updated_at
+                    created_by
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW()
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """, (
                 channel_data.open_channel_id,
@@ -97,7 +94,6 @@ class ChannelService:
                 channel_data.closed_channel_id,
                 channel_data.closed_channel_title,
                 channel_data.closed_channel_description,
-                channel_data.tier_count,
                 channel_data.sub_1_price,
                 channel_data.sub_1_time,
                 channel_data.sub_2_price,
@@ -142,7 +138,6 @@ class ChannelService:
                 closed_channel_id,
                 closed_channel_title,
                 closed_channel_description,
-                tier_count,
                 sub_1_price,
                 sub_1_time,
                 sub_2_price,
@@ -153,12 +148,10 @@ class ChannelService:
                 client_payout_currency,
                 client_payout_network,
                 payout_strategy,
-                payout_threshold_usd,
-                created_at,
-                updated_at
+                payout_threshold_usd
             FROM main_clients_database
             WHERE client_id = %s
-            ORDER BY created_at DESC
+            ORDER BY open_channel_id DESC
         """, (user_id,))
 
         rows = cursor.fetchall()
@@ -166,6 +159,15 @@ class ChannelService:
 
         channels = []
         for row in rows:
+            # Calculate tier_count dynamically
+            tier_count = 0
+            if row[6] is not None:  # sub_1_price
+                tier_count += 1
+            if row[8] is not None:  # sub_2_price
+                tier_count += 1
+            if row[10] is not None:  # sub_3_price
+                tier_count += 1
+
             channels.append({
                 'open_channel_id': row[0],
                 'open_channel_title': row[1],
@@ -173,20 +175,18 @@ class ChannelService:
                 'closed_channel_id': row[3],
                 'closed_channel_title': row[4],
                 'closed_channel_description': row[5],
-                'tier_count': row[6],
-                'sub_1_price': float(row[7]) if row[7] else None,
-                'sub_1_time': row[8],
-                'sub_2_price': float(row[9]) if row[9] else None,
-                'sub_2_time': row[10],
-                'sub_3_price': float(row[11]) if row[11] else None,
-                'sub_3_time': row[12],
-                'client_wallet_address': row[13],
-                'client_payout_currency': row[14],
-                'client_payout_network': row[15],
-                'payout_strategy': row[16],
-                'payout_threshold_usd': float(row[17]) if row[17] else None,
-                'created_at': row[18].isoformat() if row[18] else None,
-                'updated_at': row[19].isoformat() if row[19] else None,
+                'tier_count': tier_count,
+                'sub_1_price': float(row[6]) if row[6] else None,
+                'sub_1_time': row[7],
+                'sub_2_price': float(row[8]) if row[8] else None,
+                'sub_2_time': row[9],
+                'sub_3_price': float(row[10]) if row[10] else None,
+                'sub_3_time': row[11],
+                'client_wallet_address': row[12],
+                'client_payout_currency': row[13],
+                'client_payout_network': row[14],
+                'payout_strategy': row[15],
+                'payout_threshold_usd': float(row[16]) if row[16] else None,
                 'accumulated_amount': None  # TODO: Calculate from payout_accumulation table
             })
 
@@ -213,7 +213,6 @@ class ChannelService:
                 closed_channel_id,
                 closed_channel_title,
                 closed_channel_description,
-                tier_count,
                 sub_1_price,
                 sub_1_time,
                 sub_2_price,
@@ -225,9 +224,7 @@ class ChannelService:
                 client_payout_network,
                 payout_strategy,
                 payout_threshold_usd,
-                client_id,
-                created_at,
-                updated_at
+                client_id
             FROM main_clients_database
             WHERE open_channel_id = %s
         """, (channel_id,))
@@ -238,6 +235,15 @@ class ChannelService:
         if not row:
             return None
 
+        # Calculate tier_count dynamically
+        tier_count = 0
+        if row[6] is not None:  # sub_1_price
+            tier_count += 1
+        if row[8] is not None:  # sub_2_price
+            tier_count += 1
+        if row[10] is not None:  # sub_3_price
+            tier_count += 1
+
         return {
             'open_channel_id': row[0],
             'open_channel_title': row[1],
@@ -245,21 +251,19 @@ class ChannelService:
             'closed_channel_id': row[3],
             'closed_channel_title': row[4],
             'closed_channel_description': row[5],
-            'tier_count': row[6],
-            'sub_1_price': float(row[7]) if row[7] else None,
-            'sub_1_time': row[8],
-            'sub_2_price': float(row[9]) if row[9] else None,
-            'sub_2_time': row[10],
-            'sub_3_price': float(row[11]) if row[11] else None,
-            'sub_3_time': row[12],
-            'client_wallet_address': row[13],
-            'client_payout_currency': row[14],
-            'client_payout_network': row[15],
-            'payout_strategy': row[16],
-            'payout_threshold_usd': float(row[17]) if row[17] else None,
-            'client_id': str(row[18]),
-            'created_at': row[19].isoformat() if row[19] else None,
-            'updated_at': row[20].isoformat() if row[20] else None
+            'tier_count': tier_count,
+            'sub_1_price': float(row[6]) if row[6] else None,
+            'sub_1_time': row[7],
+            'sub_2_price': float(row[8]) if row[8] else None,
+            'sub_2_time': row[9],
+            'sub_3_price': float(row[10]) if row[10] else None,
+            'sub_3_time': row[11],
+            'client_wallet_address': row[12],
+            'client_payout_currency': row[13],
+            'client_payout_network': row[14],
+            'payout_strategy': row[15],
+            'payout_threshold_usd': float(row[16]) if row[16] else None,
+            'client_id': str(row[17])
         }
 
     @staticmethod
