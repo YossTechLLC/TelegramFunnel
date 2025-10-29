@@ -185,7 +185,7 @@ class DatabaseManager:
         Get payout threshold for client.
 
         Args:
-            client_id: Client's open_channel_id
+            client_id: Client's closed_channel_id (stored in payout_accumulation.client_id)
 
         Returns:
             Payout threshold in USD
@@ -203,7 +203,7 @@ class DatabaseManager:
             cur.execute(
                 """SELECT payout_threshold_usd
                    FROM main_clients_database
-                   WHERE open_channel_id = %s""",
+                   WHERE closed_channel_id = %s""",
                 (client_id,)
             )
 

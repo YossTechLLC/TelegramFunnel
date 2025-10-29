@@ -91,7 +91,13 @@
       "Bash(done)",
       "Bash(for service in gcwebhook1-10-26 gcwebhook2-10-26 gcsplit1-10-26 gcsplit2-10-26 gcsplit3-10-26 gcaccumulator-10-26 gcbatchprocessor-10-26)",
       "Bash(do echo \"======================================================================\" echo \"SERVICE: $service\" echo \"======================================================================\" gcloud run services describe $service --region=us-central1 --format=\"yaml(spec.template.spec.containers[0].env)\")",
-      "Bash(gcloud logging read:*)"
+      "Bash(gcloud logging read:*)",
+      "Bash(for secret in GCWEBHOOK2_QUEUE GCSPLIT1_QUEUE GCSPLIT2_QUEUE GCSPLIT3_QUEUE GCACCUMULATOR_QUEUE GCBATCHPROCESSOR_QUEUE GCHOSTPAY1_QUEUE GCHOSTPAY2_QUEUE GCHOSTPAY3_QUEUE GCHOSTPAY1_RESPONSE_QUEUE)",
+      "Bash(do echo \"\")",
+      "Bash(gcloud secrets versions add:*)",
+      "Bash(for secret in GCWEBHOOK2_QUEUE GCSPLIT1_QUEUE GCSPLIT2_QUEUE GCSPLIT3_QUEUE GCACCUMULATOR_QUEUE GCBATCHPROCESSOR_QUEUE GCHOSTPAY1_QUEUE GCHOSTPAY2_QUEUE GCHOSTPAY3_QUEUE GCHOSTPAY1_RESPONSE_QUEUE GCSPLIT1_URL GCSPLIT2_URL GCSPLIT3_URL GCACCUMULATOR_URL GCWEBHOOK1_URL GCWEBHOOK2_URL GCHOSTPAY1_URL GCHOSTPAY2_URL GCHOSTPAY3_URL)",
+      "Bash(do echo \"Checking $secret...\")",
+      "Bash(gcloud run services update-traffic:*)"
     ],
     "deny": [],
     "ask": []

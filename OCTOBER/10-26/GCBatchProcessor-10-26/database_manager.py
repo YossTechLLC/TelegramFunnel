@@ -72,6 +72,40 @@ class DatabaseManager:
             cur = conn.cursor()
             print(f"🔍 [DATABASE] Searching for clients over threshold")
 
+            # Debug: Check total unpaid records
+            cur.execute("SELECT COUNT(*) FROM payout_accumulation WHERE is_paid_out = FALSE")
+            unpaid_count = cur.fetchone()[0]
+            print(f"🔍 [DATABASE DEBUG] Total unpaid accumulation records: {unpaid_count}")
+
+            # Debug: Check if JOIN works
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM payout_accumulation pa
+                JOIN main_clients_database mc ON pa.client_id = mc.closed_channel_id
+                WHERE pa.is_paid_out = FALSE
+            """)
+            join_count = cur.fetchone()[0]
+            print(f"🔍 [DATABASE DEBUG] Records after JOIN: {join_count}")
+
+            # Debug: Show aggregated values before HAVING
+            cur.execute("""
+                SELECT
+                    pa.client_id,
+                    SUM(pa.accumulated_amount_usdt) as total_usdt,
+                    COUNT(*) as payment_count,
+                    mc.payout_threshold_usd as threshold
+                FROM payout_accumulation pa
+                JOIN main_clients_database mc ON pa.client_id = mc.closed_channel_id
+                WHERE pa.is_paid_out = FALSE
+                GROUP BY pa.client_id, mc.payout_threshold_usd
+            """)
+            agg_results = cur.fetchall()
+            print(f"🔍 [DATABASE DEBUG] Aggregated clients (before HAVING): {len(agg_results)}")
+            for row in agg_results:
+                is_over = row[1] >= row[3] if row[3] is not None else False
+                print(f"🔍 [DATABASE DEBUG]   Client {row[0]}: ${row[1]} / ${row[3]} (over: {is_over})")
+
+            # Main query with HAVING clause
             cur.execute(
                 """SELECT
                     pa.client_id,

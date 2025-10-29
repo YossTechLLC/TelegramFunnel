@@ -12,6 +12,77 @@
 
 ## Recently Fixed
 
+### 🐛 Batch Payout System Not Processing Due to Secret Newlines and Query Bug
+- **Date Fixed:** October 29, 2025
+- **Severity:** CRITICAL
+- **Description:** Threshold payout batches were not being created despite accumulations exceeding threshold
+- **Root Causes:**
+  1. **GCSPLIT1_BATCH_QUEUE secret had trailing newline** - Cloud Tasks API rejected task creation with "400 Queue ID" error
+  2. **GCAccumulator used wrong ID field** - Queried `open_channel_id` instead of `closed_channel_id` for threshold lookup
+- **Example:**
+  - Client -1003296084379 accumulated $2.295 USDT (threshold: $2.00)
+  - GCBatchProcessor found the client but Cloud Tasks enqueue failed
+  - GCAccumulator logs showed "threshold: $0" due to wrong query column
+- **Impact:**
+  - No batch payouts being created since threshold payout deployment
+  - `payout_batches` table remained empty
+  - Accumulated payments stuck in `payout_accumulation` indefinitely
+  - Manual intervention required to process accumulated funds
+- **Solution:**
+  1. **Fixed Secret Newlines:**
+     - Removed trailing `\n` from GCSPLIT1_BATCH_QUEUE using `echo -n`
+     - Created `fix_secret_newlines.sh` to audit and fix all queue/URL secrets
+     - Redeployed GCBatchProcessor to pick up new secret version
+  2. **Fixed GCAccumulator Threshold Query:**
+     - Changed `WHERE open_channel_id = %s` to `WHERE closed_channel_id = %s`
+     - Aligned with how `payout_accumulation.client_id` stores the value
+     - Redeployed GCAccumulator with fix
+- **Files Modified:**
+  - `GCSPLIT1_BATCH_QUEUE` secret (version 2 created)
+  - `GCAccumulator-10-26/database_manager.py:206` - Fixed WHERE clause
+  - `GCBatchProcessor-10-26/database_manager.py` - Added debug logging (temporary)
+  - `fix_secret_newlines.sh` - Created utility script
+- **Verification:**
+  - Batch `bd90fadf-fdc8-4f9e-b575-9de7a7ff41e0` created successfully
+  - Task enqueued: `projects/.../queues/gcsplit1-batch-queue/tasks/79768775309535645311`
+  - Both payout_accumulation records marked `is_paid_out=TRUE`
+  - Batch status: `processing`
+- **Reference Document:** `THRESHOLD_PAYOUT_BUG_FIX_SUMMARY.md`
+- **Status:** ✅ FIXED and deployed, batch payouts now working correctly
+
+### 🐛 Trailing Newlines in Secret Manager Queue Names Breaking Cloud Tasks
+- **Date Fixed:** October 29, 2025
+- **Severity:** CRITICAL
+- **Description:** Queue names stored in Secret Manager had trailing newline characters (`\n`), causing Cloud Tasks API to reject task creation with "Queue ID can contain only letters, numbers, or hyphens" error
+- **Example Error:** `Queue ID "accumulator-payment-queue\n" can contain only letters ([A-Za-z]), numbers ([0-9]), or hyphens (-)`
+- **Root Cause:**
+  - Secrets were created with `echo` instead of `echo -n`, adding unwanted newlines
+  - Affected secrets:
+    - `GCACCUMULATOR_QUEUE` = `"accumulator-payment-queue\n"`
+    - `GCSPLIT3_QUEUE` = `"gcsplit-eth-client-swap-queue\n"`
+    - `GCHOSTPAY1_RESPONSE_QUEUE` = `"gchostpay1-response-queue\n"`
+    - `GCACCUMULATOR_URL` = `"https://gcaccumulator-10-26-291176869049.us-central1.run.app\n"`
+    - `GCWEBHOOK2_URL` = `"https://gcwebhook2-10-26-291176869049.us-central1.run.app\n"`
+  - When `config_manager.py` loaded these via `os.getenv()`, it included the `\n`
+  - Cloud Tasks queue creation failed validation
+- **Impact:**
+  - GCWebhook1 could NOT route threshold payments to GCAccumulator (fell back to instant payout)
+  - All threshold payout functionality broken
+  - Payments that should accumulate were processed instantly
+- **Solution (Two-Pronged):**
+  1. **Fixed Secret Manager values** - Created new versions without trailing newlines using `echo -n`
+  2. **Added defensive `.strip()`** - Updated `fetch_secret()` in all config_manager.py files to strip whitespace
+- **Files Modified:**
+  - Secret Manager: Created version 2 of all affected secrets
+  - `GCWebhook1-10-26/config_manager.py:40` - Added `.strip()`
+  - `GCSplit3-10-26/config_manager.py:40` - Added `.strip()`
+  - `GCHostPay3-10-26/config_manager.py:40` - Added `.strip()`
+- **Verification:**
+  - All secrets verified with `cat -A` (no `$` at end = no newline)
+  - GCWebhook1 revision `00012-9pb` logs show successful queue name loading
+  - Health check shows all components healthy
+- **Status:** ✅ FIXED and deployed, threshold routing now works correctly
+
 ### 🐛 Threshold Payout Strategy Defaulting to Instant (GCWebhook1 Secret Configuration)
 - **Date Fixed:** October 29, 2025
 - **Severity:** CRITICAL

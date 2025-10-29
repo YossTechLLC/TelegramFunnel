@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-10-28
+**Last Updated:** 2025-10-29 (Secret Management Best Practices)
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -1427,3 +1427,60 @@ CREATE TABLE currency_to_network (
   - GCHostPay3-10-26 revision: 00004-662
   - Both deployed successfully with credentials loading correctly
 
+
+### Decision: Secret Manager Value Sanitization and Validation
+- **Date:** October 29, 2025
+- **Status:** ✅ Implemented
+- **Context:** GCSPLIT1_BATCH_QUEUE secret contained trailing newline, causing Cloud Tasks API to reject task creation
+- **Problem:**
+  - Secrets created with `echo "value" | gcloud secrets versions add ...` included trailing `\n`
+  - Cloud Tasks validated queue names and rejected: `"gcsplit1-batch-queue\n"`
+  - Batch payout system completely broken - no tasks could be enqueued
+  - Difficult to debug (error message truncated, newline invisible in logs)
+- **Decision:** Implement strict secret management practices:
+  1. **Creation:** Always use `echo -n` to prevent trailing newlines
+  2. **Validation:** Created `fix_secret_newlines.sh` utility to audit and fix all secrets
+  3. **Defensive Loading:** Add `.strip()` in `fetch_secret()` methods as defense-in-depth
+  4. **Verification:** Use `od -c` or `cat -A` to verify secret contents before deployment
+- **Rationale:**
+  - Trailing whitespace in secrets is never intentional
+  - Cloud APIs have strict validation (queue names, URLs, etc.)
+  - Invisible characters cause hard-to-debug failures
+  - Services cache secrets - redeployment required to pick up fixes
+- **Implementation:**
+  ```bash
+  # CORRECT: No trailing newline
+  echo -n "gcsplit1-batch-queue" | gcloud secrets versions add GCSPLIT1_BATCH_QUEUE --data-file=-
+  
+  # VERIFY: Should show no $ at end (no newline)
+  gcloud secrets versions access latest --secret=GCSPLIT1_BATCH_QUEUE | cat -A
+  
+  # VERIFY hex: Should end with 'e' not '\n'
+  gcloud secrets versions access latest --secret=GCSPLIT1_BATCH_QUEUE | od -c
+  ```
+- **Files Created:**
+  - `fix_secret_newlines.sh` - Automated audit and fix script for all queue/URL secrets
+  - `THRESHOLD_PAYOUT_BUG_FIX_SUMMARY.md` - Complete debugging walkthrough
+- **Trade-offs:**
+  - Requires discipline in secret creation process
+  - Additional verification step before deployment
+  - Must redeploy services to pick up fixed secrets (Cloud Run caches at startup)
+- **Alternative Considered:** Only use `.strip()` in code
+- **Why Rejected:** Masks the problem instead of fixing root cause, violates principle of least surprise
+- **Outcome:**
+  - ✅ All 19 queue/URL secrets audited and fixed
+  - ✅ Batch payout system now works (first batch created successfully)
+  - ✅ Created reusable utility script for future secret management
+  - ✅ Documented best practices for team
+- **Lessons Learned:**
+  1. Always verify secrets with `od -c` after creation
+  2. Cloud Run caches secrets - new revision required for changes
+  3. Use `--no-traffic` + `update-traffic` for zero-downtime secret updates
+  4. Truncated error messages may hide root cause - add detailed logging
+  5. Test with `curl` manually before relying on Cloud Scheduler
+- **Reference Documents:**
+  - `THRESHOLD_PAYOUT_BUG_FIX_SUMMARY.md`
+  - `fix_secret_newlines.sh`
+- **Related Bugs Fixed:**
+  - Batch payout system not processing (GCSPLIT1_BATCH_QUEUE newline)
+  - GCAccumulator threshold query using wrong column (open vs closed channel_id)
