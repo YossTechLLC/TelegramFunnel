@@ -20,30 +20,27 @@ class ConfigManager:
 
     def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
         """
-        Fetch a secret from Google Cloud Secret Manager.
+        Fetch a secret value from environment variable.
+        Cloud Run automatically injects secret values when using --set-secrets.
 
         Args:
-            secret_name_env: Environment variable containing the secret path
+            secret_name_env: Environment variable name containing the secret value
             description: Description for logging purposes
 
         Returns:
             Secret value or None if failed
         """
         try:
-            secret_path = os.getenv(secret_name_env)
-            if not secret_path:
+            secret_value = os.getenv(secret_name_env)
+            if not secret_value:
                 print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set")
                 return None
 
-            print(f"🔐 [CONFIG] Fetching {description or secret_name_env}")
-            response = self.client.access_secret_version(request={"name": secret_path})
-            secret_value = response.payload.data.decode("UTF-8")
-
-            print(f"✅ [CONFIG] Successfully fetched {description or secret_name_env}")
+            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
             return secret_value
 
         except Exception as e:
-            print(f"❌ [CONFIG] Error fetching {description or secret_name_env}: {e}")
+            print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
             return None
 
     def get_env_var(self, var_name: str, description: str = "", required: bool = True) -> Optional[str]:

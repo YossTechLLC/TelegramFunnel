@@ -1089,6 +1089,100 @@ Landing Page → Signup → Login → Dashboard (0 channels)
 
 ---
 
+## Critical Config Manager Fix - October 29, 2025
+
+### ❌ ISSUE DISCOVERED: config_manager.py Pattern Causing Failures
+
+**Problem Summary:**
+- 7 services (GCWebhook2, GCSplit1-3, GCHostPay1-3) had config_manager.py files using INCORRECT pattern
+- Services were trying to call Secret Manager API directly instead of using os.getenv()
+- Cloud Run's `--set-secrets` flag automatically injects secrets as environment variables
+- INCORRECT pattern: `response = self.client.access_secret_version(request={"name": name})`
+- CORRECT pattern: `secret_value = os.getenv(secret_name_env)`
+
+**Impact:**
+- GCWebhook2 logs showed: `❌ [CONFIG] Environment variable SUCCESS_URL_SIGNING_KEY is not set`
+- GCWebhook2 logs showed: `❌ [CONFIG] Environment variable TELEGRAM_BOT_SECRET_NAME is not set`
+- All 7 services were failing to load configuration properly
+- Services were trying to access Secret Manager API which is NOT needed
+
+**Root Cause:**
+- Environment variable type conflict from previous deployments
+- Services had variables set as regular env vars, now trying to use as secrets
+- Error: `Cannot update environment variable [SUCCESS_URL_SIGNING_KEY] to the given type because it has already been set with a different type`
+
+### ✅ SOLUTION IMPLEMENTED: Systematic Config Fix & Redeployment
+
+**Fix Applied:**
+1. ✅ Corrected config_manager.py pattern in all 7 services to use direct `os.getenv()`
+2. ✅ Cleared all environment variables from services using `--clear-env-vars`
+3. ✅ Redeployed all services with correct --set-secrets configuration
+
+**Services Fixed & Redeployed:**
+1. **GCWebhook2-10-26** ✅ (Revision 00009-6xg)
+   - Secrets: SUCCESS_URL_SIGNING_KEY, TELEGRAM_BOT_SECRET_NAME
+   - Logs show: `✅ [CONFIG] Successfully loaded` for both secrets
+
+2. **GCSplit1-10-26** ✅ (Revision 00007-fmt)
+   - Secrets: 15 total (including database, Cloud Tasks, queues)
+   - All configurations loading with ✅ indicators
+   - Database manager initialized successfully
+
+3. **GCSplit2-10-26** ✅ (Revision 00006-8lt)
+   - Secrets: SUCCESS_URL_SIGNING_KEY, CHANGENOW_API_KEY, Cloud Tasks configs, queues
+   - All configurations verified
+
+4. **GCSplit3-10-26** ✅ (Revision 00005-tnp)
+   - Secrets: SUCCESS_URL_SIGNING_KEY, CHANGENOW_API_KEY, Cloud Tasks configs, queues
+   - All configurations verified
+
+5. **GCHostPay1-10-26** ✅ (Revision 00003-fd8)
+   - Secrets: 12 total (signing keys, Cloud Tasks, database configs)
+   - All configurations verified
+
+6. **GCHostPay2-10-26** ✅ (Revision 00003-lw8)
+   - Secrets: SUCCESS_URL_SIGNING_KEY, CHANGENOW_API_KEY, Cloud Tasks configs
+   - All configurations verified
+
+7. **GCHostPay3-10-26** ✅ (Revision 00003-wmq)
+   - Secrets: 13 total (wallet, RPC, Cloud Tasks, database)
+   - All configurations verified
+
+**Verification:**
+- ✅ GCWebhook2 logs at 12:04:34 show successful config loading
+- ✅ GCSplit1 logs at 12:05:11 show all ✅ indicators for configs
+- ✅ Database managers initializing properly
+- ✅ Token managers initializing properly
+- ✅ Cloud Tasks clients initializing properly
+
+**Key Lesson:**
+- When using Cloud Run `--set-secrets`, do NOT call Secret Manager API
+- Secrets are automatically injected as environment variables
+- Simply use `os.getenv(secret_name_env)` to access secret values
+- This is more efficient and follows Cloud Run best practices
+
+**Deployment Commands Used:**
+```bash
+# Example for GCWebhook2:
+gcloud run deploy gcwebhook2-10-26 \
+  --image gcr.io/telepay-459221/gcwebhook2-10-26:latest \
+  --region us-central1 \
+  --set-secrets SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,TELEGRAM_BOT_SECRET_NAME=TELEGRAM_BOT_SECRET_NAME:latest
+```
+
+**Files Modified:**
+- GCWebhook2-10-26/config_manager.py:21-44
+- GCSplit1-10-26/config_manager.py:21-44
+- GCSplit2-10-26/config_manager.py:21-44
+- GCSplit3-10-26/config_manager.py:21-44
+- GCHostPay1-10-26/config_manager.py:21-44
+- GCHostPay2-10-26/config_manager.py:21-44
+- GCHostPay3-10-26/config_manager.py:21-44
+
+**Status:** ✅ ALL SERVICES OPERATIONAL AND VERIFIED
+
+---
+
 ## Notes
 - All services use emoji patterns for consistent logging
 - Token-based authentication between all services
@@ -1100,7 +1194,9 @@ Landing Page → Signup → Login → Dashboard (0 channels)
 - **NEW (2025-10-28):** User account management implementation guides complete
 - **NEW (2025-10-29):** GCRegisterAPI-10-26 REST API deployed to Cloud Run (Phase 3 backend)
 - **NEW (2025-10-29):** RegisterChannelPage.tsx complete - full user flow operational
+- **NEW (2025-10-29):** ✅ CRITICAL FIX - Config manager pattern corrected across 7 services
 - **KEY INNOVATION (Threshold Payout):** USDT accumulation eliminates market volatility risk
 - **KEY INNOVATION (User Accounts):** UUID-based client_id enables secure multi-channel management
 - **KEY INNOVATION (Modernization):** Zero cold starts via static SPA + JWT REST API architecture
 - **KEY INNOVATION (Channel Registration):** 470-line dynamic form with real-time validation and network/currency mapping
+- **KEY LESSON (Config Manager):** Always use os.getenv() when Cloud Run injects secrets, never call Secret Manager API

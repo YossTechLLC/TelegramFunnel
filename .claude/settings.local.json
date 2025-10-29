@@ -85,7 +85,8 @@
       "Bash(DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,)",
       "Bash(DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest)",
       "Bash(gcloud run services update:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": []
