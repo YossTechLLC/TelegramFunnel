@@ -4,10 +4,7 @@ Database Manager for GCHostPay10-26 Host Wallet Payment Service.
 Handles database operations for the split_payout_hostpay table.
 Uses Google Cloud SQL Connector (mirroring GCSplit10-26 pattern).
 """
-import os
-from google.cloud import secretmanager
 from typing import Optional
-from datetime import datetime
 
 # Import Cloud SQL Connector for database functionality
 try:
@@ -26,71 +23,25 @@ class DatabaseManager:
     Uses Google Cloud SQL Connector (no connection pooling).
     """
 
-    def __init__(self):
-        """Initialize the DatabaseManager."""
-        self.db_name = None
-        self.db_user = None
-        self.db_password = None
-        self.connection_name = None
-
-        # Fetch database credentials
-        self._initialize_credentials()
-
-    def _fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
+    def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str):
         """
-        Fetch a secret from Google Cloud Secret Manager.
+        Initialize the DatabaseManager.
 
         Args:
-            secret_name_env: Environment variable containing the secret path
-            description: Description for logging purposes
-
-        Returns:
-            Secret value or None if failed
+            instance_connection_name: Cloud SQL instance connection name
+            db_name: Database name
+            db_user: Database user
+            db_password: Database password
         """
-        try:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_path = os.getenv(secret_name_env)
-            if not secret_path:
-                print(f"❌ [DB_CONFIG] Environment variable {secret_name_env} is not set")
-                return None
+        self.connection_name = instance_connection_name
+        self.db_name = db_name
+        self.db_user = db_user
+        self.db_password = db_password
 
-            print(f"🔐 [DB_CONFIG] Fetching {description or secret_name_env}")
-            response = client.access_secret_version(request={"name": secret_path})
-            secret_value = response.payload.data.decode("UTF-8")
-
-            print(f"✅ [DB_CONFIG] Successfully fetched {description or secret_name_env}")
-            return secret_value
-
-        except Exception as e:
-            print(f"❌ [DB_CONFIG] Error fetching {description or secret_name_env}: {e}")
-            return None
-
-    def _initialize_credentials(self):
-        """Initialize database credentials from Secret Manager."""
-        try:
-            print(f"🔄 [DATABASE] Initializing database credentials")
-
-            # Fetch database credentials from Secret Manager
-            self.db_name = self._fetch_secret("DATABASE_NAME_SECRET", "database name")
-            self.db_user = self._fetch_secret("DATABASE_USER_SECRET", "database user")
-            self.db_password = self._fetch_secret("DATABASE_PASSWORD_SECRET", "database password")
-            self.connection_name = self._fetch_secret("CLOUD_SQL_CONNECTION_NAME", "Cloud SQL connection name")
-
-            if not all([self.db_name, self.db_user, self.db_password, self.connection_name]):
-                print(f"❌ [DATABASE] Missing required database credentials")
-                print(f"   Database Name: {'✅' if self.db_name else '❌'}")
-                print(f"   Database User: {'✅' if self.db_user else '❌'}")
-                print(f"   Database Password: {'✅' if self.db_password else '❌'}")
-                print(f"   Cloud SQL Connection Name: {'✅' if self.connection_name else '❌'}")
-                return
-
-            print(f"✅ [DATABASE] Database credentials initialized")
-            print(f"📊 [DATABASE] Database: {self.db_name}")
-            print(f"📊 [DATABASE] User: {self.db_user}")
-            print(f"☁️ [DATABASE] Connection: {self.connection_name}")
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Error initializing credentials: {e}")
+        print(f"🗄️ [DATABASE] DatabaseManager initialized")
+        print(f"📊 [DATABASE] Instance: {instance_connection_name}")
+        print(f"📊 [DATABASE] Database: {db_name}")
+        print(f"📊 [DATABASE] User: {db_user}")
 
     def get_database_connection(self):
         """

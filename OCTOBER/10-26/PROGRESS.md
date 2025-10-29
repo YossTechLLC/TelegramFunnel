@@ -1,6 +1,6 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-10-29 (Edit Channel Functionality Complete - Full CRUD Operations)
+**Last Updated:** 2025-10-29 (Database Credentials Fix - GCHostPay1/3 Constructor-Based Injection)
 
 ## Current System Status
 
@@ -1200,3 +1200,74 @@ gcloud run deploy gcwebhook2-10-26 \
 - **KEY INNOVATION (Modernization):** Zero cold starts via static SPA + JWT REST API architecture
 - **KEY INNOVATION (Channel Registration):** 470-line dynamic form with real-time validation and network/currency mapping
 - **KEY LESSON (Config Manager):** Always use os.getenv() when Cloud Run injects secrets, never call Secret Manager API
+
+---
+
+## Session Update - October 29, 2025 (Database Credentials Fix)
+
+### 🔧 Critical Bug Fix: GCHostPay1 and GCHostPay3 Database Credential Loading
+
+**Problem Discovered:**
+- GCHostPay1 and GCHostPay3 services showing "❌ [DATABASE] Missing required database credentials" on startup
+- Services unable to connect to database, payment processing completely broken
+
+**Root Cause Analysis:**
+1. database_manager.py had its own `_fetch_secret()` method that called Secret Manager API
+2. Expected environment variables to contain secret PATHS (e.g., `projects/123/secrets/name/versions/latest`)
+3. Cloud Run `--set-secrets` flag injects secret VALUES directly into environment variables (not paths)
+4. Inconsistency: config_manager.py used `os.getenv()` (correct), database_manager.py used `access_secret_version()` (incorrect)
+5. Result: database_manager attempted to use secret VALUE as a PATH, causing API call to fail
+
+**Services Affected:**
+- ❌ GCHostPay1-10-26 (Validator & Orchestrator) - FIXED
+- ❌ GCHostPay3-10-26 (Payment Executor) - FIXED
+
+**Services Already Correct:**
+- ✅ GCHostPay2-10-26 (no database access)
+- ✅ GCAccumulator-10-26 (constructor-based from start)
+- ✅ GCBatchProcessor-10-26 (constructor-based from start)
+- ✅ GCWebhook1-10-26 (constructor-based from start)
+- ✅ GCSplit1-10-26 (constructor-based from start)
+
+**Solution Implemented:**
+1. **Standardized DatabaseManager pattern across all services**
+   - Removed `_fetch_secret()` method from database_manager.py
+   - Removed `_initialize_credentials()` method from database_manager.py
+   - Changed `__init__()` to accept credentials via constructor parameters
+   - Updated main service files to pass credentials from config_manager
+
+2. **Architectural Benefits:**
+   - Single Responsibility Principle: config_manager handles secrets, database_manager handles database
+   - DRY: No duplicate secret-fetching logic
+   - Consistency: All services follow same pattern
+   - Testability: Easier to mock and test with injected credentials
+
+**Files Modified:**
+- `GCHostPay1-10-26/database_manager.py` - Converted to constructor-based initialization
+- `GCHostPay1-10-26/tphp1-10-26.py:53` - Pass credentials to DatabaseManager()
+- `GCHostPay3-10-26/database_manager.py` - Converted to constructor-based initialization
+- `GCHostPay3-10-26/tphp3-10-26.py:67` - Pass credentials to DatabaseManager()
+
+**Deployments:**
+- ✅ GCHostPay1-10-26 revision 00004-xmg deployed successfully
+- ✅ GCHostPay3-10-26 revision 00004-662 deployed successfully
+
+**Verification:**
+- ✅ GCHostPay1 logs: "🗄️ [DATABASE] DatabaseManager initialized" with credentials
+- ✅ GCHostPay3 logs: "🗄️ [DATABASE] DatabaseManager initialized" with credentials
+- ✅ All configuration items showing ✅ checkmarks
+- ✅ Database connections working properly
+
+**Documentation Created:**
+- `DATABASE_CREDENTIALS_FIX_CHECKLIST.md` - Comprehensive fix guide
+- Updated `BUGS.md` with bug report and resolution
+- Updated `DECISIONS.md` with architectural decision rationale
+
+**Impact:**
+- 🎯 Critical payment processing bug resolved
+- 🎯 System architecture now more consistent and maintainable
+- 🎯 All services follow same credential injection pattern
+- 🎯 Easier to debug and test going forward
+
+**Time to Resolution:** ~30 minutes (investigation + fix + deployment + verification)
+

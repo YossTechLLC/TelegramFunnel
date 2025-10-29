@@ -64,7 +64,7 @@ try:
     if not all([instance_connection_name, db_name, db_user, db_password]):
         raise ValueError("Database configuration incomplete")
 
-    db_manager = DatabaseManager()
+    db_manager = DatabaseManager(instance_connection_name, db_name, db_user, db_password)
     print(f"✅ [APP] Database manager initialized")
 except Exception as e:
     print(f"❌ [APP] Failed to initialize database manager: {e}")

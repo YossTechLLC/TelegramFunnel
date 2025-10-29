@@ -1380,3 +1380,50 @@ CREATE TABLE currency_to_network (
 - Better UX with descriptive names ("Ethereum" vs "ETH", "USD Coin" vs "USDC")
 - Data consistency across all services (all use currency_to_network as source of truth)
 - Easier to add new networks/currencies (just update one table, all services get the change)
+
+---
+
+### Decision: Constructor-Based Credential Injection for DatabaseManager
+- **Date:** October 29, 2025
+- **Status:** ✅ Implemented
+- **Context:** GCHostPay1 and GCHostPay3 had database_manager.py with built-in secret fetching logic that was incompatible with Cloud Run's secret injection mechanism
+- **Problem:**
+  - database_manager.py had `_fetch_secret()` method that called Secret Manager API
+  - Expected environment variables to contain secret PATHS (e.g., `projects/123/secrets/name/versions/latest`)
+  - Cloud Run `--set-secrets` injects secret VALUES directly into environment variables
+  - Caused "❌ [DATABASE] Missing required database credentials" errors
+  - Inconsistency: config_manager.py used `os.getenv()` (correct), database_manager.py used `access_secret_version()` (incorrect)
+- **Decision:** Standardize DatabaseManager across ALL services to accept credentials via constructor parameters
+- **Rationale:**
+  - **Single Responsibility Principle:** config_manager handles secrets, database_manager handles database operations
+  - **DRY (Don't Repeat Yourself):** No duplicate secret-fetching logic
+  - **Consistency:** All services follow same pattern (GCAccumulator, GCBatchProcessor, GCWebhook1, GCSplit1 already used this)
+  - **Testability:** Easier to mock and test with injected credentials
+  - **Cloud Run Compatibility:** Works perfectly with `--set-secrets` flag
+- **Implementation:**
+  - Removed `_fetch_secret()` and `_initialize_credentials()` methods from database_manager.py
+  - Changed `__init__()` to accept: `instance_connection_name`, `db_name`, `db_user`, `db_password`
+  - Updated main service files to pass credentials from config to DatabaseManager
+  - Pattern now matches GCAccumulator, GCBatchProcessor, GCWebhook1, GCSplit1
+- **Files Modified:**
+  - `GCHostPay1-10-26/database_manager.py` - Converted to constructor-based initialization
+  - `GCHostPay1-10-26/tphp1-10-26.py:53` - Pass credentials to DatabaseManager()
+  - `GCHostPay3-10-26/database_manager.py` - Converted to constructor-based initialization
+  - `GCHostPay3-10-26/tphp3-10-26.py:67` - Pass credentials to DatabaseManager()
+- **Trade-offs:**
+  - None - this is strictly better than the old approach
+  - Aligns with established best practices
+  - Makes the codebase more maintainable
+- **Alternative Considered:** Fix `_fetch_secret()` to use `os.getenv()` instead
+- **Why Rejected:** Still violates single responsibility, keeps duplicate logic, harder to test
+- **Outcome:**
+  - ✅ GCHostPay1 now loads credentials correctly
+  - ✅ GCHostPay3 now loads credentials correctly
+  - ✅ All services now follow same pattern
+  - ✅ Logs show: "🗄️ [DATABASE] DatabaseManager initialized" with proper credentials
+- **Reference Document:** `DATABASE_CREDENTIALS_FIX_CHECKLIST.md`
+- **Deployment:**
+  - GCHostPay1-10-26 revision: 00004-xmg
+  - GCHostPay3-10-26 revision: 00004-662
+  - Both deployed successfully with credentials loading correctly
+

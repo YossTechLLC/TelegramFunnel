@@ -6,62 +6,28 @@
 
 ## Active Bugs
 
-### 🐛 Incorrect Channel ID Mapping in GCWebhook1 Database Query
+### 🐛 Database Credentials Not Loading in GCHostPay1 and GCHostPay3
 - **Date Discovered:** October 29, 2025
 - **Severity:** CRITICAL
-- **Description:** GCWebhook1 queries `main_clients_database WHERE open_channel_id = closed_channel_id` causing "No client found" errors. All threshold payouts fallback to instant mode.
+- **Description:** GCHostPay1 and GCHostPay3 showing "❌ [DATABASE] Missing required database credentials" on startup
 - **Root Cause:**
-  - Token from NOWPayments contains `closed_channel_id` (private channel)
-  - GCWebhook1 database_manager.py:206 queries by `open_channel_id` instead of `closed_channel_id`
-  - GCBatchProcessor JOIN condition also uses wrong column: `pa.client_id = mc.open_channel_id`
-- **Impact:** Threshold payout routing completely broken; all payments process as instant
+  - database_manager.py used its own `_fetch_secret()` method that called Secret Manager API
+  - Expected environment variables to contain secret PATHS instead of VALUES
+  - Cloud Run `--set-secrets` injects secret VALUES directly via environment variables
+  - Inconsistency: config_manager.py used `os.getenv()` (correct), database_manager.py used `access_secret_version()` (incorrect)
+- **Impact:** GCHostPay1 and GCHostPay3 could not connect to database, payment processing completely broken
 - **Solution:**
-  - Changed GCWebhook1 query to `WHERE closed_channel_id = %s`
-  - Changed GCBatchProcessor JOIN to `pa.client_id = mc.closed_channel_id`
-  - Updated GCAccumulator documentation
+  - Removed `_fetch_secret()` and `_initialize_credentials()` methods from database_manager.py
+  - Changed DatabaseManager to accept credentials via constructor parameters (like other services)
+  - Updated main service files to pass credentials from config_manager to DatabaseManager
+  - Follows single responsibility principle: config_manager handles secrets, database_manager handles database
 - **Files Modified:**
-  - `GCWebhook1-10-26/database_manager.py:206`
-  - `GCBatchProcessor-10-26/database_manager.py:85`
-  - `GCAccumulator-10-26/database_manager.py:79` (doc only)
-- **Status:** 🔄 Fixed, currently deploying
-
-### 🐛 Config Manager Environment Variable Loading Pattern Mismatch (WIDESPREAD)
-- **Date Discovered:** October 29, 2025
-- **Severity:** CRITICAL
-- **Description:** 7 services use outdated Secret Manager API pattern that expects environment variables to contain secret PATHS, but Cloud Run injects secret VALUES directly via `--set-secrets` flag
-- **Root Cause:**
-  - Services using `access_secret_version()` API call in config_manager.py
-  - Cloud Run `--set-secrets` flag injects VALUES directly, not paths
-  - Results in all secrets showing as "not set" even when properly configured
-- **Affected Services:**
-  - GCWebhook1-10-26 ✅ Fixed
-  - GCWebhook2-10-26 ❌ Needs fix
-  - GCSplit1-10-26 ❌ Needs fix
-  - GCSplit2-10-26 ❌ Needs fix
-  - GCSplit3-10-26 ❌ Needs fix
-  - GCHostPay1-10-26 ❌ Needs fix
-  - GCHostPay2-10-26 ❌ Needs fix
-  - GCHostPay3-10-26 ❌ Needs fix
-  - GCAccumulator-10-26 ✅ Fixed earlier
-  - GCBatchProcessor-10-26 ✅ Fixed earlier
-- **Impact:** Services may fail to load configuration, causing runtime failures when accessing secrets
-- **Solution:** Replace `access_secret_version()` API call with direct `os.getenv()` read
-- **Reference Document:** `CONFIG_MANAGER_SYSTEMATIC_FIX.md`
-- **Status:** 🔄 In progress (3 fixed, 7 pending)
-
-### 🐛 Missing GCAccumulator Environment Variables in GCWebhook1
-- **Date Discovered:** October 29, 2025
-- **Severity:** HIGH
-- **Description:** GCWebhook1 logs show `❌ [CONFIG] Environment variable GCACCUMULATOR_QUEUE is not set` and `❌ [CONFIG] Environment variable GCACCUMULATOR_URL is not set`
-- **Root Cause:** GCWebhook1 deployment missing `--set-secrets` flags for GCACCUMULATOR_QUEUE and GCACCUMULATOR_URL
-- **Impact:** GCWebhook1 cannot route threshold payouts to GCAccumulator
-- **Solution:**
-  - Fixed config_manager.py to use os.getenv() pattern
-  - Added GCACCUMULATOR_QUEUE and GCACCUMULATOR_URL to deployment secrets
-- **Files Modified:**
-  - `GCWebhook1-10-26/config_manager.py`
-  - Deployment command updated with additional secrets
-- **Status:** 🔄 Fixed, currently deploying
+  - `GCHostPay1-10-26/database_manager.py` - Converted to constructor-based initialization
+  - `GCHostPay1-10-26/tphp1-10-26.py:53` - Pass credentials to DatabaseManager()
+  - `GCHostPay3-10-26/database_manager.py` - Converted to constructor-based initialization
+  - `GCHostPay3-10-26/tphp3-10-26.py:67` - Pass credentials to DatabaseManager()
+- **Reference Document:** `DATABASE_CREDENTIALS_FIX_CHECKLIST.md`
+- **Status:** ✅ FIXED and deployed, credentials now loading correctly
 
 ---
 

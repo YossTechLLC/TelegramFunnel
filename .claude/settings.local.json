@@ -86,7 +86,9 @@
       "Bash(DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest)",
       "Bash(gcloud run services update:*)",
       "Bash(psql:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(for file in /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GC*/database_manager.py)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
