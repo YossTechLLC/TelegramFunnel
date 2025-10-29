@@ -16,7 +16,7 @@ Deployment:
 - Region: us-central1
 """
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
@@ -42,20 +42,42 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = 2592000  # 30 days
 jwt = JWTManager(app)
 
 # CORS configuration (allow frontend SPA)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            config['cors_origin'],
-            "http://localhost:5173",  # Local dev
-            "http://localhost:3000"   # Alternative local dev
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "expose_headers": ["Content-Type"],
-        "supports_credentials": True,
-        "max_age": 3600
-    }
-})
+# Note: Must be explicit when using credentials
+# Strip whitespace from CORS origin (Secret Manager may include newlines)
+cors_origins = [
+    config['cors_origin'].strip(),
+    "http://localhost:5173",  # Local dev
+    "http://localhost:3000"   # Alternative local dev
+]
+
+# Initialize CORS
+CORS(app,
+     resources={r"/api/*": {"origins": cors_origins}},
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"],
+     expose_headers=["Content-Type", "Authorization"],
+     supports_credentials=True,
+     max_age=3600)
+
+# Explicit CORS headers for all responses (backup method)
+@app.after_request
+def after_request(response):
+    origin = request.headers.get('Origin')
+    print(f"🔍 CORS Debug - Origin: {origin}, Allowed origins: {cors_origins}")
+    print(f"🔍 CORS Debug - Origin in list: {origin in cors_origins}")
+
+    if origin in cors_origins:
+        print(f"✅ Adding CORS headers for origin: {origin}")
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+    else:
+        print(f"❌ Origin not in allowed list or missing")
+
+    print(f"🔍 Response headers: {dict(response.headers)}")
+    return response
 
 # Rate limiting
 limiter = Limiter(

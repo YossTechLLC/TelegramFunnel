@@ -14,7 +14,7 @@ from database.connection import db_manager
 channels_bp = Blueprint('channels', __name__)
 
 
-@channels_bp.route('/register', methods=['POST'])
+@channels_bp.route('/register', methods=['POST'], strict_slashes=False)
 @jwt_required()
 def register_channel():
     """
@@ -81,7 +81,7 @@ def register_channel():
         }), 500
 
 
-@channels_bp.route('/', methods=['GET'])
+@channels_bp.route('/', methods=['GET'], strict_slashes=False)
 @jwt_required()
 def get_channels():
     """
