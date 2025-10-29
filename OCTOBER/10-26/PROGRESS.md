@@ -1271,3 +1271,123 @@ gcloud run deploy gcwebhook2-10-26 \
 
 **Time to Resolution:** ~30 minutes (investigation + fix + deployment + verification)
 
+
+---
+
+## Session Update: 2025-10-29 (Threshold Payout Bug Fix - GCWebhook1 Secret Configuration)
+
+**Problem Reported:**
+User reported that channel `-1003296084379` with threshold payout strategy ($2.00 threshold) was incorrectly processing a $1.35 payment as instant/direct payout instead of accumulating. Transaction hash: `0x7603d7944c4ea164e7f134619deb2dbe594ac210d0f5f50351103e8bd360ae18`
+
+**Investigation:**
+1. ✅ Verified database configuration: Channel correctly set to `payout_strategy='threshold'` with `payout_threshold_usd=2.00`
+2. ✅ Checked `split_payout_request` table: Found entries with `type='direct'` instead of `type='accumulation'`
+3. ✅ Analyzed GCWebhook1 code: Found payout routing logic at lines 176-213 calls `get_payout_strategy()`
+4. ✅ Checked GCWebhook1 logs: Found `⚠️ [DATABASE] No client found for channel -1003296084379, defaulting to instant`
+5. ✅ Tested database query directly: Query works correctly and finds the channel
+6. 🔍 **Root Cause Identified**: GCWebhook1 deployment had secret PATHS in environment variables instead of secret VALUES
+
+**Root Cause Details:**
+- GCWebhook1's Cloud Run deployment used environment variables like:
+  ```yaml
+  env:
+    - name: DATABASE_NAME_SECRET
+      value: projects/291176869049/secrets/DATABASE_NAME_SECRET/versions/latest
+  ```
+- config_manager.py uses `os.getenv()` expecting secret VALUES (like `client_table`)
+- Instead, it received the SECRET PATH, which was then used in database connection
+- Database connection either failed or connected to wrong location
+- `get_payout_strategy()` returned no results, defaulting to `('instant', 0)`
+- ALL threshold channels broken - payments bypassed accumulation architecture
+
+**Solution Implemented:**
+1. **Changed deployment method from env vars to --set-secrets:**
+   - Cleared old environment variables: `gcloud run services update gcwebhook1-10-26 --clear-env-vars`
+   - Cleared VPC connector (was invalid): `gcloud run services update gcwebhook1-10-26 --clear-vpc-connector`
+   - Deployed with `--set-secrets` flag to inject VALUES directly
+   - Rebuilt from source to ensure latest code deployed
+
+2. **Verified other services:**
+   - GCSplit1, GCAccumulator, GCBatchProcessor: Already using `--set-secrets` (valueFrom) ✅
+   - GCWebhook2, GCSplit2, GCSplit3: Don't need database access ✅
+   - GCHostPay1, GCHostPay3: Fixed earlier today with same issue ✅
+   - **Only GCWebhook1 had the secret configuration problem**
+
+**Deployment Details:**
+- Service: `gcwebhook1-10-26`
+- Final Revision: `gcwebhook1-10-26-00011-npq`
+- Deployment Command:
+  ```bash
+  gcloud run deploy gcwebhook1-10-26 \
+    --source . \
+    --region us-central1 \
+    --platform managed \
+    --allow-unauthenticated \
+    --set-secrets="DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,
+                   DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,
+                   DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest,
+                   CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest,
+                   SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,
+                   CLOUD_TASKS_PROJECT_ID=CLOUD_TASKS_PROJECT_ID:latest,
+                   CLOUD_TASKS_LOCATION=CLOUD_TASKS_LOCATION:latest,
+                   GCWEBHOOK2_QUEUE=GCWEBHOOK2_QUEUE:latest,
+                   GCWEBHOOK2_URL=GCWEBHOOK2_URL:latest,
+                   GCSPLIT1_QUEUE=GCSPLIT1_QUEUE:latest,
+                   GCSPLIT1_URL=GCSPLIT1_URL:latest,
+                   GCACCUMULATOR_QUEUE=GCACCUMULATOR_QUEUE:latest,
+                   GCACCUMULATOR_URL=GCACCUMULATOR_URL:latest"
+  ```
+
+**Verification:**
+```
+✅ DATABASE_NAME_SECRET: ✅
+✅ DATABASE_USER_SECRET: ✅
+✅ DATABASE_PASSWORD_SECRET: ✅
+✅ CLOUD_SQL_CONNECTION_NAME: ✅
+✅ [APP] Database manager initialized
+📊 [DATABASE] Database: client_table
+📊 [DATABASE] Instance: telepay-459221:us-central1:telepaypsql
+```
+
+Health check response:
+```json
+{
+  "status": "healthy",
+  "service": "GCWebhook1-10-26 Payment Processor",
+  "components": {
+    "token_manager": "healthy",
+    "database": "healthy",
+    "cloudtasks": "healthy"
+  }
+}
+```
+
+**Files Created:**
+- `THRESHOLD_PAYOUT_BUG_FIX_CHECKLIST.md` - Comprehensive investigation and fix documentation
+
+**Files Modified:**
+- `BUGS.md` - Added threshold payout bug to Recently Fixed section
+- `PROGRESS.md` - This session update
+- `DECISIONS.md` - Will be updated next
+
+**Impact:**
+- 🎯 **CRITICAL BUG RESOLVED**: Threshold payout strategy now works correctly
+- 🎯 Future payments to threshold channels will accumulate properly
+- 🎯 `get_payout_strategy()` can now find channel configurations in database
+- 🎯 Payments will route to GCAccumulator instead of GCSplit1 when threshold configured
+- 🎯 `split_payout_request.type` will be `accumulation` instead of `direct`
+- 🎯 `payout_accumulation` table will receive entries
+- 🎯 GCBatchProcessor will trigger when thresholds are met
+
+**Next Steps:**
+- Monitor next threshold channel payment to verify correct behavior
+- Look for logs showing: `✅ [DATABASE] Found client by closed_channel_id: strategy=threshold`
+- Verify task enqueued to GCAccumulator instead of GCSplit1
+- Confirm `payout_accumulation` table entry created
+
+**Time to Resolution:** ~45 minutes (investigation + deployment iterations + verification)
+
+**Related Issues:**
+- Same pattern as GCHostPay1/GCHostPay3 fix earlier today
+- Reinforces importance of using `--set-secrets` for all Cloud Run deployments
+- Highlights need for consistent deployment patterns across services

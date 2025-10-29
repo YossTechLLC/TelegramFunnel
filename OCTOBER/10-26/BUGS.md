@@ -6,6 +6,45 @@
 
 ## Active Bugs
 
+**None currently** - All critical bugs fixed as of 2025-10-29
+
+---
+
+## Recently Fixed
+
+### 🐛 Threshold Payout Strategy Defaulting to Instant (GCWebhook1 Secret Configuration)
+- **Date Fixed:** October 29, 2025
+- **Severity:** CRITICAL
+- **Description:** Channels configured with `payout_strategy='threshold'` were being processed as instant payouts instead of accumulating funds
+- **Example:** Channel `-1003296084379` with $2.00 threshold and $1.35 payment was processed instantly instead of accumulating
+- **Root Cause:**
+  - GCWebhook1's Cloud Run deployment used environment variables with secret PATHS (e.g., `DATABASE_NAME_SECRET=projects/.../secrets/DATABASE_NAME_SECRET/versions/latest`)
+  - config_manager.py uses `os.getenv()` expecting secret VALUES
+  - When `get_payout_strategy()` queried database, it received the PATH as the value
+  - Database query failed silently, defaulting to `('instant', 0)`
+  - All threshold payments processed as instant via GCSplit1 instead of accumulating via GCAccumulator
+- **Impact:**
+  - ALL threshold-based channels broken since deployment
+  - Payments not accumulating, processed instantly regardless of threshold
+  - `split_payout_request.type` marked as `direct` instead of `accumulation`
+  - No entries in `payout_accumulation` table
+  - Threshold payout architecture completely bypassed
+- **Solution:**
+  - Changed GCWebhook1 deployment to use `--set-secrets` flag instead of environment variables
+  - Cloud Run now injects secret VALUES directly, compatible with `os.getenv()`
+  - Removed old environment variables with `--clear-env-vars`
+  - Rebuilt service from source to ensure latest code deployed
+  - Removed invalid VPC connector configuration
+- **Files/Commands Modified:**
+  - Deployment: `gcloud run deploy gcwebhook1-10-26 --set-secrets="DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,..."`
+  - Cleared old env vars and VPC connector
+- **Verification:**
+  - Revision `gcwebhook1-10-26-00011-npq` logs show all credentials loading correctly
+  - Health check shows `"database":"healthy"`
+  - DatabaseManager initialized with correct database: `client_table`
+- **Reference Document:** `THRESHOLD_PAYOUT_BUG_FIX_CHECKLIST.md`
+- **Status:** ✅ FIXED and deployed (revision 00011-npq), ready to process threshold payouts correctly
+
 ### 🐛 Database Credentials Not Loading in GCHostPay1 and GCHostPay3
 - **Date Discovered:** October 29, 2025
 - **Severity:** CRITICAL

@@ -88,7 +88,10 @@
       "Bash(psql:*)",
       "Bash(bash:*)",
       "Bash(for file in /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GC*/database_manager.py)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(for service in gcwebhook1-10-26 gcwebhook2-10-26 gcsplit1-10-26 gcsplit2-10-26 gcsplit3-10-26 gcaccumulator-10-26 gcbatchprocessor-10-26)",
+      "Bash(do echo \"======================================================================\" echo \"SERVICE: $service\" echo \"======================================================================\" gcloud run services describe $service --region=us-central1 --format=\"yaml(spec.template.spec.containers[0].env)\")",
+      "Bash(gcloud logging read:*)"
     ],
     "deny": [],
     "ask": []
