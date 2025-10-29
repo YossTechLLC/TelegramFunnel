@@ -89,7 +89,7 @@ class ChannelUpdateRequest(BaseModel):
     closed_channel_title: Optional[str] = None
     closed_channel_description: Optional[str] = None
 
-    tier_count: Optional[int] = None
+    # NOTE: tier_count is not updatable - it's calculated dynamically from sub_X_price fields
     sub_1_price: Optional[Decimal] = None
     sub_1_time: Optional[int] = None
     sub_2_price: Optional[Decimal] = None

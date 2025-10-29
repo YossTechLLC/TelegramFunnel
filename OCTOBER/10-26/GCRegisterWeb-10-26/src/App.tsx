@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import RegisterChannelPage from './pages/RegisterChannelPage';
+import EditChannelPage from './pages/EditChannelPage';
 import { authService } from './services/authService';
 
 const queryClient = new QueryClient({
@@ -45,6 +46,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <RegisterChannelPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/edit/:channelId"
+            element={
+              <ProtectedRoute>
+                <EditChannelPage />
               </ProtectedRoute>
             }
           />

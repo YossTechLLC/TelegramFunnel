@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
 import api from '../services/api';
@@ -11,9 +11,11 @@ interface CurrencyNetworkMappings {
   currencies_with_names: Record<string, string>;
 }
 
-export default function RegisterChannelPage() {
+export default function EditChannelPage() {
   const navigate = useNavigate();
+  const { channelId } = useParams<{ channelId: string }>();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mappings, setMappings] = useState<CurrencyNetworkMappings | null>(null);
 
@@ -40,32 +42,64 @@ export default function RegisterChannelPage() {
   const [payoutStrategy, setPayoutStrategy] = useState('instant');
   const [payoutThresholdUsd, setPayoutThresholdUsd] = useState('');
 
-  // Load currency/network mappings
+  // Load channel data and mappings
   useEffect(() => {
-    const loadMappings = async () => {
+    const loadData = async () => {
       try {
-        const response = await api.get('/api/mappings/currency-network');
-        setMappings(response.data);
+        setIsLoading(true);
 
-        // Set default values
-        const networks = Object.keys(response.data.networks_with_names);
-        if (networks.length > 0) {
-          setClientPayoutNetwork(networks[0]);
-          const currencies = response.data.network_to_currencies[networks[0]];
-          if (currencies && currencies.length > 0) {
-            setClientPayoutCurrency(currencies[0].currency);
-          }
+        // Load mappings
+        const mappingsResponse = await api.get('/api/mappings/currency-network');
+        setMappings(mappingsResponse.data);
+
+        // Load channel data
+        if (!channelId) {
+          throw new Error('No channel ID provided');
         }
-      } catch (err) {
-        console.error('Failed to load mappings:', err);
-        // Set default fallback
-        setClientPayoutNetwork('ETH');
-        setClientPayoutCurrency('USDT');
+
+        const channel = await channelService.getChannel(channelId);
+
+        // Populate form with existing data
+        setOpenChannelId(channel.open_channel_id);
+        setOpenChannelTitle(channel.open_channel_title);
+        setOpenChannelDescription(channel.open_channel_description || '');
+        setClosedChannelId(channel.closed_channel_id);
+        setClosedChannelTitle(channel.closed_channel_title);
+        setClosedChannelDescription(channel.closed_channel_description || '');
+
+        // Determine tier count based on which tiers have values
+        let calculatedTierCount = 1;
+        if (channel.sub_3_price !== null && channel.sub_3_time !== null) {
+          calculatedTierCount = 3;
+        } else if (channel.sub_2_price !== null && channel.sub_2_time !== null) {
+          calculatedTierCount = 2;
+        }
+        setTierCount(calculatedTierCount);
+
+        setSub1Price(channel.sub_1_price.toString());
+        setSub1Time(channel.sub_1_time.toString());
+        setSub2Price(channel.sub_2_price?.toString() || '');
+        setSub2Time(channel.sub_2_time?.toString() || '');
+        setSub3Price(channel.sub_3_price?.toString() || '');
+        setSub3Time(channel.sub_3_time?.toString() || '');
+
+        setClientWalletAddress(channel.client_wallet_address);
+        setClientPayoutCurrency(channel.client_payout_currency);
+        setClientPayoutNetwork(channel.client_payout_network);
+
+        setPayoutStrategy(channel.payout_strategy);
+        setPayoutThresholdUsd(channel.payout_threshold_usd?.toString() || '');
+
+        setIsLoading(false);
+      } catch (err: any) {
+        console.error('Failed to load channel data:', err);
+        setError(err.response?.data?.error || err.message || 'Failed to load channel');
+        setIsLoading(false);
       }
     };
 
-    loadMappings();
-  }, []);
+    loadData();
+  }, [channelId]);
 
   const handleLogout = () => {
     authService.logout();
@@ -117,7 +151,7 @@ export default function RegisterChannelPage() {
 
     try {
       // Validate required fields
-      if (!openChannelId || !openChannelTitle || !closedChannelId || !closedChannelTitle) {
+      if (!openChannelTitle || !closedChannelTitle) {
         throw new Error('Please fill in all required channel fields');
       }
 
@@ -141,23 +175,13 @@ export default function RegisterChannelPage() {
         throw new Error('Threshold amount is required and must be positive when using threshold strategy');
       }
 
-      // Validate channel ID format
-      if (!openChannelId.startsWith('-100')) {
-        throw new Error('Open channel ID must start with -100');
-      }
-      if (!closedChannelId.startsWith('-100')) {
-        throw new Error('Closed channel ID must start with -100');
-      }
-
-      // Build request payload
+      // Build request payload (channel IDs and tier_count cannot be changed)
+      // NOTE: tier_count is calculated dynamically from sub_X_price fields
       const payload = {
-        open_channel_id: openChannelId,
         open_channel_title: openChannelTitle,
         open_channel_description: openChannelDescription || '',
-        closed_channel_id: closedChannelId,
         closed_channel_title: closedChannelTitle,
         closed_channel_description: closedChannelDescription || '',
-        tier_count: tierCount,
         sub_1_price: parseFloat(sub1Price),
         sub_1_time: parseInt(sub1Time),
         sub_2_price: tierCount >= 2 ? parseFloat(sub2Price) : null,
@@ -171,13 +195,17 @@ export default function RegisterChannelPage() {
         payout_threshold_usd: payoutStrategy === 'threshold' ? parseFloat(payoutThresholdUsd) : null,
       };
 
-      await channelService.registerChannel(payload);
+      if (!channelId) {
+        throw new Error('No channel ID provided');
+      }
+
+      await channelService.updateChannel(channelId, payload);
 
       // Success - navigate to dashboard
       navigate('/dashboard');
     } catch (err: any) {
-      console.error('Channel registration error:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to register channel');
+      console.error('Channel update error:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to update channel');
     } finally {
       setIsSubmitting(false);
     }
@@ -203,6 +231,22 @@ export default function RegisterChannelPage() {
         }))
     : [];
 
+  if (isLoading) {
+    return (
+      <div>
+        <div className="header">
+          <div className="header-content">
+            <div className="logo">PayGate Prime</div>
+            <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+          </div>
+        </div>
+        <div className="container" style={{ textAlign: 'center', padding: '48px 0' }}>
+          <p style={{ fontSize: '18px', color: '#666' }}>Loading channel data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="header">
@@ -217,8 +261,8 @@ export default function RegisterChannelPage() {
           <button onClick={() => navigate('/dashboard')} className="btn btn-secondary" style={{ marginBottom: '16px' }}>
             ← Back to Dashboard
           </button>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '8px' }}>Register New Channel</h1>
-          <p style={{ color: '#666' }}>Set up a new Telegram channel to accept crypto payments</p>
+          <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '8px' }}>Edit Channel</h1>
+          <p style={{ color: '#666' }}>Update your Telegram channel configuration</p>
         </div>
 
         {error && (
@@ -236,15 +280,14 @@ export default function RegisterChannelPage() {
             </p>
 
             <div className="form-group">
-              <label>Channel ID *</label>
+              <label>Channel ID</label>
               <input
                 type="text"
-                placeholder="-1001234567890"
                 value={openChannelId}
-                onChange={(e) => setOpenChannelId(e.target.value)}
-                required
+                disabled
+                style={{ background: '#f5f5f5', cursor: 'not-allowed' }}
               />
-              <small style={{ color: '#666', fontSize: '12px' }}>Must start with -100</small>
+              <small style={{ color: '#666', fontSize: '12px' }}>Channel IDs cannot be changed</small>
             </div>
 
             <div className="form-group">
@@ -277,15 +320,14 @@ export default function RegisterChannelPage() {
             </p>
 
             <div className="form-group">
-              <label>Channel ID *</label>
+              <label>Channel ID</label>
               <input
                 type="text"
-                placeholder="-1009876543210"
                 value={closedChannelId}
-                onChange={(e) => setClosedChannelId(e.target.value)}
-                required
+                disabled
+                style={{ background: '#f5f5f5', cursor: 'not-allowed' }}
               />
-              <small style={{ color: '#666', fontSize: '12px' }}>Must start with -100</small>
+              <small style={{ color: '#666', fontSize: '12px' }}>Channel IDs cannot be changed</small>
             </div>
 
             <div className="form-group">
@@ -623,7 +665,7 @@ export default function RegisterChannelPage() {
               style={{ flex: 2 }}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Registering...' : 'Register Channel'}
+              {isSubmitting ? 'Updating...' : 'Update Channel'}
             </button>
           </div>
         </form>

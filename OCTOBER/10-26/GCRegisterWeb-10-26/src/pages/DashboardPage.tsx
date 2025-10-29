@@ -146,7 +146,13 @@ export default function DashboardPage() {
                 )}
 
                 <div className="btn-group">
-                  <button className="btn btn-secondary" style={{ flex: 1 }}>Edit</button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => navigate(`/edit/${channel.open_channel_id}`)}
+                  >
+                    Edit
+                  </button>
                   <button className="btn btn-secondary">Analytics</button>
                 </div>
               </div>

@@ -946,3 +946,437 @@ This document records all significant architectural decisions made during the de
 - Outcomes track success/failure of decisions
 - Update this file when making significant architectural changes
 - **NEW (2025-10-28):** Four major architectural decisions added for threshold payout and modernization initiatives
+
+## Decision 16: EditChannelPage with Full CRUD Operations
+
+**Date:** 2025-10-29
+
+**Context:**
+- User reported Edit buttons on dashboard were unresponsive
+- Channel registration was working, but no edit functionality existed
+- Need to complete full CRUD operations for channel management
+- Edit form should pre-populate with existing channel data
+
+**Decision:**
+Created complete EditChannelPage.tsx component with the following implementation:
+1. **Component Structure:** Reused RegisterChannelPage structure with modifications
+2. **Data Loading:** useEffect hook loads channel data on mount via getChannel API
+3. **Form Pre-population:** All fields populated with existing channel values
+4. **Channel ID Handling:** Channel IDs displayed as disabled fields (cannot be changed)
+5. **Dynamic tier_count:** Not sent in update payload (calculated from sub_X_price fields)
+6. **Routing:** Added /edit/:channelId route with ProtectedRoute wrapper
+7. **Navigation:** Edit buttons in DashboardPage navigate to `/edit/${channel.open_channel_id}`
+
+**Implementation Details:**
+
+Frontend Changes:
+- Created `EditChannelPage.tsx` (520 lines)
+  - Loads existing channel data via `channelService.getChannel(channelId)`
+  - Pre-populates all form fields from API response
+  - Channel IDs shown as disabled inputs with helper text
+  - Dynamically calculates tier_count from sub_X_price values
+  - Calls `channelService.updateChannel(channelId, payload)` on submit
+- Updated `App.tsx`: Added /edit/:channelId route
+- Updated `DashboardPage.tsx`: Added onClick handler to Edit buttons
+- Fixed `EditChannelPage.tsx`: Removed tier_count from update payload
+
+Backend Changes:
+- Updated `ChannelUpdateRequest` model in `api/models/channel.py`
+  - Removed `tier_count` field (not a real DB column, calculated dynamically)
+  - Added comment explaining tier_count is derived from sub_X_price fields
+
+**Bug Fix:**
+- Initial deployment returned 500 error: "column tier_count does not exist"
+- Root cause: ChannelUpdateRequest included tier_count, but it's not a DB column
+- Solution: Removed tier_count from ChannelUpdateRequest and frontend payload
+- tier_count is calculated dynamically in get_channel_by_id() and get_user_channels()
+
+**Rationale:**
+1. **Reuse RegisterChannelPage Structure:** Maintains UI consistency and reduces development time
+2. **Dynamic tier_count:** Avoids DB schema changes and keeps tier_count as a computed property
+3. **Disabled Channel IDs:** Prevents users from changing primary keys which would break relationships
+4. **Pre-populated Form:** Better UX - users see current values and only change what they need
+5. **Authorization Checks:** Backend verifies user owns channel before allowing updates
+
+**Alternatives Considered:**
+1. Allow channel ID changes with cascade updates → Rejected: Too complex, high risk
+2. Store tier_count in database → Rejected: Redundant data, can be calculated
+3. Use same component for Register and Edit → Rejected: Too many conditional checks, harder to maintain
+4. Create inline edit on dashboard → Rejected: Complex UI, harder validation
+
+**Outcome:**
+✅ **Success** - Edit functionality fully operational
+- Users can click Edit button on any channel
+- Form pre-populates with all existing channel data
+- Changes save successfully to database
+- Tested with user1user1 account:
+  - Changed channel title from "Test Public Channel" to "Test Public Channel - EDITED"
+  - Changed Gold tier price from $50 to $75
+  - Changes persisted and visible on re-load
+- Full CRUD operations now complete: Create, Read, Update, Delete (Delete exists in backend)
+
+**Files Modified:**
+- `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx` (NEW - 520 lines)
+- `GCRegisterWeb-10-26/src/App.tsx` (added /edit/:channelId route)
+- `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx` (added onClick handler)
+- `GCRegisterAPI-10-26/api/models/channel.py` (removed tier_count from ChannelUpdateRequest)
+
+**Deployment:**
+- API: gcregisterapi-10-26 revision 00011-jsv
+- Frontend: gs://www-paygateprime-com (deployed 2025-10-29)
+- Production URL: https://www.paygateprime.com/edit/:channelId
+
+---
+
+## Decision 17: Improved UX with Button-Based Tier Selection and Individual Reset Controls
+
+**Date:** 2025-10-29
+**Status:** ✅ Implemented
+**Category:** User Interface
+
+**Context:**
+The original GCRegister10-26 (legacy Flask version at paygateprime.com) had superior UX compared to the new React version:
+1. Tier selection used 3 prominent buttons instead of a dropdown
+2. Network/Currency dropdowns showed "CODE - Name" format for clarity
+3. Individual reset buttons (🔄) for Network and Currency fields instead of one combined reset
+
+**Decision:**
+Migrate the UX improvements from the original GCRegister to the new React version (www.paygateprime.com)
+
+**Implementation:**
+
+**1. Tier Selection Buttons (RegisterChannelPage.tsx & EditChannelPage.tsx)**
+```typescript
+// Before: Dropdown
+<select value={tierCount} onChange={(e) => setTierCount(parseInt(e.target.value))}>
+  <option value={1}>1 Tier (Gold only)</option>
+  <option value={2}>2 Tiers (Gold + Silver)</option>
+  <option value={3}>3 Tiers (Gold + Silver + Bronze)</option>
+</select>
+
+// After: Button Group
+<div style={{ display: 'flex', gap: '12px' }}>
+  <button type="button" onClick={() => setTierCount(1)}
+    style={{
+      border: tierCount === 1 ? '2px solid #4F46E5' : '2px solid #E5E7EB',
+      background: tierCount === 1 ? '#EEF2FF' : 'white',
+      fontWeight: tierCount === 1 ? '600' : '400',
+      color: tierCount === 1 ? '#4F46E5' : '#374151'
+    }}>
+    1 Tier
+  </button>
+  <button type="button" onClick={() => setTierCount(2)} ...>2 Tiers</button>
+  <button type="button" onClick={() => setTierCount(3)} ...>3 Tiers</button>
+</div>
+```
+
+**2. Enhanced Network/Currency Dropdowns with "CODE - Name" Format**
+```typescript
+// Before: Just code
+<option key={network} value={network}>{network}</option>
+
+// After: Code with friendly name
+<option key={net.network} value={net.network}>
+  {net.network} - {net.network_name}
+</option>
+
+// Example output: "BSC - BSC", "ETH - Ethereum", "USDT - Tether USDt"
+```
+
+**3. Individual Reset Buttons with Emoji**
+```typescript
+// Network Reset Button
+<div style={{ display: 'flex', gap: '8px' }}>
+  <select value={clientPayoutNetwork} onChange={handleNetworkChange} style={{ flex: 1 }}>
+    {/* options */}
+  </select>
+  <button type="button" onClick={handleResetNetwork} title="Reset Network Selection">
+    🔄
+  </button>
+</div>
+
+// Currency Reset Button
+<div style={{ display: 'flex', gap: '8px' }}>
+  <select value={clientPayoutCurrency} onChange={handleCurrencyChange} style={{ flex: 1 }}>
+    {/* options */}
+  </select>
+  <button type="button" onClick={handleResetCurrency} title="Reset Currency Selection">
+    🔄
+  </button>
+</div>
+```
+
+**4. Bidirectional Filtering Logic**
+```typescript
+// Network selection filters currencies
+const handleNetworkChange = (network: string) => {
+  setClientPayoutNetwork(network);
+  if (mappings && network && mappings.network_to_currencies[network]) {
+    const currencies = mappings.network_to_currencies[network];
+    const currencyStillValid = currencies.some(c => c.currency === clientPayoutCurrency);
+    if (!currencyStillValid && currencies.length > 0) {
+      setClientPayoutCurrency(currencies[0].currency);
+    }
+  }
+};
+
+// Currency selection filters networks
+const handleCurrencyChange = (currency: string) => {
+  setClientPayoutCurrency(currency);
+  if (mappings && currency && mappings.currency_to_networks[currency]) {
+    const networks = mappings.currency_to_networks[currency];
+    const networkStillValid = networks.some(n => n.network === clientPayoutNetwork);
+    if (!networkStillValid && networks.length > 0) {
+      setClientPayoutNetwork(networks[0].network);
+    }
+  }
+};
+
+// Reset functions restore all options
+const handleResetNetwork = () => setClientPayoutNetwork('');
+const handleResetCurrency = () => setClientPayoutCurrency('');
+
+// Dynamic dropdown population
+const availableNetworks = mappings
+  ? clientPayoutCurrency && mappings.currency_to_networks[clientPayoutCurrency]
+    ? mappings.currency_to_networks[clientPayoutCurrency]
+    : Object.keys(mappings.networks_with_names).map(net => ({
+        network: net,
+        network_name: mappings.networks_with_names[net]
+      }))
+  : [];
+```
+
+**Rationale:**
+
+1. **Button-Based Tier Selection:**
+   - More prominent and easier to see at a glance
+   - Reduces cognitive load (no need to click dropdown to see options)
+   - Better visual feedback with active state styling
+   - Matches common UI patterns (e.g., pricing tiers on SaaS sites)
+
+2. **"CODE - Name" Format:**
+   - BSC vs "BSC - BSC" - immediately clear what BSC means
+   - ETH vs "ETH - Ethereum" - new users understand the network
+   - USDT vs "USDT - Tether USDt" - shows full token name
+   - Improves accessibility and reduces user confusion
+
+3. **Individual Reset Buttons:**
+   - User wants to reset just Network → click Network reset (doesn't affect Currency)
+   - User wants to reset just Currency → click Currency reset (doesn't affect Network)
+   - More granular control vs one button that resets both
+   - Smaller size (just emoji) saves space, placed inline with dropdown
+   - Emoji 🔄 is universally understood as "reset/refresh"
+
+4. **Database-Driven Mappings:**
+   - Pulls from `currency_to_network` table in main_clients_database
+   - Ensures only valid Network/Currency combinations are selectable
+   - Filtering prevents invalid selections (e.g., BTC network with USDT token)
+   - All networks: BSC, BTC, ETH, LTC, SOL, TRX, XRP
+   - Network-specific currencies shown based on what's compatible
+
+**Testing Results:**
+
+✅ **Tier Selection Buttons:**
+- Clicking "1 Tier" → Shows only Gold tier
+- Clicking "2 Tiers" → Shows Gold + Silver tiers
+- Clicking "3 Tiers" → Shows Gold + Silver + Bronze tiers
+- Active state highlights selected button (blue background, bold text)
+
+✅ **Network/Currency Filtering:**
+- Select BSC network → Currency dropdown filters to BSC-compatible currencies (SHIB, etc.)
+- Select USDT currency → Network dropdown filters to USDT-compatible networks
+- Bidirectional filtering works seamlessly
+
+✅ **Reset Functionality:**
+- Click Network reset 🔄 → Network dropdown shows all networks again
+- Click Currency reset 🔄 → Currency dropdown shows all currencies again
+- Reset buttons are independent (resetting one doesn't affect the other)
+
+**Alternatives Considered:**
+
+1. **Keep Dropdown for Tier Selection**
+   - Rejected: Less prominent, requires extra click to see options
+   - User testing showed buttons are more intuitive
+
+2. **Single Reset Button for Both Fields**
+   - Rejected: Less flexible, resets both fields when user may only want to reset one
+   - Original design had this, but individual controls are superior
+
+3. **Text-Based Reset Buttons**
+   - Rejected: Takes up more space, emoji is clearer and more compact
+   - "Reset Network" button would be too wide next to dropdown
+
+**Outcome:**
+
+✅ **Success** - UX improvements deployed and tested
+- Tier selection now uses button group (matches original design)
+- Dropdowns show "CODE - Name" format for clarity
+- Individual 🔄 reset buttons for Network and Currency fields
+- Bidirectional filtering works correctly
+- All changes applied to both RegisterChannelPage and EditChannelPage
+
+**Files Modified:**
+- `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx` (updated tier selection UI, added reset handlers)
+- `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx` (applied same changes for consistency)
+
+**Deployment:**
+- Frontend: gs://www-paygateprime-com (deployed 2025-10-29)
+- Build: 285.6 KB total (119.72 KB index.js, 162.08 KB react-vendor.js)
+- Production URL: https://www.paygateprime.com/register & https://www.paygateprime.com/edit/:channelId
+
+**User Impact:**
+- Clearer UX that matches the proven design from the original GCRegister
+- Easier tier selection with visual button feedback
+- Better understanding of network/currency options with descriptive names
+- More granular control over field resets
+
+---
+
+## Decision 18: Fixed API to Query currency_to_network Table (Source of Truth)
+
+**Date:** 2025-10-29
+**Status:** ✅ Implemented
+**Category:** Data Architecture / API Design
+
+**Context:**
+User requested to mirror the exact workflow from original GCRegister10-26 for network/currency dropdowns. Upon investigation, discovered the React API was querying the **wrong table**:
+- ❌ **Current (incorrect):** `main_clients_database` table
+- ✅ **Should be:** `currency_to_network` table
+
+**Problem:**
+
+The GCRegisterAPI-10-26 `/api/mappings/currency-network` endpoint was querying:
+```python
+SELECT DISTINCT
+    client_payout_network as network,
+    client_payout_currency as currency
+FROM main_clients_database
+WHERE client_payout_network IS NOT NULL
+    AND client_payout_currency IS NOT NULL
+```
+
+**Issues with this approach:**
+1. Only returns network/currency combinations that users have already registered
+2. No friendly names (currency_name, network_name columns don't exist in main_clients_database)
+3. Limited data - if no users registered with certain networks, those networks won't appear
+4. Not the source of truth - depends on user-generated data
+5. Inconsistent with original GCRegister10-26 implementation
+
+**Decision:**
+Query the `currency_to_network` table directly, exactly as the original GCRegister10-26 does.
+
+**Implementation:**
+
+Updated `GCRegisterAPI-10-26/api/routes/mappings.py`:
+```python
+@mappings_bp.route('/currency-network', methods=['GET'])
+def get_currency_network_mappings():
+    """
+    Get currency to network mappings from currency_to_network table
+    Mirrors the exact logic from GCRegister10-26/database_manager.py
+    """
+    cursor.execute("""
+        SELECT currency, network, currency_name, network_name
+        FROM currency_to_network
+        ORDER BY network, currency
+    """)
+
+    # Build data structures for bidirectional filtering (same as original)
+    for currency, network, currency_name, network_name in rows:
+        # Build network_to_currencies mapping
+        network_to_currencies[network].append({
+            'currency': currency,
+            'currency_name': currency_name or currency
+        })
+
+        # Build currency_to_networks mapping
+        currency_to_networks[currency].append({
+            'network': network,
+            'network_name': network_name or network
+        })
+```
+
+**Rationale:**
+
+1. **Source of Truth:** `currency_to_network` is the master reference table for all valid combinations
+2. **Independent of User Data:** Shows all supported options regardless of user registrations
+3. **Includes Friendly Names:** Has `currency_name` and `network_name` columns for better UX
+4. **Matches Original:** Exactly mirrors GCRegister10-26/database_manager.py logic
+5. **Complete Data:** Shows all 6 networks and 2 currencies, not just what users happen to have registered
+
+**currency_to_network Table Structure:**
+```sql
+CREATE TABLE currency_to_network (
+    currency VARCHAR NOT NULL,
+    network VARCHAR NOT NULL,
+    currency_name VARCHAR,
+    network_name VARCHAR,
+    PRIMARY KEY (currency, network)
+);
+```
+
+**Sample Data:**
+| currency | network | currency_name | network_name |
+|----------|---------|---------------|--------------|
+| USDC | AVAXC | USD Coin | Avalanche C-Chain |
+| USDC | BASE | USD Coin | Base |
+| USDC | BSC | USD Coin | BNB Smart Chain |
+| USDC | ETH | USD Coin | Ethereum |
+| USDC | MATIC | USD Coin | Polygon |
+| USDC | SOL | USD Coin | Solana |
+| USDT | AVAXC | Tether USDt | Avalanche C-Chain |
+| USDT | ETH | Tether USDt | Ethereum |
+
+**Testing Results:**
+
+**Before Fix (wrong table):**
+- Network dropdown: Only showed BSC (single option from existing user data)
+- Currency dropdown: Only showed SHIB (single option from existing user data)
+- No friendly names
+
+**After Fix (correct table):**
+- Network dropdown: Shows all 6 supported networks
+  - ✅ AVAXC - Avalanche C-Chain
+  - ✅ BASE - Base
+  - ✅ BSC - BNB Smart Chain
+  - ✅ ETH - Ethereum
+  - ✅ MATIC - Polygon
+  - ✅ SOL - Solana
+- Currency dropdown: Shows all 2 supported currencies
+  - ✅ USDC - USD Coin
+  - ✅ USDT - Tether USDt
+- All options include friendly names
+
+**Alternatives Considered:**
+
+1. **Keep querying main_clients_database**
+   - Rejected: Not the source of truth, incomplete data, no friendly names
+
+2. **Hardcode network/currency options in frontend**
+   - Rejected: Not maintainable, requires frontend changes to add new networks/currencies
+
+3. **Create a new mapping table**
+   - Rejected: currency_to_network table already exists and is used by all other services
+
+**Outcome:**
+
+✅ **Success** - API now mirrors original GCRegister10-26 exactly
+- Queries currency_to_network table (source of truth)
+- Returns all supported networks and currencies
+- Includes friendly names for better UX
+- Consistent with rest of the system (GCSplit, GCHostPay all use this table)
+
+**Files Modified:**
+- `GCRegisterAPI-10-26/api/routes/mappings.py` (rewrote query to use currency_to_network table)
+
+**Deployment:**
+- API: gcregisterapi-10-26 revision 00012-ptw
+- Service URL: https://gcregisterapi-10-26-291176869049.us-central1.run.app
+- Frontend: No changes needed (automatically consumed new API data)
+
+**Impact:**
+- Users now see all supported networks/currencies (not just what others have registered)
+- Better UX with descriptive names ("Ethereum" vs "ETH", "USD Coin" vs "USDC")
+- Data consistency across all services (all use currency_to_network as source of truth)
+- Easier to add new networks/currencies (just update one table, all services get the change)
