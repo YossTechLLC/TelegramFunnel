@@ -4,3 +4,11 @@
 - MONITOR FOR THIS PACKAGE ERROR - google-cloud-sql-connector is not a package, instead call cloud-sql-python-connector --> it imports as google.cloud.sql.connector.
 - Remember USER : PASS for 'www.paygateprime.com' --> user1user1 : user1TEST$
 - .venv &or /.venv is found in ~/Desktop/2025/.venv AND NO LONGER IN ~/Desktop/2025/TelegramFunnel/.venv
+- I have given you MCP access to gcloud and observability, you'll see that you're working in the telepay-459221 project.
+- You are allowed to enable any API or gcloud service you may need, however you are to EXPLICITLY ask if you must disable any API or gcloud service.
+- You'll have explicit read/write permissions to the telepaypsql database instance.
+- You are NOT to duplicate and deployment names you find when you fun gcloud run services list & gcloud functions list.
+- You are to implement the necessary changes to the telepaypsql database - do not tamper with the telepaypsql-clone-preclaude database, as it's an archived clone.
+- You are to deploy the google cloud functions you have built.
+- You are to deploy the google queues/tasks you have built.
+- You are still NOT to make any GitHub commits, I will do that manually afterwards.

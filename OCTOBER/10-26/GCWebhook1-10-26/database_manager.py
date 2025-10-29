@@ -190,7 +190,7 @@ class DatabaseManager:
         conn = None
         cur = None
         try:
-            print(f"🔍 [DATABASE] Fetching payout strategy for channel {closed_channel_id}")
+            print(f"🔍 [DATABASE] Fetching payout strategy for closed channel {closed_channel_id}")
 
             conn = self.get_connection()
             if not conn:
@@ -199,11 +199,11 @@ class DatabaseManager:
 
             cur = conn.cursor()
 
-            # Query for payout strategy and threshold
+            # Query for payout strategy and threshold by closed_channel_id
             query = """
                 SELECT payout_strategy, payout_threshold_usd
                 FROM main_clients_database
-                WHERE open_channel_id = %s
+                WHERE closed_channel_id = %s
             """
             cur.execute(query, (str(closed_channel_id),))
             result = cur.fetchone()
@@ -211,10 +211,10 @@ class DatabaseManager:
             if result:
                 strategy = result[0] or 'instant'
                 threshold = float(result[1]) if result[1] else 0
-                print(f"✅ [DATABASE] Found strategy: {strategy}, threshold: ${threshold}")
+                print(f"✅ [DATABASE] Found client by closed_channel_id: strategy={strategy}, threshold=${threshold}")
                 return (strategy, threshold)
             else:
-                print(f"⚠️ [DATABASE] No client found for channel {closed_channel_id}, defaulting to instant")
+                print(f"⚠️ [DATABASE] No client found for closed_channel_id {closed_channel_id}, defaulting to instant")
                 return ('instant', 0)
 
         except Exception as e:

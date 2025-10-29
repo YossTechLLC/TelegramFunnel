@@ -62,50 +62,60 @@ class DatabaseManager:
         Returns:
             List of client data dictionaries
         """
+        conn = None
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                print(f"🔍 [DATABASE] Searching for clients over threshold")
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return []
 
-                cur.execute(
-                    """SELECT
-                        pa.client_id,
-                        pa.client_wallet_address,
-                        pa.client_payout_currency,
-                        pa.client_payout_network,
-                        SUM(pa.accumulated_amount_usdt) as total_usdt,
-                        COUNT(*) as payment_count,
-                        mc.payout_threshold_usd as threshold
-                    FROM payout_accumulation pa
-                    JOIN main_clients_database mc ON pa.client_id = mc.open_channel_id
-                    WHERE pa.is_paid_out = FALSE
-                    GROUP BY
-                        pa.client_id,
-                        pa.client_wallet_address,
-                        pa.client_payout_currency,
-                        pa.client_payout_network,
-                        mc.payout_threshold_usd
-                    HAVING SUM(pa.accumulated_amount_usdt) >= mc.payout_threshold_usd"""
-                )
+            cur = conn.cursor()
+            print(f"🔍 [DATABASE] Searching for clients over threshold")
 
-                results = []
-                for row in cur.fetchall():
-                    results.append({
-                        'client_id': row[0],
-                        'wallet_address': row[1],
-                        'payout_currency': row[2],
-                        'payout_network': row[3],
-                        'total_usdt': Decimal(str(row[4])),
-                        'payment_count': row[5],
-                        'threshold': Decimal(str(row[6]))
-                    })
+            cur.execute(
+                """SELECT
+                    pa.client_id,
+                    pa.client_wallet_address,
+                    pa.client_payout_currency,
+                    pa.client_payout_network,
+                    SUM(pa.accumulated_amount_usdt) as total_usdt,
+                    COUNT(*) as payment_count,
+                    mc.payout_threshold_usd as threshold
+                FROM payout_accumulation pa
+                JOIN main_clients_database mc ON pa.client_id = mc.closed_channel_id
+                WHERE pa.is_paid_out = FALSE
+                GROUP BY
+                    pa.client_id,
+                    pa.client_wallet_address,
+                    pa.client_payout_currency,
+                    pa.client_payout_network,
+                    mc.payout_threshold_usd
+                HAVING SUM(pa.accumulated_amount_usdt) >= mc.payout_threshold_usd"""
+            )
 
-                print(f"✅ [DATABASE] Found {len(results)} client(s) over threshold")
+            results = []
+            for row in cur.fetchall():
+                results.append({
+                    'client_id': row[0],
+                    'wallet_address': row[1],
+                    'payout_currency': row[2],
+                    'payout_network': row[3],
+                    'total_usdt': Decimal(str(row[4])),
+                    'payment_count': row[5],
+                    'threshold': Decimal(str(row[6]))
+                })
 
-                return results
+            cur.close()
+            print(f"✅ [DATABASE] Found {len(results)} client(s) over threshold")
+
+            return results
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to find clients over threshold: {e}")
             return []
+        finally:
+            if conn:
+                conn.close()
 
     def create_payout_batch(
         self,
@@ -132,36 +142,46 @@ class DatabaseManager:
         Returns:
             True if successful, False if failed
         """
+        conn = None
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                print(f"💾 [DATABASE] Creating batch record")
-                print(f"🆔 [DATABASE] Batch ID: {batch_id}")
-                print(f"🏢 [DATABASE] Client ID: {client_id}")
-                print(f"💰 [DATABASE] Total USDT: ${total_amount_usdt}")
-                print(f"📊 [DATABASE] Payment Count: {total_payments_count}")
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return False
 
-                cur.execute(
-                    """INSERT INTO payout_batches (
-                        batch_id, client_id,
-                        total_amount_usdt, total_payments_count,
-                        client_wallet_address, client_payout_currency, client_payout_network,
-                        status
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending')""",
-                    (
-                        batch_id, client_id,
-                        total_amount_usdt, total_payments_count,
-                        client_wallet_address, client_payout_currency, client_payout_network
-                    )
+            cur = conn.cursor()
+            print(f"💾 [DATABASE] Creating batch record")
+            print(f"🆔 [DATABASE] Batch ID: {batch_id}")
+            print(f"🏢 [DATABASE] Client ID: {client_id}")
+            print(f"💰 [DATABASE] Total USDT: ${total_amount_usdt}")
+            print(f"📊 [DATABASE] Payment Count: {total_payments_count}")
+
+            cur.execute(
+                """INSERT INTO payout_batches (
+                    batch_id, client_id,
+                    total_amount_usdt, total_payments_count,
+                    client_wallet_address, client_payout_currency, client_payout_network,
+                    status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending')""",
+                (
+                    batch_id, client_id,
+                    total_amount_usdt, total_payments_count,
+                    client_wallet_address, client_payout_currency, client_payout_network
                 )
-                conn.commit()
+            )
+            conn.commit()
+            cur.close()
 
-                print(f"✅ [DATABASE] Batch record created successfully")
+            print(f"✅ [DATABASE] Batch record created successfully")
 
-                return True
+            return True
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to create batch record: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def update_batch_status(self, batch_id: str, status: str) -> bool:
         """
@@ -174,27 +194,38 @@ class DatabaseManager:
         Returns:
             True if successful, False if failed
         """
+        conn = None
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                print(f"🔄 [DATABASE] Updating batch {batch_id} status to: {status}")
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return False
 
-                cur.execute(
-                    """UPDATE payout_batches
-                       SET status = %s,
-                           processing_started_at = CASE WHEN %s = 'processing' THEN NOW() ELSE processing_started_at END,
-                           completed_at = CASE WHEN %s IN ('completed', 'failed') THEN NOW() ELSE completed_at END
-                       WHERE batch_id = %s""",
-                    (status, status, status, batch_id)
-                )
-                conn.commit()
+            cur = conn.cursor()
+            print(f"🔄 [DATABASE] Updating batch {batch_id} status to: {status}")
 
-                print(f"✅ [DATABASE] Batch status updated successfully")
+            cur.execute(
+                """UPDATE payout_batches
+                   SET status = %s,
+                       processing_started_at = CASE WHEN %s = 'processing' THEN NOW() ELSE processing_started_at END,
+                       completed_at = CASE WHEN %s IN ('completed', 'failed') THEN NOW() ELSE completed_at END
+                   WHERE batch_id = %s""",
+                (status, status, status, batch_id)
+            )
+            conn.commit()
+            rowcount = cur.rowcount
+            cur.close()
 
-                return cur.rowcount > 0
+            print(f"✅ [DATABASE] Batch status updated successfully")
+
+            return rowcount > 0
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to update batch status: {e}")
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def mark_accumulations_paid(self, client_id: str, batch_id: str) -> int:
         """
@@ -207,27 +238,37 @@ class DatabaseManager:
         Returns:
             Number of records updated
         """
+        conn = None
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                print(f"💾 [DATABASE] Marking accumulations as paid")
-                print(f"🏢 [DATABASE] Client ID: {client_id}")
-                print(f"🆔 [DATABASE] Batch ID: {batch_id}")
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return 0
 
-                cur.execute(
-                    """UPDATE payout_accumulation
-                       SET is_paid_out = TRUE,
-                           payout_batch_id = %s,
-                           paid_out_at = NOW()
-                       WHERE client_id = %s AND is_paid_out = FALSE""",
-                    (batch_id, client_id)
-                )
-                conn.commit()
+            cur = conn.cursor()
+            print(f"💾 [DATABASE] Marking accumulations as paid")
+            print(f"🏢 [DATABASE] Client ID: {client_id}")
+            print(f"🆔 [DATABASE] Batch ID: {batch_id}")
 
-                count = cur.rowcount
-                print(f"✅ [DATABASE] Marked {count} accumulation(s) as paid")
+            cur.execute(
+                """UPDATE payout_accumulation
+                   SET is_paid_out = TRUE,
+                       payout_batch_id = %s,
+                       paid_out_at = NOW()
+                   WHERE client_id = %s AND is_paid_out = FALSE""",
+                (batch_id, client_id)
+            )
+            conn.commit()
+            count = cur.rowcount
+            cur.close()
 
-                return count
+            print(f"✅ [DATABASE] Marked {count} accumulation(s) as paid")
+
+            return count
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to mark accumulations as paid: {e}")
             return 0
+        finally:
+            if conn:
+                conn.close()

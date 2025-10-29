@@ -74,7 +74,18 @@
       "Bash(gcloud tasks queues:*)",
       "mcp__observability__list_log_entries",
       "Bash(gcloud scheduler jobs describe:*)",
-      "Bash(gcloud scheduler jobs list:*)"
+      "Bash(gcloud scheduler jobs list:*)",
+      "Bash(TP_FLAT_FEE=TP_FLAT_FEE:latest,)",
+      "Bash(CLOUD_TASKS_PROJECT_ID=CLOUD_TASKS_PROJECT_ID:latest,)",
+      "Bash(CLOUD_TASKS_LOCATION=CLOUD_TASKS_LOCATION:latest,)",
+      "Bash(GCSPLIT2_QUEUE=GCSPLIT2_QUEUE:latest,)",
+      "Bash(GCSPLIT2_URL=GCSPLIT2_URL:latest,)",
+      "Bash(CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest,)",
+      "Bash(DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,)",
+      "Bash(DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,)",
+      "Bash(DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest)",
+      "Bash(gcloud run services update:*)",
+      "Bash(psql:*)"
     ],
     "deny": [],
     "ask": []

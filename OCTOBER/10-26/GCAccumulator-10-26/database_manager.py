@@ -76,7 +76,7 @@ class DatabaseManager:
         Insert a payment accumulation record.
 
         Args:
-            client_id: open_channel_id from main_clients_database
+            client_id: closed_channel_id from main_clients_database (private channel ID)
             user_id: Telegram user who made payment
             subscription_id: FK to private_channel_users_database
             payment_amount_usd: What user originally paid
@@ -93,42 +93,52 @@ class DatabaseManager:
         Returns:
             Accumulation ID if successful, None if failed
         """
+        conn = None
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                print(f"💾 [DATABASE] Inserting payout accumulation record")
-                print(f"👤 [DATABASE] User ID: {user_id}, Client ID: {client_id}")
-                print(f"💰 [DATABASE] Payment Amount: ${payment_amount_usd}")
-                print(f"💰 [DATABASE] USDT Accumulated: {accumulated_amount_usdt} USDT")
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return None
 
-                cur.execute(
-                    """INSERT INTO payout_accumulation (
-                        client_id, user_id, subscription_id,
-                        payment_amount_usd, payment_currency, payment_timestamp,
-                        accumulated_amount_usdt, eth_to_usdt_rate,
-                        conversion_timestamp, conversion_tx_hash,
-                        client_wallet_address, client_payout_currency, client_payout_network
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id""",
-                    (
-                        client_id, user_id, subscription_id,
-                        payment_amount_usd, payment_currency, payment_timestamp,
-                        accumulated_amount_usdt, eth_to_usdt_rate,
-                        conversion_timestamp, conversion_tx_hash,
-                        client_wallet_address, client_payout_currency, client_payout_network
-                    )
+            cur = conn.cursor()
+            print(f"💾 [DATABASE] Inserting payout accumulation record")
+            print(f"👤 [DATABASE] User ID: {user_id}, Client ID: {client_id}")
+            print(f"💰 [DATABASE] Payment Amount: ${payment_amount_usd}")
+            print(f"💰 [DATABASE] USDT Accumulated: {accumulated_amount_usdt} USDT")
+
+            cur.execute(
+                """INSERT INTO payout_accumulation (
+                    client_id, user_id, subscription_id,
+                    payment_amount_usd, payment_currency, payment_timestamp,
+                    accumulated_amount_usdt, eth_to_usdt_rate,
+                    conversion_timestamp, conversion_tx_hash,
+                    client_wallet_address, client_payout_currency, client_payout_network
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id""",
+                (
+                    client_id, user_id, subscription_id,
+                    payment_amount_usd, payment_currency, payment_timestamp,
+                    accumulated_amount_usdt, eth_to_usdt_rate,
+                    conversion_timestamp, conversion_tx_hash,
+                    client_wallet_address, client_payout_currency, client_payout_network
                 )
+            )
 
-                accumulation_id = cur.fetchone()[0]
-                conn.commit()
+            accumulation_id = cur.fetchone()[0]
+            conn.commit()
+            cur.close()
 
-                print(f"✅ [DATABASE] Accumulation record inserted successfully")
-                print(f"🆔 [DATABASE] Accumulation ID: {accumulation_id}")
+            print(f"✅ [DATABASE] Accumulation record inserted successfully")
+            print(f"🆔 [DATABASE] Accumulation ID: {accumulation_id}")
 
-                return accumulation_id
+            return accumulation_id
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to insert accumulation record: {e}")
             return None
+        finally:
+            if conn:
+                conn.close()
 
     def get_client_accumulation_total(self, client_id: str) -> Decimal:
         """
@@ -140,25 +150,35 @@ class DatabaseManager:
         Returns:
             Total USDT accumulated
         """
+        conn = None
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                print(f"📊 [DATABASE] Fetching accumulation total for client: {client_id}")
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return Decimal('0')
 
-                cur.execute(
-                    """SELECT COALESCE(SUM(accumulated_amount_usdt), 0)
-                       FROM payout_accumulation
-                       WHERE client_id = %s AND is_paid_out = FALSE""",
-                    (client_id,)
-                )
+            cur = conn.cursor()
+            print(f"📊 [DATABASE] Fetching accumulation total for client: {client_id}")
 
-                total = cur.fetchone()[0]
-                print(f"💰 [DATABASE] Client total accumulated: ${total} USDT")
+            cur.execute(
+                """SELECT COALESCE(SUM(accumulated_amount_usdt), 0)
+                   FROM payout_accumulation
+                   WHERE client_id = %s AND is_paid_out = FALSE""",
+                (client_id,)
+            )
 
-                return Decimal(str(total))
+            total = cur.fetchone()[0]
+            cur.close()
+            print(f"💰 [DATABASE] Client total accumulated: ${total} USDT")
+
+            return Decimal(str(total))
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to fetch accumulation total: {e}")
             return Decimal('0')
+        finally:
+            if conn:
+                conn.close()
 
     def get_client_threshold(self, client_id: str) -> Decimal:
         """
@@ -170,24 +190,34 @@ class DatabaseManager:
         Returns:
             Payout threshold in USD
         """
+        conn = None
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                print(f"🎯 [DATABASE] Fetching threshold for client: {client_id}")
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return Decimal('0')
 
-                cur.execute(
-                    """SELECT payout_threshold_usd
-                       FROM main_clients_database
-                       WHERE open_channel_id = %s""",
-                    (client_id,)
-                )
+            cur = conn.cursor()
+            print(f"🎯 [DATABASE] Fetching threshold for client: {client_id}")
 
-                result = cur.fetchone()
-                threshold = Decimal(str(result[0])) if result else Decimal('0')
+            cur.execute(
+                """SELECT payout_threshold_usd
+                   FROM main_clients_database
+                   WHERE open_channel_id = %s""",
+                (client_id,)
+            )
 
-                print(f"🎯 [DATABASE] Client threshold: ${threshold}")
+            result = cur.fetchone()
+            threshold = Decimal(str(result[0])) if result else Decimal('0')
+            cur.close()
 
-                return threshold
+            print(f"🎯 [DATABASE] Client threshold: ${threshold}")
+
+            return threshold
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to fetch client threshold: {e}")
             return Decimal('0')
+        finally:
+            if conn:
+                conn.close()
