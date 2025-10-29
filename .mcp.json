@@ -16,6 +16,14 @@
         "@playwright/mcp@latest"
       ],
       "env": {}
+    },
+    "gcloud": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/gcloud-mcp"]
+    },
+    "observability": {
+      "command": "npx",
+      "args": ["-y", "@google-cloud/observability-mcp"]
     }
   }
 }

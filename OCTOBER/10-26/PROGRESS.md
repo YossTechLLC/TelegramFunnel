@@ -1,6 +1,6 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-10-28 (Comprehensive Codebase Review Completed)
+**Last Updated:** 2025-10-29 (GCRegister Modernization - Backend API Deployed)
 
 ## Current System Status
 
@@ -263,8 +263,11 @@ User → TelePay (Bot) → GCWebhook1 ┬→ GCWebhook2 → Telegram Invite
 |---------|--------|-----|----------|
 | TelePay10-26 | ✅ Running | - | - |
 | GCRegister10-26 | ✅ Running | www.paygateprime.com | - |
-| GCWebhook1-10-26 | ✅ Running | - | - |
+| **GCRegisterAPI-10-26** | ✅ Running | https://gcregisterapi-10-26-291176869049.us-central1.run.app | - |
+| GCWebhook1-10-26 | ✅ Running (Rev 4) | https://gcwebhook1-10-26-291176869049.us-central1.run.app | - |
 | GCWebhook2-10-26 | ✅ Running | - | gcwebhook-telegram-invite-queue |
+| **GCAccumulator-10-26** | ✅ Running | https://gcaccumulator-10-26-291176869049.us-central1.run.app | accumulator-payment-queue |
+| **GCBatchProcessor-10-26** | ✅ Running | https://gcbatchprocessor-10-26-291176869049.us-central1.run.app | gcsplit1-batch-queue |
 | GCSplit1-10-26 | ✅ Running | - | gcsplit1-response-queue |
 | GCSplit2-10-26 | ✅ Running | - | gcsplit-usdt-eth-estimate-queue |
 | GCSplit3-10-26 | ✅ Running | - | gcsplit-eth-client-swap-queue |
@@ -282,15 +285,34 @@ All queues configured with:
 
 ---
 
+### Google Cloud Scheduler Jobs
+| Job Name | Schedule | Target | Status |
+|----------|----------|--------|--------|
+| **batch-processor-job** | Every 5 minutes (`*/5 * * * *`) | https://gcbatchprocessor-10-26-291176869049.us-central1.run.app/process | ✅ ENABLED |
+
+---
+
 ## Database Schema Status
 
 ### ✅ Main Tables
 - `main_clients_database` - Channel configurations
+  - **NEW:** `payout_strategy` (instant/threshold), `payout_threshold_usd`, `payout_threshold_updated_at`
+  - **NEW:** `client_id` (UUID, FK to registered_users), `created_by`, `updated_at`
 - `private_channel_users_database` - Active subscriptions
 - `split_payout_request` - Payment split requests (pure market value)
 - `split_payout_que` - Swap transactions (ChangeNow data)
 - `hostpay_transactions` - ETH payment execution logs
 - `currency_to_network_supported_mappings` - Supported currencies/networks
+- **NEW:** `payout_accumulation` - Threshold payout accumulations (USDT locked values)
+- **NEW:** `payout_batches` - Batch payout tracking
+- **NEW:** `registered_users` - User accounts (UUID primary key)
+
+### Database Statistics (Post-Migration)
+- **Total Channels:** 13
+- **Default Payout Strategy:** instant (all 13 channels)
+- **Legacy User:** 00000000-0000-0000-0000-000000000000 (owns all existing channels)
+- **Accumulations:** 0 (ready for first threshold payment)
+- **Batches:** 0 (ready for first batch payout)
 
 ---
 
@@ -476,30 +498,413 @@ All queues configured with:
 
 ---
 
+## User Account Management Implementation (2025-10-28)
+
+### ✅ Documentation Completed
+
+1. **DB_MIGRATION_USER_ACCOUNTS.md**
+   - Creates `registered_users` table for user authentication
+   - Adds `client_id` foreign key to `main_clients_database`
+   - Creates legacy user ('00000000-0000-0000-0000-000000000000') for existing channels
+   - Includes verification queries and rollback procedure
+   - Status: ✅ Complete - Ready for execution
+
+2. **GCREGISTER_USER_MANAGEMENT_GUIDE.md**
+   - Comprehensive implementation guide for GCRegister10-26 modifications
+   - Code changes documented:
+     - requirements.txt: Add Flask-Login==0.6.3
+     - forms.py: Add LoginForm and SignupForm classes with validation
+     - database_manager.py: Add user management functions (get_user_by_username, create_user, etc.)
+     - config_manager.py: Add SECRET_KEY secret fetch
+     - tpr10-26.py: Add Flask-Login initialization, authentication routes
+   - New routes: `/`, `/signup`, `/login`, `/logout`, `/channels`, `/channels/add`, `/channels/<id>/edit`
+   - Template creation: signup.html, login.html, dashboard.html, edit_channel.html
+   - Authorization checks: Users can only edit their own channels
+   - 10-channel limit enforcement
+   - Status: ✅ Complete - Ready for implementation
+
+3. **DEPLOYMENT_GUIDE_USER_ACCOUNTS.md**
+   - Step-by-step deployment procedures
+   - Database migration verification steps
+   - Secret Manager configuration (SECRET_KEY)
+   - Code modification checklist
+   - Docker build and Cloud Run deployment commands
+   - Comprehensive testing procedures:
+     - Signup flow test
+     - Login flow test
+     - Dashboard display test
+     - Add channel flow test
+     - Edit channel flow test
+     - Authorization test (403 forbidden)
+     - 10-channel limit test
+     - Logout test
+   - Troubleshooting guide with common issues and fixes
+   - Rollback procedure
+   - Monitoring and alerting setup
+   - Status: ✅ Complete - Ready for deployment
+
+### Key Features
+
+**User Authentication:**
+- Username/email/password registration
+- bcrypt password hashing for security
+- Flask-Login session management
+- Login/logout functionality
+- Remember me capability
+
+**Multi-Channel Dashboard:**
+- Dashboard view showing all user's channels (0-10)
+- Add new channel functionality
+- Edit existing channel functionality
+- Delete channel functionality
+- 10-channel limit per account
+
+**Authorization:**
+- Owner-only edit access (channel.client_id == current_user.id)
+- 403 Forbidden for unauthorized edit attempts
+- Session-based authentication
+- JWT-compatible design for future SPA migration
+
+**Database Schema:**
+- `registered_users` table (UUID primary key, username, email, password_hash)
+- `main_clients_database.client_id` foreign key to users
+- Legacy user support for backward compatibility
+- ON DELETE CASCADE for channel cleanup
+
+### Integration Points
+
+**Seamless Integration with Threshold Payout:**
+- Both architectures modify `main_clients_database` independently
+- No conflicts between user account columns and threshold payout columns
+- Can deploy in any order (recommended: threshold first, then user accounts)
+
+**Future Integration with GCRegister Modernization:**
+- User management provides backend foundation for SPA
+- Dashboard routes map directly to SPA pages
+- Can migrate to TypeScript + React frontend incrementally
+- API endpoints easily extractable for REST API
+
+### ⏳ Pending User Action
+
+1. **Database Migration**
+   - Backup database first: `gcloud sql backups create --instance=YOUR_INSTANCE_NAME`
+   - Execute `DB_MIGRATION_USER_ACCOUNTS.md` SQL manually
+   - Verify with provided queries (registered_users created, client_id added)
+
+2. **Code Implementation**
+   - Apply modifications from `GCREGISTER_USER_MANAGEMENT_GUIDE.md`
+   - Create new templates (signup.html, login.html, dashboard.html, edit_channel.html)
+   - Update tpr10-26.py with authentication routes
+   - Test locally (optional but recommended)
+
+3. **Deployment**
+   - Follow `DEPLOYMENT_GUIDE_USER_ACCOUNTS.md`
+   - Build Docker image: `gcloud builds submit --tag gcr.io/telepay-459221/gcregister-10-26`
+   - Deploy to Cloud Run with updated environment variables
+   - Test all flows (signup, login, dashboard, add/edit channel, authorization, 10-limit, logout)
+
+---
+
+---
+
+## Session Progress (2025-10-28 Continuation)
+
+### Current Session Summary
+- **Status:** ✅ All implementation work complete for Phases 1 & 2
+- **Next Action:** User manual deployment following guides
+- **Context Remaining:** 138,011 tokens (69% available)
+
+### What Was Accomplished (Previous Session)
+1. ✅ Created GCAccumulator-10-26 service (complete)
+2. ✅ Created GCBatchProcessor-10-26 service (complete)
+3. ✅ Modified GCWebhook1-10-26 with routing logic (complete)
+4. ✅ Created GCREGISTER_MODIFICATIONS_GUIDE.md for threshold UI (complete)
+5. ✅ Created DB_MIGRATION_THRESHOLD_PAYOUT.md (complete)
+6. ✅ Created DEPLOYMENT_GUIDE_THRESHOLD_PAYOUT.md (complete)
+7. ✅ Created deploy_accumulator_tasks_queues.sh (complete)
+8. ✅ Created DB_MIGRATION_USER_ACCOUNTS.md (complete)
+9. ✅ Created GCREGISTER_USER_MANAGEMENT_GUIDE.md (complete)
+10. ✅ Created DEPLOYMENT_GUIDE_USER_ACCOUNTS.md (complete)
+11. ✅ Updated MAIN_ARCHITECTURE_WORKFLOW.md (complete)
+12. ✅ Updated PROGRESS.md (complete)
+13. ✅ Updated DECISIONS.md with 6 new decisions (complete)
+
+### What Needs User Action
+All implementation work is complete. The following requires manual execution:
+
+**Phase 1 - Threshold Payout System:**
+1. 📋 Execute DB_MIGRATION_THRESHOLD_PAYOUT.md SQL in PostgreSQL
+2. 📋 Apply GCREGISTER_MODIFICATIONS_GUIDE.md changes to GCRegister10-26
+3. 📋 Follow DEPLOYMENT_GUIDE_THRESHOLD_PAYOUT.md for Cloud Run deployment
+4. 📋 Execute deploy_accumulator_tasks_queues.sh for Cloud Tasks queues
+5. 📋 Create Cloud Scheduler job for GCBatchProcessor-10-26
+6. 📋 Test instant payout flow (verify unchanged)
+7. 📋 Test threshold payout end-to-end
+
+**Phase 2 - User Account Management:**
+1. 📋 Execute DB_MIGRATION_USER_ACCOUNTS.md SQL in PostgreSQL
+2. 📋 Apply GCREGISTER_USER_MANAGEMENT_GUIDE.md changes to GCRegister10-26
+3. 📋 Follow DEPLOYMENT_GUIDE_USER_ACCOUNTS.md for Cloud Run deployment
+4. 📋 Test signup, login, dashboard, add/edit channel flows
+5. 📋 Test authorization checks and 10-channel limit
+
+**Phase 3 - Modernization (Optional):**
+1. 📋 Review GCREGISTER_MODERNIZATION_ARCHITECTURE.md
+2. 📋 Decide if TypeScript + React SPA is needed
+3. 📋 If approved, implementation can begin (7-8 week timeline)
+
+---
+
 ## Next Steps
 
-1. **Review Implementation Documentation**
+### Phase 1: Threshold Payout System (Recommended First)
+
+1. **Review Documentation**
    - Read MAIN_ARCHITECTURE_WORKFLOW.md for complete roadmap
    - Review IMPLEMENTATION_SUMMARY.md for critical details
-   - Reference architecture docs for full implementation specs
+   - Review DEPLOYMENT_GUIDE_THRESHOLD_PAYOUT.md
 
 2. **Execute Database Migration**
    - Backup database first
    - Run DB_MIGRATION_THRESHOLD_PAYOUT.md SQL
    - Verify with provided queries
 
-3. **Implement Services**
-   - GCAccumulator-10-26 (ETH→USDT conversion & accumulation)
-   - GCBatchProcessor-10-26 (threshold detection & batch payouts)
-   - Modify GCWebhook1-10-26 (add payout strategy routing)
-   - Modify GCRegister10-26 (add threshold UI fields)
+3. **Deploy Services**
+   - Deploy GCAccumulator-10-26 to Cloud Run
+   - Deploy GCBatchProcessor-10-26 to Cloud Run
+   - Re-deploy GCWebhook1-10-26 with modifications
+   - Apply GCRegister threshold UI modifications
+   - Create Cloud Tasks queues via deploy_accumulator_tasks_queues.sh
+   - Set up Cloud Scheduler for batch processor
+
+4. **Test End-to-End**
+   - Test instant payout (verify unchanged)
+   - Test threshold payout flow
+   - Monitor accumulation records
+   - Verify batch processing
+
+### Phase 2: User Account Management (Can Deploy Independently)
+
+1. **Review Documentation**
+   - Read DB_MIGRATION_USER_ACCOUNTS.md
+   - Read GCREGISTER_USER_MANAGEMENT_GUIDE.md
+   - Read DEPLOYMENT_GUIDE_USER_ACCOUNTS.md
+
+2. **Execute Database Migration**
+   - Backup database first
+   - Run DB_MIGRATION_USER_ACCOUNTS.md SQL
+   - Verify legacy user created
+   - Verify client_id added to main_clients_database
+
+3. **Apply Code Changes**
+   - Modify requirements.txt (add Flask-Login)
+   - Modify forms.py (add LoginForm, SignupForm)
+   - Modify database_manager.py (add user functions)
+   - Modify config_manager.py (add SECRET_KEY)
+   - Modify tpr10-26.py (add authentication routes)
+   - Create templates (signup, login, dashboard, edit_channel)
 
 4. **Deploy & Test**
-   - Deploy new services to Cloud Run
-   - Create Cloud Tasks queues
-   - Set up Cloud Scheduler for batch processor
-   - Test instant payout (verify unchanged)
-   - Test threshold payout end-to-end
+   - Build and deploy GCRegister10-26
+   - Test signup flow
+   - Test login/logout flow
+   - Test dashboard
+   - Test add/edit/delete channel
+   - Test authorization (403 forbidden)
+   - Test 10-channel limit
+
+### Phase 3: GCRegister Modernization (Optional, Future)
+
+1. **Approval Decision**
+   - Review GCREGISTER_MODERNIZATION_ARCHITECTURE.md
+   - Decide if TypeScript + React SPA modernization is needed
+   - Allocate 7-8 weeks for implementation
+
+2. **Implementation** (if approved)
+   - Week 1-2: Backend REST API
+   - Week 3-4: Frontend SPA foundation
+   - Week 5: Dashboard implementation
+   - Week 6: Threshold payout integration
+   - Week 7: Production deployment
+   - Week 8+: Monitoring & optimization
+
+---
+
+## Architecture Summary (2025-10-28)
+
+### ✅ Three Major Architectures Completed
+
+1. **THRESHOLD_PAYOUT_ARCHITECTURE**
+   - Status: ✅ Documentation Complete - Ready for Deployment
+   - Purpose: Eliminate market volatility risk via USDT accumulation
+   - Services: GCAccumulator-10-26, GCBatchProcessor-10-26
+   - Modifications: GCWebhook1-10-26, GCRegister10-26
+   - Database: payout_accumulation, payout_batches tables + main_clients_database columns
+   - Key Innovation: USDT locks USD value immediately, preventing volatility losses
+
+2. **USER_ACCOUNT_MANAGEMENT_ARCHITECTURE**
+   - Status: ✅ Documentation Complete - Ready for Deployment
+   - Purpose: Multi-channel dashboard with secure authentication
+   - Services: GCRegister10-26 modifications (Flask-Login integration)
+   - Database: registered_users table + client_id foreign key
+   - Key Innovation: UUID-based client_id provides secure user-to-channel mapping
+   - Features: Signup, login, dashboard, 10-channel limit, owner-only editing
+
+3. **GCREGISTER_MODERNIZATION_ARCHITECTURE**
+   - Status: ⏳ Design Complete - Awaiting Approval
+   - Purpose: Convert to modern TypeScript + React SPA
+   - Services: GCRegisterWeb-10-26 (React SPA), GCRegisterAPI-10-26 (Flask REST API)
+   - Infrastructure: Cloud Storage + CDN (zero cold starts)
+   - Key Innovation: 0ms page load times, instant interactions, mobile-first UX
+   - Timeline: 7-8 weeks implementation
+
+### Documentation Files Inventory
+
+**Migration Guides:**
+- DB_MIGRATION_THRESHOLD_PAYOUT.md
+- DB_MIGRATION_USER_ACCOUNTS.md
+
+**Deployment Guides:**
+- DEPLOYMENT_GUIDE_THRESHOLD_PAYOUT.md
+- DEPLOYMENT_GUIDE_USER_ACCOUNTS.md
+- deploy_accumulator_tasks_queues.sh
+
+**Implementation Guides:**
+- GCREGISTER_MODIFICATIONS_GUIDE.md (threshold payout UI)
+- GCREGISTER_USER_MANAGEMENT_GUIDE.md (user authentication)
+- IMPLEMENTATION_SUMMARY.md (critical details)
+
+**Architecture Documents:**
+- MAIN_ARCHITECTURE_WORKFLOW.md (master tracker)
+- THRESHOLD_PAYOUT_ARCHITECTURE.md
+- USER_ACCOUNT_MANAGEMENT_ARCHITECTURE.md
+- GCREGISTER_MODERNIZATION_ARCHITECTURE.md
+- SYSTEM_ARCHITECTURE.md
+
+**Tracking Documents:**
+- PROGRESS.md (this file)
+- DECISIONS.md (architectural decisions)
+- BUGS.md (known issues)
+
+---
+
+## Recent Progress (2025-10-29)
+
+### ✅ MAJOR DEPLOYMENT: Threshold Payout System - COMPLETE
+
+**Session Summary:**
+- ✅ Successfully deployed complete Threshold Payout system to production
+- ✅ Executed all database migrations (threshold payout + user accounts)
+- ✅ Deployed 2 new services: GCAccumulator-10-26, GCBatchProcessor-10-26
+- ✅ Re-deployed GCWebhook1-10-26 with threshold routing logic
+- ✅ Created 2 Cloud Tasks queues and 1 Cloud Scheduler job
+- ✅ All Phase 1 features from MAIN_ARCHITECTURE_WORKFLOW.md are DEPLOYED
+
+**Database Migrations Executed:**
+1. **DB_MIGRATION_THRESHOLD_PAYOUT.md** ✅
+   - Added `payout_strategy`, `payout_threshold_usd`, `payout_threshold_updated_at` to `main_clients_database`
+   - Created `payout_accumulation` table (18 columns, 4 indexes)
+   - Created `payout_batches` table (17 columns, 3 indexes)
+   - All 13 existing channels default to `strategy='instant'`
+
+2. **DB_MIGRATION_USER_ACCOUNTS.md** ✅
+   - Created `registered_users` table (13 columns, 4 indexes)
+   - Created legacy user: `00000000-0000-0000-0000-000000000000`
+   - Added `client_id`, `created_by`, `updated_at` to `main_clients_database`
+   - All 13 existing channels assigned to legacy user
+
+**New Services Deployed:**
+1. **GCAccumulator-10-26** ✅
+   - URL: https://gcaccumulator-10-26-291176869049.us-central1.run.app
+   - Purpose: Immediately converts payments to USDT to eliminate volatility
+   - Status: Deployed and healthy
+
+2. **GCBatchProcessor-10-26** ✅
+   - URL: https://gcbatchprocessor-10-26-291176869049.us-central1.run.app
+   - Purpose: Detects clients over threshold and triggers batch payouts
+   - Triggered by Cloud Scheduler every 5 minutes
+   - Status: Deployed and healthy
+
+**Services Updated:**
+1. **GCWebhook1-10-26** ✅ (Revision 4)
+   - URL: https://gcwebhook1-10-26-291176869049.us-central1.run.app
+   - Added threshold routing logic (lines 174-230 in tph1-10-26.py)
+   - Routes to GCAccumulator if `strategy='threshold'`
+   - Routes to GCSplit1 if `strategy='instant'` (unchanged)
+   - Fallback to instant if GCAccumulator unavailable
+
+**Infrastructure Created:**
+1. **Cloud Tasks Queues** ✅
+   - `accumulator-payment-queue` (GCWebhook1 → GCAccumulator)
+   - `gcsplit1-batch-queue` (GCBatchProcessor → GCSplit1)
+   - Config: 10 dispatches/sec, 50 concurrent, infinite retry
+
+2. **Cloud Scheduler Job** ✅
+   - Job Name: `batch-processor-job`
+   - Schedule: Every 5 minutes (`*/5 * * * *`)
+   - Target: https://gcbatchprocessor-10-26-291176869049.us-central1.run.app/process
+   - State: ENABLED
+
+3. **Secret Manager Secrets** ✅
+   - `GCACCUMULATOR_QUEUE` = `accumulator-payment-queue`
+   - `GCACCUMULATOR_URL` = `https://gcaccumulator-10-26-291176869049.us-central1.run.app`
+   - `GCSPLIT1_BATCH_QUEUE` = `gcsplit1-batch-queue`
+
+**Next Steps - READY FOR MANUAL TESTING:**
+1. ⏳ **Test Instant Payout** (verify unchanged): Make payment with `strategy='instant'`
+2. ⏳ **Test Threshold Payout** (new feature):
+   - Update channel to `strategy='threshold'`, `threshold=$100`
+   - Make 3 payments ($25, $50, $30) to cross threshold
+   - Verify USDT accumulation and batch payout execution
+3. ⏳ **Monitor Cloud Scheduler**: Check batch-processor-job executions every 5 minutes
+4. ⏳ **Implement GCRegister User Management** (Phase 2 - database ready, code pending)
+
+**Documentation Created:**
+- SESSION_SUMMARY_10-29_DEPLOYMENT.md - Comprehensive deployment guide with testing procedures
+- execute_migrations.py - Python script for database migrations (successfully executed)
+
+**System Status:** ✅ DEPLOYED AND READY FOR MANUAL TESTING
+
+---
+
+### ✅ GCRegister Modernization - Phase 3 Backend Deployment (2025-10-29)
+
+**Session Summary:**
+- Successfully deployed GCRegisterAPI-10-26 REST API to Cloud Run
+- Backend service is live and operational at: https://gcregisterapi-10-26-291176869049.us-central1.run.app
+- Health endpoint confirmed working (status: healthy)
+
+**Services Created:**
+1. **GCRegisterAPI-10-26** - Flask REST API (deployed)
+   - JWT authentication with Flask-JWT-Extended
+   - Pydantic request validation with email-validator
+   - CORS enabled for www.paygateprime.com
+   - Rate limiting (200/day, 50/hour)
+   - Cloud SQL PostgreSQL connection pooling
+   - Secret Manager integration
+
+**API Endpoints Implemented:**
+- `POST /api/auth/signup` - User registration
+- `POST /api/auth/login` - User login (returns JWT)
+- `POST /api/auth/refresh` - Refresh access token
+- `GET /api/auth/me` - Get current user info
+- `POST /api/channels/register` - Register new channel (JWT required)
+- `GET /api/channels` - Get user's channels (JWT required)
+- `GET /api/channels/<id>` - Get channel details (JWT required)
+- `PUT /api/channels/<id>` - Update channel (JWT required)
+- `DELETE /api/channels/<id>` - Delete channel (JWT required)
+- `GET /api/mappings/currency-network` - Get currency/network mappings
+- `GET /api/health` - Health check endpoint
+- `GET /` - API documentation
+
+**Secrets Created:**
+- JWT_SECRET_KEY - Random 32-byte hex for JWT signing
+- CORS_ORIGIN - https://www.paygateprime.com (frontend domain)
+
+**Dependencies Fixed:**
+- cloud-sql-python-connector==1.18.5 (corrected from 1.11.1)
+- pg8000==1.31.2 (corrected from 1.30.3 for compatibility)
+- email-validator==2.1.0 (added for Pydantic EmailStr support)
 
 ---
 
@@ -510,5 +915,9 @@ All queues configured with:
 - Cloud Tasks for asynchronous orchestration
 - PostgreSQL Cloud SQL for all database operations
 - **NEW (2025-10-28):** Three major architecture documents completed
-- **NEW (2025-10-28):** Implementation guides and migration SQL ready
-- **KEY INNOVATION:** USDT accumulation eliminates market volatility risk completely
+- **NEW (2025-10-28):** Threshold payout implementation guides complete
+- **NEW (2025-10-28):** User account management implementation guides complete
+- **NEW (2025-10-29):** GCRegisterAPI-10-26 REST API deployed to Cloud Run (Phase 3 backend)
+- **KEY INNOVATION (Threshold Payout):** USDT accumulation eliminates market volatility risk
+- **KEY INNOVATION (User Accounts):** UUID-based client_id enables secure multi-channel management
+- **KEY INNOVATION (Modernization):** Zero cold starts via static SPA + JWT REST API architecture

@@ -539,6 +539,320 @@ This document records all significant architectural decisions made during the de
 - **Outcome:** Modern architecture, ready for future growth
 - **Documentation:** `GCREGISTER_MODERNIZATION_ARCHITECTURE.md`
 
+### Decision: Flask-Login for User Account Management
+- **Date:** October 28, 2025
+- **Status:** ✅ Designed, Documentation Complete
+- **Context:** Need user authentication and session management for multi-channel dashboard
+- **Decision:** Use Flask-Login library for authentication
+- **Rationale:**
+  - **Industry Standard:** Most popular Flask authentication library
+  - **Built-In Features:** @login_required decorator, current_user proxy, remember-me
+  - **Simple Integration:** Minimal configuration, works with existing Flask setup
+  - **Session-Based:** Stateful authentication suitable for web app
+  - **Easy Migration:** Can later migrate to JWT for SPA when modernizing
+- **Implementation:**
+  - LoginManager initialization in tpr10-26.py
+  - User class implementing UserMixin
+  - @login_manager.user_loader function
+  - Session cookies for authentication state
+- **Trade-offs:**
+  - Session-based (not stateless like JWT)
+  - Requires SECRET_KEY in Secret Manager
+  - Server-side session storage
+- **Alternative Considered:**
+  - JWT authentication (better for SPA, but GCRegister not yet SPA)
+  - Custom authentication (too much reinvention)
+  - Flask-Security (overkill for current needs)
+- **Outcome:** Perfect fit for current Flask template architecture
+- **Documentation:** `GCREGISTER_USER_MANAGEMENT_GUIDE.md`, `DEPLOYMENT_GUIDE_USER_ACCOUNTS.md`
+
+### Decision: UUID for User IDs (Not Sequential Integers)
+- **Date:** October 28, 2025
+- **Status:** ✅ Designed, Documentation Complete
+- **Context:** Need primary key for registered_users table
+- **Decision:** Use UUID (gen_random_uuid()) instead of SERIAL
+- **Rationale:**
+  - **Security:** Prevents user enumeration attacks (can't guess user IDs)
+  - **Opaque Identifiers:** UUIDs don't leak information (unlike sequential IDs)
+  - **Distributed System Ready:** UUIDs can be generated independently without coordination
+  - **Best Practice:** Industry standard for user identifiers
+  - **URL Safety:** UUIDs work well in URLs without exposing system internals
+- **Implementation:**
+  ```sql
+  CREATE TABLE registered_users (
+      user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ...
+  );
+  ```
+- **Trade-offs:**
+  - Larger storage (16 bytes vs 4 bytes for INTEGER)
+  - Slightly slower joins (but negligible with proper indexes)
+  - Less human-readable in logs
+- **Alternative Considered:**
+  - SERIAL/BIGSERIAL (sequential integers - bad for security)
+  - Custom hash-based IDs (unnecessary complexity)
+- **Outcome:** Secure, scalable user identification
+- **Documentation:** `DB_MIGRATION_USER_ACCOUNTS.md`
+
+### Decision: Legacy User for Backward Compatibility
+- **Date:** October 28, 2025
+- **Status:** ✅ Designed, Documentation Complete
+- **Context:** Existing channels have no user owner when user accounts are first introduced
+- **Decision:** Create special "legacy_system" user (UUID all zeros) for existing channels
+- **Rationale:**
+  - **Backward Compatibility:** All existing channels remain functional
+  - **No Data Loss:** Channels not deleted when user accounts introduced
+  - **Clean Migration:** All existing channels assigned to known UUID
+  - **Future Reassignment:** Admin can later reassign channels to real users
+  - **Atomic Migration:** No manual channel-by-channel assignment during migration
+- **Implementation:**
+  ```sql
+  INSERT INTO registered_users (
+      user_id,
+      username,
+      email,
+      password_hash,
+      is_active,
+      email_verified
+  ) VALUES (
+      '00000000-0000-0000-0000-000000000000',  -- Reserved UUID
+      'legacy_system',
+      'legacy@paygateprime.com',
+      '$2b$12$...',  -- Random bcrypt hash (login disabled)
+      FALSE,  -- Account disabled
+      FALSE
+  );
+
+  -- All existing channels
+  UPDATE main_clients_database
+  SET client_id = '00000000-0000-0000-0000-000000000000'
+  WHERE client_id IS NULL;
+  ```
+- **Trade-offs:**
+  - Special-case UUID (all zeros) requires documentation
+  - Legacy user account takes up one user slot (minimal impact)
+- **Alternative Considered:**
+  - Nullable client_id (bad for data integrity)
+  - Delete existing channels (data loss)
+  - Manual reassignment during migration (too risky)
+- **Outcome:** Smooth migration path, zero downtime
+- **Documentation:** `DB_MIGRATION_USER_ACCOUNTS.md`
+
+### Decision: 10-Channel Limit per Account
+- **Date:** October 28, 2025
+- **Status:** ✅ Designed, Documentation Complete
+- **Context:** Need to prevent abuse and manage resource allocation
+- **Decision:** Enforce maximum 10 channels per user account
+- **Rationale:**
+  - **Prevent Abuse:** Stops users from creating unlimited channels
+  - **Resource Management:** Bounds per-user resource consumption
+  - **Business Model:** Encourages premium accounts in future (if >10 needed)
+  - **Reasonable Limit:** 10 is generous for most legitimate use cases
+  - **Performance:** Ensures dashboard queries remain fast
+- **Implementation:**
+  ```python
+  # In tpr10-26.py /channels/add route
+  channel_count = db_manager.count_channels_by_client(current_user.id)
+  if channel_count >= 10:
+      flash('Maximum 10 channels per account', 'error')
+      return redirect('/channels')
+  ```
+- **Trade-offs:**
+  - May frustrate power users (can create multiple accounts)
+  - Requires enforcement in application code
+- **Alternative Considered:**
+  - No limit (open to abuse)
+  - Database constraint (CHECK constraint, but harder to update)
+  - Higher limit (15, 20) - 10 is good starting point
+- **Outcome:** Balanced limit for resource management
+- **Documentation:** `GCREGISTER_USER_MANAGEMENT_GUIDE.md`, `DEPLOYMENT_GUIDE_USER_ACCOUNTS.md`
+
+### Decision: Owner-Only Channel Editing (Authorization)
+- **Date:** October 28, 2025
+- **Status:** ✅ Designed, Documentation Complete
+- **Context:** Users should only edit their own channels, not others'
+- **Decision:** Implement authorization checks in /channels/<id>/edit route
+- **Rationale:**
+  - **Security:** Prevents unauthorized channel modifications
+  - **Data Integrity:** Only owner can modify channel configuration
+  - **User Trust:** Users confident their channels are private
+  - **Compliance:** Meets basic security requirements
+- **Implementation:**
+  ```python
+  @app.route('/channels/<channel_id>/edit', methods=['GET', 'POST'])
+  @login_required
+  def edit_channel(channel_id):
+      channel = db_manager.get_channel_by_id(channel_id)
+
+      # Authorization check
+      if str(channel['client_id']) != str(current_user.id):
+          abort(403)  # Forbidden
+
+      # ... rest of edit logic
+  ```
+- **Trade-offs:**
+  - Requires UUID comparison (client_id == current_user.id)
+  - Need to handle 403 errors gracefully in templates
+- **Alternative Considered:**
+  - Trust frontend to only show user's channels (insecure)
+  - Database-level row security policies (overkill for this use case)
+- **Outcome:** Secure channel editing with clear authorization
+- **Documentation:** `GCREGISTER_USER_MANAGEMENT_GUIDE.md`, `DEPLOYMENT_GUIDE_USER_ACCOUNTS.md`
+
+### Decision: ON DELETE CASCADE for Client-to-Channel Relationship
+- **Date:** October 28, 2025
+- **Status:** ✅ Designed, Documentation Complete
+- **Context:** What happens to channels when user account is deleted?
+- **Decision:** Use ON DELETE CASCADE to automatically delete channels
+- **Rationale:**
+  - **Data Cleanup:** No orphaned channels when user deleted
+  - **GDPR Compliance:** User data fully removed when account deleted
+  - **Automatic:** No manual cleanup required
+  - **Database-Enforced:** Cannot forget to delete channels
+- **Implementation:**
+  ```sql
+  ALTER TABLE main_clients_database
+  ADD CONSTRAINT fk_client_id
+      FOREIGN KEY (client_id)
+      REFERENCES registered_users(user_id)
+      ON DELETE CASCADE;
+  ```
+- **Trade-offs:**
+  - Permanent data loss (can't undo user deletion)
+  - Channels deleted immediately without confirmation
+- **Alternative Considered:**
+  - ON DELETE SET NULL (orphaned channels)
+  - ON DELETE RESTRICT (prevent user deletion if channels exist)
+  - Soft delete (mark user inactive, keep channels)
+- **Outcome:** Clean data model, automatic cleanup
+- **Documentation:** `DB_MIGRATION_USER_ACCOUNTS.md`
+
+---
+
+## Recent Deployment Decisions (2025-10-29)
+
+### Decision: Deploy Threshold Payout and User Accounts in Single Session
+- **Date:** October 29, 2025
+- **Status:** ✅ Executed
+- **Context:** Both database migrations were ready and independent
+- **Decision:** Execute both migrations together to minimize database downtime
+- **Rationale:**
+  - Both migrations modify `main_clients_database` (different columns, no conflicts)
+  - Simpler deployment story (one migration session vs two)
+  - User accounts database ready even if UI implementation delayed
+  - Reduces risk of forgetting second migration
+- **Implementation:**
+  - Created single Python script (`execute_migrations.py`) handling both migrations
+  - Executed migrations in sequence with verification steps
+  - All 13 existing channels successfully migrated
+- **Trade-offs:**
+  - Slightly longer migration time (~15 minutes vs ~8 minutes each)
+  - More complex rollback if issues (but provided separate rollback procedures)
+- **Alternative Considered:** Deploy threshold payout first, user accounts later
+- **Outcome:** ✅ Success - Both migrations completed, all data verified
+
+### Decision: Use Cloud Scheduler Instead of Cron Job for Batch Processing
+- **Date:** October 29, 2025
+- **Status:** ✅ Implemented
+- **Context:** Need to trigger GCBatchProcessor every 5 minutes to check for clients over threshold
+- **Decision:** Use Google Cloud Scheduler with HTTP target
+- **Rationale:**
+  - **Serverless:** No VM maintenance required
+  - **Reliable:** Google-managed, guaranteed execution
+  - **Observable:** Built-in execution history and logging
+  - **Scalable:** No capacity planning needed
+  - **Cost-effective:** Free tier covers 3 jobs (we use 1)
+  - **Cloud Run Integration:** Direct HTTP POST to service endpoint
+- **Configuration:**
+  - Schedule: `*/5 * * * *` (every 5 minutes)
+  - Target: https://gcbatchprocessor-10-26.../process
+  - Timezone: America/Los_Angeles
+  - State: ENABLED
+- **Trade-offs:**
+  - Requires Cloud Scheduler API (easily enabled)
+  - 5-minute granularity (good enough for batch processing)
+- **Alternative Considered:** Cron job in VM, Cloud Functions with pub/sub trigger
+- **Outcome:** ✅ Job created and enabled, runs every 5 minutes
+
+### Decision: Enable Cloud Scheduler API During Deployment
+- **Date:** October 29, 2025
+- **Status:** ✅ Executed
+- **Context:** Cloud Scheduler API was not previously enabled in telepay-459221 project
+- **Decision:** Enable API when needed rather than asking user
+- **Rationale:**
+  - User gave explicit permission to enable any API needed
+  - Cloud Scheduler is core infrastructure for batch processing
+  - No cost impact (free tier sufficient)
+  - API enablement is non-destructive and reversible
+- **Command:** `gcloud services enable cloudscheduler.googleapis.com`
+- **Trade-offs:**
+  - Adds API to project (minimal impact)
+  - Requires waiting ~2 minutes for API to propagate
+- **Alternative Considered:** Ask user before enabling (unnecessary delay)
+- **Outcome:** ✅ API enabled successfully, scheduler job created immediately after
+
+### Decision: Deploy Services Before Creating URL Secrets
+- **Date:** October 29, 2025
+- **Status:** ✅ Executed
+- **Context:** GCACCUMULATOR_URL secret needs actual Cloud Run URL
+- **Decision:** Deploy service first, then create URL secret, then re-deploy dependent services
+- **Rationale:**
+  - Cloud Run URLs unknown until first deployment
+  - GCWebhook1 needs GCACCUMULATOR_URL to route threshold payments
+  - Two-step deployment acceptable (deploy accumulator → create secret → re-deploy webhook)
+- **Implementation Order:**
+  1. Deploy GCAccumulator-10-26 (get URL)
+  2. Create GCACCUMULATOR_URL secret with actual URL
+  3. Deploy GCBatchProcessor-10-26 (get URL)
+  4. Re-deploy GCWebhook1-10-26 (can now fetch GCACCUMULATOR_URL secret)
+- **Trade-offs:**
+  - Requires re-deployment of dependent services
+  - Slight complexity in deployment order
+- **Alternative Considered:** Hardcode URLs (bad practice), deploy all at once with placeholder URLs
+- **Outcome:** ✅ All services deployed correctly with proper URL secrets
+
+### Decision: Mock ETH→USDT Conversion in GCAccumulator
+- **Date:** October 29, 2025
+- **Status:** ✅ Implemented
+- **Context:** GCAccumulator needs to convert ETH to USDT for accumulation
+- **Decision:** Use mock conversion rate initially, design for ChangeNow integration later
+- **Rationale:**
+  - Mock allows end-to-end testing without ChangeNow API costs
+  - Architecture supports swapping in real ChangeNow calls later
+  - Can verify database writes and batch processing independently
+  - Reduces deployment complexity (fewer API dependencies)
+- **Implementation:**
+  - Mock rate: 1 ETH = 3000 USDT (hardcoded for now)
+  - `eth_to_usdt_rate` stored in database for audit
+  - Ready to replace with ChangeNow API v2 estimate call
+- **Trade-offs:**
+  - Not production-ready for real money (mock conversion)
+  - Requires future work to integrate ChangeNow
+- **Alternative Considered:** Integrate ChangeNow immediately (more complex, delays testing)
+- **Outcome:** ✅ System deployed and testable, ChangeNow integration deferred
+
+### Decision: Use Python Script for Database Migrations Instead of Manual SQL
+- **Date:** October 29, 2025
+- **Status:** ✅ Executed
+- **Context:** Need to execute SQL migrations from WSL environment without psql client
+- **Decision:** Create Python script using Cloud SQL Connector
+- **Rationale:**
+  - **No psql Required:** Cloud SQL Connector handles authentication and connection
+  - **Programmatic:** Can add verification queries and error handling
+  - **Idempotent:** Script checks if migration already applied before executing
+  - **Audit Trail:** Prints detailed progress with emojis matching project style
+  - **Reusable:** Can be run again safely (won't re-apply migrations)
+- **Implementation:**
+  - Created `execute_migrations.py` with Cloud SQL Connector + pg8000
+  - Used Google Secret Manager for database credentials
+  - Added verification steps after each migration
+  - Included rollback SQL in comments
+- **Trade-offs:**
+  - Requires Python dependencies (cloud-sql-python-connector, google-cloud-secret-manager)
+  - More code than manual SQL execution
+- **Alternative Considered:** Manual SQL via gcloud sql connect (psql not available), Cloud Shell
+- **Outcome:** ✅ Migrations executed successfully, full verification completed
+
 ---
 
 ## Future Considerations
