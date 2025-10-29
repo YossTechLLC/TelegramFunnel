@@ -176,3 +176,107 @@ class DatabaseManager:
             if conn:
                 conn.close()
                 print(f"🔌 [DATABASE] Connection closed")
+
+    def get_payout_strategy(self, closed_channel_id: int) -> tuple:
+        """
+        Get payout strategy and threshold for a client channel.
+
+        Args:
+            closed_channel_id: The closed (private) channel ID
+
+        Returns:
+            Tuple of (payout_strategy, payout_threshold_usd) or ('instant', 0) if not found
+        """
+        conn = None
+        cur = None
+        try:
+            print(f"🔍 [DATABASE] Fetching payout strategy for channel {closed_channel_id}")
+
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Could not establish connection")
+                return ('instant', 0)  # Default to instant
+
+            cur = conn.cursor()
+
+            # Query for payout strategy and threshold
+            query = """
+                SELECT payout_strategy, payout_threshold_usd
+                FROM main_clients_database
+                WHERE open_channel_id = %s
+            """
+            cur.execute(query, (str(closed_channel_id),))
+            result = cur.fetchone()
+
+            if result:
+                strategy = result[0] or 'instant'
+                threshold = float(result[1]) if result[1] else 0
+                print(f"✅ [DATABASE] Found strategy: {strategy}, threshold: ${threshold}")
+                return (strategy, threshold)
+            else:
+                print(f"⚠️ [DATABASE] No client found for channel {closed_channel_id}, defaulting to instant")
+                return ('instant', 0)
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Error fetching payout strategy: {e}")
+            return ('instant', 0)  # Default to instant on error
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+                print(f"🔌 [DATABASE] Connection closed")
+
+    def get_subscription_id(self, user_id: int, closed_channel_id: int) -> int:
+        """
+        Get subscription ID for a user/channel combination.
+
+        Args:
+            user_id: User's Telegram ID
+            closed_channel_id: The closed (private) channel ID
+
+        Returns:
+            Subscription ID or 0 if not found
+        """
+        conn = None
+        cur = None
+        try:
+            print(f"🔍 [DATABASE] Fetching subscription ID for user {user_id}, channel {closed_channel_id}")
+
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Could not establish connection")
+                return 0
+
+            cur = conn.cursor()
+
+            # Query for subscription ID
+            query = """
+                SELECT id
+                FROM private_channel_users_database
+                WHERE user_id = %s AND private_channel_id = %s
+                ORDER BY id DESC
+                LIMIT 1
+            """
+            cur.execute(query, (user_id, closed_channel_id))
+            result = cur.fetchone()
+
+            if result:
+                subscription_id = result[0]
+                print(f"✅ [DATABASE] Found subscription ID: {subscription_id}")
+                return subscription_id
+            else:
+                print(f"⚠️ [DATABASE] No subscription found")
+                return 0
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Error fetching subscription ID: {e}")
+            return 0
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+                print(f"🔌 [DATABASE] Connection closed")

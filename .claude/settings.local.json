@@ -1,15 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find:*)",
-      "Bash(cat:*)",
-      "Bash(tree:*)",
-      "Bash(xargs -I {} sh -c 'echo \"\"\"\"=== {} ===\"\"\"\" && head -20 {}')",
-      "Bash(xargs -I {} sh -c 'echo \"\"\"\"=== {} ===\"\"\"\" && cat {}')",
-      "Bash(awk:*)",
-      "Bash(chmod:*)"
+      "Bash(xargs:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "context7"
+  ]
 }

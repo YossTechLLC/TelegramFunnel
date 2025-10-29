@@ -92,6 +92,17 @@ class ConfigManager:
             "GCSplit1 service URL"
         )
 
+        # GCAccumulator configuration (for threshold payout)
+        gcaccumulator_queue = self.fetch_secret(
+            "GCACCUMULATOR_QUEUE",
+            "GCAccumulator queue name"
+        )
+
+        gcaccumulator_url = self.fetch_secret(
+            "GCACCUMULATOR_URL",
+            "GCAccumulator service URL"
+        )
+
         # Fetch database configuration from Secret Manager
         cloud_sql_connection_name = self.fetch_secret(
             "CLOUD_SQL_CONNECTION_NAME",
@@ -130,6 +141,8 @@ class ConfigManager:
             'gcwebhook2_url': gcwebhook2_url,
             'gcsplit1_queue': gcsplit1_queue,
             'gcsplit1_url': gcsplit1_url,
+            'gcaccumulator_queue': gcaccumulator_queue,
+            'gcaccumulator_url': gcaccumulator_url,
 
             # Database configuration (all from Secret Manager)
             'instance_connection_name': cloud_sql_connection_name,
@@ -147,6 +160,8 @@ class ConfigManager:
         print(f"   GCWebhook2 URL: {'✅' if config['gcwebhook2_url'] else '❌'}")
         print(f"   GCSplit1 Queue: {'✅' if config['gcsplit1_queue'] else '❌'}")
         print(f"   GCSplit1 URL: {'✅' if config['gcsplit1_url'] else '❌'}")
+        print(f"   GCAccumulator Queue: {'✅' if config['gcaccumulator_queue'] else '❌'}")
+        print(f"   GCAccumulator URL: {'✅' if config['gcaccumulator_url'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")

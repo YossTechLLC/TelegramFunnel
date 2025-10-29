@@ -170,6 +170,54 @@ def process_payment():
             print(f"❌ [ENDPOINT] Database error: {e}")
             # Continue anyway - enqueue tasks for retry
 
+        # ============================================================================
+        # NEW: Check payout strategy and route accordingly
+        # ============================================================================
+        print(f"🔍 [ENDPOINT] Checking payout strategy for channel {closed_channel_id}")
+        payout_strategy, payout_threshold = db_manager.get_payout_strategy(closed_channel_id)
+
+        print(f"💰 [ENDPOINT] Payout strategy: {payout_strategy}")
+        if payout_strategy == 'threshold':
+            print(f"🎯 [ENDPOINT] Threshold payout mode - ${payout_threshold} threshold")
+            print(f"📊 [ENDPOINT] Will accumulate in USDT to eliminate volatility")
+
+            # Get subscription ID for accumulation record
+            subscription_id = db_manager.get_subscription_id(user_id, closed_channel_id)
+
+            # Route to GCAccumulator instead of GCSplit1
+            gcaccumulator_queue = config.get('gcaccumulator_queue')
+            gcaccumulator_url = config.get('gcaccumulator_url')
+
+            if not gcaccumulator_queue or not gcaccumulator_url:
+                print(f"⚠️ [ENDPOINT] GCAccumulator config missing - falling back to instant payout")
+                payout_strategy = 'instant'  # Fallback to instant
+            else:
+                # Enqueue to GCAccumulator
+                task_name_accumulator = cloudtasks_client.enqueue_gcaccumulator_payment(
+                    queue_name=gcaccumulator_queue,
+                    target_url=gcaccumulator_url,
+                    user_id=user_id,
+                    client_id=closed_channel_id,
+                    wallet_address=wallet_address,
+                    payout_currency=payout_currency,
+                    payout_network=payout_network,
+                    subscription_price=subscription_price,
+                    subscription_id=subscription_id
+                )
+
+                if task_name_accumulator:
+                    print(f"✅ [ENDPOINT] Enqueued to GCAccumulator for threshold payout")
+                    print(f"🆔 [ENDPOINT] Task: {task_name_accumulator}")
+                else:
+                    print(f"❌ [ENDPOINT] Failed to enqueue to GCAccumulator - falling back to instant")
+                    payout_strategy = 'instant'  # Fallback to instant
+        else:
+            print(f"⚡ [ENDPOINT] Instant payout mode - processing immediately")
+
+        # ============================================================================
+        # Continue with existing flow (Telegram invite always sent)
+        # ============================================================================
+
         # Encrypt token for GCWebhook2
         encrypted_token = token_manager.encrypt_token_for_gcwebhook2(
             user_id=user_id,
@@ -210,31 +258,35 @@ def process_payment():
             print(f"✅ [ENDPOINT] Enqueued Telegram invite to GCWebhook2")
             print(f"🆔 [ENDPOINT] Task: {task_name_gcwebhook2}")
 
-        # Enqueue payment split to GCSplit1
-        gcsplit1_queue = config.get('gcsplit1_queue')
-        gcsplit1_url = config.get('gcsplit1_url')
+        # Enqueue payment split to GCSplit1 (ONLY for instant payout)
+        if payout_strategy == 'instant':
+            print(f"⚡ [ENDPOINT] Routing to GCSplit1 for instant payout")
+            gcsplit1_queue = config.get('gcsplit1_queue')
+            gcsplit1_url = config.get('gcsplit1_url')
 
-        if not gcsplit1_queue or not gcsplit1_url:
-            print(f"❌ [ENDPOINT] GCSplit1 configuration missing")
-            abort(500, "Service configuration error")
+            if not gcsplit1_queue or not gcsplit1_url:
+                print(f"❌ [ENDPOINT] GCSplit1 configuration missing")
+                abort(500, "Service configuration error")
 
-        task_name_gcsplit1 = cloudtasks_client.enqueue_gcsplit1_payment_split(
-            queue_name=gcsplit1_queue,
-            target_url=gcsplit1_url,
-            user_id=user_id,
-            closed_channel_id=closed_channel_id,
-            wallet_address=wallet_address,
-            payout_currency=payout_currency,
-            payout_network=payout_network,
-            subscription_price=subscription_price
-        )
+            task_name_gcsplit1 = cloudtasks_client.enqueue_gcsplit1_payment_split(
+                queue_name=gcsplit1_queue,
+                target_url=gcsplit1_url,
+                user_id=user_id,
+                closed_channel_id=closed_channel_id,
+                wallet_address=wallet_address,
+                payout_currency=payout_currency,
+                payout_network=payout_network,
+                subscription_price=subscription_price
+            )
 
-        if not task_name_gcsplit1:
-            print(f"❌ [ENDPOINT] Failed to enqueue payment split to GCSplit1")
-            # Don't abort - at least Telegram invite was enqueued
+            if not task_name_gcsplit1:
+                print(f"❌ [ENDPOINT] Failed to enqueue payment split to GCSplit1")
+                # Don't abort - at least Telegram invite was enqueued
+            else:
+                print(f"✅ [ENDPOINT] Enqueued payment split to GCSplit1")
+                print(f"🆔 [ENDPOINT] Task: {task_name_gcsplit1}")
         else:
-            print(f"✅ [ENDPOINT] Enqueued payment split to GCSplit1")
-            print(f"🆔 [ENDPOINT] Task: {task_name_gcsplit1}")
+            print(f"📊 [ENDPOINT] Skipping GCSplit1 - using threshold accumulation instead")
 
         print(f"🎉 [ENDPOINT] Payment processing completed successfully")
         return jsonify({"status": "ok"}), 200

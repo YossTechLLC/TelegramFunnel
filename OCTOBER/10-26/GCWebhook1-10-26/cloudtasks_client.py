@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 """
 Cloud Tasks Client for GCWebhook1-10-26 (Payment Processor Service).
-Handles creation and dispatch of Cloud Tasks to GCWebhook2 and GCSplit1.
+Handles creation and dispatch of Cloud Tasks to GCWebhook2, GCSplit1, and GCAccumulator.
 """
 import json
 import time
 import hmac
 import hashlib
+import datetime
 from typing import Optional
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
-import datetime
 
 
 class CloudTasksClient:
@@ -211,4 +211,60 @@ class CloudTasksClient:
 
         except Exception as e:
             print(f"❌ [CLOUD_TASKS] Error enqueueing payment split: {e}")
+            return None
+
+    def enqueue_gcaccumulator_payment(
+        self,
+        queue_name: str,
+        target_url: str,
+        user_id: int,
+        client_id: int,
+        wallet_address: str,
+        payout_currency: str,
+        payout_network: str,
+        subscription_price: str,
+        subscription_id: int
+    ) -> Optional[str]:
+        """
+        Enqueue a payment accumulation request to GCAccumulator.
+
+        Args:
+            queue_name: Queue name (e.g., "accumulator-payment-queue")
+            target_url: GCAccumulator service URL
+            user_id: User's Telegram ID
+            client_id: Client's channel ID
+            wallet_address: Client's wallet address
+            payout_currency: Client's preferred payout currency
+            payout_network: Client's payout network
+            subscription_price: Subscription price as string
+            subscription_id: ID from private_channel_users_database
+
+        Returns:
+            Task name if successful, None if failed
+        """
+        try:
+            print(f"📊 [CLOUD_TASKS] Enqueueing payment accumulation to GCAccumulator")
+            print(f"👤 [CLOUD_TASKS] User: {user_id}, Client: {client_id}")
+            print(f"💵 [CLOUD_TASKS] Amount: ${subscription_price} → USDT accumulation")
+
+            # Prepare payload
+            payload = {
+                "user_id": user_id,
+                "client_id": client_id,
+                "wallet_address": wallet_address,
+                "payout_currency": payout_currency,
+                "payout_network": payout_network,
+                "payment_amount_usd": subscription_price,
+                "subscription_id": subscription_id,
+                "payment_timestamp": datetime.datetime.now().isoformat()
+            }
+
+            return self.create_task(
+                queue_name=queue_name,
+                target_url=target_url,
+                payload=payload
+            )
+
+        except Exception as e:
+            print(f"❌ [CLOUD_TASKS] Error enqueueing payment accumulation: {e}")
             return None
