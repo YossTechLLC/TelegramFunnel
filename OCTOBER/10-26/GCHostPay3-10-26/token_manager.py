@@ -181,11 +181,12 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch - token may be tampered or invalid signing key")
 
-        # Validate timestamp (1-minute window: current_time - 60 to current_time + 5)
+        # Validate timestamp (5-minute window: current_time - 300 to current_time + 5)
+        # Extended window to accommodate Cloud Tasks delivery delays and retry backoff (60s)
         current_time = int(time.time())
-        if not (current_time - 60 <= timestamp <= current_time + 5):
+        if not (current_time - 300 <= timestamp <= current_time + 5):
             time_diff = current_time - timestamp
-            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 60 seconds)")
+            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 300 seconds)")
 
         print(f"🔓 [TOKEN_DEC] GCSplit1→GCHostPay1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
@@ -277,7 +278,7 @@ class TokenManager:
     def decrypt_gchostpay1_to_gchostpay2_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from GCHostPay1 → GCHostPay2.
-        Token valid for 60 seconds.
+        Token valid for 300 seconds (5 minutes).
 
         Returns:
             Dictionary with {unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, timestamp}
@@ -333,9 +334,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp (60 second window)
+        # Validate timestamp (300 second / 5-minute window)
+        # Extended for Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 60 <= timestamp <= current_time + 5):
+        if not (current_time - 300 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay2: Token validated")
@@ -431,7 +433,7 @@ class TokenManager:
     def decrypt_gchostpay2_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt response token from GCHostPay2 → GCHostPay1.
-        Token valid for 60 seconds.
+        Token valid for 300 seconds (5 minutes).
 
         Returns:
             Dictionary with {unique_id, cn_api_id, status, from_currency, from_network, from_amount, payin_address, timestamp}
@@ -490,9 +492,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp
+        # Validate timestamp (300 second / 5-minute window)
+        # Extended for Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 60 <= timestamp <= current_time + 5):
+        if not (current_time - 300 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay2→GCHostPay1: Token validated")
@@ -574,7 +577,7 @@ class TokenManager:
     def decrypt_gchostpay1_to_gchostpay3_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from GCHostPay1 → GCHostPay3.
-        Token valid for 60 seconds.
+        Token valid for 300 seconds (5 minutes).
 
         Returns:
             Dictionary with payment details or None
@@ -630,9 +633,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp
+        # Validate timestamp (300 second / 5-minute window)
+        # Extended for Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 60 <= timestamp <= current_time + 5):
+        if not (current_time - 300 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay3: Token validated")
@@ -713,7 +717,7 @@ class TokenManager:
     def decrypt_gchostpay3_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt response token from GCHostPay3 → GCHostPay1.
-        Token valid for 60 seconds.
+        Token valid for 300 seconds (5 minutes).
 
         Returns:
             Dictionary with payment results or None
@@ -772,9 +776,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp
+        # Validate timestamp (300 second / 5-minute window)
+        # Extended for Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 60 <= timestamp <= current_time + 5):
+        if not (current_time - 300 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay3→GCHostPay1: Token validated")

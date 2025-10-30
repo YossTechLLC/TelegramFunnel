@@ -12,6 +12,84 @@
 
 ## Recently Fixed
 
+### 🐛 Token Expiration Too Short for Cloud Tasks Retry Timing
+- **Date Fixed:** October 29, 2025
+- **Severity:** CRITICAL
+- **Description:** GCHostPay services (GCHostPay1, GCHostPay2, GCHostPay3) using 60-second token expiration window, causing "Token expired" errors when Cloud Tasks retries exceeded this window
+- **Example Error:**
+  ```
+  2025-10-29 11:18:34.747 EDT
+  🎯 [ENDPOINT] Payment execution request received (from GCHostPay1)
+  ❌ [ENDPOINT] Token validation error: Token expired
+  ❌ [ENDPOINT] Unexpected error: 400 Bad Request: Token error: Token expired
+  ```
+- **Root Cause:**
+  - All GCHostPay TokenManager files validated tokens with 60-second expiration: `if not (current_time - 60 <= timestamp <= current_time + 5)`
+  - Cloud Tasks has variable delivery delays (10-30 seconds) + 60-second retry backoff
+  - Total time from token creation to retry delivery could exceed 60 seconds
+  - Token validation failed on legitimate Cloud Tasks retries
+- **Timeline Example:**
+  - Token created at time T
+  - First request at T+20s - SUCCESS (within 60s window)
+  - Cloud Tasks retry at T+80s - FAIL (token expired, outside 60s window)
+  - Cloud Tasks retry at T+140s - FAIL (token expired)
+- **Impact:**
+  - Payment execution failures on Cloud Tasks retries
+  - Manual intervention required to reprocess failed payments
+  - User payments stuck in processing state
+  - System appears unreliable due to retry failures
+- **Solution:**
+  - Extended token expiration from 60 seconds to 300 seconds (5 minutes)
+  - Updated validation logic in all GCHostPay TokenManager files
+  - New validation: `if not (current_time - 300 <= timestamp <= current_time + 5)`
+  - Accommodates: Initial delivery (30s) + Multiple retries (60s each) + Buffer (30s)
+- **Files Modified:**
+  - `GCHostPay1-10-26/token_manager.py` - Updated 5 token validation methods
+  - `GCHostPay2-10-26/token_manager.py` - Copied from GCHostPay1
+  - `GCHostPay3-10-26/token_manager.py` - Copied from GCHostPay1
+- **Deployment:**
+  - GCHostPay1: revision `gchostpay1-10-26-00005-htc`
+  - GCHostPay2: revision `gchostpay2-10-26-00005-hb9`
+  - GCHostPay3: revision `gchostpay3-10-26-00006-ndl`
+- **Verification:**
+  - All services deployed successfully (status: True)
+  - Token validation now allows 5-minute window
+  - Cloud Tasks retries no longer fail with "Token expired"
+- **Status:** ✅ FIXED and deployed, payment retries now working correctly
+
+### 🐛 GCSplit1 Missing /batch-payout Endpoint Causing 404 Errors
+- **Date Fixed:** October 29, 2025
+- **Severity:** CRITICAL
+- **Description:** GCSplit1 did not have a `/batch-payout` endpoint to handle batch payout requests from GCBatchProcessor, resulting in 404 errors
+- **Root Causes:**
+  1. **Missing endpoint implementation** - GCSplit1 only had endpoints for instant payouts (/, /usdt-eth-estimate, /eth-client-swap)
+  2. **Missing token decryption method** - TokenManager lacked `decrypt_batch_token()` method to handle batch tokens
+  3. **Incorrect signing key** - GCSplit1 TokenManager initialized with SUCCESS_URL_SIGNING_KEY but batch tokens encrypted with TPS_HOSTPAY_SIGNING_KEY
+- **Example Error:**
+  - GCBatchProcessor successfully created batch and enqueued task to `gcsplit1-batch-queue`
+  - Cloud Tasks sent POST to `https://gcsplit1-10-26.../batch-payout`
+  - GCSplit1 returned 404 - endpoint not found
+  - Cloud Tasks retried with exponential backoff
+- **Impact:**
+  - Batch payouts could not be processed
+  - Tasks accumulated in Cloud Tasks queue
+  - Clients over threshold had batches created but never executed
+  - Split workflow broken for batch payouts
+- **Solution:**
+  1. **Added `/batch-payout` endpoint** to GCSplit1 (tps1-10-26.py lines 700-833)
+  2. **Implemented `decrypt_batch_token()`** in TokenManager (token_manager.py lines 637-686)
+  3. **Updated TokenManager constructor** to accept separate `batch_signing_key` parameter
+  4. **Modified GCSplit1 initialization** to pass TPS_HOSTPAY_SIGNING_KEY for batch token decryption
+  5. **Deployed GCSplit1 revision 00009-krs** with all fixes
+- **Files Modified:**
+  - `GCSplit1-10-26/tps1-10-26.py` - Added /batch-payout endpoint
+  - `GCSplit1-10-26/token_manager.py` - Added decrypt_batch_token() method, updated constructor
+- **Verification:**
+  - Endpoint now exists and returns proper responses
+  - Token decryption uses correct signing key
+  - Batch payout flow: GCBatchProcessor → GCSplit1 /batch-payout → GCSplit2 → GCSplit3 → GCHostPay
+- **Status:** ✅ FIXED and deployed (revision gcsplit1-10-26-00009-krs)
+
 ### 🐛 Batch Payout System Not Processing Due to Secret Newlines and Query Bug
 - **Date Fixed:** October 29, 2025
 - **Severity:** CRITICAL

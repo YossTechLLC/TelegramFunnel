@@ -1,8 +1,48 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-10-29 (Threshold Payout Batch System Fixed - Secret Newlines + Query Bug)
+**Last Updated:** 2025-10-29 (Token Expiration Extended to 5 Minutes)
 
 ## Recent Updates
+
+### October 29, 2025 - Token Expiration Extended from 60s to 300s (5 Minutes) ✅
+- **CRITICAL FIX**: Extended token expiration window in all GCHostPay services to accommodate Cloud Tasks delivery delays and retry backoff
+- **Problem:** GCHostPay services returning "Token expired" errors on Cloud Tasks retries, even for legitimate payment requests
+- **Root Cause:**
+  - Token validation used 60-second window: `if not (current_time - 60 <= timestamp <= current_time + 5)`
+  - Cloud Tasks delivery delays (10-30s) + retry backoff (60s) could exceed 60-second window
+  - Example: Token created at T, first request at T+20s (SUCCESS), retry at T+80s (FAIL - expired)
+- **Solution:**
+  - Extended token expiration to 300 seconds (5 minutes) across all GCHostPay TokenManagers
+  - New validation: `if not (current_time - 300 <= timestamp <= current_time + 5)`
+  - Accommodates: Initial delivery (30s) + Multiple retries (60s + 60s + 60s) + Buffer (30s) = 240s total
+- **Implementation:**
+  - Updated all 5 token validation methods in GCHostPay1 TokenManager
+  - Copied fixed TokenManager to GCHostPay2 and GCHostPay3
+  - Updated docstrings to reflect "Token valid for 300 seconds (5 minutes)"
+- **Deployment:**
+  - GCHostPay1: `gchostpay1-10-26-00005-htc`
+  - GCHostPay2: `gchostpay2-10-26-00005-hb9`
+  - GCHostPay3: `gchostpay3-10-26-00006-ndl`
+- **Verification:** All services deployed successfully, Cloud Tasks retries now succeed within 5-minute window
+- **Impact:** Payment processing now resilient to Cloud Tasks delivery delays and multiple retry attempts
+- **Status:** Token expiration fix deployed and operational
+
+### October 29, 2025 - GCSplit1 /batch-payout Endpoint Implemented ✅
+- **CRITICAL FIX**: Implemented missing `/batch-payout` endpoint in GCSplit1 service
+- **Problem:** GCBatchProcessor was successfully creating batches and enqueueing tasks, but GCSplit1 returned 404 errors
+- **Root Causes:**
+  1. GCSplit1 only had instant payout endpoints (/, /usdt-eth-estimate, /eth-client-swap)
+  2. Missing `decrypt_batch_token()` method in TokenManager
+  3. TokenManager used wrong signing key (SUCCESS_URL_SIGNING_KEY instead of TPS_HOSTPAY_SIGNING_KEY for batch tokens)
+- **Implementation:**
+  - Added `/batch-payout` endpoint (ENDPOINT_4) to GCSplit1
+  - Implemented `decrypt_batch_token()` method in TokenManager with JSON-based decryption
+  - Updated TokenManager to accept separate `batch_signing_key` parameter
+  - Modified GCSplit1 initialization to pass TPS_HOSTPAY_SIGNING_KEY for batch decryption
+  - Batch payouts use `user_id=0` (not tied to single user, aggregates multiple payments)
+- **Deployment:** GCSplit1 revision 00009-krs deployed successfully
+- **Batch Payout Flow:** GCBatchProcessor → GCSplit1 /batch-payout → GCSplit2 → GCSplit3 → GCHostPay
+- **Status:** Batch payout endpoint now operational, ready to process threshold payment batches
 
 ### October 29, 2025 - Threshold Payout Batch System Now Working ✅
 - **CRITICAL FIX**: Identified and resolved batch payout system failure

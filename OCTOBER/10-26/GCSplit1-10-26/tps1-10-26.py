@@ -39,9 +39,12 @@ except Exception as e:
 # Initialize token manager
 try:
     signing_key = config.get('success_url_signing_key')
+    batch_signing_key = config.get('tps_hostpay_signing_key')
     if not signing_key:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
-    token_manager = TokenManager(signing_key)
+    if not batch_signing_key:
+        print(f"⚠️ [APP] TPS_HOSTPAY_SIGNING_KEY not available - batch token decryption may fail")
+    token_manager = TokenManager(signing_key, batch_signing_key)
     print(f"✅ [APP] Token manager initialized")
 except Exception as e:
     print(f"❌ [APP] Failed to initialize token manager: {e}")
@@ -690,6 +693,146 @@ def receive_eth_client_swap():
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
+        }), 500
+
+
+# ============================================================================
+# ENDPOINT 4: POST /batch-payout - Batch payout from GCBatchProcessor
+# ============================================================================
+
+@app.route("/batch-payout", methods=["POST"])
+def batch_payout():
+    """
+    Endpoint for receiving batch payout requests from GCBatchProcessor.
+
+    Flow:
+    1. Decrypt batch token
+    2. Extract batch data (batch_id, client_id, amount, etc.)
+    3. Encrypt token for GCSplit2 (USDT estimate request)
+    4. Enqueue Cloud Task to GCSplit2
+    5. Note: Use user_id=0 for batch payouts (not tied to single user)
+
+    Returns:
+        JSON response with status
+    """
+    try:
+        print(f"🎯 [ENDPOINT_4] Batch payout request received (from GCBatchProcessor)")
+
+        # Parse JSON payload
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                abort(400, "Invalid JSON payload")
+        except Exception as e:
+            print(f"❌ [ENDPOINT_4] JSON parsing error: {e}")
+            abort(400, "Malformed JSON payload")
+
+        encrypted_token = request_data.get('token')
+        batch_mode = request_data.get('batch_mode', False)
+
+        if not encrypted_token:
+            print(f"❌ [ENDPOINT_4] Missing token")
+            abort(400, "Missing token")
+
+        if not batch_mode:
+            print(f"⚠️ [ENDPOINT_4] batch_mode flag not set, proceeding anyway")
+
+        # Decrypt batch token
+        if not token_manager:
+            print(f"❌ [ENDPOINT_4] Token manager not available")
+            abort(500, "Service configuration error")
+
+        decrypted_data = token_manager.decrypt_batch_token(encrypted_token)
+        if not decrypted_data:
+            print(f"❌ [ENDPOINT_4] Failed to decrypt batch token")
+            abort(401, "Invalid token")
+
+        # Extract data
+        batch_id = decrypted_data.get('batch_id')
+        client_id = decrypted_data.get('client_id')
+        wallet_address = decrypted_data.get('wallet_address')
+        payout_currency = decrypted_data.get('payout_currency')
+        payout_network = decrypted_data.get('payout_network')
+        amount_usdt = decrypted_data.get('amount_usdt')
+
+        print(f"🆔 [ENDPOINT_4] Batch ID: {batch_id}")
+        print(f"🏢 [ENDPOINT_4] Client ID: {client_id}")
+        print(f"💰 [ENDPOINT_4] Total Amount: ${amount_usdt} USDT")
+        print(f"🎯 [ENDPOINT_4] Target: {payout_currency.upper()} on {payout_network.upper()}")
+
+        # Validate required fields
+        if not all([batch_id, client_id, wallet_address, payout_currency, payout_network, amount_usdt]):
+            print(f"❌ [ENDPOINT_4] Missing required fields in decrypted token")
+            return jsonify({
+                "status": "error",
+                "message": "Missing required fields in token",
+                "details": {
+                    "batch_id": bool(batch_id),
+                    "client_id": bool(client_id),
+                    "wallet_address": bool(wallet_address),
+                    "payout_currency": bool(payout_currency),
+                    "payout_network": bool(payout_network),
+                    "amount_usdt": bool(amount_usdt)
+                }
+            }), 400
+
+        # Note: For batch payouts, we use user_id=0 since it's not tied to a single user
+        # The batch aggregates multiple user payments for the same client
+        batch_user_id = 0
+
+        print(f"📝 [ENDPOINT_4] Using user_id={batch_user_id} for batch payout")
+
+        # Encrypt token for GCSplit2 (USDT estimate request)
+        encrypted_token_for_split2 = token_manager.encrypt_gcsplit1_to_gcsplit2_token(
+            user_id=batch_user_id,
+            closed_channel_id=str(client_id),
+            wallet_address=wallet_address,
+            payout_currency=payout_currency,
+            payout_network=payout_network,
+            adjusted_amount_usdt=amount_usdt
+        )
+
+        if not encrypted_token_for_split2:
+            print(f"❌ [ENDPOINT_4] Failed to encrypt token for GCSplit2")
+            abort(500, "Token encryption failed")
+
+        # Enqueue Cloud Task to GCSplit2
+        if not cloudtasks_client:
+            print(f"❌ [ENDPOINT_4] Cloud Tasks client not available")
+            abort(500, "Cloud Tasks unavailable")
+
+        gcsplit2_queue = config.get('gcsplit2_queue')
+        gcsplit2_url = config.get('gcsplit2_url')
+
+        if not gcsplit2_queue or not gcsplit2_url:
+            print(f"❌ [ENDPOINT_4] GCSplit2 configuration missing")
+            abort(500, "Service configuration error")
+
+        task_name = cloudtasks_client.enqueue_gcsplit2_estimate_request(
+            queue_name=gcsplit2_queue,
+            target_url=gcsplit2_url,
+            encrypted_token=encrypted_token_for_split2
+        )
+
+        if not task_name:
+            print(f"❌ [ENDPOINT_4] Failed to create Cloud Task")
+            abort(500, "Failed to enqueue task")
+
+        print(f"✅ [ENDPOINT_4] Successfully enqueued batch payout to GCSplit2")
+        print(f"🆔 [ENDPOINT_4] Task: {task_name}")
+
+        return jsonify({
+            "status": "success",
+            "message": "Batch payout request accepted",
+            "batch_id": batch_id,
+            "task_id": task_name
+        }), 200
+
+    except Exception as e:
+        print(f"❌ [ENDPOINT_4] Unexpected error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Batch payout error: {str(e)}"
         }), 500
 
 

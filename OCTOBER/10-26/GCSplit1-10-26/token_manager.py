@@ -17,18 +17,22 @@ class TokenManager:
     Uses binary packing and HMAC-SHA256 signatures for security.
     """
 
-    def __init__(self, signing_key: str):
+    def __init__(self, signing_key: str, batch_signing_key: Optional[str] = None):
         """
         Initialize TokenManager with signing key.
 
         Args:
             signing_key: SECRET key for HMAC signing (SUCCESS_URL_SIGNING_KEY)
+            batch_signing_key: Optional separate key for batch tokens (TPS_HOSTPAY_SIGNING_KEY)
         """
         if not signing_key:
             raise ValueError("Signing key cannot be empty")
 
         self.signing_key = signing_key
+        self.batch_signing_key = batch_signing_key if batch_signing_key else signing_key
         print(f"🔐 [TOKEN_MANAGER] Initialized with signing key")
+        if batch_signing_key:
+            print(f"🔐 [TOKEN_MANAGER] Batch signing key configured separately")
 
     def _pack_string(self, s: str) -> bytes:
         """
@@ -632,4 +636,55 @@ class TokenManager:
 
         except Exception as e:
             print(f"❌ [TOKEN_DEC] Decryption error: {e}")
+            return None
+
+    def decrypt_batch_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Decrypt batch token from GCBatchProcessor.
+
+        Token Structure:
+        - JSON payload with: batch_id, client_id, wallet_address, payout_currency, payout_network, amount_usdt
+        - 16 bytes: HMAC signature (truncated)
+        - Base64 URL-safe encoded
+
+        Returns:
+            Dictionary with decrypted fields or None if failed
+        """
+        try:
+            print(f"🔓 [TOKEN_DEC] GCBatchProcessor→GCSplit1: Decrypting batch token")
+
+            # Decode base64
+            padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
+            token_padded = token + ('=' * padding)
+            data = base64.urlsafe_b64decode(token_padded)
+
+            if len(data) < 16:
+                raise ValueError("Token too short")
+
+            # Split payload and signature
+            payload_bytes = data[:-16]
+            provided_signature = data[-16:]
+
+            # Verify signature (use batch_signing_key for batch tokens)
+            expected_signature = hmac.new(
+                self.batch_signing_key.encode(),
+                payload_bytes,
+                hashlib.sha256
+            ).digest()[:16]
+
+            if not hmac.compare_digest(provided_signature, expected_signature):
+                raise ValueError("Invalid signature")
+
+            # Parse JSON payload
+            import json
+            payload = json.loads(payload_bytes.decode('utf-8'))
+
+            print(f"✅ [TOKEN_DEC] Batch token decrypted successfully")
+            print(f"🆔 [TOKEN_DEC] Batch ID: {payload.get('batch_id')}")
+            print(f"💰 [TOKEN_DEC] Amount: ${payload.get('amount_usdt')} USDT")
+
+            return payload
+
+        except Exception as e:
+            print(f"❌ [TOKEN_DEC] Batch token decryption error: {e}")
             return None
