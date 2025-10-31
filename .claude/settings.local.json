@@ -97,7 +97,21 @@
       "Bash(gcloud secrets versions add:*)",
       "Bash(for secret in GCWEBHOOK2_QUEUE GCSPLIT1_QUEUE GCSPLIT2_QUEUE GCSPLIT3_QUEUE GCACCUMULATOR_QUEUE GCBATCHPROCESSOR_QUEUE GCHOSTPAY1_QUEUE GCHOSTPAY2_QUEUE GCHOSTPAY3_QUEUE GCHOSTPAY1_RESPONSE_QUEUE GCSPLIT1_URL GCSPLIT2_URL GCSPLIT3_URL GCACCUMULATOR_URL GCWEBHOOK1_URL GCWEBHOOK2_URL GCHOSTPAY1_URL GCHOSTPAY2_URL GCHOSTPAY3_URL)",
       "Bash(do echo \"Checking $secret...\")",
-      "Bash(gcloud run services update-traffic:*)"
+      "Bash(gcloud run services update-traffic:*)",
+      "Bash(gcloud run revisions list:*)",
+      "Bash(md5sum:*)",
+      "Bash(for secret in GCSPLIT3_QUEUE GCACCUMULATOR_RESPONSE_QUEUE GCHOSTPAY1_THRESHOLD_QUEUE)",
+      "Bash(do echo \"Checking $secret...\" gcloud secrets versions access latest --secret=$secret)",
+      "Bash(__NEW_LINE__ echo \"\")",
+      "Bash(for secret in GCACCUMULATOR_URL GCSPLIT3_URL GCHOSTPAY1_URL PLATFORM_USDT_WALLET_ADDRESS)",
+      "Bash(gcloud secrets delete:*)",
+      "Bash(for service in gcsplit2-10-26 gcsplit3-10-26 gcaccumulator-10-26 gchostpay1-10-26 gchostpay3-10-26)",
+      "Bash(do echo \"=== $service ===\")",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $service health check ===\")",
+      "Bash(gcloud secrets describe:*)",
+      "Bash(gcloud secrets:*)",
+      "Bash(do echo \"=== $service ===\" curl -s https://$service-291176869049.us-central1.run.app/health)"
     ],
     "deny": [],
     "ask": []

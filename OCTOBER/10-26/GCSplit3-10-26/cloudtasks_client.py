@@ -262,3 +262,37 @@ class CloudTasksClient:
         except Exception as e:
             print(f"❌ [CLOUD_TASKS] Error enqueueing HostPay trigger: {e}")
             return None
+
+    def enqueue_accumulator_swap_response(
+        self,
+        queue_name: str,
+        target_url: str,
+        encrypted_token: str
+    ) -> Optional[str]:
+        """
+        Enqueue swap response to GCAccumulator.
+
+        Args:
+            queue_name: Queue name (e.g., "gcaccumulator-swap-response-queue")
+            target_url: GCAccumulator webhook URL
+            encrypted_token: Encrypted token with swap details
+
+        Returns:
+            Task name if successful, None if failed
+        """
+        try:
+            print(f"🚀 [CLOUD_TASKS] Enqueueing response to GCAccumulator")
+
+            payload = {
+                "token": encrypted_token
+            }
+
+            return self.create_task(
+                queue_name=queue_name,
+                target_url=target_url,
+                payload=payload
+            )
+
+        except Exception as e:
+            print(f"❌ [CLOUD_TASKS] Error enqueueing GCAccumulator response: {e}")
+            return None

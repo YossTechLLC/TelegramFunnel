@@ -78,11 +78,15 @@ except Exception as e:
 @app.route("/", methods=["POST"])
 def main_webhook():
     """
-    Main webhook endpoint for receiving payment split requests from GCSplit1.
+    Main webhook endpoint for receiving payment split requests.
+
+    Supports TWO token types:
+    1. GCSplit1 → GCHostPay1 (instant payouts with unique_id)
+    2. GCAccumulator → GCHostPay1 (threshold payouts with accumulation_id and context)
 
     Flow:
-    1. Decode & verify token from GCSplit1
-    2. Extract: unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address
+    1. Decode & verify token (try GCSplit1, fallback to GCAccumulator)
+    2. Extract: unique_id/accumulation_id, cn_api_id, from_currency, from_network, from_amount, payin_address, context
     3. Check database for duplicate
     4. Encrypt token for GCHostPay2 (status check)
     5. Enqueue to GCHostPay2 via Cloud Tasks
@@ -91,7 +95,7 @@ def main_webhook():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_1] Payment split request received (from GCSplit1)")
+        print(f"🎯 [ENDPOINT_1] Payment request received")
 
         # Parse JSON payload
         try:
@@ -112,28 +116,58 @@ def main_webhook():
             print(f"❌ [ENDPOINT_1] Token manager not available")
             abort(500, "Service configuration error")
 
+        # Try decrypting as GCSplit1 token first (instant payouts)
+        decrypted_data = None
+        token_source = None
+        unique_id = None
+        accumulation_id = None
+        context = 'instant'  # Default context
+
         try:
             decrypted_data = token_manager.decrypt_gcsplit1_to_gchostpay1_token(token)
-            if not decrypted_data:
-                print(f"❌ [ENDPOINT_1] Failed to decrypt token")
-                abort(401, "Invalid token")
-
-            unique_id = decrypted_data['unique_id']
-            cn_api_id = decrypted_data['cn_api_id']
-            from_currency = decrypted_data['from_currency']
-            from_network = decrypted_data['from_network']
-            from_amount = decrypted_data['from_amount']
-            payin_address = decrypted_data['payin_address']
-
-            print(f"✅ [ENDPOINT_1] Token decoded successfully")
-            print(f"🆔 [ENDPOINT_1] Unique ID: {unique_id}")
-            print(f"🆔 [ENDPOINT_1] CN API ID: {cn_api_id}")
-            print(f"💰 [ENDPOINT_1] Amount: {from_amount} {from_currency.upper()}")
-            print(f"🏦 [ENDPOINT_1] Payin Address: {payin_address}")
-
+            if decrypted_data:
+                token_source = 'gcsplit1'
+                unique_id = decrypted_data['unique_id']
+                context = 'instant'
+                print(f"✅ [ENDPOINT_1] GCSplit1 token decoded (instant payout)")
         except Exception as e:
-            print(f"❌ [ENDPOINT_1] Token validation error: {e}")
-            abort(400, f"Token error: {e}")
+            print(f"⚠️ [ENDPOINT_1] Not a GCSplit1 token: {e}")
+
+        # If GCSplit1 decryption failed, try GCAccumulator token (threshold payouts)
+        if not decrypted_data:
+            try:
+                decrypted_data = token_manager.decrypt_accumulator_to_gchostpay1_token(token)
+                if decrypted_data:
+                    token_source = 'gcaccumulator'
+                    accumulation_id = decrypted_data['accumulation_id']
+                    context = decrypted_data.get('context', 'threshold')
+                    # Create a unique_id for database tracking (use accumulation_id)
+                    unique_id = f"acc_{accumulation_id}"
+                    print(f"✅ [ENDPOINT_1] GCAccumulator token decoded (threshold payout)")
+            except Exception as e:
+                print(f"❌ [ENDPOINT_1] Not a GCAccumulator token either: {e}")
+                abort(401, f"Invalid token: could not decrypt as GCSplit1 or GCAccumulator token")
+
+        # At this point, decrypted_data must be valid
+        if not decrypted_data:
+            print(f"❌ [ENDPOINT_1] Failed to decrypt token")
+            abort(401, "Invalid token")
+
+        # Extract common fields
+        cn_api_id = decrypted_data['cn_api_id']
+        from_currency = decrypted_data['from_currency']
+        from_network = decrypted_data['from_network']
+        from_amount = decrypted_data['from_amount']
+        payin_address = decrypted_data['payin_address']
+
+        print(f"📋 [ENDPOINT_1] Token source: {token_source}")
+        print(f"📋 [ENDPOINT_1] Context: {context}")
+        print(f"🆔 [ENDPOINT_1] Unique ID: {unique_id}")
+        if accumulation_id:
+            print(f"🆔 [ENDPOINT_1] Accumulation ID: {accumulation_id}")
+        print(f"🆔 [ENDPOINT_1] CN API ID: {cn_api_id}")
+        print(f"💰 [ENDPOINT_1] Amount: {from_amount} {from_currency.upper()}")
+        print(f"🏦 [ENDPOINT_1] Payin Address: {payin_address}")
 
         # Check database for duplicate
         if not db_manager:
@@ -282,14 +316,21 @@ def status_verified():
                 "cn_api_id": cn_api_id
             }), 400
 
-        # Encrypt token for GCHostPay3 (payment execution)
+        # Determine context based on unique_id
+        # If unique_id starts with "acc_", it's from GCAccumulator (threshold payout)
+        # Otherwise, it's from GCSplit1 (instant payout)
+        context = 'threshold' if unique_id.startswith('acc_') else 'instant'
+        print(f"📋 [ENDPOINT_2] Detected context: {context}")
+
+        # Encrypt token for GCHostPay3 (payment execution) with context
         encrypted_token_payment = token_manager.encrypt_gchostpay1_to_gchostpay3_token(
             unique_id=unique_id,
             cn_api_id=cn_api_id,
             from_currency=from_currency,
             from_network=from_network,
             from_amount=from_amount,
-            payin_address=payin_address
+            payin_address=payin_address,
+            context=context
         )
 
         if not encrypted_token_payment:

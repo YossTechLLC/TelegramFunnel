@@ -56,7 +56,7 @@ class DatabaseManager:
             print(f"❌ [DATABASE] Connection failed: {e}")
             return None
 
-    def insert_payout_accumulation(
+    def insert_payout_accumulation_pending(
         self,
         client_id: str,
         user_id: int,
@@ -64,16 +64,13 @@ class DatabaseManager:
         payment_amount_usd: Decimal,
         payment_currency: str,
         payment_timestamp: str,
-        accumulated_amount_usdt: Decimal,
-        eth_to_usdt_rate: Decimal,
-        conversion_timestamp: str,
-        conversion_tx_hash: str,
+        accumulated_eth: Decimal,
         client_wallet_address: str,
         client_payout_currency: str,
         client_payout_network: str
     ) -> Optional[int]:
         """
-        Insert a payment accumulation record.
+        Insert a payment accumulation record with pending conversion status.
 
         Args:
             client_id: closed_channel_id from main_clients_database (private channel ID)
@@ -82,10 +79,7 @@ class DatabaseManager:
             payment_amount_usd: What user originally paid
             payment_currency: Original payment currency
             payment_timestamp: When user paid
-            accumulated_amount_usdt: Locked USDT value (eliminates volatility)
-            eth_to_usdt_rate: Rate at conversion time
-            conversion_timestamp: When ETH→USDT executed
-            conversion_tx_hash: ChangeNow tx ID
+            accumulated_eth: ETH value pending conversion (USD equivalent)
             client_wallet_address: Client's payout wallet address
             client_payout_currency: Target currency (e.g., XMR)
             client_payout_network: Payout network
@@ -101,25 +95,23 @@ class DatabaseManager:
                 return None
 
             cur = conn.cursor()
-            print(f"💾 [DATABASE] Inserting payout accumulation record")
+            print(f"💾 [DATABASE] Inserting payout accumulation record (pending conversion)")
             print(f"👤 [DATABASE] User ID: {user_id}, Client ID: {client_id}")
             print(f"💰 [DATABASE] Payment Amount: ${payment_amount_usd}")
-            print(f"💰 [DATABASE] USDT Accumulated: {accumulated_amount_usdt} USDT")
+            print(f"💰 [DATABASE] Accumulated ETH: ${accumulated_eth} (pending conversion)")
 
             cur.execute(
                 """INSERT INTO payout_accumulation (
                     client_id, user_id, subscription_id,
                     payment_amount_usd, payment_currency, payment_timestamp,
-                    accumulated_amount_usdt, eth_to_usdt_rate,
-                    conversion_timestamp, conversion_tx_hash,
+                    accumulated_eth, conversion_status,
                     client_wallet_address, client_payout_currency, client_payout_network
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id""",
                 (
                     client_id, user_id, subscription_id,
                     payment_amount_usd, payment_currency, payment_timestamp,
-                    accumulated_amount_usdt, eth_to_usdt_rate,
-                    conversion_timestamp, conversion_tx_hash,
+                    accumulated_eth, 'pending',
                     client_wallet_address, client_payout_currency, client_payout_network
                 )
             )
@@ -128,7 +120,7 @@ class DatabaseManager:
             conn.commit()
             cur.close()
 
-            print(f"✅ [DATABASE] Accumulation record inserted successfully")
+            print(f"✅ [DATABASE] Accumulation record inserted successfully (pending conversion)")
             print(f"🆔 [DATABASE] Accumulation ID: {accumulation_id}")
 
             return accumulation_id
@@ -218,6 +210,120 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ [DATABASE] Failed to fetch client threshold: {e}")
             return Decimal('0')
+        finally:
+            if conn:
+                conn.close()
+
+    def update_accumulation_conversion_status(
+        self,
+        accumulation_id: int,
+        conversion_status: str,
+        cn_api_id: str,
+        payin_address: str
+    ) -> bool:
+        """
+        Update accumulation record with conversion status and swap details.
+
+        Args:
+            accumulation_id: Accumulation record ID
+            conversion_status: Status ('swapping', 'completed', 'failed')
+            cn_api_id: ChangeNow API transaction ID
+            payin_address: ChangeNow payin address
+
+        Returns:
+            True if successful, False if failed
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return False
+
+            cur = conn.cursor()
+            print(f"💾 [DATABASE] Updating accumulation conversion status")
+            print(f"🆔 [DATABASE] Accumulation ID: {accumulation_id}")
+            print(f"📊 [DATABASE] Status: {conversion_status}")
+            print(f"🔗 [DATABASE] CN API ID: {cn_api_id}")
+
+            cur.execute(
+                """UPDATE payout_accumulation
+                   SET conversion_status = %s,
+                       cn_api_id = %s,
+                       payin_address = %s,
+                       updated_at = NOW()
+                   WHERE id = %s""",
+                (conversion_status, cn_api_id, payin_address, accumulation_id)
+            )
+
+            conn.commit()
+            cur.close()
+
+            print(f"✅ [DATABASE] Accumulation status updated")
+
+            return True
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Failed to update accumulation status: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def finalize_accumulation_conversion(
+        self,
+        accumulation_id: int,
+        accumulated_amount_usdt: Decimal,
+        conversion_tx_hash: str,
+        conversion_status: str
+    ) -> bool:
+        """
+        Finalize accumulation conversion with final USDT amount and tx hash.
+
+        Args:
+            accumulation_id: Accumulation record ID
+            accumulated_amount_usdt: Final USDT amount received
+            conversion_tx_hash: Blockchain transaction hash
+            conversion_status: Final status ('completed' or 'failed')
+
+        Returns:
+            True if successful, False if failed
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return False
+
+            cur = conn.cursor()
+            print(f"💾 [DATABASE] Finalizing accumulation conversion")
+            print(f"🆔 [DATABASE] Accumulation ID: {accumulation_id}")
+            print(f"💰 [DATABASE] Final USDT: ${accumulated_amount_usdt}")
+            print(f"🔗 [DATABASE] TX Hash: {conversion_tx_hash}")
+            print(f"📊 [DATABASE] Status: {conversion_status}")
+
+            cur.execute(
+                """UPDATE payout_accumulation
+                   SET accumulated_amount_usdt = %s,
+                       conversion_tx_hash = %s,
+                       conversion_status = %s,
+                       updated_at = NOW()
+                   WHERE id = %s""",
+                (accumulated_amount_usdt, conversion_tx_hash, conversion_status, accumulation_id)
+            )
+
+            conn.commit()
+            cur.close()
+
+            print(f"✅ [DATABASE] Accumulation conversion finalized")
+            print(f"💰 [DATABASE] ${accumulated_amount_usdt} USDT locked in value - volatility protection active!")
+
+            return True
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Failed to finalize accumulation conversion: {e}")
+            return False
         finally:
             if conn:
                 conn.close()

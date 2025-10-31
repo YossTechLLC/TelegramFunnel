@@ -139,8 +139,10 @@ def execute_eth_payment():
             from_network = decrypted_data['from_network']
             from_amount = decrypted_data['from_amount']
             payin_address = decrypted_data['payin_address']
+            context = decrypted_data.get('context', 'instant')  # NEW: Extract context
 
             print(f"✅ [ENDPOINT] Token decoded successfully")
+            print(f"📋 [ENDPOINT] Context: {context}")
             print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
             print(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
             print(f"💰 [ENDPOINT] Amount: {from_amount} {from_currency.upper()}")
@@ -216,23 +218,49 @@ def execute_eth_payment():
             print(f"❌ [ENDPOINT] Failed to encrypt response token")
             abort(500, "Token encryption failed")
 
-        # Enqueue response back to GCHostPay1
+        # Enqueue response based on context (NEW: Conditional routing)
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        gchostpay1_response_queue = config.get('gchostpay1_response_queue')
-        gchostpay1_url = config.get('gchostpay1_url')
+        # Determine routing based on context
+        if context == 'threshold':
+            # Route to GCAccumulator for threshold payouts
+            print(f"🎯 [ENDPOINT] Context: threshold → Routing to GCAccumulator")
 
-        if not gchostpay1_response_queue or not gchostpay1_url:
-            print(f"❌ [ENDPOINT] GCHostPay1 configuration missing")
-            abort(500, "Service configuration error")
+            gcaccumulator_response_queue = config.get('gcaccumulator_response_queue')
+            gcaccumulator_url = config.get('gcaccumulator_url')
 
-        # Target the /payment-completed endpoint
-        target_url = f"{gchostpay1_url}/payment-completed"
+            if not gcaccumulator_response_queue or not gcaccumulator_url:
+                print(f"❌ [ENDPOINT] GCAccumulator configuration missing")
+                abort(500, "Service configuration error")
 
+            # Target the /swap-executed endpoint
+            target_url = f"{gcaccumulator_url}/swap-executed"
+            queue_name = gcaccumulator_response_queue
+
+            print(f"📤 [ENDPOINT] Routing to: {target_url}")
+
+        else:
+            # Route to GCHostPay1 for instant payouts (existing behavior)
+            print(f"🎯 [ENDPOINT] Context: instant → Routing to GCHostPay1")
+
+            gchostpay1_response_queue = config.get('gchostpay1_response_queue')
+            gchostpay1_url = config.get('gchostpay1_url')
+
+            if not gchostpay1_response_queue or not gchostpay1_url:
+                print(f"❌ [ENDPOINT] GCHostPay1 configuration missing")
+                abort(500, "Service configuration error")
+
+            # Target the /payment-completed endpoint
+            target_url = f"{gchostpay1_url}/payment-completed"
+            queue_name = gchostpay1_response_queue
+
+            print(f"📤 [ENDPOINT] Routing to: {target_url}")
+
+        # Enqueue response to appropriate service
         task_name = cloudtasks_client.enqueue_gchostpay1_payment_response(
-            queue_name=gchostpay1_response_queue,
+            queue_name=queue_name,
             target_url=target_url,
             encrypted_token=encrypted_response_token
         )
@@ -241,7 +269,7 @@ def execute_eth_payment():
             print(f"❌ [ENDPOINT] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT] Successfully enqueued response to GCHostPay1")
+        print(f"✅ [ENDPOINT] Successfully enqueued response")
         print(f"🆔 [ENDPOINT] Task: {task_name}")
 
         return jsonify({

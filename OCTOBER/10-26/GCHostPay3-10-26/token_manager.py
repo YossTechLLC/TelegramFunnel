@@ -522,7 +522,8 @@ class TokenManager:
         from_currency: str,
         from_network: str,
         from_amount: float,
-        payin_address: str
+        payin_address: str,
+        context: str = 'instant'
     ) -> Optional[str]:
         """
         Encrypt token for GCHostPay1 → GCHostPay3 (ETH payment execution request).
@@ -534,14 +535,19 @@ class TokenManager:
         - 1 byte: from_network length + variable bytes
         - 8 bytes: from_amount (double)
         - 1 byte: payin_address length + variable bytes
+        - 1 byte: context length + variable bytes (NEW: 'instant' or 'threshold')
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
+
+        Args:
+            context: Payment context - 'instant' (default) or 'threshold'
 
         Returns:
             Base64 URL-safe encoded token or None if failed
         """
         try:
             print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay3: Encrypting payment request")
+            print(f"📋 [TOKEN_ENC] Context: {context}")
 
             unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
 
@@ -552,6 +558,7 @@ class TokenManager:
             packed_data.extend(self._pack_string(from_network.lower()))
             packed_data.extend(struct.pack(">d", from_amount))
             packed_data.extend(self._pack_string(payin_address))
+            packed_data.extend(self._pack_string(context.lower()))  # NEW: context field
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -580,7 +587,7 @@ class TokenManager:
         Token valid for 300 seconds (5 minutes).
 
         Returns:
-            Dictionary with payment details or None
+            Dictionary with payment details including context field or None
         """
         padding = '=' * (-len(token) % 4)
         try:
@@ -615,6 +622,14 @@ class TokenManager:
         # Parse payin_address
         payin_address, offset = self._unpack_string(raw, offset)
 
+        # Parse context (NEW: defaults to 'instant' for backward compatibility)
+        try:
+            context, offset = self._unpack_string(raw, offset)
+        except (ValueError, IndexError):
+            # Backward compatibility: if context field doesn't exist, default to 'instant'
+            context = 'instant'
+            print(f"⚠️ [TOKEN_DEC] No context field found - defaulting to 'instant' (legacy token)")
+
         # Parse timestamp
         if offset + 4 > len(raw):
             raise ValueError("Invalid token: incomplete timestamp")
@@ -640,6 +655,7 @@ class TokenManager:
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay3: Token validated")
+        print(f"📋 [TOKEN_DEC] Context: {context}")
 
         return {
             "unique_id": unique_id,
@@ -648,6 +664,7 @@ class TokenManager:
             "from_network": from_network,
             "from_amount": from_amount,
             "payin_address": payin_address,
+            "context": context,  # NEW: context field
             "timestamp": timestamp
         }
 

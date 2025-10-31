@@ -201,6 +201,112 @@ class TokenManager:
             "timestamp": timestamp
         }
 
+    def decrypt_accumulator_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Decrypt token from GCAccumulator → GCHostPay1.
+        Token is valid for 300 seconds from creation (5-minute window).
+
+        Token Format (from GCAccumulator encrypt_accumulator_to_gchostpay1_token):
+        - 8 bytes: accumulation_id (uint64)
+        - 1 byte: cn_api_id length + variable bytes for cn_api_id
+        - 1 byte: from_currency length + variable bytes for from_currency
+        - 1 byte: from_network length + variable bytes for from_network
+        - 8 bytes: from_amount (double precision float)
+        - 1 byte: payin_address length + variable bytes for payin_address
+        - 1 byte: context length + variable bytes for context ('threshold')
+        - 8 bytes: timestamp (uint64 unix timestamp)
+        - 16 bytes: HMAC-SHA256 signature (truncated)
+
+        Args:
+            token: Base64 URL-safe encoded token from GCAccumulator
+
+        Returns:
+            Dictionary with decrypted data or None if invalid
+
+        Raises:
+            ValueError: If token is invalid, expired, or signature verification fails
+        """
+        padding = '=' * (-len(token) % 4)
+        try:
+            raw = base64.urlsafe_b64decode(token + padding)
+        except Exception:
+            raise ValueError("Invalid token: cannot decode base64")
+
+        # Minimum size check (8 + 1 + 1 + 1 + 8 + 1 + 1 + 8 + 16 = 45 minimum)
+        if len(raw) < 45:
+            raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 45)")
+
+        offset = 0
+
+        # Parse accumulation_id (8 bytes, uint64)
+        if offset + 8 > len(raw):
+            raise ValueError("Invalid token: missing accumulation_id")
+        accumulation_id = struct.unpack(">Q", raw[offset:offset+8])[0]
+        offset += 8
+
+        # Parse variable-length cn_api_id
+        cn_api_id, offset = self._unpack_string(raw, offset)
+
+        # Parse variable-length from_currency
+        from_currency, offset = self._unpack_string(raw, offset)
+
+        # Parse variable-length from_network
+        from_network, offset = self._unpack_string(raw, offset)
+
+        # Parse 8-byte double for from_amount
+        if offset + 8 > len(raw):
+            raise ValueError("Invalid token: incomplete from_amount")
+        from_amount = struct.unpack(">d", raw[offset:offset+8])[0]
+        offset += 8
+
+        # Parse variable-length payin_address
+        payin_address, offset = self._unpack_string(raw, offset)
+
+        # Parse variable-length context
+        context, offset = self._unpack_string(raw, offset)
+
+        # Parse 8-byte timestamp (uint64)
+        if offset + 8 > len(raw):
+            raise ValueError("Invalid token: incomplete timestamp")
+        timestamp = struct.unpack(">Q", raw[offset:offset+8])[0]
+        offset += 8
+
+        # The remaining bytes should be the 16-byte truncated signature
+        if len(raw) - offset != 16:
+            raise ValueError(f"Invalid token: wrong signature size (got {len(raw) - offset}, expected 16)")
+
+        data = raw[:offset]  # All data except signature
+        sig = raw[offset:]   # The signature
+
+        # Verify truncated signature using SUCCESS_URL_SIGNING_KEY (internal key)
+        expected_full_sig = hmac.new(self.internal_key.encode(), data, hashlib.sha256).digest()
+        expected_sig = expected_full_sig[:16]
+        if not hmac.compare_digest(sig, expected_sig):
+            raise ValueError("Signature mismatch - token may be tampered or invalid signing key")
+
+        # Validate timestamp (5-minute window: current_time - 300 to current_time + 5)
+        # Extended window to accommodate Cloud Tasks delivery delays and retry backoff (60s)
+        current_time = int(time.time())
+        if not (current_time - 300 <= timestamp <= current_time + 5):
+            time_diff = current_time - timestamp
+            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 300 seconds)")
+
+        print(f"🔓 [TOKEN_DEC] GCAccumulator→GCHostPay1: Token validated successfully")
+        print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
+        print(f"📋 [TOKEN_DEC] Context: {context}")
+        print(f"🆔 [TOKEN_DEC] Accumulation ID: {accumulation_id}")
+
+        return {
+            "accumulation_id": accumulation_id,
+            "cn_api_id": cn_api_id,
+            "from_currency": from_currency,
+            "from_network": from_network,
+            "from_amount": from_amount,
+            "payin_address": payin_address,
+            "context": context,
+            "timestamp": timestamp
+        }
+
     # ========================================================================
     # TOKEN 2: GCHostPay1 → GCHostPay2 (Status check request)
     # ========================================================================
@@ -522,7 +628,8 @@ class TokenManager:
         from_currency: str,
         from_network: str,
         from_amount: float,
-        payin_address: str
+        payin_address: str,
+        context: str = 'instant'
     ) -> Optional[str]:
         """
         Encrypt token for GCHostPay1 → GCHostPay3 (ETH payment execution request).
@@ -534,14 +641,19 @@ class TokenManager:
         - 1 byte: from_network length + variable bytes
         - 8 bytes: from_amount (double)
         - 1 byte: payin_address length + variable bytes
+        - 1 byte: context length + variable bytes (NEW: 'instant' or 'threshold')
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
+
+        Args:
+            context: Payment context - 'instant' for direct payouts, 'threshold' for accumulator payouts
 
         Returns:
             Base64 URL-safe encoded token or None if failed
         """
         try:
             print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay3: Encrypting payment request")
+            print(f"📋 [TOKEN_ENC] Context: {context}")
 
             unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
 
@@ -552,6 +664,7 @@ class TokenManager:
             packed_data.extend(self._pack_string(from_network.lower()))
             packed_data.extend(struct.pack(">d", from_amount))
             packed_data.extend(self._pack_string(payin_address))
+            packed_data.extend(self._pack_string(context.lower()))  # NEW: context field
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))

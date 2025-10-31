@@ -102,6 +102,17 @@ class ConfigManager:
             "GCHostPay1 service URL"
         )
 
+        # Get GCAccumulator response queue configuration (for threshold payouts)
+        gcaccumulator_response_queue = self.fetch_secret(
+            "GCACCUMULATOR_RESPONSE_QUEUE",
+            "GCAccumulator response queue name"
+        )
+
+        gcaccumulator_url = self.fetch_secret(
+            "GCACCUMULATOR_URL",
+            "GCAccumulator service URL"
+        )
+
         # Fetch database configuration from Secret Manager
         cloud_sql_connection_name = self.fetch_secret(
             "CLOUD_SQL_CONNECTION_NAME",
@@ -150,6 +161,8 @@ class ConfigManager:
             'cloud_tasks_location': cloud_tasks_location,
             'gchostpay1_response_queue': gchostpay1_response_queue,
             'gchostpay1_url': gchostpay1_url,
+            'gcaccumulator_response_queue': gcaccumulator_response_queue,
+            'gcaccumulator_url': gcaccumulator_url,
 
             # Database configuration
             'instance_connection_name': cloud_sql_connection_name,
@@ -169,6 +182,8 @@ class ConfigManager:
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
         print(f"   GCHostPay1 Response Queue: {'✅' if config['gchostpay1_response_queue'] else '❌'}")
         print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
+        print(f"   GCAccumulator Response Queue: {'✅' if config['gcaccumulator_response_queue'] else '❌'}")
+        print(f"   GCAccumulator URL: {'✅' if config['gcaccumulator_url'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")

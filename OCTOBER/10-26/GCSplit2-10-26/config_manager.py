@@ -107,6 +107,38 @@ class ConfigManager:
             "GCSplit1 /usdt-eth-estimate endpoint URL"
         )
 
+        # Fetch database configuration from Secret Manager
+        cloud_sql_connection_name = self.fetch_secret(
+            "CLOUD_SQL_CONNECTION_NAME",
+            "Cloud SQL instance connection name"
+        )
+
+        database_name = self.fetch_secret(
+            "DATABASE_NAME_SECRET",
+            "Database name"
+        )
+
+        database_user = self.fetch_secret(
+            "DATABASE_USER_SECRET",
+            "Database user"
+        )
+
+        database_password = self.fetch_secret(
+            "DATABASE_PASSWORD_SECRET",
+            "Database password"
+        )
+
+        # GCBatchProcessor configuration (for threshold checking)
+        gcbatchprocessor_queue = self.fetch_secret(
+            "GCBATCHPROCESSOR_QUEUE",
+            "GCBatchProcessor queue name"
+        )
+
+        gcbatchprocessor_url = self.fetch_secret(
+            "GCBATCHPROCESSOR_URL",
+            "GCBatchProcessor service URL"
+        )
+
         # Validate critical configurations
         if not success_url_signing_key:
             print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
@@ -124,7 +156,15 @@ class ConfigManager:
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
             'gcsplit1_response_queue': gcsplit1_response_queue,
-            'gcsplit1_url': gcsplit1_url
+            'gcsplit1_url': gcsplit1_url,
+            'gcbatchprocessor_queue': gcbatchprocessor_queue,
+            'gcbatchprocessor_url': gcbatchprocessor_url,
+
+            # Database configuration
+            'instance_connection_name': cloud_sql_connection_name,
+            'db_name': database_name,
+            'db_user': database_user,
+            'db_password': database_password
         }
 
         # Log configuration status

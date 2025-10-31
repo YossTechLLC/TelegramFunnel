@@ -80,3 +80,86 @@ class CloudTasksClient:
         except Exception as e:
             print(f"❌ [CLOUD_TASKS] Error creating task: {e}")
             return None
+
+    def enqueue_gcsplit2_conversion(
+        self,
+        queue_name: str,
+        target_url: str,
+        accumulation_id: int,
+        client_id: str,
+        accumulated_eth: float
+    ) -> Optional[str]:
+        """
+        Enqueue ETH→USDT conversion task to GCSplit2.
+
+        Args:
+            queue_name: GCSplit2 queue name
+            target_url: GCSplit2 /estimate-and-update endpoint URL
+            accumulation_id: Database accumulation record ID
+            client_id: Client's closed_channel_id
+            accumulated_eth: ETH value to convert (USD equivalent)
+
+        Returns:
+            Task name if successful, None if failed
+        """
+        payload = {
+            "accumulation_id": accumulation_id,
+            "client_id": client_id,
+            "accumulated_eth": accumulated_eth
+        }
+
+        print(f"📤 [CLOUD_TASKS] Enqueueing GCSplit2 conversion task")
+        print(f"🆔 [CLOUD_TASKS] Accumulation ID: {accumulation_id}")
+        print(f"💰 [CLOUD_TASKS] Accumulated ETH: ${accumulated_eth}")
+
+        return self.create_task(queue_name, target_url, payload)
+
+    def enqueue_gcsplit3_eth_to_usdt_swap(
+        self,
+        queue_name: str,
+        target_url: str,
+        encrypted_token: str
+    ) -> Optional[str]:
+        """
+        Enqueue ETH→USDT swap creation task to GCSplit3.
+
+        Args:
+            queue_name: GCSplit3 queue name
+            target_url: GCSplit3 /eth-to-usdt endpoint URL
+            encrypted_token: Encrypted token with swap request data
+
+        Returns:
+            Task name if successful, None if failed
+        """
+        payload = {
+            "token": encrypted_token
+        }
+
+        print(f"💱 [CLOUD_TASKS] Enqueueing GCSplit3 ETH→USDT swap task")
+
+        return self.create_task(queue_name, target_url, payload)
+
+    def enqueue_gchostpay1_execution(
+        self,
+        queue_name: str,
+        target_url: str,
+        encrypted_token: str
+    ) -> Optional[str]:
+        """
+        Enqueue swap execution task to GCHostPay1.
+
+        Args:
+            queue_name: GCHostPay1 queue name
+            target_url: GCHostPay1 endpoint URL
+            encrypted_token: Encrypted token with execution request data
+
+        Returns:
+            Task name if successful, None if failed
+        """
+        payload = {
+            "token": encrypted_token
+        }
+
+        print(f"🚀 [CLOUD_TASKS] Enqueueing GCHostPay1 execution task")
+
+        return self.create_task(queue_name, target_url, payload)

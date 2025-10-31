@@ -225,6 +225,157 @@ def process_eth_client_swap():
 
 
 # ============================================================================
+# NEW ENDPOINT: POST /eth-to-usdt - Create ETH→USDT Swap for Threshold Payouts
+# ============================================================================
+
+@app.route("/eth-to-usdt", methods=["POST"])
+def process_eth_to_usdt_swap():
+    """
+    New endpoint for creating ETH→USDT swaps (threshold payout accumulation).
+
+    Flow:
+    1. Decrypt token from GCAccumulator
+    2. Create ChangeNow fixed-rate transaction (ETH→USDT)
+    3. Encrypt response token with transaction details
+    4. Enqueue Cloud Task back to GCAccumulator
+
+    This endpoint mirrors the existing `/` endpoint but for USDT target currency.
+
+    Returns:
+        JSON response with status
+    """
+    try:
+        print(f"🎯 [ENDPOINT] ETH→USDT swap request received (from GCAccumulator)")
+
+        # Parse JSON payload
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                abort(400, "Invalid JSON payload")
+        except Exception as e:
+            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            abort(400, "Malformed JSON payload")
+
+        encrypted_token = request_data.get('token')
+        if not encrypted_token:
+            print(f"❌ [ENDPOINT] Missing token")
+            abort(400, "Missing token")
+
+        # Decrypt token
+        if not token_manager:
+            print(f"❌ [ENDPOINT] Token manager not available")
+            abort(500, "Service configuration error")
+
+        decrypted_data = token_manager.decrypt_accumulator_to_gcsplit3_token(encrypted_token)
+        if not decrypted_data:
+            print(f"❌ [ENDPOINT] Failed to decrypt token")
+            abort(401, "Invalid token")
+
+        # Extract data
+        accumulation_id = decrypted_data['accumulation_id']
+        client_id = decrypted_data['client_id']
+        eth_amount = decrypted_data['eth_amount']
+        usdt_wallet_address = decrypted_data.get('usdt_wallet_address', '')
+
+        print(f"🆔 [ENDPOINT] Accumulation ID: {accumulation_id}")
+        print(f"🏢 [ENDPOINT] Client ID: {client_id}")
+        print(f"💰 [ENDPOINT] ETH Amount: ${eth_amount} (USD equivalent)")
+        print(f"🎯 [ENDPOINT] Target: USDT on ETH network")
+        print(f"🏦 [ENDPOINT] USDT Wallet: {usdt_wallet_address}")
+
+        # Create ChangeNow fixed-rate transaction (ETH→USDT)
+        if not changenow_client:
+            print(f"❌ [ENDPOINT] ChangeNow client not available")
+            abort(500, "ChangeNow client unavailable")
+
+        print(f"🌐 [ENDPOINT] Creating ChangeNow ETH→USDT transaction (with retry)")
+
+        transaction = changenow_client.create_fixed_rate_transaction_with_retry(
+            from_currency="eth",
+            to_currency="usdt",
+            from_amount=str(eth_amount),
+            address=usdt_wallet_address,  # Platform's USDT receiving address
+            from_network="eth",
+            to_network="eth",
+            user_id=f"accumulation_{accumulation_id}"
+        )
+
+        if not transaction:
+            print(f"❌ [ENDPOINT] ChangeNow API returned None (should not happen)")
+            abort(500, "ChangeNow API failure")
+
+        # Extract transaction data
+        cn_api_id = transaction.get('id', '')
+        api_from_amount = float(transaction.get('fromAmount', 0))
+        api_to_amount = float(transaction.get('toAmount', 0))
+        api_payin_address = transaction.get('payinAddress', '')
+        api_payout_address = transaction.get('payoutAddress', usdt_wallet_address)
+
+        print(f"✅ [ENDPOINT] ChangeNow transaction created")
+        print(f"🆔 [ENDPOINT] ChangeNow API ID: {cn_api_id}")
+        print(f"🏦 [ENDPOINT] Payin address: {api_payin_address}")
+        print(f"💰 [ENDPOINT] From: ${api_from_amount} ETH (USD equivalent)")
+        print(f"💰 [ENDPOINT] To: ${api_to_amount} USDT")
+
+        # Encrypt response token for GCAccumulator
+        encrypted_response_token = token_manager.encrypt_gcsplit3_to_accumulator_token(
+            accumulation_id=accumulation_id,
+            client_id=client_id,
+            cn_api_id=cn_api_id,
+            from_amount=api_from_amount,
+            to_amount=api_to_amount,
+            payin_address=api_payin_address,
+            payout_address=api_payout_address
+        )
+
+        if not encrypted_response_token:
+            print(f"❌ [ENDPOINT] Failed to encrypt response token")
+            abort(500, "Token encryption failed")
+
+        # Enqueue Cloud Task back to GCAccumulator
+        if not cloudtasks_client:
+            print(f"❌ [ENDPOINT] Cloud Tasks client not available")
+            abort(500, "Cloud Tasks unavailable")
+
+        gcaccumulator_response_queue = config.get('gcaccumulator_response_queue')
+        gcaccumulator_url = config.get('gcaccumulator_url')
+
+        if not gcaccumulator_response_queue or not gcaccumulator_url:
+            print(f"❌ [ENDPOINT] GCAccumulator configuration missing")
+            abort(500, "Service configuration error")
+
+        task_name = cloudtasks_client.enqueue_accumulator_swap_response(
+            queue_name=gcaccumulator_response_queue,
+            target_url=f"{gcaccumulator_url}/swap-created",
+            encrypted_token=encrypted_response_token
+        )
+
+        if not task_name:
+            print(f"❌ [ENDPOINT] Failed to create Cloud Task")
+            abort(500, "Failed to enqueue task")
+
+        print(f"✅ [ENDPOINT] Successfully enqueued response to GCAccumulator")
+        print(f"🆔 [ENDPOINT] Task: {task_name}")
+
+        return jsonify({
+            "status": "success",
+            "message": "ETH→USDT swap created and response enqueued",
+            "accumulation_id": accumulation_id,
+            "cn_api_id": cn_api_id,
+            "from_amount": api_from_amount,
+            "to_amount": api_to_amount,
+            "task_id": task_name
+        }), 200
+
+    except Exception as e:
+        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Processing error: {str(e)}"
+        }), 500
+
+
+# ============================================================================
 # HEALTH CHECK ENDPOINT
 # ============================================================================
 

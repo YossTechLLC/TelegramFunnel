@@ -57,6 +57,8 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
     cloudtasks_client = None
 
+# ChangeNow client removed - conversion now handled by GCSplit2 via Cloud Tasks
+
 
 @app.route("/", methods=["POST"])
 def accumulate_payment():
@@ -66,9 +68,9 @@ def accumulate_payment():
     Flow:
     1. Receive payment data from GCWebhook1
     2. Calculate adjusted amount (after TP fee)
-    3. Convert to USDT (locks USD value - eliminates volatility)
-    4. Write to payout_accumulation table
-    5. Return success
+    3. Store payment with accumulated_eth (pending conversion)
+    4. Queue task to GCSplit2 for ETH→USDT conversion
+    5. Return success immediately (non-blocking)
 
     Returns:
         JSON response with status
@@ -108,36 +110,27 @@ def accumulate_payment():
         print(f"💸 [ENDPOINT] TP fee ({tp_flat_fee}%): ${fee_amount}")
         print(f"✅ [ENDPOINT] Adjusted amount: ${adjusted_amount_usd}")
 
-        # For now, we'll use a 1:1 ETH→USDT mock conversion
-        # In production, this would call GCSplit2 for actual ChangeNow estimate
-        # CRITICAL: This locks the USD value in USDT to eliminate volatility
-        accumulated_usdt = adjusted_amount_usd
-        eth_to_usdt_rate = Decimal('1.0')  # Mock rate for now
-        conversion_tx_hash = f"mock_cn_tx_{int(time.time())}"
-
-        print(f"🌐 [ENDPOINT] USDT Conversion (MOCK)")
-        print(f"💰 [ENDPOINT] USDT amount: {accumulated_usdt}")
-        print(f"📊 [ENDPOINT] Rate: {eth_to_usdt_rate}")
-        print(f"🆔 [ENDPOINT] TX Hash: {conversion_tx_hash}")
+        # Store accumulated_eth (the adjusted USD amount pending conversion)
+        # Conversion will happen asynchronously via GCSplit2
+        accumulated_eth = adjusted_amount_usd
+        print(f"⏳ [ENDPOINT] Storing payment with accumulated_eth (pending conversion)")
+        print(f"💰 [ENDPOINT] Accumulated ETH value: ${accumulated_eth}")
 
         # Write to payout_accumulation table
         if not db_manager:
             print(f"❌ [ENDPOINT] Database manager not available")
             abort(500, "Database unavailable")
 
-        print(f"💾 [ENDPOINT] Inserting into payout_accumulation")
+        print(f"💾 [ENDPOINT] Inserting into payout_accumulation (pending conversion)")
 
-        accumulation_id = db_manager.insert_payout_accumulation(
+        accumulation_id = db_manager.insert_payout_accumulation_pending(
             client_id=client_id,
             user_id=user_id,
             subscription_id=subscription_id,
             payment_amount_usd=payment_amount_usd,
             payment_currency='usd',
             payment_timestamp=payment_timestamp,
-            accumulated_amount_usdt=accumulated_usdt,
-            eth_to_usdt_rate=eth_to_usdt_rate,
-            conversion_timestamp=datetime.now().isoformat(),
-            conversion_tx_hash=conversion_tx_hash,
+            accumulated_eth=accumulated_eth,
             client_wallet_address=wallet_address,
             client_payout_currency=payout_currency,
             client_payout_network=payout_network
@@ -150,29 +143,270 @@ def accumulate_payment():
         print(f"✅ [ENDPOINT] Database insertion successful")
         print(f"🆔 [ENDPOINT] Accumulation ID: {accumulation_id}")
 
-        # Check current accumulation total (informational)
-        total_accumulated = db_manager.get_client_accumulation_total(client_id)
-        threshold = db_manager.get_client_threshold(client_id)
+        # Queue task to GCSplit3 for ACTUAL ETH→USDT swap creation
+        if not cloudtasks_client:
+            print(f"❌ [ENDPOINT] Cloud Tasks client not available")
+            abort(500, "Cloud Tasks unavailable")
 
-        print(f"📊 [ENDPOINT] Client total accumulated: ${total_accumulated}")
-        print(f"🎯 [ENDPOINT] Client threshold: ${threshold}")
+        if not token_manager:
+            print(f"❌ [ENDPOINT] Token manager not available")
+            abort(500, "Token manager unavailable")
 
-        if total_accumulated >= threshold:
-            print(f"🎉 [ENDPOINT] Threshold reached! GCBatchProcessor will process on next run")
-        else:
-            remaining = threshold - total_accumulated
-            print(f"⏳ [ENDPOINT] ${remaining} remaining to reach threshold")
+        gcsplit3_queue = config.get('gcsplit3_queue')
+        gcsplit3_url = config.get('gcsplit3_url')
+        host_wallet_usdt = config.get('host_wallet_usdt_address')
 
-        print(f"🎉 [ENDPOINT] Payment accumulation completed successfully")
+        if not gcsplit3_queue or not gcsplit3_url or not host_wallet_usdt:
+            print(f"❌ [ENDPOINT] GCSplit3 configuration missing")
+            abort(500, "Service configuration error")
+
+        print(f"📤 [ENDPOINT] Queuing ETH→USDT SWAP task to GCSplit3")
+        print(f"🏦 [ENDPOINT] Host USDT wallet: {host_wallet_usdt}")
+
+        # Encrypt token for GCSplit3
+        encrypted_token = token_manager.encrypt_accumulator_to_gcsplit3_token(
+            accumulation_id=accumulation_id,
+            client_id=client_id,
+            eth_amount=float(accumulated_eth),
+            usdt_wallet_address=host_wallet_usdt
+        )
+
+        if not encrypted_token:
+            print(f"❌ [ENDPOINT] Failed to encrypt token")
+            abort(500, "Token encryption failed")
+
+        task_name = cloudtasks_client.enqueue_gcsplit3_eth_to_usdt_swap(
+            queue_name=gcsplit3_queue,
+            target_url=f"{gcsplit3_url}/eth-to-usdt",
+            encrypted_token=encrypted_token
+        )
+
+        if not task_name:
+            print(f"❌ [ENDPOINT] Failed to create Cloud Task")
+            abort(500, "Failed to enqueue swap task")
+
+        print(f"✅ [ENDPOINT] Swap task enqueued successfully")
+        print(f"🆔 [ENDPOINT] Task: {task_name}")
+        print(f"⏳ [ENDPOINT] Waiting for GCSplit3 to create swap, then GCHostPay will execute")
+
+        print(f"🎉 [ENDPOINT] Payment accumulation completed successfully (swap pending)")
 
         return jsonify({
             "status": "success",
-            "message": "Payment accumulated successfully",
+            "message": "Payment accumulated successfully, ETH→USDT swap pending",
             "accumulation_id": accumulation_id,
-            "accumulated_usdt": str(accumulated_usdt),
-            "total_accumulated": str(total_accumulated),
-            "threshold": str(threshold),
-            "threshold_reached": total_accumulated >= threshold
+            "accumulated_eth": str(accumulated_eth),
+            "swap_task": task_name,
+            "conversion_status": "pending"
+        }), 200
+
+    except Exception as e:
+        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Processing error: {str(e)}"
+        }), 500
+
+
+@app.route("/swap-created", methods=["POST"])
+def swap_created():
+    """
+    Receives response from GCSplit3 after ETH→USDT swap is created.
+
+    Flow:
+    1. Decrypt token from GCSplit3
+    2. Extract ChangeNow transaction details
+    3. Update database with conversion status = 'swapping'
+    4. Queue task to GCHostPay1 for swap execution
+
+    Returns:
+        JSON response with status
+    """
+    try:
+        print(f"🎯 [ENDPOINT] ETH→USDT swap created notification received")
+
+        # Parse JSON payload
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                abort(400, "Invalid JSON payload")
+        except Exception as e:
+            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            abort(400, "Malformed JSON payload")
+
+        encrypted_token = request_data.get('token')
+        if not encrypted_token:
+            print(f"❌ [ENDPOINT] Missing token")
+            abort(400, "Missing token")
+
+        # Decrypt token
+        if not token_manager:
+            print(f"❌ [ENDPOINT] Token manager not available")
+            abort(500, "Service configuration error")
+
+        decrypted_data = token_manager.decrypt_gcsplit3_to_accumulator_token(encrypted_token)
+        if not decrypted_data:
+            print(f"❌ [ENDPOINT] Failed to decrypt token")
+            abort(401, "Invalid token")
+
+        # Extract data
+        accumulation_id = decrypted_data['accumulation_id']
+        client_id = decrypted_data['client_id']
+        cn_api_id = decrypted_data['cn_api_id']
+        from_amount = decrypted_data['from_amount']
+        to_amount = decrypted_data['to_amount']
+        payin_address = decrypted_data['payin_address']
+
+        print(f"✅ [ENDPOINT] Swap created successfully")
+        print(f"🆔 [ENDPOINT] Accumulation ID: {accumulation_id}")
+        print(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
+        print(f"💰 [ENDPOINT] From: ${from_amount} ETH")
+        print(f"💰 [ENDPOINT] To: ${to_amount} USDT")
+        print(f"🏦 [ENDPOINT] Payin Address: {payin_address}")
+
+        # Update database with conversion status
+        if not db_manager:
+            print(f"❌ [ENDPOINT] Database manager not available")
+            abort(500, "Database unavailable")
+
+        db_manager.update_accumulation_conversion_status(
+            accumulation_id=accumulation_id,
+            conversion_status='swapping',
+            cn_api_id=cn_api_id,
+            payin_address=payin_address
+        )
+        print(f"✅ [ENDPOINT] Database updated: conversion_status = 'swapping'")
+
+        # Queue task to GCHostPay1 for swap execution
+        print(f"📤 [ENDPOINT] Queuing swap execution to GCHostPay1")
+
+        if not cloudtasks_client:
+            print(f"❌ [ENDPOINT] Cloud Tasks client not available")
+            abort(500, "Cloud Tasks unavailable")
+
+        gchostpay1_queue = config.get('gchostpay1_queue')
+        gchostpay1_url = config.get('gchostpay1_url')
+
+        if not gchostpay1_queue or not gchostpay1_url:
+            print(f"❌ [ENDPOINT] GCHostPay1 configuration missing")
+            abort(500, "Service configuration error")
+
+        # Encrypt token for GCHostPay1
+        hostpay_token = token_manager.encrypt_accumulator_to_gchostpay1_token(
+            accumulation_id=accumulation_id,
+            cn_api_id=cn_api_id,
+            from_currency='eth',
+            from_network='eth',
+            from_amount=from_amount,
+            payin_address=payin_address
+        )
+
+        if not hostpay_token:
+            print(f"❌ [ENDPOINT] Failed to encrypt token for GCHostPay1")
+            abort(500, "Token encryption failed")
+
+        task_name = cloudtasks_client.enqueue_gchostpay1_execution(
+            queue_name=gchostpay1_queue,
+            target_url=gchostpay1_url,
+            encrypted_token=hostpay_token
+        )
+
+        if not task_name:
+            print(f"❌ [ENDPOINT] Failed to enqueue execution task")
+            abort(500, "Failed to enqueue execution task")
+
+        print(f"✅ [ENDPOINT] Execution task enqueued: {task_name}")
+
+        return jsonify({
+            "status": "success",
+            "message": "Swap created and execution queued",
+            "accumulation_id": accumulation_id,
+            "cn_api_id": cn_api_id,
+            "execution_task": task_name
+        }), 200
+
+    except Exception as e:
+        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Processing error: {str(e)}"
+        }), 500
+
+
+@app.route("/swap-executed", methods=["POST"])
+def swap_executed():
+    """
+    Receives response from GCHostPay1 after ETH payment is executed.
+
+    Flow:
+    1. Decrypt token from GCHostPay1
+    2. Update database with final USDT amount
+    3. Update conversion status = 'completed'
+    4. Log success
+
+    Returns:
+        JSON response with status
+    """
+    try:
+        print(f"🎯 [ENDPOINT] ETH→USDT swap executed notification received")
+
+        # Parse JSON payload
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                abort(400, "Invalid JSON payload")
+        except Exception as e:
+            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            abort(400, "Malformed JSON payload")
+
+        encrypted_token = request_data.get('token')
+        if not encrypted_token:
+            print(f"❌ [ENDPOINT] Missing token")
+            abort(400, "Missing token")
+
+        # Decrypt token
+        if not token_manager:
+            print(f"❌ [ENDPOINT] Token manager not available")
+            abort(500, "Service configuration error")
+
+        decrypted_data = token_manager.decrypt_gchostpay1_to_accumulator_token(encrypted_token)
+        if not decrypted_data:
+            print(f"❌ [ENDPOINT] Failed to decrypt token")
+            abort(401, "Invalid token")
+
+        # Extract data
+        accumulation_id = decrypted_data['accumulation_id']
+        cn_api_id = decrypted_data['cn_api_id']
+        tx_hash = decrypted_data['tx_hash']
+        to_amount = decrypted_data['to_amount']  # Final USDT amount
+
+        print(f"✅ [ENDPOINT] Swap executed successfully")
+        print(f"🆔 [ENDPOINT] Accumulation ID: {accumulation_id}")
+        print(f"🔗 [ENDPOINT] TX Hash: {tx_hash}")
+        print(f"💰 [ENDPOINT] Final USDT: ${to_amount}")
+
+        # Update database with final conversion
+        if not db_manager:
+            print(f"❌ [ENDPOINT] Database manager not available")
+            abort(500, "Database unavailable")
+
+        db_manager.finalize_accumulation_conversion(
+            accumulation_id=accumulation_id,
+            accumulated_amount_usdt=Decimal(str(to_amount)),
+            conversion_tx_hash=tx_hash,
+            conversion_status='completed'
+        )
+
+        print(f"✅ [ENDPOINT] Database updated: conversion_status = 'completed'")
+        print(f"💰 [ENDPOINT] ${to_amount} USDT locked in value - volatility protection active!")
+
+        return jsonify({
+            "status": "success",
+            "message": "Swap executed and finalized",
+            "accumulation_id": accumulation_id,
+            "cn_api_id": cn_api_id,
+            "tx_hash": tx_hash,
+            "final_usdt": to_amount
         }), 200
 
     except Exception as e:

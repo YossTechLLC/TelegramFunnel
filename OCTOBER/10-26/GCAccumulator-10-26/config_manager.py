@@ -80,6 +80,34 @@ class ConfigManager:
             "GCSplit2 service URL"
         )
 
+        # GCSplit3 configuration (for ETH→USDT swap creation)
+        gcsplit3_queue = self.fetch_secret(
+            "GCSPLIT3_QUEUE",
+            "GCSplit3 queue name"
+        )
+
+        gcsplit3_url = self.fetch_secret(
+            "GCSPLIT3_URL",
+            "GCSplit3 service URL"
+        )
+
+        # GCHostPay1 configuration (for swap execution)
+        gchostpay1_queue = self.fetch_secret(
+            "GCHOSTPAY1_QUEUE",
+            "GCHostPay1 queue name"
+        )
+
+        gchostpay1_url = self.fetch_secret(
+            "GCHOSTPAY1_URL",
+            "GCHostPay1 service URL"
+        )
+
+        # Host wallet configuration
+        host_wallet_usdt_address = self.fetch_secret(
+            "HOST_WALLET_USDT_ADDRESS",
+            "Host USDT wallet address"
+        )
+
         # Fetch database configuration from Secret Manager
         cloud_sql_connection_name = self.fetch_secret(
             "CLOUD_SQL_CONNECTION_NAME",
@@ -122,6 +150,13 @@ class ConfigManager:
             'cloud_tasks_location': cloud_tasks_location,
             'gcsplit2_queue': gcsplit2_queue,
             'gcsplit2_url': gcsplit2_url,
+            'gcsplit3_queue': gcsplit3_queue,
+            'gcsplit3_url': gcsplit3_url,
+            'gchostpay1_queue': gchostpay1_queue,
+            'gchostpay1_url': gchostpay1_url,
+
+            # Wallet configuration
+            'host_wallet_usdt_address': host_wallet_usdt_address,
 
             # Database configuration (all from Secret Manager)
             'instance_connection_name': cloud_sql_connection_name,
@@ -140,6 +175,11 @@ class ConfigManager:
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
         print(f"   GCSplit2 Queue: {'✅' if config['gcsplit2_queue'] else '❌'}")
         print(f"   GCSplit2 URL: {'✅' if config['gcsplit2_url'] else '❌'}")
+        print(f"   GCSplit3 Queue: {'✅' if config['gcsplit3_queue'] else '❌'}")
+        print(f"   GCSplit3 URL: {'✅' if config['gcsplit3_url'] else '❌'}")
+        print(f"   GCHostPay1 Queue: {'✅' if config['gchostpay1_queue'] else '❌'}")
+        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
+        print(f"   Host USDT Wallet: {'✅' if config['host_wallet_usdt_address'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")
