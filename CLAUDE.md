@@ -1,5 +1,6 @@
 - Always warn about the remaining context! Before starting a new task make sure the remaining context is enough for the new task or not. If not, ask the user to compact first.
-- Create PROGRESS.md, BUGS.md & DECISION.md if not already existing. Update the PROGRESS.md file after every tun, while adding bug reports to BUGS.md file and use the DECISIONS.md file to log every architectural decision you make.
+- Create PROGRESS.md, BUGS.md & DECISION.md if not already existing. Update the PROGRESS.md file after every turn with a concice checklist of what you've been able to accomplish, while adding bug reports to BUGS.md file. Use the DECISIONS.md file to log every architectural decision you make. Keep these notes short & concentrated.
+- Make sure that any new entry you make to the PROGRESS.md DECISIONS.md & BUGS.md files are always first in --> Meaning every new entry should be at the top of the file.
 - Please pay attention to the way in which the debug/error/print statements are written and use emojis, please continue to do so but and only use the emojis that have already been used.
 - MONITOR FOR THIS PACKAGE ERROR - google-cloud-sql-connector is not a package, instead call cloud-sql-python-connector --> it imports as google.cloud.sql.connector.
 - Remember USER : PASS for 'www.paygateprime.com' --> user1user1 : user1TEST$
@@ -12,3 +13,5 @@
 - You are to deploy the google cloud functions you have built.
 - You are to deploy the google queues/tasks you have built.
 - You are still NOT to make any GitHub commits, I will do that manually afterwards.
+- If a .md you're looking for isn't found in the /10-26 folder you can find it in /TelegramFunnel/ARCHIVES/NOTES10-31
+- Old entries to PROGRESS.md & DECISION.md get systematically cleaned out, if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md & DECISIONS_ARCH.md which hold all the archived entries if you search for your terms explicitly.
