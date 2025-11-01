@@ -39,10 +39,16 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        // Attempt to refresh token
-        const response = await axios.post(`${API_URL}/api/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
+        // Attempt to refresh token (send refresh token in Authorization header)
+        const response = await axios.post(
+          `${API_URL}/api/auth/refresh`,
+          {},  // Empty body
+          {
+            headers: {
+              'Authorization': `Bearer ${refreshToken}`,  // ✅ Send refresh token in header
+            },
+          }
+        );
 
         const { access_token } = response.data;
         localStorage.setItem('access_token', access_token);

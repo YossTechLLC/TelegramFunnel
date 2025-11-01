@@ -1,6 +1,81 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-10-31 (Session 11 - Final Review Complete)
+**Last Updated:** 2025-11-01 (Session 13 - JWT Refresh Token Fix)
+
+---
+
+## Recently Fixed (Session 13)
+
+### 🟢 RESOLVED: JWT Refresh Token Sent in Request Body Instead of Authorization Header
+- **Date Fixed:** November 1, 2025
+- **Severity:** HIGH - Token refresh completely broken
+- **Status:** ✅ FIXED AND DEPLOYED
+- **Location:** `GCRegisterWeb-10-26/src/services/api.ts` lines 42-51
+- **Deployed Revision:** Build hash `B2DoxGBX`
+
+**Description:**
+Frontend was sending JWT refresh token in request BODY instead of Authorization HEADER, causing all token refresh attempts to fail with 401 Unauthorized. Users were being logged out after 15 minutes when access token expired.
+
+**Backend Expectation:**
+```python
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)  # ← Expects refresh token in Authorization header
+```
+
+**Frontend Bug:**
+```typescript
+// ❌ WRONG - Sending in request body
+const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+  refresh_token: refreshToken,
+});
+```
+
+**Fix Applied:**
+```typescript
+// ✅ CORRECT - Sending in Authorization header
+const response = await axios.post(
+  `${API_URL}/api/auth/refresh`,
+  {},  // Empty body
+  {
+    headers: {
+      'Authorization': `Bearer ${refreshToken}`,
+    },
+  }
+);
+```
+
+**Impact:**
+- ✅ Initial login worked (access token issued)
+- ❌ Token refresh failed after 15 minutes (401 error)
+- ❌ Users forced to re-login every 15 minutes
+- ❌ Dashboard would fail to load after access token expiration
+
+**Verification:**
+- ✅ Frontend rebuilt and deployed to gs://www-paygateprime-com
+- ✅ No more 401 errors on `/api/auth/refresh`
+- ✅ No more 401 errors on `/api/channels`
+- ✅ Login and logout cycle works perfectly
+- ✅ Dashboard loads channels successfully
+- ✅ Only harmless favicon 404 errors remain
+
+**Console Errors Before Fix:**
+```
+[ERROR] 401 on /api/channels
+[ERROR] 401 on /api/auth/refresh
+```
+
+**Console Errors After Fix:**
+```
+[ERROR] 404 on /favicon.ico (harmless)
+```
+
+**Test Results:**
+- User `user1user1` successfully logged in
+- Dashboard displayed 2 channels correctly
+- Logout and re-login worked flawlessly
+- No authentication errors
+
+**Status:** ✅ RESOLVED - JWT refresh now working correctly
 
 ---
 

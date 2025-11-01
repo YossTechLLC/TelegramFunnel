@@ -1,8 +1,103 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Session 12 - Decimal Precision Fixes Deployed ✅)
+**Last Updated:** 2025-11-01 (Session 13 - JWT Refresh Token Fix Deployed ✅)
 
 ## Recent Updates
+
+## 2025-11-01 Session 13: JWT REFRESH TOKEN FIX DEPLOYED ✅
+
+### 🎯 Purpose
+Fixed critical JWT refresh token authentication bug in www.paygateprime.com that was causing 401 errors and forcing users to re-login every 15 minutes.
+
+### 🐛 Problem Identified
+**Symptoms:**
+- Console errors: 401 on `/api/auth/refresh` and `/api/channels`
+- Initial login worked perfectly
+- Users forced to re-login after 15 minutes (access token expiration)
+
+**Root Cause:**
+- Backend expected refresh token in `Authorization` header (Flask-JWT-Extended `@jwt_required(refresh=True)`)
+- Frontend was incorrectly sending refresh token in request BODY
+- Mismatch caused all token refresh attempts to fail with 401 Unauthorized
+
+### ✅ Fix Applied
+
+**File Modified:** `GCRegisterWeb-10-26/src/services/api.ts` lines 42-51
+
+**Before (Incorrect):**
+```typescript
+const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+  refresh_token: refreshToken,  // ❌ Sending in body
+});
+```
+
+**After (Correct):**
+```typescript
+const response = await axios.post(
+  `${API_URL}/api/auth/refresh`,
+  {},  // Empty body
+  {
+    headers: {
+      'Authorization': `Bearer ${refreshToken}`,  // ✅ Sending in header
+    },
+  }
+);
+```
+
+### 🚀 Deployment
+
+**Steps Executed:**
+1. ✅ Modified api.ts response interceptor
+2. ✅ Rebuilt React frontend: `npm run build`
+3. ✅ Deployed to GCS bucket: `gs://www-paygateprime-com`
+4. ✅ Set cache headers (no-cache on index.html, long-term on assets)
+
+**Build Artifacts:**
+- index.html (0.67 kB)
+- index-B2DoxGBX.js (119.75 kB)
+- index-B6UDAss1.css (3.41 kB)
+- react-vendor-ycPT9Mzr.js (162.08 kB)
+
+### 🧪 Verification
+
+**Testing Performed:**
+1. ✅ Fresh browser session - No initial 401 errors
+2. ✅ Login with `user1user1` / `user1TEST$` - Success
+3. ✅ Dashboard loads with 2 channels displayed
+4. ✅ Logout functionality - Success
+5. ✅ Re-login - Success
+
+**Console Errors:**
+- ❌ Before: 401 on `/api/auth/refresh`, 401 on `/api/channels`
+- ✅ After: Only harmless 404 on `/favicon.ico`
+
+**Channels Displayed:**
+- "10-29 NEW WEBSITE" (-1003268562225) - Threshold ($2) → SHIB
+- "Test Public Channel - EDITED" (-1001234567890) - Instant → SHIB
+
+### 📊 Impact
+
+**User Experience:**
+- ✅ Users no longer forced to re-login every 15 minutes
+- ✅ Token refresh happens automatically in background
+- ✅ Seamless session persistence up to 30 days (refresh token lifetime)
+- ✅ Dashboard and API calls work continuously
+
+**Technical:**
+- Access token: 15 minutes (short-lived for security)
+- Refresh token: 30 days (long-lived for UX)
+- Automatic refresh on 401 errors
+- Failed refresh → clean logout and redirect to login
+
+### 📝 Documentation
+
+**Updated Files:**
+- `BUGS.md` - Added Session 13 entry documenting the fix
+- `PROGRESS.md` - This entry
+
+**Status:** ✅ DEPLOYED AND VERIFIED - Authentication system fully functional
+
+---
 
 ## 2025-11-01 Session 12: DECIMAL PRECISION FIXES DEPLOYED ✅
 
