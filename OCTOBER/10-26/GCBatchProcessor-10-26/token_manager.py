@@ -32,7 +32,7 @@ class TokenManager:
         wallet_address: str,
         payout_currency: str,
         payout_network: str,
-        total_amount_usdt: float
+        total_amount_usdt: str  # ✅ Accept string to preserve Decimal precision
     ) -> Optional[str]:
         """
         Encrypt token for GCSplit1 batch payout request.
@@ -43,7 +43,7 @@ class TokenManager:
             wallet_address: Client's payout wallet address
             payout_currency: Target currency (e.g., XMR)
             payout_network: Payout network
-            total_amount_usdt: Total USDT to convert
+            total_amount_usdt: Total USDT to convert (string for precision)
 
         Returns:
             Encrypted token string or None if failed

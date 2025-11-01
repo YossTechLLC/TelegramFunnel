@@ -146,7 +146,7 @@ def process_batches():
                     wallet_address=wallet_address,
                     payout_currency=payout_currency,
                     payout_network=payout_network,
-                    total_amount_usdt=float(total_usdt)
+                    total_amount_usdt=str(total_usdt)  # ✅ Preserve Decimal precision
                 )
 
                 if not batch_token:

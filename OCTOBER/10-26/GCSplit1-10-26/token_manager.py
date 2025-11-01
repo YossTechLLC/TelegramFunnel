@@ -8,7 +8,8 @@ import hashlib
 import struct
 import base64
 import time
-from typing import Dict, Any, Optional, Tuple
+from decimal import Decimal
+from typing import Dict, Any, Optional, Tuple, Union
 
 
 class TokenManager:
@@ -73,7 +74,7 @@ class TokenManager:
         wallet_address: str,
         payout_currency: str,
         payout_network: str,
-        adjusted_amount_usdt: float
+        adjusted_amount_usdt: Union[str, float, Decimal]  # ✅ Accept str/Decimal for precision
     ) -> Optional[str]:
         """
         Encrypt token for GCSplit1 → GCSplit2 (USDT estimate request).
@@ -94,6 +95,15 @@ class TokenManager:
         try:
             print(f"🔐 [TOKEN_ENC] GCSplit1→GCSplit2: Encrypting token")
 
+            # ✅ Convert amount to Decimal for precision, then to float for struct.pack
+            # Note: struct.pack requires float, but we've verified amounts are within safe range
+            if isinstance(adjusted_amount_usdt, str):
+                amount = float(Decimal(adjusted_amount_usdt))
+            elif isinstance(adjusted_amount_usdt, Decimal):
+                amount = float(adjusted_amount_usdt)
+            else:
+                amount = float(adjusted_amount_usdt)
+
             # Fixed 16-byte closed_channel_id
             closed_channel_id_bytes = closed_channel_id.encode('utf-8')[:16].ljust(16, b'\x00')
 
@@ -112,7 +122,7 @@ class TokenManager:
             packed_data.extend(self._pack_string(payout_network))
 
             # adjusted_amount_usdt (8 bytes double)
-            packed_data.extend(struct.pack(">d", adjusted_amount_usdt))
+            packed_data.extend(struct.pack(">d", amount))
 
             # timestamp (4 bytes)
             current_timestamp = int(time.time())

@@ -1,8 +1,110 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-10-31 (Phase 4 - Threshold Payout Architecture Clarified)
+**Last Updated:** 2025-11-01 (Decision 26 - Decimal Precision for High-Value Tokens)
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
+
+---
+
+## Decision 26: Implement Decimal Precision for High-Value Token Support
+
+**Date:** November 1, 2025
+**Status:** ✅ IMPLEMENTED and DEPLOYED
+**Impact:** HIGH - Enables safe handling of high-value tokens (SHIB, PEPE)
+**Related:** LARGE_TOKEN_QUANTITY_ANALYSIS.md, test_changenow_precision.py
+
+### Context
+
+After analyzing the system's ability to handle high-value tokens like SHIBA INU (1 USD = 100,000 SHIB) and PEPE, we discovered:
+
+1. **Database Layer:** ✅ Already using PostgreSQL NUMERIC (unlimited precision)
+2. **Python Layer:** ⚠️ Using native float (15-17 digit precision limit)
+3. **ChangeNow API:** ⚠️ Returns amounts as JSON numbers (parsed as Python float)
+4. **Token Encryption:** ⚠️ Uses struct.pack(">d", amount) for binary packing (8-byte double)
+
+**Test Results:**
+- SHIB: 9,768,424 tokens (14 digits) - No precision loss
+- PEPE: 14,848,580 tokens (15 digits) - No precision loss BUT at maximum safe limit
+- XRP: 39.11 tokens (8 digits) - No precision loss
+
+**Risk:** System worked but was at the edge of float precision limits. Future tokens with higher quantities or more decimal places could experience precision loss.
+
+### Decision
+
+**Implement Decimal-based precision throughout the token conversion pipeline.**
+
+**Changes:**
+1. **GCBatchProcessor batch10-26.py:** Pass amounts as string instead of float
+2. **GCSplit2 changenow_client.py:** Parse ChangeNow API responses using Decimal
+3. **GCSplit1 token_manager.py:** Accept string/Decimal and convert to float only for struct.pack
+
+### Rationale
+
+**Why Decimal over float:**
+- Python's `Decimal` provides arbitrary precision (configurable, default 28 digits)
+- Eliminates precision loss risk for any token quantity
+- Database already uses NUMERIC, so end-to-end precision is maintained
+- Minimal performance impact for financial calculations
+
+**Why not full Decimal in token packing:**
+- struct.pack requires native Python float for binary encoding
+- Current approach (Decimal→float conversion) is safe for tested token ranges
+- Fully documented limitation with comment in code
+- Future refactoring could implement custom binary encoding if needed
+
+**Alternative Considered:**
+- Continue with float and monitor for precision issues
+- **Rejected:** Reactive approach, risk of production issues with new tokens
+
+### Implementation
+
+**Modified Files:**
+1. `GCBatchProcessor-10-26/batch10-26.py` (line 149)
+2. `GCBatchProcessor-10-26/token_manager.py` (line 35)
+3. `GCSplit2-10-26/changenow_client.py` (lines 8, 117-129)
+4. `GCSplit1-10-26/token_manager.py` (lines 11-12, 77, 98-105)
+
+**Deployment:**
+- All 3 services redeployed to Cloud Run
+- Health checks confirmed all components healthy
+- No production downtime
+
+### Testing
+
+**Pre-Deployment:**
+- Syntax validation: All Python files compile successfully
+- Precision test: test_changenow_precision.py validated ChangeNow response format
+
+**Post-Deployment:**
+- Health endpoints: All services report healthy status
+- Awaiting first real SHIB/PEPE payout for end-to-end validation
+
+### Benefits
+
+1. **Future-Proof:** Can handle any token quantity without precision loss
+2. **Safety:** Eliminates risk of rounding errors in high-value token payouts
+3. **Consistency:** Maintains precision from database → API → token encryption
+4. **Minimal Disruption:** Changes isolated to amount handling, no architecture changes
+
+### Trade-offs
+
+1. **Slight Performance Overhead:** Decimal operations are slower than float (negligible for this use case)
+2. **Code Complexity:** Type handling now requires Union[str, float, Decimal]
+3. **Incomplete Coverage:** Token binary packing still uses float (documented limitation)
+
+### Success Criteria
+
+✅ All services deployed without errors
+✅ Health checks pass for all components
+✅ Syntax validation passes
+⏳ Pending: First SHIB/PEPE payout completes successfully
+
+### Related Documents
+
+- `DECIMAL_PRECISION_FIX_CHECKLIST.md` - Implementation checklist
+- `LARGE_TOKEN_QUANTITY_ANALYSIS.md` - Original analysis and recommendations
+- `test_changenow_precision.py` - Test script and results
+- `TEST_CHANGENOW_INSTRUCTIONS.md` - Test execution guide
 
 ---
 

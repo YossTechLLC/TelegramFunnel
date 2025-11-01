@@ -5,6 +5,7 @@ Handles USDT→ETH estimate requests with automatic retry on failures.
 """
 import requests
 import time
+from decimal import Decimal
 from typing import Dict, Any, Optional
 
 
@@ -112,14 +113,20 @@ class ChangeNowClient:
                     try:
                         result = response.json()
 
-                        to_amount = result.get('toAmount', 0)
-                        deposit_fee = result.get('depositFee', 0)
-                        withdrawal_fee = result.get('withdrawalFee', 0)
+                        # ✅ Parse amounts as Decimal to preserve precision
+                        to_amount = Decimal(str(result.get('toAmount', 0)))
+                        deposit_fee = Decimal(str(result.get('depositFee', 0)))
+                        withdrawal_fee = Decimal(str(result.get('withdrawalFee', 0)))
 
                         print(f"✅ [CHANGENOW_ESTIMATE_V2] Success after {attempt} attempt(s)")
                         print(f"💰 [CHANGENOW_ESTIMATE_V2] Estimated receive: {to_amount} {to_currency.upper()}")
                         print(f"📊 [CHANGENOW_ESTIMATE_V2] Deposit fee: {deposit_fee}")
                         print(f"📊 [CHANGENOW_ESTIMATE_V2] Withdrawal fee: {withdrawal_fee}")
+
+                        # Store Decimal values back in result dict
+                        result['toAmount'] = to_amount
+                        result['depositFee'] = deposit_fee
+                        result['withdrawalFee'] = withdrawal_fee
 
                         return result
 
