@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCHostPay1-10-26 (Validator & Orchestrator Service).
-Handles fetching configuration values from Google Cloud Secret Manager.
+Configuration Manager for GCMicroBatchProcessor-10-26 (Micro-Batch Conversion Service).
+Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
+from decimal import Decimal
 from google.cloud import secretmanager
 from typing import Optional
 
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCHostPay1-10-26 service.
+    Manages configuration and secrets for the GCMicroBatchProcessor-10-26 service.
     """
 
     def __init__(self):
@@ -43,24 +44,48 @@ class ConfigManager:
             print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
             return None
 
+    def get_micro_batch_threshold(self) -> Decimal:
+        """
+        Fetch micro-batch threshold from Google Cloud Secret Manager.
+
+        Returns:
+            Decimal threshold value (e.g., Decimal('20.00'))
+        """
+        try:
+            # Try to get from env variable first (for Cloud Run deployment)
+            threshold_str = os.getenv('MICRO_BATCH_THRESHOLD_USD')
+
+            if not threshold_str:
+                # Fallback to direct Secret Manager access
+                project_id = os.getenv('CLOUD_TASKS_PROJECT_ID', 'telepay-459221')
+                secret_name = f"projects/{project_id}/secrets/MICRO_BATCH_THRESHOLD_USD/versions/latest"
+
+                print(f"🔐 [CONFIG] Fetching threshold from Secret Manager")
+                response = self.client.access_secret_version(request={"name": secret_name})
+                threshold_str = response.payload.data.decode('UTF-8')
+
+            threshold = Decimal(threshold_str)
+            print(f"✅ [CONFIG] Threshold fetched: ${threshold}")
+            return threshold
+
+        except Exception as e:
+            print(f"❌ [CONFIG] Failed to fetch threshold: {e}")
+            print(f"⚠️ [CONFIG] Using fallback threshold: $20.00")
+            return Decimal('20.00')
+
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCHostPay1.
+        Initialize and return all configuration values for GCMicroBatchProcessor.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCHostPay1-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing GCMicroBatchProcessor-10-26 configuration")
 
-        # Fetch signing keys
-        tps_hostpay_signing_key = self.fetch_secret(
-            "TPS_HOSTPAY_SIGNING_KEY",
-            "TPS HostPay signing key (for GCSplit1 → GCHostPay1)"
-        )
-
+        # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
-            "Success URL signing key (for internal GCHostPay communication)"
+            "Success URL signing key (for token verification and encryption)"
         )
 
         # Get Cloud Tasks configuration from Secret Manager
@@ -74,43 +99,27 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        # Get GCHostPay2 (Status Checker) configuration
-        gchostpay2_queue = self.fetch_secret(
-            "GCHOSTPAY2_QUEUE",
-            "GCHostPay2 queue name"
+        # GCHostPay1 batch configuration
+        gchostpay1_batch_queue = self.fetch_secret(
+            "GCHOSTPAY1_BATCH_QUEUE",
+            "GCHostPay1 batch queue name"
         )
 
-        gchostpay2_url = self.fetch_secret(
-            "GCHOSTPAY2_URL",
-            "GCHostPay2 service URL"
+        gchostpay1_url = self.fetch_secret(
+            "GCHOSTPAY1_URL",
+            "GCHostPay1 service URL"
         )
 
-        # Get GCHostPay3 (Payment Executor) configuration
-        gchostpay3_queue = self.fetch_secret(
-            "GCHOSTPAY3_QUEUE",
-            "GCHostPay3 queue name"
-        )
-
-        gchostpay3_url = self.fetch_secret(
-            "GCHOSTPAY3_URL",
-            "GCHostPay3 service URL"
-        )
-
-        # Get ChangeNow API key for transaction status queries
+        # ChangeNow API key
         changenow_api_key = self.fetch_secret(
             "CHANGENOW_API_KEY",
             "ChangeNow API key"
         )
 
-        # Get GCMicroBatchProcessor configuration (for batch conversion callbacks)
-        microbatch_response_queue = self.fetch_secret(
-            "MICROBATCH_RESPONSE_QUEUE",
-            "MicroBatchProcessor response queue name"
-        )
-
-        microbatch_url = self.fetch_secret(
-            "MICROBATCH_URL",
-            "MicroBatchProcessor service URL"
+        # Host wallet configuration
+        host_wallet_usdt_address = self.fetch_secret(
+            "HOST_WALLET_USDT_ADDRESS",
+            "Host USDT wallet address"
         )
 
         # Fetch database configuration from Secret Manager
@@ -135,28 +144,26 @@ class ConfigManager:
         )
 
         # Validate critical configurations
-        if not tps_hostpay_signing_key or not success_url_signing_key:
-            print(f"⚠️ [CONFIG] Warning: Signing keys not available")
+        if not success_url_signing_key:
+            print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
         if not cloud_tasks_project_id or not cloud_tasks_location:
             print(f"⚠️ [CONFIG] Warning: Cloud Tasks configuration incomplete")
 
         config = {
-            # Signing keys
-            'tps_hostpay_signing_key': tps_hostpay_signing_key,
+            # Secrets
             'success_url_signing_key': success_url_signing_key,
-
-            # ChangeNow API
-            'changenow_api_key': changenow_api_key,
 
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gchostpay2_queue': gchostpay2_queue,
-            'gchostpay2_url': gchostpay2_url,
-            'gchostpay3_queue': gchostpay3_queue,
-            'gchostpay3_url': gchostpay3_url,
-            'microbatch_response_queue': microbatch_response_queue,
-            'microbatch_url': microbatch_url,
+            'gchostpay1_batch_queue': gchostpay1_batch_queue,
+            'gchostpay1_url': gchostpay1_url,
+
+            # ChangeNow configuration
+            'changenow_api_key': changenow_api_key,
+
+            # Wallet configuration
+            'host_wallet_usdt_address': host_wallet_usdt_address,
 
             # Database configuration (all from Secret Manager)
             'instance_connection_name': cloud_sql_connection_name,
@@ -167,17 +174,13 @@ class ConfigManager:
 
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
-        print(f"   TPS_HOSTPAY_SIGNING_KEY: {'✅' if config['tps_hostpay_signing_key'] else '❌'}")
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
-        print(f"   CHANGENOW_API_KEY: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCHostPay2 Queue: {'✅' if config['gchostpay2_queue'] else '❌'}")
-        print(f"   GCHostPay2 URL: {'✅' if config['gchostpay2_url'] else '❌'}")
-        print(f"   GCHostPay3 Queue: {'✅' if config['gchostpay3_queue'] else '❌'}")
-        print(f"   GCHostPay3 URL: {'✅' if config['gchostpay3_url'] else '❌'}")
-        print(f"   MicroBatch Response Queue: {'✅' if config['microbatch_response_queue'] else '❌'}")
-        print(f"   MicroBatch URL: {'✅' if config['microbatch_url'] else '❌'}")
+        print(f"   GCHostPay1 Batch Queue: {'✅' if config['gchostpay1_batch_queue'] else '❌'}")
+        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
+        print(f"   ChangeNow API Key: {'✅' if config['changenow_api_key'] else '❌'}")
+        print(f"   Host USDT Wallet: {'✅' if config['host_wallet_usdt_address'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")

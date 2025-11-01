@@ -1,15 +1,182 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-10-31 (Micro-Batch Conversion Architecture - Implementation Checklist)
+**Last Updated:** 2025-10-31 (Phase 4 - Threshold Payout Architecture Clarified)
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
+
+---
+
+## Decision 25: Threshold Payout Architecture Clarification
+
+**Date:** October 31, 2025
+**Status:** ✅ DECIDED and DOCUMENTED
+**Impact:** Medium - Simplifies architecture, removes ambiguity
+**Related:** BUGS.md Issue #3, MAIN_BATCH_CONVERSION_ARCHITECTURE_REFINEMENT_CHECKLIST.md Phase 4
+
+### Context
+
+After implementing the micro-batch conversion architecture, it was unclear how threshold-based payouts (payments that trigger when a channel's accumulated balance reaches a threshold) should be processed:
+
+**Option A:** Threshold payouts use micro-batch flow (same as regular instant payments)
+- All payments stored with `conversion_status='pending'`
+- Included in next micro-batch when global $20 threshold reached
+- Single conversion path for all payments
+
+**Option B:** Threshold payouts use separate instant flow
+- Re-implement GCAccumulator `/swap-executed` endpoint
+- Threshold payments trigger immediate individual swap
+- Separate callback routing in GCHostPay1
+
+**Key Observations:**
+1. MICRO_BATCH_CONVERSION_ARCHITECTURE.md does not mention "threshold payouts" separately
+2. GCAccumulator's `/swap-executed` endpoint was already removed (only has `/` and `/health`)
+3. GCHostPay1 has TODO placeholder for threshold callback (lines 620-623: "Threshold callback not yet implemented")
+4. Micro-batch architecture was designed for ALL ETH→USDT conversions, not just instant payments
+
+### Decision
+
+**Threshold payouts will use the micro-batch flow (Option A)** - same as regular instant payments.
+
+### Rationale
+
+1. **Architectural Simplicity:** Single conversion path reduces complexity and maintenance burden
+2. **Batch Efficiency:** All payments benefit from reduced gas fees, regardless of payout strategy
+3. **Acceptable Delay:** 15-minute maximum delay is acceptable for volatility protection (original goal of micro-batch)
+4. **Consistency:** Aligns with original micro-batch architecture intent
+5. **Code Reduction:** Removes need for separate callback routing logic in GCHostPay1
+
+### Implementation
+
+**No code changes needed** - System already implements this approach:
+- GCAccumulator stores all payments with `conversion_status='pending'` (no distinction by payout_strategy)
+- GCMicroBatchProcessor batches ALL pending payments when threshold reached
+- GCHostPay1's threshold callback TODO (lines 620-623) can be removed or raise NotImplementedError
+
+**Database Flow (Unchanged):**
+```
+payout_accumulation record created
+  → conversion_status = 'pending'
+  → accumulated_eth = [USD value]
+  → payout_strategy = 'threshold' or 'instant' (doesn't affect conversion flow)
+
+Cloud Scheduler triggers GCMicroBatchProcessor every 15 minutes
+  → If SUM(accumulated_eth WHERE conversion_status='pending') >= $20:
+      → Create batch conversion (includes ALL pending, regardless of payout_strategy)
+      → Process via ChangeNow
+      → Distribute USDT proportionally
+```
+
+### Consequences
+
+**Positive:**
+- ✅ Simplified architecture (one conversion path)
+- ✅ Reduced code complexity
+- ✅ Batch efficiency for all payments
+- ✅ Clear callback routing (batch-only, no threshold special case)
+
+**Neutral:**
+- ⏱️ Individual threshold payments may wait up to 15 minutes for batch
+- 📊 Still provides volatility protection (acceptable trade-off)
+
+**Code Changes Required:**
+- Remove or update GCHostPay1 threshold callback TODO (tphp1-10-26.py:620-623)
+- Optionally: Change to `raise NotImplementedError("Threshold payouts use micro-batch flow")` for clarity
+
+### Alternative Considered
+
+**Option B (Rejected):** Separate threshold flow with immediate swaps
+- **Cons:** Increases complexity, loses batch efficiency, requires re-implementing removed endpoint
+- **Not Worth Trade-Off:** 15-minute delay is acceptable for volatility protection
+
+---
+
+## Decision 24: Bug Fix Strategy for Micro-Batch Conversion Architecture
+
+**Date:** October 31, 2025
+**Status:** 📋 PLANNED - Refinement checklist created
+**Impact:** High - Determines order and approach for fixing critical bugs
+
+### Context
+
+Comprehensive code review identified 4 major issues:
+1. 🔴 CRITICAL: Database column name inconsistency (system non-functional)
+2. 🟡 HIGH: Missing ChangeNow USDT query (callbacks incomplete)
+3. 🟡 HIGH: Incomplete callback routing (distribution won't work)
+4. 🟡 MEDIUM: Unclear threshold payout architecture
+
+### Decision
+
+**Implement 5-phase refinement strategy with clear priorities:**
+
+**Phase 1 (CRITICAL - 15 min):**
+- Fix database column bug IMMEDIATELY
+- Deploy GCMicroBatchProcessor with fix
+- System becomes functional again
+
+**Phase 2 (HIGH - 90 min):**
+- Complete GCHostPay1 callback implementation
+- Implement ChangeNow USDT query
+- Implement callback routing
+- System becomes end-to-end operational
+
+**Phase 3 (HIGH - 120 min):**
+- Execute all Phase 10 testing procedures
+- Verify end-to-end flow works correctly
+- Document test results
+- System becomes production-ready
+
+**Phase 4 (MEDIUM - 30 min):**
+- Clarify threshold payout architecture
+- Document architectural decision
+- Simplify codebase based on decision
+- System architecture becomes clear
+
+**Phase 5 (LOW - 90 min):**
+- Implement monitoring and observability
+- Add error recovery for stuck batches
+- System becomes maintainable long-term
+
+### Rationale
+
+1. **Priority-Based Approach**: Fix critical bugs first, enhancements later
+2. **Testing Emphasis**: Dedicated phase for comprehensive testing (Phase 3)
+3. **Architecture Clarity**: Resolve ambiguity before adding features (Phase 4)
+4. **Rollback Plan**: Clear reversion path if issues occur
+5. **Documentation-Driven**: Each phase requires docs updates (PROGRESS.md, BUGS.md)
+
+### Implementation
+
+Created `MAIN_BATCH_CONVERSION_ARCHITECTURE_REFINEMENT_CHECKLIST.md`:
+- 550+ lines of detailed step-by-step instructions
+- Clear verification procedures for each task
+- Success criteria for each phase
+- Rollback plan for emergencies
+- Estimated timelines and dependencies
+
+### Consequences
+
+**Positive:**
+- ✅ Clear roadmap to production-ready system
+- ✅ Prioritizes critical fixes over nice-to-haves
+- ✅ Comprehensive testing before launch
+- ✅ Documentation maintained throughout process
+
+**Negative:**
+- ⚠️ Requires 3.75 hours minimum (critical path)
+- ⚠️ Full completion with monitoring: 5.75 hours
+- ⚠️ System remains broken until Phase 1 complete
+
+**Risk Mitigation:**
+- Rollback plan documented
+- Each phase independently deployable
+- Testing phase prevents production issues
 
 ---
 
 ## Decision 23: Micro-Batch Conversion Architecture with Dynamic Google Cloud Secret Threshold
 
 **Date:** October 31, 2025
-**Status:** 📋 Planning Phase - Implementation Checklist Complete
+**Status:** ✅ DEPLOYED - Phases 1-9 Complete - System Operational
 **Impact:** High - Major cost optimization affecting payment accumulation and conversion strategy
 
 ### Context
@@ -173,10 +340,41 @@ Total: 1 swap, 1× gas fees (66% savings!)
 7. ✅ Phase 7: Deploy GCMicroBatchProcessor
 8. ✅ Phase 8: Cloud Scheduler Setup (every 15 minutes)
 9. ✅ Phase 9: Redeploy Modified Services
-10. ✅ Phase 10: Testing (below/above threshold, distribution accuracy)
-11. ✅ Phase 11: Monitoring & Observability
+10. ⏳ Phase 10: Testing (below/above threshold, distribution accuracy) - Ready for manual testing
+11. ⏳ Phase 11: Monitoring & Observability - Optional dashboards
 
 **Detailed checklist available in:** `MAIN_BATCH_CONVERSION_ARCHITECTURE_CHECKLIST.md` (1,234 lines)
+
+### Deployment Status (October 31, 2025)
+
+**✅ ALL INFRASTRUCTURE DEPLOYED AND OPERATIONAL**
+
+**Deployed Services:**
+- **GCMicroBatchProcessor-10-26**: https://gcmicrobatchprocessor-10-26-pjxwjsdktq-uc.a.run.app
+  - Status: 🟢 HEALTHY
+  - Function: Checks threshold every 15 minutes, creates batches when $20+ pending
+
+- **GCAccumulator-10-26** (Modified): https://gcaccumulator-10-26-291176869049.us-central1.run.app
+  - Status: 🟢 HEALTHY
+  - Function: Accumulates payments without triggering immediate swaps
+
+- **GCHostPay1-10-26** (Modified): https://gchostpay1-10-26-291176869049.us-central1.run.app
+  - Status: 🟢 HEALTHY
+  - Function: Executes batch swaps via ChangeNow, handles batch tokens
+
+**Infrastructure:**
+- Cloud Tasks Queues: gchostpay1-batch-queue, microbatch-response-queue (READY)
+- Cloud Scheduler: micro-batch-conversion-job (ACTIVE - every 15 min)
+- Secret Manager: All secrets configured and accessible
+
+**Active Flow:**
+```
+1. Payment received → GCAccumulator (stores in payout_accumulation)
+2. Every 15 min → Cloud Scheduler triggers MicroBatchProcessor
+3. If total ≥ $20 → Create batch → Queue to GCHostPay1
+4. GCHostPay1 → Execute swap via ChangeNow
+5. On completion → Distribute USDT proportionally to all pending records
+```
 
 ### Success Metrics
 

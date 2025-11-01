@@ -15,3 +15,4 @@
 - You are still NOT to make any GitHub commits, I will do that manually afterwards.
 - If a .md you're looking for isn't found in the /10-26 folder you can find it in /TelegramFunnel/ARCHIVES/NOTES10-31
 - Old entries to PROGRESS.md & DECISION.md get systematically cleaned out, if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md & DECISIONS_ARCH.md which hold all the archived entries if you search for your terms explicitly.
+- DO NOT MAKE PSQL requests like 'Bash(PGPASSWORD='Chigdabeast123$' psql -h /cloudsql/telepay-459221:us-central1:telepaypsql -U postgres -d telepaydb -c "\d batch_conversions")' --> INSTEAD USE observability - list_log_entries (MCP)

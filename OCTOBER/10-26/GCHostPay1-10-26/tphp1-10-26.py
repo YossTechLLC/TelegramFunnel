@@ -18,6 +18,7 @@ from config_manager import ConfigManager
 from token_manager import TokenManager
 from database_manager import DatabaseManager
 from cloudtasks_client import CloudTasksClient
+from changenow_client import ChangeNowClient
 
 app = Flask(__name__)
 
@@ -70,6 +71,109 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
     cloudtasks_client = None
 
+# Initialize ChangeNow client
+try:
+    changenow_api_key = config.get('changenow_api_key')
+
+    if not changenow_api_key:
+        raise ValueError("ChangeNow API key not available")
+
+    changenow_client = ChangeNowClient(changenow_api_key)
+    print(f"✅ [APP] ChangeNow client initialized")
+except Exception as e:
+    print(f"❌ [APP] Failed to initialize ChangeNow client: {e}")
+    changenow_client = None
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _route_batch_callback(
+    batch_conversion_id: str,
+    cn_api_id: str,
+    tx_hash: str,
+    actual_usdt_received: float
+) -> bool:
+    """
+    Route batch conversion callback to GCMicroBatchProcessor.
+
+    This function:
+    1. Encrypts response token with batch data
+    2. Enqueues callback task to MicroBatchProcessor via Cloud Tasks
+
+    Args:
+        batch_conversion_id: UUID of the batch conversion
+        cn_api_id: ChangeNow API transaction ID
+        tx_hash: Ethereum transaction hash
+        actual_usdt_received: Actual USDT received from ChangeNow
+
+    Returns:
+        True if callback enqueued successfully, False otherwise
+    """
+    try:
+        print(f"📤 [BATCH_CALLBACK] Preparing callback to GCMicroBatchProcessor")
+        print(f"🆔 [BATCH_CALLBACK] Batch ID: {batch_conversion_id}")
+        print(f"💰 [BATCH_CALLBACK] Actual USDT: ${actual_usdt_received}")
+
+        # Validate token manager
+        if not token_manager:
+            print(f"❌ [BATCH_CALLBACK] Token manager not available")
+            return False
+
+        # Encrypt response token for MicroBatchProcessor
+        response_token = token_manager.encrypt_gchostpay1_to_microbatch_response_token(
+            batch_conversion_id=batch_conversion_id,
+            cn_api_id=cn_api_id,
+            tx_hash=tx_hash,
+            actual_usdt_received=actual_usdt_received
+        )
+
+        if not response_token:
+            print(f"❌ [BATCH_CALLBACK] Failed to encrypt response token")
+            return False
+
+        print(f"✅ [BATCH_CALLBACK] Response token encrypted")
+
+        # Validate Cloud Tasks client and config
+        if not cloudtasks_client:
+            print(f"❌ [BATCH_CALLBACK] Cloud Tasks client not available")
+            return False
+
+        microbatch_response_queue = config.get('microbatch_response_queue')
+        microbatch_url = config.get('microbatch_url')
+
+        if not microbatch_response_queue or not microbatch_url:
+            print(f"❌ [BATCH_CALLBACK] MicroBatchProcessor config incomplete")
+            return False
+
+        # Prepare callback payload
+        payload = {
+            'token': response_token
+        }
+
+        # Append endpoint path to base URL
+        callback_url = f"{microbatch_url}/swap-executed"
+        print(f"📡 [BATCH_CALLBACK] Enqueueing callback to: {callback_url}")
+
+        # Enqueue callback task
+        task_success = cloudtasks_client.enqueue_task(
+            queue_name=microbatch_response_queue,
+            url=callback_url,
+            payload=payload
+        )
+
+        if task_success:
+            print(f"✅ [BATCH_CALLBACK] Callback enqueued successfully")
+            return True
+        else:
+            print(f"❌ [BATCH_CALLBACK] Failed to enqueue callback")
+            return False
+
+    except Exception as e:
+        print(f"❌ [BATCH_CALLBACK] Unexpected error: {e}")
+        return False
+
 
 # ============================================================================
 # ENDPOINT 1: POST / - Main webhook (from GCSplit1)
@@ -121,6 +225,7 @@ def main_webhook():
         token_source = None
         unique_id = None
         accumulation_id = None
+        batch_conversion_id = None
         context = 'instant'  # Default context
 
         try:
@@ -145,8 +250,22 @@ def main_webhook():
                     unique_id = f"acc_{accumulation_id}"
                     print(f"✅ [ENDPOINT_1] GCAccumulator token decoded (threshold payout)")
             except Exception as e:
-                print(f"❌ [ENDPOINT_1] Not a GCAccumulator token either: {e}")
-                abort(401, f"Invalid token: could not decrypt as GCSplit1 or GCAccumulator token")
+                print(f"⚠️ [ENDPOINT_1] Not a GCAccumulator token: {e}")
+
+        # If still no match, try GCMicroBatchProcessor token (batch conversions)
+        if not decrypted_data:
+            try:
+                decrypted_data = token_manager.decrypt_microbatch_to_gchostpay1_token(token)
+                if decrypted_data:
+                    token_source = 'gcmicrobatchprocessor'
+                    batch_conversion_id = decrypted_data['batch_conversion_id']
+                    context = decrypted_data.get('context', 'batch')
+                    # Create a unique_id for database tracking (use batch_conversion_id)
+                    unique_id = f"batch_{batch_conversion_id}"
+                    print(f"✅ [ENDPOINT_1] GCMicroBatchProcessor token decoded (batch conversion)")
+            except Exception as e:
+                print(f"❌ [ENDPOINT_1] Not a GCMicroBatchProcessor token either: {e}")
+                abort(401, f"Invalid token: could not decrypt as GCSplit1, GCAccumulator, or GCMicroBatchProcessor token")
 
         # At this point, decrypted_data must be valid
         if not decrypted_data:
@@ -165,6 +284,8 @@ def main_webhook():
         print(f"🆔 [ENDPOINT_1] Unique ID: {unique_id}")
         if accumulation_id:
             print(f"🆔 [ENDPOINT_1] Accumulation ID: {accumulation_id}")
+        if batch_conversion_id:
+            print(f"🆔 [ENDPOINT_1] Batch Conversion ID: {batch_conversion_id}")
         print(f"🆔 [ENDPOINT_1] CN API ID: {cn_api_id}")
         print(f"💰 [ENDPOINT_1] Amount: {from_amount} {from_currency.upper()}")
         print(f"🏦 [ENDPOINT_1] Payin Address: {payin_address}")
@@ -446,6 +567,65 @@ def payment_completed():
             abort(400, f"Token error: {e}")
 
         print(f"🎉 [ENDPOINT_3] Payment workflow completed successfully!")
+
+        # Detect context from unique_id prefix
+        # - batch_* = Micro-batch conversion context
+        # - acc_* = Accumulator threshold payout context
+        # - regular = Instant conversion context (no callback needed)
+        context = None
+        if unique_id.startswith('batch_'):
+            context = 'batch'
+            print(f"🔀 [ENDPOINT_3] Detected batch conversion context")
+        elif unique_id.startswith('acc_'):
+            context = 'threshold'
+            print(f"🔀 [ENDPOINT_3] Detected threshold payout context")
+        else:
+            context = 'instant'
+            print(f"🔀 [ENDPOINT_3] Detected instant conversion context (no callback needed)")
+
+        # Query ChangeNow API for actual USDT received (critical for batch conversions)
+        actual_usdt_received = None
+        if context in ['batch', 'threshold']:
+            if not changenow_client:
+                print(f"❌ [ENDPOINT_3] ChangeNow client not available, cannot query transaction status")
+            else:
+                try:
+                    print(f"🔍 [ENDPOINT_3] Querying ChangeNow for actual USDT received...")
+                    cn_status = changenow_client.get_transaction_status(cn_api_id)
+
+                    if cn_status and cn_status.get('status') == 'finished':
+                        actual_usdt_received = float(cn_status.get('amountTo', 0))
+                        print(f"✅ [ENDPOINT_3] Actual USDT received: ${actual_usdt_received}")
+                    else:
+                        print(f"⚠️ [ENDPOINT_3] ChangeNow transaction not finished yet: {cn_status.get('status') if cn_status else 'unknown'}")
+
+                except Exception as e:
+                    print(f"❌ [ENDPOINT_3] ChangeNow query error: {e}")
+
+        # Route callback based on context
+        if context == 'batch' and actual_usdt_received is not None:
+            # Extract batch_conversion_id from unique_id (format: batch_{uuid})
+            batch_conversion_id = unique_id.replace('batch_', '')
+            print(f"🎯 [ENDPOINT_3] Routing batch callback to GCMicroBatchProcessor")
+            print(f"🆔 [ENDPOINT_3] Batch conversion ID: {batch_conversion_id}")
+
+            # Route batch callback
+            _route_batch_callback(
+                batch_conversion_id=batch_conversion_id,
+                cn_api_id=cn_api_id,
+                tx_hash=tx_hash,
+                actual_usdt_received=actual_usdt_received
+            )
+
+        elif context == 'threshold' and actual_usdt_received is not None:
+            print(f"🎯 [ENDPOINT_3] Routing threshold callback to GCAccumulator")
+            # TODO: Implement threshold callback routing when needed
+            print(f"⚠️ [ENDPOINT_3] Threshold callback not yet implemented")
+
+        elif context == 'instant':
+            print(f"✅ [ENDPOINT_3] Instant conversion complete, no callback needed")
+        else:
+            print(f"⚠️ [ENDPOINT_3] No callback sent (context={context}, actual_usdt_received={actual_usdt_received})")
 
         return jsonify({
             "status": "success",

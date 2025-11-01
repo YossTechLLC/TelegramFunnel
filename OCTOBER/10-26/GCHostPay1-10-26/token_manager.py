@@ -906,3 +906,183 @@ class TokenManager:
             "block_number": block_number,
             "timestamp": timestamp
         }
+
+    # ========================================================================
+    # TOKEN 7: GCMicroBatchProcessor → GCHostPay1 (Batch execution request)
+    # ========================================================================
+
+    def decrypt_microbatch_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Decrypt token from GCMicroBatchProcessor → GCHostPay1.
+        Token is valid for 300 seconds from creation (5-minute window).
+
+        Token Format (from GCMicroBatchProcessor encrypt_microbatch_to_gchostpay1_token):
+        - 1 byte: context length + variable bytes ('batch')
+        - 1 byte: batch_conversion_id length + variable bytes (UUID string)
+        - 1 byte: cn_api_id length + variable bytes
+        - 1 byte: from_currency length + variable bytes
+        - 1 byte: from_network length + variable bytes
+        - 8 bytes: from_amount (double precision float)
+        - 1 byte: payin_address length + variable bytes
+        - 8 bytes: timestamp (uint64 unix timestamp)
+        - 16 bytes: HMAC-SHA256 signature (truncated)
+
+        Args:
+            token: Base64 URL-safe encoded token from GCMicroBatchProcessor
+
+        Returns:
+            Dictionary with decrypted data or None if invalid
+
+        Raises:
+            ValueError: If token is invalid, expired, or signature verification fails
+        """
+        padding = '=' * (-len(token) % 4)
+        try:
+            raw = base64.urlsafe_b64decode(token + padding)
+        except Exception:
+            raise ValueError("Invalid token: cannot decode base64")
+
+        # Minimum size check
+        if len(raw) < 45:
+            raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 45)")
+
+        offset = 0
+
+        # Parse context (variable length string, should be 'batch')
+        context, offset = self._unpack_string(raw, offset)
+        if context != 'batch':
+            raise ValueError(f"Invalid context: expected 'batch', got '{context}'")
+
+        # Parse batch_conversion_id (variable length string, UUID)
+        batch_conversion_id, offset = self._unpack_string(raw, offset)
+
+        # Parse variable-length cn_api_id
+        cn_api_id, offset = self._unpack_string(raw, offset)
+
+        # Parse variable-length from_currency
+        from_currency, offset = self._unpack_string(raw, offset)
+
+        # Parse variable-length from_network
+        from_network, offset = self._unpack_string(raw, offset)
+
+        # Parse 8-byte double for from_amount
+        if offset + 8 > len(raw):
+            raise ValueError("Invalid token: incomplete from_amount")
+        from_amount = struct.unpack(">d", raw[offset:offset+8])[0]
+        offset += 8
+
+        # Parse variable-length payin_address
+        payin_address, offset = self._unpack_string(raw, offset)
+
+        # Parse 8-byte timestamp (uint64)
+        if offset + 8 > len(raw):
+            raise ValueError("Invalid token: incomplete timestamp")
+        timestamp = struct.unpack(">Q", raw[offset:offset+8])[0]
+        offset += 8
+
+        # The remaining bytes should be the 16-byte truncated signature
+        if len(raw) - offset != 16:
+            raise ValueError(f"Invalid token: wrong signature size (got {len(raw) - offset}, expected 16)")
+
+        data = raw[:offset]  # All data except signature
+        sig = raw[offset:]   # The signature
+
+        # Verify truncated signature using SUCCESS_URL_SIGNING_KEY (internal key)
+        expected_full_sig = hmac.new(self.internal_key.encode(), data, hashlib.sha256).digest()
+        expected_sig = expected_full_sig[:16]
+        if not hmac.compare_digest(sig, expected_sig):
+            raise ValueError("Signature mismatch - token may be tampered or invalid signing key")
+
+        # Validate timestamp (5-minute window: current_time - 300 to current_time + 5)
+        current_time = int(time.time())
+        if not (current_time - 300 <= timestamp <= current_time + 5):
+            time_diff = current_time - timestamp
+            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 300 seconds)")
+
+        print(f"🔓 [TOKEN_DEC] GCMicroBatchProcessor→GCHostPay1: Token validated successfully")
+        print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
+        print(f"📋 [TOKEN_DEC] Context: {context}")
+        print(f"🆔 [TOKEN_DEC] Batch Conversion ID: {batch_conversion_id}")
+
+        return {
+            "context": context,
+            "batch_conversion_id": batch_conversion_id,
+            "cn_api_id": cn_api_id,
+            "from_currency": from_currency,
+            "from_network": from_network,
+            "from_amount": from_amount,
+            "payin_address": payin_address,
+            "timestamp": timestamp
+        }
+
+    # ========================================================================
+    # TOKEN 8: GCHostPay1 → GCMicroBatchProcessor (Batch execution response)
+    # ========================================================================
+
+    def encrypt_gchostpay1_to_microbatch_response_token(
+        self,
+        batch_conversion_id: str,
+        cn_api_id: str,
+        tx_hash: str,
+        actual_usdt_received: float
+    ) -> Optional[str]:
+        """
+        Encrypt token for GCHostPay1 → GCMicroBatchProcessor (Batch execution response).
+
+        Token Structure:
+        - 1 byte: batch_conversion_id length + variable bytes (UUID string)
+        - 1 byte: cn_api_id length + variable bytes
+        - 1 byte: tx_hash length + variable bytes
+        - 8 bytes: actual_usdt_received (double)
+        - 8 bytes: timestamp (uint64)
+        - 16 bytes: HMAC signature
+
+        Args:
+            batch_conversion_id: Batch conversion UUID
+            cn_api_id: ChangeNow transaction ID
+            tx_hash: Ethereum transaction hash
+            actual_usdt_received: Actual USDT amount received from ChangeNow
+
+        Returns:
+            Base64 URL-safe encoded token or None if failed
+        """
+        try:
+            print(f"🔐 [TOKEN_ENC] GCHostPay1→GCMicroBatchProcessor: Encrypting batch response")
+
+            payload = bytearray()
+
+            # Pack batch_conversion_id
+            payload.extend(self._pack_string(batch_conversion_id))
+
+            # Pack cn_api_id
+            payload.extend(self._pack_string(cn_api_id))
+
+            # Pack tx_hash
+            payload.extend(self._pack_string(tx_hash))
+
+            # Pack actual_usdt_received (8 bytes, double)
+            payload.extend(struct.pack(">d", actual_usdt_received))
+
+            # Pack timestamp (8 bytes, uint64)
+            timestamp = int(time.time())
+            payload.extend(struct.pack(">Q", timestamp))
+
+            # Generate HMAC signature using internal key
+            signature = hmac.new(
+                self.internal_key.encode(),
+                bytes(payload),
+                hashlib.sha256
+            ).digest()[:16]
+
+            # Combine payload + signature
+            full_data = bytes(payload) + signature
+
+            # Base64 encode
+            token = base64.urlsafe_b64encode(full_data).decode('utf-8').rstrip('=')
+
+            print(f"✅ [TOKEN_ENC] Batch response token created successfully")
+            return token
+
+        except Exception as e:
+            print(f"❌ [TOKEN_ENC] Encryption error: {e}")
+            return None

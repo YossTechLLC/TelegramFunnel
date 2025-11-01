@@ -111,7 +111,18 @@
       "Bash(do echo \"=== $service health check ===\")",
       "Bash(gcloud secrets describe:*)",
       "Bash(gcloud secrets:*)",
-      "Bash(do echo \"=== $service ===\" curl -s https://$service-291176869049.us-central1.run.app/health)"
+      "Bash(do echo \"=== $service ===\" curl -s https://$service-291176869049.us-central1.run.app/health)",
+      "Bash(PGPASSWORD='Chigdabeast123$' psql:*)",
+      "Bash(do echo \"Granting access to $SECRET\")",
+      "Bash(SERVICE_URL=\"https://gcmicrobatchprocessor-10-26-291176869049.us-central1.run.app\":*)",
+      "Bash(SERVICE_ACCOUNT=\"291176869049-compute@developer.gserviceaccount.com\":*)",
+      "Bash(gcloud scheduler jobs run:*)",
+      "Bash(SERVICE_URL=\"https://gcmicrobatchprocessor-10-26-pjxwjsdktq-uc.a.run.app\":*)",
+      "Bash(do echo \"Checking $SECRET...\")",
+      "Bash(/dev/null)",
+      "Bash(do echo \"======================================================================\")",
+      "Bash(do)",
+      "Bash(do echo \"=== $service ===\" gcloud run services describe $service --region=us-central1 --format=\"value(spec.template.spec.containers[0].env)\")"
     ],
     "deny": [],
     "ask": []
