@@ -146,14 +146,41 @@ def check_threshold():
 
         print(f"🏦 [ENDPOINT] Host USDT wallet: {host_wallet_usdt}")
 
-        # Create ChangeNow ETH→USDT swap
-        print(f"🔄 [ENDPOINT] Creating ChangeNow swap: ETH → USDT")
-        print(f"💰 [ENDPOINT] Swap amount: ${total_pending}")
+        # Step 1: Convert USD value to ETH equivalent using ChangeNow estimate API
+        # The total_pending is a USD VALUE, not actual ETH!
+        # We need to find out how much ETH equals this USD value
+        print(f"📊 [ENDPOINT] Step 1: Converting USD to ETH equivalent")
+        print(f"💰 [ENDPOINT] Total pending: ${total_pending} USD")
+        print(f"🔄 [ENDPOINT] Calling ChangeNow estimate API: USDT → ETH")
+
+        # Use USDT→ETH estimate to find ETH equivalent of USD amount
+        # (treating USD as USDT for conversion rate purposes)
+        estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
+            from_currency='usdt',
+            to_currency='eth',
+            from_network='eth',
+            to_network='eth',
+            from_amount=str(total_pending),
+            flow='standard',
+            type_='direct'
+        )
+
+        if not estimate_response or 'toAmount' not in estimate_response:
+            print(f"❌ [ENDPOINT] Failed to get ETH estimate from ChangeNow")
+            abort(500, "Failed to calculate ETH equivalent")
+
+        eth_equivalent = estimate_response['toAmount']
+        print(f"✅ [ENDPOINT] USD→ETH conversion estimate received")
+        print(f"💰 [ENDPOINT] ${total_pending} USD ≈ {eth_equivalent} ETH")
+
+        # Step 2: Create actual ETH→USDT swap with the calculated ETH amount
+        print(f"📊 [ENDPOINT] Step 2: Creating ChangeNow swap: ETH → USDT")
+        print(f"💰 [ENDPOINT] Swap amount: {eth_equivalent} ETH → ~${total_pending} USDT")
 
         swap_result = changenow_client.create_fixed_rate_transaction_with_retry(
             from_currency='eth',
             to_currency='usdt',
-            from_amount=float(total_pending),
+            from_amount=float(eth_equivalent),
             address=host_wallet_usdt,
             from_network='eth',
             to_network='eth'  # USDT on Ethereum network (ERC-20)

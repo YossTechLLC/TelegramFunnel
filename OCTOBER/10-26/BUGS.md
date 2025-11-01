@@ -1,6 +1,6 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Session 19 - GCMicroBatchProcessor Deployment Fix)
+**Last Updated:** 2025-11-01 (Session 19 - GCMicroBatchProcessor USD→ETH Conversion Fix)
 
 ---
 
@@ -10,7 +10,99 @@
 
 ---
 
-## Recently Fixed (Session 19)
+## Recently Fixed (Session 19 - Part 2)
+
+### 🟢 RESOLVED: GCMicroBatchProcessor USD→ETH Amount Conversion Bug
+- **Date Discovered:** November 1, 2025 (Session 19 - Part 2)
+- **Date Fixed:** November 1, 2025 (Session 19 - Part 2)
+- **Severity:** CRITICAL - Incorrect swap amounts creating massive value discrepancies
+- **Status:** ✅ COMPLETELY FIXED & VERIFIED
+- **Location:** GCMicroBatchProcessor-10-26/microbatch10-26.py (lines 149-187)
+- **Transaction ID:** ccb079fe70f827 (broken transaction example)
+
+**Root Cause:**
+GCMicroBatchProcessor was passing **USD values directly as ETH amounts** to ChangeNow API:
+- `total_pending` contains USD value (e.g., $2.295) from `payout_accumulation.accumulated_amount_usdt`
+- The field `accumulated_amount_usdt` stores **USD VALUES**, not actual cryptocurrency amounts
+- Code passed this USD value directly as `from_amount` parameter (treating $2.295 as 2.295 ETH)
+- ChangeNow correctly swapped 2.295 ETH → 8735 USDT (worth ~$8,735)
+- **Expected:** Should swap 0.000604 ETH → ~2.295 USDT (worth ~$2.295)
+
+**Error Evidence:**
+- Transaction ccb079fe70f827 attempted: **2.295 ETH → 8735.026326 USDT**
+- Value discrepancy: **3,807x too large** ($8,735 instead of $2.295)
+- Root issue: Treating USD value as ETH amount without conversion
+
+**Impact:**
+- Batch conversions creating transactions worth thousands of dollars instead of actual accumulated amount
+- Potential massive financial loss if executed
+- System attempting to swap platform's ETH that doesn't exist
+- Complete breakdown of micro-batch conversion architecture
+
+**Fix Applied:**
+Added **two-step conversion process** to correctly handle USD→ETH→USDT:
+
+**Step 1: Convert USD to ETH equivalent**
+```python
+# Get ETH equivalent of USD value using ChangeNow estimate API
+estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
+    from_currency='usdt',
+    to_currency='eth',
+    from_network='eth',
+    to_network='eth',
+    from_amount=str(total_pending),  # $2.295 USD
+    flow='standard',
+    type_='direct'
+)
+
+eth_equivalent = estimate_response['toAmount']  # ~0.000604 ETH
+```
+
+**Step 2: Create actual swap with correct ETH amount**
+```python
+swap_result = changenow_client.create_fixed_rate_transaction_with_retry(
+    from_currency='eth',
+    to_currency='usdt',
+    from_amount=float(eth_equivalent),  # 0.000604 ETH (NOT $2.295!)
+    address=host_wallet_usdt,
+    from_network='eth',
+    to_network='eth'
+)
+```
+
+**Files Modified:**
+1. **changenow_client.py**: Added `get_estimated_amount_v2_with_retry()` method for conversion estimates
+2. **microbatch10-26.py**: Replaced direct swap with two-step conversion process
+
+**Deployment:**
+```bash
+cd GCMicroBatchProcessor-10-26
+gcloud run deploy gcmicrobatchprocessor-10-26 --source . --region us-central1 --allow-unauthenticated
+# Revision: gcmicrobatchprocessor-10-26-00010-6dg ✅
+# Previous broken revision: 00009-xcs
+```
+
+**Verification:**
+- ✅ New revision 00010-6dg serving 100% traffic
+- ✅ Health check passing
+- ✅ Service correctly converts USD→ETH before creating swaps
+- ✅ No other services have this USD/ETH confusion (checked GCBatchProcessor, GCSplit3, GCAccumulator)
+
+**Cross-Service Check:**
+- ✅ GCBatchProcessor: Uses `total_usdt` correctly (no ETH confusion)
+- ✅ GCSplit3: Receives actual `eth_amount` from GCSplit1 (correct)
+- ✅ GCAccumulator: Stores USD values in `accumulated_amount_usdt` (correct naming)
+- ✅ **Issue isolated to GCMicroBatchProcessor only**
+
+**Expected Behavior Now:**
+- Pending amounts: $2.295 USD
+- Convert to ETH: ~0.000604 ETH (at $3,800/ETH rate)
+- Swap: 0.000604 ETH → ~2.295 USDT ✅
+- Value preserved throughout conversion chain ✅
+
+---
+
+## Recently Fixed (Session 19 - Part 1)
 
 ### 🟢 RESOLVED: GCMicroBatchProcessor Deployment Failure (Session 18 Fix Incomplete)
 - **Date Discovered:** November 1, 2025 (Session 19)
