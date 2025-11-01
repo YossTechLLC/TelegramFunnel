@@ -1,8 +1,86 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Session 13 - JWT Refresh Token Fix Deployed ✅)
+**Last Updated:** 2025-11-01 (Session 14 - Database Schema Mismatch Fix ✅)
 
 ## Recent Updates
+
+## 2025-11-01 Session 14: DATABASE SCHEMA MISMATCH FIX ✅
+
+### 🎯 Purpose
+Fixed critical database schema mismatch in GCMicroBatchProcessor and GCAccumulator that was causing "column does not exist" errors and breaking the entire micro-batch conversion architecture.
+
+### 🐛 Problem Identified
+**Symptoms:**
+- GCMicroBatchProcessor: `column "accumulated_eth" does not exist` when querying pending USD
+- GCAccumulator: `column "accumulated_eth" of relation "payout_accumulation" does not exist` when inserting payments
+- Threshold checks returning $0.00 (all queries failing)
+- Payment accumulation completely broken (500 errors)
+- Cloud Scheduler jobs failing every 15 minutes
+
+**Root Cause:**
+- Database schema was migrated during ETH→USDT refactoring to use `accumulated_amount_usdt` column
+- GCMicroBatchProcessor and GCAccumulator code was never updated to match the new schema
+- Code still referenced the old `accumulated_eth` column which no longer exists
+- Schema mismatch caused all database operations to fail
+
+### ✅ Fix Applied
+
+**Files Modified:**
+1. `GCMicroBatchProcessor-10-26/database_manager.py` (4 locations)
+2. `GCAccumulator-10-26/database_manager.py` (1 location)
+
+**Changes:**
+- Line 83: `get_total_pending_usd()` - Changed SELECT to query `accumulated_amount_usdt`
+- Line 123: `get_all_pending_records()` - Changed SELECT to query `accumulated_amount_usdt`
+- Line 279: `get_records_by_batch()` - Changed SELECT to query `accumulated_amount_usdt`
+- Line 329: `distribute_usdt_proportionally()` - Changed dict key to `accumulated_amount_usdt`
+- Line 107 (GCAccumulator): INSERT changed to use `accumulated_amount_usdt` column
+
+**Updated Comments:**
+Added clarifying comments explaining that `accumulated_amount_usdt` stores:
+- For pending records: the adjusted USD amount awaiting batch conversion
+- After batch conversion: the final USDT share for each payment
+
+### 🚀 Deployment
+
+**Steps Executed:**
+1. ✅ Fixed GCMicroBatchProcessor database queries
+2. ✅ Fixed GCAccumulator database INSERT
+3. ✅ Built and deployed GCMicroBatchProcessor (revision `00006-fwb`)
+4. ✅ Built and deployed GCAccumulator (revision `00016-h6n`)
+5. ✅ Verified health checks pass
+6. ✅ Verified no "column does not exist" errors in logs
+7. ✅ Verified no other services reference old column name
+
+### ✅ Verification
+
+**GCMicroBatchProcessor:**
+- ✅ Service deployed successfully
+- ✅ Revision: `gcmicrobatchprocessor-10-26-00006-fwb`
+- ✅ No initialization errors
+- ✅ All database queries use correct column name
+
+**GCAccumulator:**
+- ✅ Service deployed successfully
+- ✅ Revision: `gcaccumulator-10-26-00016-h6n`
+- ✅ Health check: `{"status":"healthy","components":{"database":"healthy"}}`
+- ✅ Database manager initialized correctly
+- ✅ Token manager initialized correctly
+- ✅ Cloud Tasks client initialized correctly
+
+**Impact Resolution:**
+- ✅ Micro-batch conversion architecture now fully operational
+- ✅ Threshold checks will now return actual accumulated values
+- ✅ Payment accumulation will work correctly
+- ✅ Cloud Scheduler jobs will succeed
+- ✅ System can now accumulate payments and trigger batch conversions
+
+### 📝 Notes
+- Variable/parameter names in `acc10-26.py` and `cloudtasks_client.py` still use `accumulated_eth` for backward compatibility, but they now correctly store USD/USDT amounts
+- The database schema correctly uses `accumulated_amount_usdt` which is more semantically accurate
+- All database operations now aligned with actual schema
+
+---
 
 ## 2025-11-01 Session 13: JWT REFRESH TOKEN FIX DEPLOYED ✅
 

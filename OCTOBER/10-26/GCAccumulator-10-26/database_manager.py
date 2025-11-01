@@ -79,7 +79,7 @@ class DatabaseManager:
             payment_amount_usd: What user originally paid
             payment_currency: Original payment currency
             payment_timestamp: When user paid
-            accumulated_eth: ETH value pending conversion (USD equivalent)
+            accumulated_eth: USD value pending conversion (parameter name kept for compatibility)
             client_wallet_address: Client's payout wallet address
             client_payout_currency: Target currency (e.g., XMR)
             client_payout_network: Payout network
@@ -98,13 +98,13 @@ class DatabaseManager:
             print(f"💾 [DATABASE] Inserting payout accumulation record (pending conversion)")
             print(f"👤 [DATABASE] User ID: {user_id}, Client ID: {client_id}")
             print(f"💰 [DATABASE] Payment Amount: ${payment_amount_usd}")
-            print(f"💰 [DATABASE] Accumulated ETH: ${accumulated_eth} (pending conversion)")
+            print(f"💰 [DATABASE] Accumulated USD: ${accumulated_eth} (pending conversion)")
 
             cur.execute(
                 """INSERT INTO payout_accumulation (
                     client_id, user_id, subscription_id,
                     payment_amount_usd, payment_currency, payment_timestamp,
-                    accumulated_eth, conversion_status,
+                    accumulated_amount_usdt, conversion_status,
                     client_wallet_address, client_payout_currency, client_payout_network
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id""",

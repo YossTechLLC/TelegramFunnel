@@ -76,10 +76,11 @@ class DatabaseManager:
             cur = conn.cursor()
             print(f"🔍 [DATABASE] Querying total pending USD")
 
-            # Query accumulated_eth (stores pending USD value before conversion)
-            # Note: accumulated_amount_usdt stores final USDT AFTER conversion (NULL for pending records)
+            # Query accumulated_amount_usdt (stores pending USD value for unconverted payments)
+            # For pending records, this stores the adjusted USD amount awaiting batch conversion
+            # After batch completes, it stores the final USDT share
             cur.execute(
-                """SELECT COALESCE(SUM(accumulated_eth), 0) as total_pending
+                """SELECT COALESCE(SUM(accumulated_amount_usdt), 0) as total_pending
                    FROM payout_accumulation
                    WHERE conversion_status = 'pending'"""
             )
@@ -116,10 +117,10 @@ class DatabaseManager:
             cur = conn.cursor()
             print(f"🔍 [DATABASE] Fetching all pending payment records")
 
-            # Query accumulated_eth (stores pending USD value before conversion)
-            # Note: accumulated_amount_usdt stores final USDT AFTER conversion (NULL for pending records)
+            # Query accumulated_amount_usdt (stores pending USD value for unconverted payments)
+            # For pending records, this stores the adjusted USD amount awaiting batch conversion
             cur.execute(
-                """SELECT id, accumulated_eth, client_id, user_id,
+                """SELECT id, accumulated_amount_usdt, client_id, user_id,
                           client_wallet_address, client_payout_currency, client_payout_network
                    FROM payout_accumulation
                    WHERE conversion_status = 'pending'
@@ -132,7 +133,7 @@ class DatabaseManager:
             for row in rows:
                 records.append({
                     'id': row[0],
-                    'accumulated_eth': Decimal(str(row[1])),  # Using accumulated_amount_usdt as eth value
+                    'accumulated_amount_usdt': Decimal(str(row[1])),  # Pending USD value
                     'client_id': row[2],
                     'user_id': row[3],
                     'client_wallet_address': row[4],
@@ -272,10 +273,10 @@ class DatabaseManager:
             cur = conn.cursor()
             print(f"🔍 [DATABASE] Fetching records for batch {batch_conversion_id}")
 
-            # Query accumulated_eth (stores pending USD value before conversion)
-            # Note: accumulated_amount_usdt stores final USDT AFTER conversion (NULL for pending records)
+            # Query accumulated_amount_usdt (stores pending USD value for unconverted payments)
+            # For records in a batch, this will still have the original USD amount
             cur.execute(
-                """SELECT id, accumulated_eth
+                """SELECT id, accumulated_amount_usdt
                    FROM payout_accumulation
                    WHERE batch_conversion_id = %s""",
                 (batch_conversion_id,)
@@ -287,7 +288,7 @@ class DatabaseManager:
             for row in rows:
                 records.append({
                     'id': row[0],
-                    'accumulated_eth': Decimal(str(row[1]))
+                    'accumulated_amount_usdt': Decimal(str(row[1]))
                 })
 
             print(f"📊 [DATABASE] Found {len(records)} record(s) in batch")
@@ -313,7 +314,7 @@ class DatabaseManager:
         Formula: usdt_share_i = (payment_i / total_pending) × actual_usdt_received
 
         Args:
-            pending_records: List of dicts with 'id' and 'accumulated_eth'
+            pending_records: List of dicts with 'id' and 'accumulated_amount_usdt'
             actual_usdt_received: Total USDT received from ChangeNow
 
         Returns:
@@ -325,7 +326,7 @@ class DatabaseManager:
                 return []
 
             # Calculate total pending
-            total_pending = sum(Decimal(str(r['accumulated_eth'])) for r in pending_records)
+            total_pending = sum(Decimal(str(r['accumulated_amount_usdt'])) for r in pending_records)
 
             print(f"💰 [DISTRIBUTION] Total pending: ${total_pending}")
             print(f"💰 [DISTRIBUTION] Actual USDT received: ${actual_usdt_received}")
@@ -334,16 +335,16 @@ class DatabaseManager:
             running_total = Decimal('0')
 
             for i, record in enumerate(pending_records):
-                record_eth = Decimal(str(record['accumulated_eth']))
+                record_usd = Decimal(str(record['accumulated_amount_usdt']))
 
                 # Last record gets remainder to avoid rounding errors
                 if i == len(pending_records) - 1:
                     usdt_share = actual_usdt_received - running_total
                 else:
-                    usdt_share = (record_eth / total_pending) * actual_usdt_received
+                    usdt_share = (record_usd / total_pending) * actual_usdt_received
                     running_total += usdt_share
 
-                percentage = (record_eth / total_pending) * 100
+                percentage = (record_usd / total_pending) * 100
 
                 distributions.append({
                     'id': record['id'],
@@ -352,7 +353,7 @@ class DatabaseManager:
                 })
 
                 print(f"📊 [DISTRIBUTION] Record {record['id']}: "
-                      f"${record_eth} ({percentage:.2f}%) → ${usdt_share} USDT")
+                      f"${record_usd} ({percentage:.2f}%) → ${usdt_share} USDT")
 
             # Verification
             total_distributed = sum(d['usdt_share'] for d in distributions)

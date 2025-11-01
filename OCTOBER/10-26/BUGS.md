@@ -1,6 +1,95 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Session 13 - JWT Refresh Token Fix)
+**Last Updated:** 2025-11-01 (Session 14 - accumulated_eth Column Fix)
+
+---
+
+## Active Bugs
+
+(No active bugs at this time)
+
+---
+
+## Recently Fixed (Session 14)
+
+### 🟢 RESOLVED: Schema Mismatch - accumulated_eth Column Does Not Exist
+- **Date Discovered:** November 1, 2025
+- **Date Fixed:** November 1, 2025
+- **Severity:** CRITICAL - Both services completely non-functional
+- **Status:** ✅ FIXED AND DEPLOYED
+- **Location:** `GCMicroBatchProcessor-10-26/database_manager.py` and `GCAccumulator-10-26/database_manager.py`
+- **Affected Services:** GCMicroBatchProcessor, GCAccumulator
+- **Deployed Revisions:**
+  - GCMicroBatchProcessor: `gcmicrobatchprocessor-10-26-00006-fwb`
+  - GCAccumulator: `gcaccumulator-10-26-00016-h6n`
+
+**Description:**
+Code references `accumulated_eth` column that was removed during ETH→USDT architecture refactoring. Database schema only has `accumulated_amount_usdt` column, causing all database operations to fail.
+
+**Error Messages:**
+```
+❌ [DATABASE] Query error: column "accumulated_eth" does not exist
+❌ [DATABASE] Failed to insert accumulation record: column "accumulated_eth" of relation "payout_accumulation" does not exist
+```
+
+**Actual Database Schema** (from execute_migrations.py:152):
+```sql
+CREATE TABLE payout_accumulation (
+    accumulated_amount_usdt NUMERIC(18, 8) NOT NULL,  -- ✅ EXISTS
+    -- accumulated_eth column DOES NOT EXIST ❌
+);
+```
+
+**Code Issues:**
+
+1. **GCMicroBatchProcessor database_manager.py:**
+   - Line 82: `SELECT COALESCE(SUM(accumulated_eth), 0)` ❌
+   - Line 122: `SELECT id, accumulated_eth, client_id...` ❌
+   - Line 278: `SELECT id, accumulated_eth FROM payout_accumulation` ❌
+
+2. **GCAccumulator database_manager.py:**
+   - Line 107: `INSERT ... accumulated_eth, conversion_status,` ❌
+
+**Root Cause:**
+During the ETH→USDT refactoring, the database schema was migrated but the micro-batch conversion services (GCMicroBatchProcessor and GCAccumulator) were not updated to match the new schema.
+
+**Impact:**
+- GCMicroBatchProcessor threshold checks return $0 (all queries fail)
+- GCAccumulator payment insertions fail (500 errors)
+- Micro-batch conversion architecture completely broken
+- Payments cannot be accumulated
+- Cloud Scheduler jobs fail every 15 minutes
+
+**Fix Applied:**
+Replaced all database column references from `accumulated_eth` to `accumulated_amount_usdt`:
+
+1. **GCMicroBatchProcessor/database_manager.py (4 locations fixed):**
+   - Line 83: `get_total_pending_usd()` - Query changed to SELECT `accumulated_amount_usdt`
+   - Line 123: `get_all_pending_records()` - Query changed to SELECT `accumulated_amount_usdt`
+   - Line 279: `get_records_by_batch()` - Query changed to SELECT `accumulated_amount_usdt`
+   - Line 329: `distribute_usdt_proportionally()` - Dictionary key changed to `accumulated_amount_usdt`
+
+2. **GCAccumulator/database_manager.py (1 location fixed):**
+   - Line 107: `insert_payout_accumulation_pending()` - INSERT changed to use `accumulated_amount_usdt` column
+
+**Verification:**
+- ✅ GCMicroBatchProcessor deployed successfully (revision 00006-fwb)
+- ✅ GCAccumulator deployed successfully (revision 00016-h6n)
+- ✅ GCAccumulator health check passes: `{"status":"healthy"}`
+- ✅ Both services initialized without errors
+- ✅ No more "column does not exist" errors in logs
+- ✅ Verified no other services reference the old column name
+
+**Related Architecture:**
+The micro-batch system stores USD amounts pending conversion in `accumulated_amount_usdt` for pending records (conversion_status='pending'). After batch conversion completes, this column stores the final USDT share for each payment. The column name `accumulated_amount_usdt` correctly reflects that it stores USDT amounts (or USD-equivalent pending conversion).
+
+**Prevention:**
+- Database schema changes must be synchronized with all dependent services
+- Run schema validation tests before deploying refactored code
+- Document column renames in migration guides
+- Use automated tests to verify database column references match actual schema
+
+**Status:** ✅ RESOLVED - Micro-batch conversion architecture now fully operational
 
 ---
 
