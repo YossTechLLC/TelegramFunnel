@@ -150,9 +150,13 @@ def check_threshold():
         print(f"🔄 [ENDPOINT] Creating ChangeNow swap: ETH → USDT")
         print(f"💰 [ENDPOINT] Swap amount: ${total_pending}")
 
-        swap_result = changenow_client.create_eth_to_usdt_swap(
-            eth_amount=float(total_pending),
-            usdt_address=host_wallet_usdt
+        swap_result = changenow_client.create_fixed_rate_transaction_with_retry(
+            from_currency='eth',
+            to_currency='usdt',
+            from_amount=float(total_pending),
+            address=host_wallet_usdt,
+            from_network='eth',
+            to_network='eth'  # USDT on Ethereum network (ERC-20)
         )
 
         if not swap_result or 'id' not in swap_result:

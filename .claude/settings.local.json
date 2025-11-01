@@ -123,7 +123,11 @@
       "Bash(do echo \"======================================================================\")",
       "Bash(do)",
       "Bash(do echo \"=== $service ===\" gcloud run services describe $service --region=us-central1 --format=\"value(spec.template.spec.containers[0].env)\")",
-      "Bash(CHANGENOW_API_KEY='0e7ab0b9cfd8dd81479e811eb583b01a2b5c7f3aac00d5075225a4241e0a5bde' python3:*)"
+      "Bash(CHANGENOW_API_KEY='0e7ab0b9cfd8dd81479e811eb583b01a2b5c7f3aac00d5075225a4241e0a5bde' python3:*)",
+      "Bash(gcloud tasks list:*)",
+      "Bash(gcloud run services get-iam-policy:*)",
+      "Bash(gcloud projects:*)",
+      "Bash(gcloud run services add-iam-policy-binding:*)"
     ],
     "deny": [],
     "ask": []

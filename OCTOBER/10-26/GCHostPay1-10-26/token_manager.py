@@ -181,12 +181,13 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch - token may be tampered or invalid signing key")
 
-        # Validate timestamp (5-minute window: current_time - 300 to current_time + 5)
-        # Extended window to accommodate Cloud Tasks delivery delays and retry backoff (60s)
+        # Validate timestamp (2-hour window: current_time - 7200 to current_time + 5)
+        # Extended window to accommodate ETH transaction confirmation times (10-20 minutes),
+        # Cloud Tasks retry backoff, and ChangeNow processing delays
         current_time = int(time.time())
-        if not (current_time - 300 <= timestamp <= current_time + 5):
+        if not (current_time - 7200 <= timestamp <= current_time + 5):
             time_diff = current_time - timestamp
-            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 300 seconds)")
+            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 7200 seconds)")
 
         print(f"🔓 [TOKEN_DEC] GCSplit1→GCHostPay1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
@@ -284,12 +285,13 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch - token may be tampered or invalid signing key")
 
-        # Validate timestamp (5-minute window: current_time - 300 to current_time + 5)
-        # Extended window to accommodate Cloud Tasks delivery delays and retry backoff (60s)
+        # Validate timestamp (2-hour window: current_time - 7200 to current_time + 5)
+        # Extended window to accommodate ETH transaction confirmation times (10-20 minutes),
+        # Cloud Tasks retry backoff, and ChangeNow processing delays
         current_time = int(time.time())
-        if not (current_time - 300 <= timestamp <= current_time + 5):
+        if not (current_time - 7200 <= timestamp <= current_time + 5):
             time_diff = current_time - timestamp
-            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 300 seconds)")
+            raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 7200 seconds)")
 
         print(f"🔓 [TOKEN_DEC] GCAccumulator→GCHostPay1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
@@ -440,10 +442,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp (300 second / 5-minute window)
-        # Extended for Cloud Tasks delivery delays and retries
+        # Validate timestamp (7200 second / 2-hour window)
+        # Extended for ETH transaction confirmation, Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 300 <= timestamp <= current_time + 5):
+        if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay2: Token validated")
@@ -598,10 +600,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp (300 second / 5-minute window)
-        # Extended for Cloud Tasks delivery delays and retries
+        # Validate timestamp (7200 second / 2-hour window)
+        # Extended for ETH transaction confirmation, Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 300 <= timestamp <= current_time + 5):
+        if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay2→GCHostPay1: Token validated")
@@ -746,10 +748,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp (300 second / 5-minute window)
-        # Extended for Cloud Tasks delivery delays and retries
+        # Validate timestamp (7200 second / 2-hour window)
+        # Extended for ETH transaction confirmation, Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 300 <= timestamp <= current_time + 5):
+        if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay3: Token validated")
@@ -889,10 +891,10 @@ class TokenManager:
         if not hmac.compare_digest(sig, expected_sig):
             raise ValueError("Signature mismatch")
 
-        # Validate timestamp (300 second / 5-minute window)
-        # Extended for Cloud Tasks delivery delays and retries
+        # Validate timestamp (7200 second / 2-hour window)
+        # Extended for ETH transaction confirmation, Cloud Tasks delivery delays and retries
         current_time = int(time.time())
-        if not (current_time - 300 <= timestamp <= current_time + 5):
+        if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay3→GCHostPay1: Token validated")
