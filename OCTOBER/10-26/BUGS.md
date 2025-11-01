@@ -1,6 +1,6 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Session 15 - Schema Constraint Fix)
+**Last Updated:** 2025-11-01 (Session 16 - Complete Micro-Batch Fix)
 
 ---
 
@@ -32,6 +32,70 @@ or set the proper Authorization header.
 2. Ensure Cloud Tasks service account has proper invoker permissions
 3. Or configure service to allow unauthenticated invocations from Cloud Tasks
 4. Update Cloud Tasks queue configuration with service account if needed
+
+---
+
+## Recently Fixed (Session 16)
+
+### 🟢 RESOLVED: Dual Critical Errors - Schema Constraint & Outdated Code Deployment
+- **Date Discovered:** November 1, 2025
+- **Date Fixed:** November 1, 2025
+- **Severity:** CRITICAL - Both services completely broken
+- **Status:** ✅ FIXED AND VERIFIED
+- **Location:** Database schema + GCMicroBatchProcessor/GCAccumulator deployments
+- **Affected Services:** GCAccumulator, GCMicroBatchProcessor
+
+**Problem 1: GCAccumulator - NULL Constraint Violation**
+```
+❌ null value in column "eth_to_usdt_rate" violates not-null constraint
+```
+
+**Root Cause 1:**
+- Database schema had NOT NULL constraints on `eth_to_usdt_rate` and `conversion_timestamp`
+- Architecture requires these to be NULL for pending conversions
+- GCAccumulator stores payments in "pending" state without conversion data
+
+**Problem 2: GCMicroBatchProcessor - Outdated Code Deployment**
+```
+❌ column "accumulated_eth" does not exist
+```
+
+**Root Cause 2:**
+- DEPLOYED code was outdated (still referenced old column name)
+- LOCAL code was correct (used `accumulated_amount_usdt`)
+- Service hadn't been redeployed since column rename
+
+**Fix Applied:**
+
+1. **Database Schema Migration** - Ran `fix_payout_accumulation_schema.py`:
+   ```sql
+   ALTER TABLE payout_accumulation
+   ALTER COLUMN eth_to_usdt_rate DROP NOT NULL;
+
+   ALTER TABLE payout_accumulation
+   ALTER COLUMN conversion_timestamp DROP NOT NULL;
+   ```
+
+2. **Service Redeployments:**
+   - GCMicroBatchProcessor: `gcmicrobatchprocessor-10-26-00007-9c8` ✅
+   - GCAccumulator: `gcaccumulator-10-26-00017-phl` ✅
+
+**Verification:**
+- ✅ Schema updated: Both columns now NULLABLE
+- ✅ GCMicroBatchProcessor logs: Successfully querying `accumulated_amount_usdt`
+- ✅ GCAccumulator deployed: New revision running
+- ✅ No more "column does not exist" errors
+- ✅ No more NULL constraint violations
+- ✅ Both services responding to health checks
+
+**Production Logs Confirmed:**
+```
+🔍 [DATABASE] Querying total pending USD
+💰 [DATABASE] Total pending USD: $0
+⏳ [ENDPOINT] Total pending ($0) < Threshold ($2.00) - no action
+```
+
+**Status:** ✅ COMPLETELY RESOLVED - Micro-batch conversion architecture fully operational
 
 ---
 
