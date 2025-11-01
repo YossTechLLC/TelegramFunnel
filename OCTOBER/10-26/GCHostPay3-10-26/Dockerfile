@@ -25,6 +25,8 @@ COPY token_manager.py .
 COPY database_manager.py .
 COPY wallet_manager.py .
 COPY cloudtasks_client.py .
+COPY error_classifier.py .
+COPY alerting.py .
 
 # Expose the port
 EXPOSE 8080

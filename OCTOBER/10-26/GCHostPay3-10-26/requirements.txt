@@ -4,3 +4,4 @@ google-cloud-tasks==2.13.1
 web3==6.11.3
 pg8000==1.30.3
 cloud-sql-python-connector==1.4.3
+requests==2.31.0

@@ -212,3 +212,49 @@ class CloudTasksClient:
             target_url=target_url,
             payload=payload
         )
+
+    # ========================================================================
+    # GCHostPay3 → GCHostPay3 (Self-Retry After Failure) [NEW]
+    # ========================================================================
+
+    def enqueue_gchostpay3_retry(
+        self,
+        queue_name: str,
+        target_url: str,
+        encrypted_token: str,
+        retry_delay_seconds: int = 60
+    ) -> Optional[str]:
+        """
+        NEW METHOD: Enqueue retry task to GCHostPay3 itself after transient failure.
+
+        This method is called when a payment fails with a retryable error (e.g., RATE_LIMIT_EXCEEDED).
+        The retry is delayed by retry_delay_seconds to allow transient issues to resolve.
+
+        Args:
+            queue_name: GCHostPay3 retry queue name (e.g., "gchostpay3-retry-queue")
+            target_url: GCHostPay3 service URL (same as original endpoint)
+            encrypted_token: Retry token with incremented attempt_count
+            retry_delay_seconds: Delay before retry execution (default: 60s)
+
+        Returns:
+            Task name if successful, None if failed
+
+        Example:
+            >>> tasks_client.enqueue_gchostpay3_retry(
+            ...     queue_name="gchostpay3-retry-queue",
+            ...     target_url="https://gchostpay3-10-26.run.app/",
+            ...     encrypted_token=retry_token,
+            ...     retry_delay_seconds=60
+            ... )
+        """
+        print(f"🔄 [CLOUDTASKS] Enqueueing self-retry to GCHostPay3")
+        print(f"⏰ [CLOUDTASKS] Retry delay: {retry_delay_seconds}s")
+
+        payload = {"token": encrypted_token}
+
+        return self.create_task(
+            queue_name=queue_name,
+            target_url=target_url,
+            payload=payload,
+            schedule_delay_seconds=retry_delay_seconds
+        )

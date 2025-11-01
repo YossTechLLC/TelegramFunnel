@@ -2,9 +2,11 @@
 """
 GCHostPay3-10-26: ETH Payment Executor Service
 Receives payment execution requests from GCHostPay1, executes ETH payments
-with INFINITE RETRY logic, and returns response back to GCHostPay1.
+with 3-ATTEMPT RETRY logic, and returns response back to GCHostPay1.
 
-Implements infinite retry via Cloud Tasks (60s fixed backoff, 24h max duration).
+NEW: Implements 3-attempt retry limit with error classification and failed transaction storage.
+- Attempt 1-2: Retry with 60s delay via Cloud Tasks
+- Attempt 3: Store in failed_transactions table and send alert
 """
 import time
 from flask import Flask, request, abort, jsonify
@@ -15,6 +17,8 @@ from token_manager import TokenManager
 from database_manager import DatabaseManager
 from cloudtasks_client import CloudTasksClient
 from wallet_manager import WalletManager
+from error_classifier import ErrorClassifier
+from alerting import AlertingService
 
 app = Flask(__name__)
 
@@ -84,6 +88,21 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
     cloudtasks_client = None
 
+# Initialize Alerting Service (NEW)
+try:
+    alerting_enabled_str = config.get('alerting_enabled', 'true')
+    alerting_enabled = alerting_enabled_str.lower() == 'true'
+    slack_webhook = config.get('slack_alert_webhook')  # Optional
+
+    alerting_service = AlertingService(
+        slack_webhook_url=slack_webhook,
+        alerting_enabled=alerting_enabled
+    )
+    print(f"✅ [APP] Alerting service initialized (enabled: {alerting_enabled})")
+except Exception as e:
+    print(f"❌ [APP] Failed to initialize alerting service: {e}")
+    alerting_service = None
+
 
 # ============================================================================
 # MAIN ENDPOINT: POST / - Receives request from GCHostPay1
@@ -92,21 +111,24 @@ except Exception as e:
 @app.route("/", methods=["POST"])
 def execute_eth_payment():
     """
-    Main endpoint for executing ETH payments with infinite retry.
+    Main endpoint for executing ETH payments with 3-ATTEMPT RETRY LIMIT.
 
-    Flow:
-    1. Decrypt token from GCHostPay1
-    2. Extract payment details
-    3. Execute ETH payment with INFINITE RETRY (60s backoff, 24h max)
-    4. Log to database (ONLY after success)
-    5. Encrypt response token
-    6. Enqueue back to GCHostPay1 /payment-completed
+    NEW FLOW:
+    1. Decrypt token from GCHostPay1 (or self-retry)
+    2. Extract payment details + attempt_count
+    3. Check attempt limit (>3 = skip duplicate Cloud Tasks retry)
+    4. Execute ETH payment (SINGLE ATTEMPT - no infinite retry)
+    5. On success: Log to database, encrypt response, send to GCHostPay1
+    6. On failure:
+       a. Classify error (retryable vs permanent)
+       b. If attempt < 3: Re-encrypt with incremented count, enqueue self-retry
+       c. If attempt >= 3: Store in failed_transactions, send alert, stop
 
     Returns:
-        JSON response with status (or 500 to trigger Cloud Tasks retry)
+        JSON response with status (always 200 to prevent Cloud Tasks auto-retry)
     """
     try:
-        print(f"🎯 [ENDPOINT] Payment execution request received (from GCHostPay1)")
+        print(f"🎯 [ENDPOINT] Payment execution request received")
 
         # Parse JSON payload
         try:
@@ -139,150 +161,338 @@ def execute_eth_payment():
             from_network = decrypted_data['from_network']
             from_amount = decrypted_data['from_amount']
             payin_address = decrypted_data['payin_address']
-            context = decrypted_data.get('context', 'instant')  # NEW: Extract context
+            context = decrypted_data.get('context', 'instant')
+
+            # NEW: Extract retry tracking fields
+            attempt_count = decrypted_data.get('attempt_count', 1)
+            first_attempt_at = decrypted_data.get('first_attempt_at', int(time.time()))
+            last_error_code = decrypted_data.get('last_error_code')
 
             print(f"✅ [ENDPOINT] Token decoded successfully")
+            print(f"🔢 [ENDPOINT] Attempt #{attempt_count}/3")
             print(f"📋 [ENDPOINT] Context: {context}")
             print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
             print(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
             print(f"💰 [ENDPOINT] Amount: {from_amount} {from_currency.upper()}")
             print(f"🏦 [ENDPOINT] Payin Address: {payin_address}")
+            if last_error_code:
+                print(f"⚠️ [ENDPOINT] Previous error: {last_error_code}")
 
         except Exception as e:
             print(f"❌ [ENDPOINT] Token validation error: {e}")
             abort(400, f"Token error: {e}")
 
-        # Execute ETH payment with INFINITE RETRY
+        # NEW: Check attempt limit (prevent Cloud Tasks duplicate retry)
+        if attempt_count > 3:
+            print(f"⚠️ [ENDPOINT] Attempt count exceeds limit - skipping (Cloud Tasks retry bug)")
+            return jsonify({
+                "status": "skipped",
+                "reason": "attempt_limit_exceeded",
+                "unique_id": unique_id
+            }), 200
+
+        # Execute ETH payment (SINGLE ATTEMPT - NO INFINITE RETRY)
         if not wallet_manager:
             print(f"❌ [ENDPOINT] Wallet manager not available")
             abort(500, "Wallet manager unavailable")
 
-        print(f"💰 [ENDPOINT] Executing ETH payment with infinite retry")
+        print(f"💰 [ENDPOINT] Executing ETH payment (attempt {attempt_count}/3)")
 
-        tx_result = wallet_manager.send_eth_payment_with_infinite_retry(
-            to_address=payin_address,
-            amount=from_amount,
-            unique_id=unique_id
-        )
+        # NEW: Wrap payment execution in try/except to catch failures
+        try:
+            tx_result = wallet_manager.send_eth_payment_with_infinite_retry(
+                to_address=payin_address,
+                amount=from_amount,
+                unique_id=unique_id
+            )
 
-        # Note: tx_result will always return (or timeout after 24h) due to infinite retry
-        if not tx_result:
-            # This should never happen due to infinite retry, but handle it anyway
-            print(f"❌ [ENDPOINT] ETH payment returned None (should not happen)")
-            abort(500, "ETH payment failure")
+            # Validate result
+            if not tx_result or tx_result.get('status') != 'success':
+                raise Exception(f"Payment returned invalid result: {tx_result}")
 
-        print(f"✅ [ENDPOINT] ETH payment executed successfully")
-        print(f"🔗 [ENDPOINT] TX Hash: {tx_result['tx_hash']}")
-        print(f"📊 [ENDPOINT] TX Status: {tx_result['status']}")
-        print(f"⛽ [ENDPOINT] Gas Used: {tx_result['gas_used']}")
-        print(f"📦 [ENDPOINT] Block Number: {tx_result['block_number']}")
+            # ========================================================================
+            # SUCCESS PATH
+            # ========================================================================
+            print(f"✅ [ENDPOINT] Payment successful after {attempt_count} attempt(s)")
+            print(f"🔗 [ENDPOINT] TX Hash: {tx_result['tx_hash']}")
+            print(f"📊 [ENDPOINT] TX Status: {tx_result['status']}")
+            print(f"⛽ [ENDPOINT] Gas Used: {tx_result['gas_used']}")
+            print(f"📦 [ENDPOINT] Block Number: {tx_result['block_number']}")
 
-        # Log to database (ONLY after successful payment)
-        if not db_manager:
-            print(f"⚠️ [ENDPOINT] Database manager not available - skipping database log")
-        else:
-            try:
-                db_success = db_manager.insert_hostpay_transaction(
-                    unique_id=unique_id,
-                    cn_api_id=cn_api_id,
-                    from_currency=from_currency,
-                    from_network=from_network,
-                    from_amount=from_amount,
-                    payin_address=payin_address,
-                    is_complete=True,
-                    tx_hash=tx_result['tx_hash'],
-                    tx_status=tx_result['status'],
-                    gas_used=tx_result['gas_used'],
-                    block_number=tx_result['block_number']
+            # Log to database (ONLY after successful payment)
+            if not db_manager:
+                print(f"⚠️ [ENDPOINT] Database manager not available - skipping database log")
+            else:
+                try:
+                    db_success = db_manager.insert_hostpay_transaction(
+                        unique_id=unique_id,
+                        cn_api_id=cn_api_id,
+                        from_currency=from_currency,
+                        from_network=from_network,
+                        from_amount=from_amount,
+                        payin_address=payin_address,
+                        is_complete=True,
+                        tx_hash=tx_result['tx_hash'],
+                        tx_status=tx_result['status'],
+                        gas_used=tx_result['gas_used'],
+                        block_number=tx_result['block_number']
+                    )
+
+                    if db_success:
+                        print(f"✅ [ENDPOINT] Database: Successfully logged payment")
+                    else:
+                        print(f"⚠️ [ENDPOINT] Database: Failed to log payment (non-fatal)")
+
+                except Exception as e:
+                    print(f"❌ [ENDPOINT] Database error: {e} (non-fatal)")
+
+            # Encrypt response token
+            encrypted_response_token = token_manager.encrypt_gchostpay3_to_gchostpay1_token(
+                unique_id=unique_id,
+                cn_api_id=cn_api_id,
+                tx_hash=tx_result['tx_hash'],
+                tx_status=tx_result['status'],
+                gas_used=tx_result['gas_used'],
+                block_number=tx_result['block_number']
+            )
+
+            if not encrypted_response_token:
+                print(f"❌ [ENDPOINT] Failed to encrypt response token")
+                abort(500, "Token encryption failed")
+
+            # Enqueue response based on context (NEW: Conditional routing)
+            if not cloudtasks_client:
+                print(f"❌ [ENDPOINT] Cloud Tasks client not available")
+                abort(500, "Cloud Tasks unavailable")
+
+            # Determine routing based on context
+            if context == 'threshold':
+                # Route to GCAccumulator for threshold payouts
+                print(f"🎯 [ENDPOINT] Context: threshold → Routing to GCAccumulator")
+
+                gcaccumulator_response_queue = config.get('gcaccumulator_response_queue')
+                gcaccumulator_url = config.get('gcaccumulator_url')
+
+                if not gcaccumulator_response_queue or not gcaccumulator_url:
+                    print(f"❌ [ENDPOINT] GCAccumulator configuration missing")
+                    abort(500, "Service configuration error")
+
+                # Target the /swap-executed endpoint
+                target_url = f"{gcaccumulator_url}/swap-executed"
+                queue_name = gcaccumulator_response_queue
+
+                print(f"📤 [ENDPOINT] Routing to: {target_url}")
+
+            else:
+                # Route to GCHostPay1 for instant payouts (existing behavior)
+                print(f"🎯 [ENDPOINT] Context: instant → Routing to GCHostPay1")
+
+                gchostpay1_response_queue = config.get('gchostpay1_response_queue')
+                gchostpay1_url = config.get('gchostpay1_url')
+
+                if not gchostpay1_response_queue or not gchostpay1_url:
+                    print(f"❌ [ENDPOINT] GCHostPay1 configuration missing")
+                    abort(500, "Service configuration error")
+
+                # Target the /payment-completed endpoint
+                target_url = f"{gchostpay1_url}/payment-completed"
+                queue_name = gchostpay1_response_queue
+
+                print(f"📤 [ENDPOINT] Routing to: {target_url}")
+
+            # Enqueue response to appropriate service
+            task_name = cloudtasks_client.enqueue_gchostpay1_payment_response(
+                queue_name=queue_name,
+                target_url=target_url,
+                encrypted_token=encrypted_response_token
+            )
+
+            if not task_name:
+                print(f"❌ [ENDPOINT] Failed to create Cloud Task")
+                abort(500, "Failed to enqueue task")
+
+            print(f"✅ [ENDPOINT] Successfully enqueued response")
+            print(f"🆔 [ENDPOINT] Task: {task_name}")
+
+            return jsonify({
+                "status": "success",
+                "message": "Payment executed and response enqueued",
+                "unique_id": unique_id,
+                "cn_api_id": cn_api_id,
+                "tx_hash": tx_result['tx_hash'],
+                "tx_status": tx_result['status'],
+                "gas_used": tx_result['gas_used'],
+                "block_number": tx_result['block_number'],
+                "attempt": attempt_count,
+                "task_id": task_name
+            }), 200
+
+        except Exception as payment_error:
+            # ========================================================================
+            # FAILURE PATH
+            # ========================================================================
+            print(f"❌ [ENDPOINT] Payment execution failed: {payment_error}")
+
+            # Classify error
+            error_code, is_retryable = ErrorClassifier.classify_error(payment_error)
+            error_message = str(payment_error)
+
+            print(f"📊 [ENDPOINT] Error classified: {error_code} (retryable: {is_retryable})")
+
+            # DECISION: RETRY OR STORE?
+            if attempt_count < 3:
+                # ====================================================================
+                # RETRY PATH (Attempt 1 or 2)
+                # ====================================================================
+                print(f"🔄 [ENDPOINT] Retrying (attempt {attempt_count}/3)")
+
+                if not cloudtasks_client:
+                    print(f"❌ [ENDPOINT] Cloud Tasks client not available for retry")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Cannot retry without Cloud Tasks client",
+                        "unique_id": unique_id,
+                        "error_code": error_code
+                    }), 500
+
+                # Re-encrypt token with incremented attempt count
+                retry_token = token_manager.encrypt_gchostpay3_retry_token(
+                    token_data=decrypted_data,
+                    error_code=error_code
                 )
 
-                if db_success:
-                    print(f"✅ [ENDPOINT] Database: Successfully logged payment")
+                if not retry_token:
+                    print(f"❌ [ENDPOINT] Failed to encrypt retry token")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Failed to create retry token",
+                        "unique_id": unique_id
+                    }), 500
+
+                # Enqueue self-retry with 60s delay
+                gchostpay3_retry_queue = config.get('gchostpay3_retry_queue')
+                gchostpay3_url = config.get('gchostpay3_url')
+
+                if not gchostpay3_retry_queue or not gchostpay3_url:
+                    print(f"❌ [ENDPOINT] GCHostPay3 retry configuration missing")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Retry configuration incomplete",
+                        "unique_id": unique_id
+                    }), 500
+
+                retry_task = cloudtasks_client.enqueue_gchostpay3_retry(
+                    queue_name=gchostpay3_retry_queue,
+                    target_url=f"{gchostpay3_url}/",
+                    encrypted_token=retry_token,
+                    retry_delay_seconds=60
+                )
+
+                if not retry_task:
+                    print(f"❌ [ENDPOINT] Failed to enqueue retry task")
+                    return jsonify({
+                        "status": "error",
+                        "message": "Failed to enqueue retry",
+                        "unique_id": unique_id
+                    }), 500
+
+                print(f"✅ [ENDPOINT] Retry task enqueued: {retry_task}")
+
+                return jsonify({
+                    "status": "retry_scheduled",
+                    "unique_id": unique_id,
+                    "cn_api_id": cn_api_id,
+                    "attempt": attempt_count,
+                    "next_attempt": attempt_count + 1,
+                    "error_code": error_code,
+                    "is_retryable": is_retryable,
+                    "retry_task": retry_task,
+                    "retry_delay_seconds": 60
+                }), 200
+
+            else:
+                # ====================================================================
+                # FAILED PATH (Attempt 3 - Final Failure)
+                # ====================================================================
+                print(f"💀 [ENDPOINT] FINAL FAILURE after 3 attempts")
+                print(f"📊 [ENDPOINT] Storing in failed_transactions table")
+
+                # Build error details
+                error_details = {
+                    'exception_type': type(payment_error).__name__,
+                    'exception_message': str(payment_error),
+                    'first_attempt_at': first_attempt_at,
+                    'last_attempt_at': int(time.time()),
+                    'is_retryable': is_retryable,
+                    'error_classification': error_code
+                }
+
+                # Store in failed_transactions table
+                if db_manager:
+                    try:
+                        db_success = db_manager.insert_failed_transaction(
+                            unique_id=unique_id,
+                            cn_api_id=cn_api_id,
+                            from_currency=from_currency,
+                            from_network=from_network,
+                            from_amount=from_amount,
+                            payin_address=payin_address,
+                            context=context,
+                            error_code=error_code,
+                            error_message=error_message,
+                            error_details=error_details,
+                            attempt_count=3
+                        )
+
+                        if db_success:
+                            print(f"✅ [ENDPOINT] Failed transaction stored successfully")
+                        else:
+                            print(f"❌ [ENDPOINT] Failed to store failed transaction")
+
+                    except Exception as db_error:
+                        print(f"❌ [ENDPOINT] Database error storing failed transaction: {db_error}")
+
                 else:
-                    print(f"⚠️ [ENDPOINT] Database: Failed to log payment (non-fatal)")
+                    print(f"⚠️ [ENDPOINT] Database manager not available - cannot store failed transaction")
 
-            except Exception as e:
-                print(f"❌ [ENDPOINT] Database error: {e} (non-fatal)")
+                # Send failure alert
+                if alerting_service:
+                    try:
+                        alert_sent = alerting_service.send_payment_failure_alert(
+                            unique_id=unique_id,
+                            cn_api_id=cn_api_id,
+                            error_code=error_code,
+                            error_message=error_message,
+                            context=context,
+                            amount=from_amount,
+                            from_currency=from_currency,
+                            payin_address=payin_address,
+                            attempt_count=3
+                        )
 
-        # Encrypt response token
-        encrypted_response_token = token_manager.encrypt_gchostpay3_to_gchostpay1_token(
-            unique_id=unique_id,
-            cn_api_id=cn_api_id,
-            tx_hash=tx_result['tx_hash'],
-            tx_status=tx_result['status'],
-            gas_used=tx_result['gas_used'],
-            block_number=tx_result['block_number']
-        )
+                        if alert_sent:
+                            print(f"✅ [ENDPOINT] Failure alert sent")
+                        else:
+                            print(f"⚠️ [ENDPOINT] Alert sending failed (non-fatal)")
 
-        if not encrypted_response_token:
-            print(f"❌ [ENDPOINT] Failed to encrypt response token")
-            abort(500, "Token encryption failed")
+                    except Exception as alert_error:
+                        print(f"❌ [ENDPOINT] Alert error: {alert_error} (non-fatal)")
 
-        # Enqueue response based on context (NEW: Conditional routing)
-        if not cloudtasks_client:
-            print(f"❌ [ENDPOINT] Cloud Tasks client not available")
-            abort(500, "Cloud Tasks unavailable")
+                else:
+                    print(f"⚠️ [ENDPOINT] Alerting service not available - skipping alert")
 
-        # Determine routing based on context
-        if context == 'threshold':
-            # Route to GCAccumulator for threshold payouts
-            print(f"🎯 [ENDPOINT] Context: threshold → Routing to GCAccumulator")
+                print(f"🛑 [ENDPOINT] Payment permanently failed - no more retries")
 
-            gcaccumulator_response_queue = config.get('gcaccumulator_response_queue')
-            gcaccumulator_url = config.get('gcaccumulator_url')
-
-            if not gcaccumulator_response_queue or not gcaccumulator_url:
-                print(f"❌ [ENDPOINT] GCAccumulator configuration missing")
-                abort(500, "Service configuration error")
-
-            # Target the /swap-executed endpoint
-            target_url = f"{gcaccumulator_url}/swap-executed"
-            queue_name = gcaccumulator_response_queue
-
-            print(f"📤 [ENDPOINT] Routing to: {target_url}")
-
-        else:
-            # Route to GCHostPay1 for instant payouts (existing behavior)
-            print(f"🎯 [ENDPOINT] Context: instant → Routing to GCHostPay1")
-
-            gchostpay1_response_queue = config.get('gchostpay1_response_queue')
-            gchostpay1_url = config.get('gchostpay1_url')
-
-            if not gchostpay1_response_queue or not gchostpay1_url:
-                print(f"❌ [ENDPOINT] GCHostPay1 configuration missing")
-                abort(500, "Service configuration error")
-
-            # Target the /payment-completed endpoint
-            target_url = f"{gchostpay1_url}/payment-completed"
-            queue_name = gchostpay1_response_queue
-
-            print(f"📤 [ENDPOINT] Routing to: {target_url}")
-
-        # Enqueue response to appropriate service
-        task_name = cloudtasks_client.enqueue_gchostpay1_payment_response(
-            queue_name=queue_name,
-            target_url=target_url,
-            encrypted_token=encrypted_response_token
-        )
-
-        if not task_name:
-            print(f"❌ [ENDPOINT] Failed to create Cloud Task")
-            abort(500, "Failed to enqueue task")
-
-        print(f"✅ [ENDPOINT] Successfully enqueued response")
-        print(f"🆔 [ENDPOINT] Task: {task_name}")
-
-        return jsonify({
-            "status": "success",
-            "message": "Payment executed and response enqueued",
-            "unique_id": unique_id,
-            "cn_api_id": cn_api_id,
-            "tx_hash": tx_result['tx_hash'],
-            "tx_status": tx_result['status'],
-            "gas_used": tx_result['gas_used'],
-            "block_number": tx_result['block_number'],
-            "task_id": task_name
-        }), 200
+                return jsonify({
+                    "status": "failed_permanently",
+                    "unique_id": unique_id,
+                    "cn_api_id": cn_api_id,
+                    "error_code": error_code,
+                    "error_message": error_message,
+                    "attempt": attempt_count,
+                    "is_retryable": is_retryable,
+                    "message": "Payment failed after 3 attempts - stored in failed_transactions table"
+                }), 200  # Return 200 to prevent Cloud Tasks auto-retry
 
     except Exception as e:
         print(f"❌ [ENDPOINT] Unexpected error: {e}")

@@ -4,7 +4,9 @@ Database Manager for GCHostPay10-26 Host Wallet Payment Service.
 Handles database operations for the split_payout_hostpay table.
 Uses Google Cloud SQL Connector (mirroring GCSplit10-26 pattern).
 """
-from typing import Optional
+from typing import Optional, List, Dict, Any
+import json
+import time
 
 # Import Cloud SQL Connector for database functionality
 try:
@@ -382,6 +384,403 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ [HOSTPAY_DB] Database error looking up unique_id: {e}")
             return None
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+    # =====================================================================
+    # FAILED TRANSACTIONS METHODS (NEW - Phase 2)
+    # =====================================================================
+
+    def insert_failed_transaction(
+        self,
+        unique_id: str,
+        cn_api_id: str,
+        from_currency: str,
+        from_network: str,
+        from_amount: float,
+        payin_address: str,
+        context: str,
+        error_code: str,
+        error_message: str,
+        error_details: Dict[str, Any],
+        attempt_count: int = 3
+    ) -> bool:
+        """
+        Insert a failed transaction into failed_transactions table.
+
+        Args:
+            unique_id: Unique payment identifier (16 chars)
+            cn_api_id: ChangeNow transaction ID
+            from_currency: Source currency (e.g., "eth")
+            from_network: Source network (e.g., "eth")
+            from_amount: Payment amount
+            payin_address: ChangeNow payin address
+            context: Payment context (instant/threshold/batch)
+            error_code: Classified error code
+            error_message: Raw error message
+            error_details: JSON-serializable dict with error context
+            attempt_count: Number of attempts made (default: 3)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = None
+        cur = None
+
+        try:
+            print(f"💾 [FAILED_TX] Storing failed transaction: {unique_id}")
+            print(f"📊 [FAILED_TX] Error code: {error_code}")
+
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [FAILED_TX] Database connection failed")
+                return False
+
+            cur = conn.cursor()
+
+            # Convert error_details dict to JSON string
+            error_details_json = json.dumps(error_details)
+
+            query = """
+                INSERT INTO failed_transactions (
+                    unique_id,
+                    cn_api_id,
+                    from_currency,
+                    from_network,
+                    from_amount,
+                    payin_address,
+                    context,
+                    error_code,
+                    error_message,
+                    last_error_details,
+                    attempt_count,
+                    last_attempt_timestamp,
+                    status,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, NOW(), 'failed_pending_review', NOW(), NOW()
+                )
+            """
+
+            cur.execute(query, (
+                unique_id,
+                cn_api_id,
+                from_currency,
+                from_network,
+                from_amount,
+                payin_address,
+                context,
+                error_code,
+                error_message,
+                error_details_json,
+                attempt_count
+            ))
+
+            conn.commit()
+            print(f"✅ [FAILED_TX] Failed transaction stored successfully")
+            return True
+
+        except Exception as e:
+            print(f"❌ [FAILED_TX] Database error: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+    def get_failed_transaction_by_unique_id(self, unique_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a failed transaction by unique_id.
+
+        Args:
+            unique_id: Unique payment identifier
+
+        Returns:
+            Dict with transaction details or None if not found
+        """
+        conn = None
+        cur = None
+
+        try:
+            print(f"🔍 [FAILED_TX] Looking up failed transaction: {unique_id}")
+
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [FAILED_TX] Database connection failed")
+                return None
+
+            cur = conn.cursor()
+
+            query = """
+                SELECT
+                    id,
+                    unique_id,
+                    cn_api_id,
+                    from_currency,
+                    from_network,
+                    from_amount,
+                    payin_address,
+                    context,
+                    error_code,
+                    error_message,
+                    last_error_details,
+                    attempt_count,
+                    last_attempt_timestamp,
+                    status,
+                    retry_count,
+                    last_retry_attempt,
+                    recovery_tx_hash,
+                    recovered_at,
+                    recovered_by,
+                    admin_notes,
+                    created_at,
+                    updated_at
+                FROM failed_transactions
+                WHERE unique_id = %s
+            """
+
+            cur.execute(query, (unique_id,))
+            row = cur.fetchone()
+
+            if not row:
+                print(f"⚠️ [FAILED_TX] Failed transaction not found: {unique_id}")
+                return None
+
+            # Parse JSONB error_details back to dict
+            error_details = json.loads(row[10]) if row[10] else {}
+
+            result = {
+                'id': row[0],
+                'unique_id': row[1],
+                'cn_api_id': row[2],
+                'from_currency': row[3],
+                'from_network': row[4],
+                'from_amount': float(row[5]),
+                'payin_address': row[6],
+                'context': row[7],
+                'error_code': row[8],
+                'error_message': row[9],
+                'last_error_details': error_details,
+                'attempt_count': row[11],
+                'last_attempt_timestamp': row[12],
+                'status': row[13],
+                'retry_count': row[14],
+                'last_retry_attempt': row[15],
+                'recovery_tx_hash': row[16],
+                'recovered_at': row[17],
+                'recovered_by': row[18],
+                'admin_notes': row[19],
+                'created_at': row[20],
+                'updated_at': row[21]
+            }
+
+            print(f"✅ [FAILED_TX] Failed transaction found: {result['error_code']} ({result['status']})")
+            return result
+
+        except Exception as e:
+            print(f"❌ [FAILED_TX] Database error: {e}")
+            return None
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+    def update_failed_transaction_status(
+        self,
+        unique_id: str,
+        status: str,
+        admin_notes: Optional[str] = None
+    ) -> bool:
+        """
+        Update status of a failed transaction.
+
+        Args:
+            unique_id: Unique payment identifier
+            status: New status value
+            admin_notes: Optional admin notes
+
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = None
+        cur = None
+
+        try:
+            print(f"💾 [FAILED_TX] Updating status for {unique_id}: {status}")
+
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [FAILED_TX] Database connection failed")
+                return False
+
+            cur = conn.cursor()
+
+            if admin_notes:
+                query = """
+                    UPDATE failed_transactions
+                    SET status = %s, admin_notes = %s, updated_at = NOW()
+                    WHERE unique_id = %s
+                """
+                cur.execute(query, (status, admin_notes, unique_id))
+            else:
+                query = """
+                    UPDATE failed_transactions
+                    SET status = %s, updated_at = NOW()
+                    WHERE unique_id = %s
+                """
+                cur.execute(query, (status, unique_id))
+
+            conn.commit()
+            print(f"✅ [FAILED_TX] Status updated successfully")
+            return True
+
+        except Exception as e:
+            print(f"❌ [FAILED_TX] Database error: {e}")
+            if conn:
+                conn.rollback()
+            return False
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+    def get_retryable_failed_transactions(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get failed transactions with retryable status.
+
+        Args:
+            limit: Maximum number of records to return
+
+        Returns:
+            List of dicts with transaction details
+        """
+        conn = None
+        cur = None
+
+        try:
+            print(f"🔍 [FAILED_TX] Fetching retryable failed transactions (limit: {limit})")
+
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [FAILED_TX] Database connection failed")
+                return []
+
+            cur = conn.cursor()
+
+            query = """
+                SELECT
+                    unique_id,
+                    cn_api_id,
+                    from_currency,
+                    from_network,
+                    from_amount,
+                    payin_address,
+                    context,
+                    error_code,
+                    status,
+                    retry_count
+                FROM failed_transactions
+                WHERE status = 'failed_retryable'
+                ORDER BY created_at ASC
+                LIMIT %s
+            """
+
+            cur.execute(query, (limit,))
+            rows = cur.fetchall()
+
+            results = []
+            for row in rows:
+                results.append({
+                    'unique_id': row[0],
+                    'cn_api_id': row[1],
+                    'from_currency': row[2],
+                    'from_network': row[3],
+                    'from_amount': float(row[4]),
+                    'payin_address': row[5],
+                    'context': row[6],
+                    'error_code': row[7],
+                    'status': row[8],
+                    'retry_count': row[9]
+                })
+
+            print(f"✅ [FAILED_TX] Found {len(results)} retryable transaction(s)")
+            return results
+
+        except Exception as e:
+            print(f"❌ [FAILED_TX] Database error: {e}")
+            return []
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
+    def mark_failed_transaction_recovered(
+        self,
+        unique_id: str,
+        recovery_tx_hash: str,
+        recovered_by: str = "manual"
+    ) -> bool:
+        """
+        Mark a failed transaction as recovered after successful retry.
+
+        Args:
+            unique_id: Unique payment identifier
+            recovery_tx_hash: Ethereum transaction hash of successful retry
+            recovered_by: Who/what recovered it (default: "manual")
+
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = None
+        cur = None
+
+        try:
+            print(f"💾 [FAILED_TX] Marking transaction as recovered: {unique_id}")
+            print(f"🔗 [FAILED_TX] Recovery TX: {recovery_tx_hash}")
+
+            conn = self.get_database_connection()
+            if not conn:
+                print(f"❌ [FAILED_TX] Database connection failed")
+                return False
+
+            cur = conn.cursor()
+
+            query = """
+                UPDATE failed_transactions
+                SET
+                    status = 'recovered',
+                    recovery_tx_hash = %s,
+                    recovered_at = NOW(),
+                    recovered_by = %s,
+                    updated_at = NOW()
+                WHERE unique_id = %s
+            """
+
+            cur.execute(query, (recovery_tx_hash, recovered_by, unique_id))
+            conn.commit()
+            print(f"✅ [FAILED_TX] Transaction marked as recovered")
+            return True
+
+        except Exception as e:
+            print(f"❌ [FAILED_TX] Database error: {e}")
+            if conn:
+                conn.rollback()
+            return False
 
         finally:
             if cur:

@@ -524,7 +524,10 @@ class TokenManager:
         from_network: str,
         from_amount: float,
         payin_address: str,
-        context: str = 'instant'
+        context: str = 'instant',
+        attempt_count: int = 1,
+        first_attempt_at: Optional[int] = None,
+        last_error_code: Optional[str] = None
     ) -> Optional[str]:
         """
         Encrypt token for GCHostPay1 → GCHostPay3 (ETH payment execution request).
@@ -536,21 +539,31 @@ class TokenManager:
         - 1 byte: from_network length + variable bytes
         - 8 bytes: from_amount (double)
         - 1 byte: payin_address length + variable bytes
-        - 1 byte: context length + variable bytes (NEW: 'instant' or 'threshold')
+        - 1 byte: context length + variable bytes ('instant' or 'threshold')
+        - 4 bytes: attempt_count (uint32) [NEW: retry tracking]
+        - 4 bytes: first_attempt_at timestamp (uint32) [NEW: retry tracking]
+        - 1 byte: last_error_code length + variable bytes [NEW: retry tracking, empty if None]
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
 
         Args:
             context: Payment context - 'instant' (default) or 'threshold'
+            attempt_count: Current attempt number (default: 1 for first attempt)
+            first_attempt_at: Timestamp of first attempt (default: current time)
+            last_error_code: Error code from previous attempt (default: None)
 
         Returns:
             Base64 URL-safe encoded token or None if failed
         """
         try:
             print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay3: Encrypting payment request")
-            print(f"📋 [TOKEN_ENC] Context: {context}")
+            print(f"📋 [TOKEN_ENC] Context: {context}, Attempt: {attempt_count}")
 
             unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
+
+            # Default first_attempt_at to current time if not provided
+            if first_attempt_at is None:
+                first_attempt_at = int(time.time())
 
             packed_data = bytearray()
             packed_data.extend(unique_id_bytes)
@@ -559,7 +572,12 @@ class TokenManager:
             packed_data.extend(self._pack_string(from_network.lower()))
             packed_data.extend(struct.pack(">d", from_amount))
             packed_data.extend(self._pack_string(payin_address))
-            packed_data.extend(self._pack_string(context.lower()))  # NEW: context field
+            packed_data.extend(self._pack_string(context.lower()))
+
+            # NEW: Add retry tracking fields
+            packed_data.extend(struct.pack(">I", attempt_count))
+            packed_data.extend(struct.pack(">I", first_attempt_at))
+            packed_data.extend(self._pack_string(last_error_code if last_error_code else ''))
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -576,6 +594,8 @@ class TokenManager:
             token = base64.urlsafe_b64encode(final_data).rstrip(b'=').decode('utf-8')
 
             print(f"✅ [TOKEN_ENC] Payment request token encrypted ({len(token)} chars)")
+            if last_error_code:
+                print(f"🔄 [TOKEN_ENC] Retry token - Previous error: {last_error_code}")
             return token
 
         except Exception as e:
@@ -585,7 +605,10 @@ class TokenManager:
     def decrypt_gchostpay1_to_gchostpay3_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from GCHostPay1 → GCHostPay3.
-        Token valid for 300 seconds (5 minutes).
+        Token valid for 7200 seconds (2 hours).
+
+        **UPDATED**: Now includes retry tracking fields (attempt_count, first_attempt_at, last_error_code)
+        with full backward compatibility for legacy tokens.
 
         Returns:
             Dictionary with payment details including context field or None
@@ -623,13 +646,44 @@ class TokenManager:
         # Parse payin_address
         payin_address, offset = self._unpack_string(raw, offset)
 
-        # Parse context (NEW: defaults to 'instant' for backward compatibility)
+        # Parse context (defaults to 'instant' for backward compatibility)
         try:
             context, offset = self._unpack_string(raw, offset)
         except (ValueError, IndexError):
             # Backward compatibility: if context field doesn't exist, default to 'instant'
             context = 'instant'
             print(f"⚠️ [TOKEN_DEC] No context field found - defaulting to 'instant' (legacy token)")
+
+        # NEW: Parse retry tracking fields (with backward compatibility)
+        attempt_count = 1
+        first_attempt_at = None
+        last_error_code = None
+
+        try:
+            # Try to parse attempt_count (4 bytes)
+            if offset + 4 <= len(raw) - 20:  # Need at least 20 more bytes (4 + 4 + 1 + 4 + 16)
+                attempt_count = struct.unpack(">I", raw[offset:offset+4])[0]
+                offset += 4
+
+                # Try to parse first_attempt_at (4 bytes)
+                if offset + 4 <= len(raw) - 16:
+                    first_attempt_at = struct.unpack(">I", raw[offset:offset+4])[0]
+                    offset += 4
+
+                    # Try to parse last_error_code (variable length string)
+                    try:
+                        last_error_code_str, offset = self._unpack_string(raw, offset)
+                        last_error_code = last_error_code_str if last_error_code_str else None
+                    except (ValueError, IndexError):
+                        # If parsing fails, this is a legacy token
+                        pass
+        except (ValueError, IndexError, struct.error):
+            # If any retry field parsing fails, treat as legacy token (defaults already set)
+            print(f"⚠️ [TOKEN_DEC] No retry fields found - treating as legacy token (attempt_count=1)")
+
+        # If first_attempt_at is None, default to current time (legacy token)
+        if first_attempt_at is None:
+            first_attempt_at = int(time.time())
 
         # Parse timestamp
         if offset + 4 > len(raw):
@@ -656,7 +710,9 @@ class TokenManager:
             raise ValueError(f"Token expired")
 
         print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay3: Token validated")
-        print(f"📋 [TOKEN_DEC] Context: {context}")
+        print(f"📋 [TOKEN_DEC] Context: {context}, Attempt: {attempt_count}")
+        if last_error_code:
+            print(f"⚠️ [TOKEN_DEC] Previous error: {last_error_code}")
 
         return {
             "unique_id": unique_id,
@@ -665,8 +721,12 @@ class TokenManager:
             "from_network": from_network,
             "from_amount": from_amount,
             "payin_address": payin_address,
-            "context": context,  # NEW: context field
-            "timestamp": timestamp
+            "context": context,
+            "timestamp": timestamp,
+            # NEW: Retry tracking fields
+            "attempt_count": attempt_count,
+            "first_attempt_at": first_attempt_at,
+            "last_error_code": last_error_code
         }
 
     # ========================================================================
@@ -811,3 +871,80 @@ class TokenManager:
             "block_number": block_number,
             "timestamp": timestamp
         }
+
+    # ========================================================================
+    # TOKEN 6: GCHostPay3 → GCHostPay3 (Self-retry after failure) [NEW]
+    # ========================================================================
+
+    def encrypt_gchostpay3_retry_token(
+        self,
+        token_data: Dict[str, Any],
+        error_code: str
+    ) -> Optional[str]:
+        """
+        NEW METHOD: Encrypt token for GCHostPay3 self-retry after payment failure.
+
+        This method is called when a payment fails but is retryable (attempt_count < 3).
+        It increments the attempt_count and adds the error_code from the failed attempt.
+
+        Args:
+            token_data: Decrypted token data from previous attempt (dict)
+            error_code: Error code from the failed attempt (e.g., "RATE_LIMIT_EXCEEDED")
+
+        Returns:
+            Base64 URL-safe encoded retry token or None if failed
+
+        Example:
+            >>> failed_token_data = {
+            ...     'unique_id': 'abc123',
+            ...     'cn_api_id': 'xyz789',
+            ...     'from_currency': 'eth',
+            ...     'from_network': 'eth',
+            ...     'from_amount': 0.001234,
+            ...     'payin_address': '0x...',
+            ...     'context': 'instant',
+            ...     'attempt_count': 1,
+            ...     'first_attempt_at': 1730419200,
+            ...     'last_error_code': None
+            ... }
+            >>> retry_token = token_mgr.encrypt_gchostpay3_retry_token(
+            ...     failed_token_data,
+            ...     error_code='RATE_LIMIT_EXCEEDED'
+            ... )
+            >>> # retry_token will have attempt_count=2, last_error_code='RATE_LIMIT_EXCEEDED'
+        """
+        try:
+            print(f"🔄 [TOKEN_RETRY] Building retry token for GCHostPay3 self-enqueue")
+            print(f"🔄 [TOKEN_RETRY] Previous attempt: {token_data.get('attempt_count', 1)}")
+            print(f"🔄 [TOKEN_RETRY] Error code: {error_code}")
+
+            # Increment attempt count
+            new_attempt_count = token_data.get('attempt_count', 1) + 1
+
+            # Preserve first_attempt_at (should already exist)
+            first_attempt_at = token_data.get('first_attempt_at', int(time.time()))
+
+            # Build retry token using encrypt_gchostpay1_to_gchostpay3_token
+            retry_token = self.encrypt_gchostpay1_to_gchostpay3_token(
+                unique_id=token_data['unique_id'],
+                cn_api_id=token_data['cn_api_id'],
+                from_currency=token_data['from_currency'],
+                from_network=token_data['from_network'],
+                from_amount=token_data['from_amount'],
+                payin_address=token_data['payin_address'],
+                context=token_data.get('context', 'instant'),
+                attempt_count=new_attempt_count,
+                first_attempt_at=first_attempt_at,
+                last_error_code=error_code
+            )
+
+            if retry_token:
+                print(f"✅ [TOKEN_RETRY] Retry token created (attempt {new_attempt_count}/3)")
+            else:
+                print(f"❌ [TOKEN_RETRY] Failed to create retry token")
+
+            return retry_token
+
+        except Exception as e:
+            print(f"❌ [TOKEN_RETRY] Retry token encryption error: {e}")
+            return None

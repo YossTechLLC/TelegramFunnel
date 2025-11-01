@@ -113,6 +113,28 @@ class ConfigManager:
             "GCAccumulator service URL"
         )
 
+        # NEW: Get GCHostPay3 self-retry configuration (for error handling)
+        gchostpay3_retry_queue = self.fetch_secret(
+            "GCHOSTPAY3_RETRY_QUEUE",
+            "GCHostPay3 self-retry queue name"
+        )
+
+        gchostpay3_url = self.fetch_secret(
+            "GCHOSTPAY3_URL",
+            "GCHostPay3 service URL"
+        )
+
+        # NEW: Get alerting configuration (optional)
+        alerting_enabled = self.fetch_secret(
+            "ALERTING_ENABLED",
+            "Alerting enabled flag"
+        )
+
+        slack_alert_webhook = self.fetch_secret(
+            "SLACK_ALERT_WEBHOOK",
+            "Slack webhook URL for alerts (optional)"
+        )
+
         # Fetch database configuration from Secret Manager
         cloud_sql_connection_name = self.fetch_secret(
             "CLOUD_SQL_CONNECTION_NAME",
@@ -164,6 +186,14 @@ class ConfigManager:
             'gcaccumulator_response_queue': gcaccumulator_response_queue,
             'gcaccumulator_url': gcaccumulator_url,
 
+            # NEW: Self-retry configuration (error handling)
+            'gchostpay3_retry_queue': gchostpay3_retry_queue,
+            'gchostpay3_url': gchostpay3_url,
+
+            # NEW: Alerting configuration (optional)
+            'alerting_enabled': alerting_enabled,
+            'slack_alert_webhook': slack_alert_webhook,
+
             # Database configuration
             'instance_connection_name': cloud_sql_connection_name,
             'db_name': database_name,
@@ -184,6 +214,10 @@ class ConfigManager:
         print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
         print(f"   GCAccumulator Response Queue: {'✅' if config['gcaccumulator_response_queue'] else '❌'}")
         print(f"   GCAccumulator URL: {'✅' if config['gcaccumulator_url'] else '❌'}")
+        print(f"   GCHostPay3 Retry Queue: {'✅' if config['gchostpay3_retry_queue'] else '❌'}")
+        print(f"   GCHostPay3 URL: {'✅' if config['gchostpay3_url'] else '❌'}")
+        print(f"   Alerting Enabled: {'✅' if config['alerting_enabled'] else '⚠️ (optional)'}")
+        print(f"   Slack Alert Webhook: {'✅' if config['slack_alert_webhook'] else '⚠️ (optional)'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")

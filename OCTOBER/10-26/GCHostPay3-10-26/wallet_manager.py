@@ -131,10 +131,10 @@ class WalletManager:
         unique_id: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Send ETH payment with INFINITE RETRY logic.
+        Send ETH payment with SINGLE ATTEMPT (NEW: No infinite retry).
 
-        Implements infinite retry with 60-second fixed backoff.
-        Cloud Tasks will enforce 24-hour max retry duration.
+        UPDATED: Removed infinite retry loop. Now raises exceptions on failure.
+        Retry logic handled by GCHostPay3 main service (3-attempt limit).
 
         Args:
             to_address: Destination address (ChangeNow payin address)
@@ -145,16 +145,16 @@ class WalletManager:
             Dictionary with transaction details:
             {
                 "tx_hash": "0x...",
-                "status": "success" | "failed",
+                "status": "success",
                 "gas_used": int,
                 "block_number": int
             }
-            Returns None if payment failed after 24h
-        """
-        attempt = 0
-        start_time = time.time()
 
-        print(f"💰 [ETH_PAYMENT] Starting ETH payment with infinite retry")
+        Raises:
+            ValueError: If address is invalid or amount is invalid
+            Exception: For all other payment failures (network, gas, confirmation, etc.)
+        """
+        print(f"💰 [ETH_PAYMENT] Starting ETH payment (single attempt)")
         print(f"🆔 [ETH_PAYMENT] Unique ID: {unique_id}")
         print(f"🏦 [ETH_PAYMENT] From: {self.wallet_address}")
         print(f"🏦 [ETH_PAYMENT] To: {to_address}")
@@ -165,118 +165,90 @@ class WalletManager:
             to_address_checksum = self.w3.to_checksum_address(to_address)
         except Exception as e:
             print(f"❌ [ETH_PAYMENT] Invalid destination address: {e}")
-            return None
+            raise ValueError(f"Invalid destination address: {e}")
 
         # Convert ETH to Wei
         amount_wei = self.w3.to_wei(amount, 'ether')
         print(f"💸 [ETH_PAYMENT] Amount in Wei: {amount_wei}")
 
-        while True:
-            attempt += 1
-            elapsed_time = int(time.time() - start_time)
+        # Validate amount
+        if amount_wei <= 0:
+            raise ValueError(f"Invalid amount: {amount} ETH (must be positive)")
 
-            print(f"🔄 [ETH_PAYMENT_RETRY] Attempt #{attempt} (elapsed: {elapsed_time}s)")
+        # Single attempt (NO RETRY)
+        try:
+            # Check connection
+            if not self.w3 or not self.w3.is_connected():
+                print(f"🔗 [ETH_PAYMENT] Reconnecting to Web3")
+                if not self._connect_to_web3():
+                    raise Exception("Failed to connect to Ethereum RPC endpoint")
+
+            # Get nonce
+            nonce = self.w3.eth.get_transaction_count(self.wallet_address)
+            print(f"🔢 [ETH_PAYMENT] Nonce: {nonce}")
+
+            # Get optimized gas prices
+            gas_data = self._get_optimized_gas_price()
+
+            # Build transaction with EIP-1559
+            transaction = {
+                'nonce': nonce,
+                'to': to_address_checksum,
+                'value': amount_wei,
+                'gas': 21000,
+                'maxFeePerGas': gas_data['maxFeePerGas'],
+                'maxPriorityFeePerGas': gas_data['maxPriorityFeePerGas'],
+                'chainId': 1
+            }
+
+            print(f"📝 [ETH_PAYMENT] Transaction built (EIP-1559)")
+
+            # Sign transaction
+            print(f"🔐 [ETH_PAYMENT] Signing transaction")
+            signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
+
+            # Broadcast transaction
+            print(f"📤 [ETH_PAYMENT] Broadcasting transaction")
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            tx_hash_hex = self.w3.to_hex(tx_hash)
+
+            print(f"✅ [ETH_PAYMENT] Transaction broadcasted")
+            print(f"🆔 [ETH_PAYMENT] TX Hash: {tx_hash_hex}")
+
+            # Wait for confirmation with timeout
+            print(f"⏳ [ETH_PAYMENT] Waiting for confirmation (300s timeout)...")
 
             try:
-                # Reconnect if not connected
-                if not self.w3 or not self.w3.is_connected():
-                    print(f"🔗 [ETH_PAYMENT_RETRY] Reconnecting to Web3")
-                    if not self._connect_to_web3():
-                        print(f"❌ [ETH_PAYMENT_RETRY] Reconnection failed")
-                        print(f"⏳ [ETH_PAYMENT_RETRY] Waiting 60s before retry...")
-                        time.sleep(60)
-                        continue
+                tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
 
-                # Get nonce
-                nonce = self.w3.eth.get_transaction_count(self.wallet_address)
-                print(f"🔢 [ETH_PAYMENT_RETRY] Nonce: {nonce}")
+                status = "success" if tx_receipt['status'] == 1 else "failed"
 
-                # Get optimized gas prices
-                gas_data = self._get_optimized_gas_price()
+                if status == "success":
+                    print(f"🎉 [ETH_PAYMENT] Transaction confirmed!")
 
-                # Build transaction with EIP-1559
-                transaction = {
-                    'nonce': nonce,
-                    'to': to_address_checksum,
-                    'value': amount_wei,
-                    'gas': 21000,
-                    'maxFeePerGas': gas_data['maxFeePerGas'],
-                    'maxPriorityFeePerGas': gas_data['maxPriorityFeePerGas'],
-                    'chainId': 1
-                }
+                    return {
+                        "tx_hash": tx_hash_hex,
+                        "status": status,
+                        "gas_used": tx_receipt['gasUsed'],
+                        "block_number": tx_receipt['blockNumber']
+                    }
+                else:
+                    # Transaction reverted on-chain
+                    print(f"❌ [ETH_PAYMENT] Transaction failed on-chain (reverted)")
+                    raise Exception(f"Transaction reverted on-chain: {tx_hash_hex}")
 
-                print(f"📝 [ETH_PAYMENT_RETRY] Transaction built (EIP-1559)")
+            except Exception as timeout_err:
+                # Confirmation timeout (transaction may still be pending)
+                print(f"⏰ [ETH_PAYMENT] Transaction confirmation timeout: {timeout_err}")
+                raise Exception(f"Transaction confirmation timeout after 300s: {tx_hash_hex}")
 
-                # Sign transaction
-                print(f"🔐 [ETH_PAYMENT_RETRY] Signing transaction")
-                signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
+        except ValueError as e:
+            # Value errors (nonce, insufficient funds, etc.)
+            error_msg = str(e)
+            print(f"❌ [ETH_PAYMENT] Transaction error: {error_msg}")
+            raise  # Re-raise ValueError for classification
 
-                # Broadcast transaction
-                print(f"📤 [ETH_PAYMENT_RETRY] Broadcasting transaction")
-                tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-                tx_hash_hex = self.w3.to_hex(tx_hash)
-
-                print(f"✅ [ETH_PAYMENT_RETRY] Transaction broadcasted")
-                print(f"🆔 [ETH_PAYMENT_RETRY] TX Hash: {tx_hash_hex}")
-
-                # Wait for confirmation with timeout
-                print(f"⏳ [ETH_PAYMENT_RETRY] Waiting for confirmation (300s timeout)...")
-
-                try:
-                    tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
-
-                    status = "success" if tx_receipt['status'] == 1 else "failed"
-
-                    if status == "success":
-                        print(f"🎉 [ETH_PAYMENT_RETRY] Transaction confirmed!")
-                        print(f"🕒 [ETH_PAYMENT_RETRY] Total attempts: {attempt}")
-                        print(f"⏱️  [ETH_PAYMENT_RETRY] Total time: {elapsed_time}s")
-
-                        return {
-                            "tx_hash": tx_hash_hex,
-                            "status": status,
-                            "gas_used": tx_receipt['gasUsed'],
-                            "block_number": tx_receipt['blockNumber']
-                        }
-                    else:
-                        print(f"❌ [ETH_PAYMENT_RETRY] Transaction failed on-chain")
-                        print(f"⏳ [ETH_PAYMENT_RETRY] Waiting 60s before retry...")
-                        time.sleep(60)
-                        continue
-
-                except Exception as timeout_err:
-                    print(f"⏰ [ETH_PAYMENT_RETRY] Transaction confirmation timeout: {timeout_err}")
-                    print(f"⏳ [ETH_PAYMENT_RETRY] Waiting 60s before retry...")
-                    time.sleep(60)
-                    continue
-
-            except ValueError as e:
-                error_msg = str(e)
-                print(f"❌ [ETH_PAYMENT_RETRY] Transaction error: {error_msg}")
-
-                # Handle specific errors
-                if "nonce too low" in error_msg.lower():
-                    print(f"⚠️ [ETH_PAYMENT_RETRY] Nonce too low - transaction may be mined")
-                    # Wait and check if transaction was mined
-                    time.sleep(60)
-                    continue
-                elif "insufficient funds" in error_msg.lower():
-                    print(f"❌ [ETH_PAYMENT_RETRY] Insufficient funds")
-                    print(f"⏳ [ETH_PAYMENT_RETRY] Waiting 60s before retry...")
-                    time.sleep(60)
-                    continue
-                elif "replacement transaction underpriced" in error_msg.lower():
-                    print(f"⚠️ [ETH_PAYMENT_RETRY] Replacement underpriced - increasing gas buffer")
-                    self.gas_price_buffer += 0.1
-                    time.sleep(60)
-                    continue
-
-                print(f"⏳ [ETH_PAYMENT_RETRY] Waiting 60s before retry...")
-                time.sleep(60)
-                continue
-
-            except Exception as e:
-                print(f"❌ [ETH_PAYMENT_RETRY] Unexpected error: {e}")
-                print(f"⏳ [ETH_PAYMENT_RETRY] Waiting 60s before retry...")
-                time.sleep(60)
-                continue
+        except Exception as e:
+            # All other errors (network, gas, etc.)
+            print(f"❌ [ETH_PAYMENT] Payment execution error: {e}")
+            raise  # Re-raise for classification
