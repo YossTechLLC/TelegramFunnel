@@ -1,8 +1,94 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Session 14 - Database Schema Mismatch Fix ✅)
+**Last Updated:** 2025-11-01 (Session 15 - Schema Constraint Fix ✅)
 
 ## Recent Updates
+
+## 2025-11-01 Session 15: DATABASE SCHEMA CONSTRAINT FIX ✅
+
+### 🎯 Purpose
+Fixed critical NULL constraint violations in payout_accumulation table schema that prevented GCAccumulator from storing pending conversion records.
+
+### 🐛 Problem Identified
+**Symptoms:**
+- GCAccumulator: `null value in column "eth_to_usdt_rate" violates not-null constraint`
+- GCAccumulator: `null value in column "conversion_timestamp" violates not-null constraint`
+- Payment accumulation requests returning 500 errors
+- Cloud Tasks retrying failed requests continuously
+- GCMicroBatchProcessor: Still showed `accumulated_eth` error in old logs (but this was already fixed in Session 14)
+
+**Root Cause:**
+- Database schema (`execute_migrations.py:153-154`) incorrectly defined:
+  - `eth_to_usdt_rate NUMERIC(18, 8) NOT NULL` ❌
+  - `conversion_timestamp TIMESTAMP NOT NULL` ❌
+- Architecture requires two-phase processing:
+  1. **GCAccumulator**: Stores payments with `conversion_status='pending'` WITHOUT conversion data
+  2. **GCMicroBatchProcessor**: Later fills in conversion data during batch processing
+- NOT NULL constraints prevented storing pending records with NULL conversion fields
+
+### ✅ Fix Applied
+
+**Schema Migration:**
+Created and executed `fix_payout_accumulation_schema.py`:
+```sql
+ALTER TABLE payout_accumulation
+ALTER COLUMN eth_to_usdt_rate DROP NOT NULL;
+
+ALTER TABLE payout_accumulation
+ALTER COLUMN conversion_timestamp DROP NOT NULL;
+```
+
+**Verification:**
+- ✅ Schema updated successfully
+- ✅ `eth_to_usdt_rate` now NULLABLE
+- ✅ `conversion_timestamp` now NULLABLE
+- ✅ `conversion_status` DEFAULT 'pending' (already correct)
+- ✅ No existing records with NULL values (existing 3 records all have conversion data)
+
+### 📊 System-Wide Verification
+
+**Checked for Schema Issues:**
+1. ✅ No service code has hardcoded NOT NULL constraints
+2. ✅ `accumulated_eth` only exists as variable names (not SQL columns)
+3. ✅ GCMicroBatchProcessor verified working (status 200 on scheduled checks)
+4. ✅ Database schema matches architecture requirements
+
+**Architecture Validation:**
+```
+Payment Flow:
+┌─────────────────┐    ┌──────────────────┐    ┌────────────────────┐
+│  GCWebhook1     │───▶│  GCAccumulator   │───▶│  Database          │
+│  (Receives $)   │    │  (Stores pending)│    │  (pending status)  │
+└─────────────────┘    └──────────────────┘    │  eth_to_usdt_rate: │
+                                                │    NULL ✅         │
+                                                │  conversion_ts:    │
+                       ┌──────────────────┐    │    NULL ✅         │
+                       │ GCMicroBatch     │───▶└────────────────────┘
+                       │ (Converts batch) │    │  (converted status)│
+                       └──────────────────┘    │  eth_to_usdt_rate: │
+                                                │    FILLED ✅       │
+                                                │  conversion_ts:    │
+                                                │    FILLED ✅       │
+                                                └────────────────────┘
+```
+
+### ⚠️ Discovered Issues
+
+**Cloud Tasks Authentication (NEW - Not in original scope):**
+- GCAccumulator receiving 403 errors from Cloud Tasks
+- Error: "The request was not authenticated"
+- Impact: Cannot test schema fix with real production requests
+- Status: Documented in BUGS.md as Active Bug
+- Next Steps: Fix IAM permissions or allow unauthenticated Cloud Tasks
+
+**Note:** This authentication issue is separate from the schema fix and was discovered during testing.
+
+### 📝 Documentation Updated
+- ✅ BUGS.md: Added Session 15 entry for schema constraint fix
+- ✅ BUGS.md: Documented Cloud Tasks authentication issue
+- ✅ PROGRESS.md: Added Session 15 summary
+
+---
 
 ## 2025-11-01 Session 14: DATABASE SCHEMA MISMATCH FIX ✅
 

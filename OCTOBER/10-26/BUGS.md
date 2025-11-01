@@ -1,12 +1,91 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Session 14 - accumulated_eth Column Fix)
+**Last Updated:** 2025-11-01 (Session 15 - Schema Constraint Fix)
 
 ---
 
 ## Active Bugs
 
-(No active bugs at this time)
+### 🔴 ACTIVE: GCAccumulator Cloud Tasks Authentication Failure
+- **Date Discovered:** November 1, 2025
+- **Severity:** HIGH - Blocking payment accumulation processing
+- **Status:** ⚠️ NEEDS ATTENTION
+- **Location:** GCAccumulator Cloud Run Service
+- **Error:** `403 Forbidden - The request was not authenticated`
+
+**Description:**
+Cloud Tasks cannot authenticate to GCAccumulator service. All task queue requests are being rejected with 403 errors.
+
+**Error Message:**
+```
+The request was not authenticated. Either allow unauthenticated invocations
+or set the proper Authorization header.
+```
+
+**Impact:**
+- Payment accumulation requests from GCWebhook1 via Cloud Tasks queue are failing
+- Tasks are being retried but continue to fail
+- Schema fix cannot be tested in production until authentication is resolved
+
+**Next Steps:**
+1. Review Cloud Run IAM settings for gcaccumulator-10-26
+2. Ensure Cloud Tasks service account has proper invoker permissions
+3. Or configure service to allow unauthenticated invocations from Cloud Tasks
+4. Update Cloud Tasks queue configuration with service account if needed
+
+---
+
+## Recently Fixed (Session 15)
+
+### 🟢 RESOLVED: NULL Constraint Violation - eth_to_usdt_rate & conversion_timestamp
+- **Date Discovered:** November 1, 2025
+- **Date Fixed:** November 1, 2025
+- **Severity:** CRITICAL - Payment accumulation completely broken
+- **Status:** ✅ FIXED (Database schema updated)
+- **Location:** Database schema `payout_accumulation` table
+- **Affected Services:** GCAccumulator
+
+**Description:**
+Database schema had NOT NULL constraints on `eth_to_usdt_rate` and `conversion_timestamp` columns, but the architecture requires these to be NULL for pending conversions. GCAccumulator stores payments in "pending" state without conversion data, which gets filled in later by GCMicroBatchProcessor.
+
+**Error Message:**
+```
+❌ [DATABASE] Failed to insert accumulation record:
+null value in column "eth_to_usdt_rate" of relation "payout_accumulation"
+violates not-null constraint
+```
+
+**Root Cause:**
+Schema migration (`execute_migrations.py:153-154`) incorrectly set:
+```sql
+eth_to_usdt_rate NUMERIC(18, 8) NOT NULL,        -- ❌ WRONG
+conversion_timestamp TIMESTAMP NOT NULL,          -- ❌ WRONG
+```
+
+**Architecture Flow:**
+1. GCAccumulator: Stores payment with `conversion_status='pending'`, NULL conversion fields
+2. GCMicroBatchProcessor: Later fills in conversion data when processing batch
+
+**Fix Applied:**
+Created and executed `fix_payout_accumulation_schema.py`:
+```sql
+ALTER TABLE payout_accumulation
+ALTER COLUMN eth_to_usdt_rate DROP NOT NULL;
+
+ALTER TABLE payout_accumulation
+ALTER COLUMN conversion_timestamp DROP NOT NULL;
+```
+
+**Verification:**
+- ✅ Schema updated successfully
+- ✅ Both columns now NULLABLE
+- ✅ Ready to accept pending conversion records
+- ⚠️ Production testing blocked by authentication issue (see Active Bugs)
+
+**Prevention:**
+- Review all NOT NULL constraints during schema design
+- Ensure constraints match actual data flow architecture
+- Test with realistic data before production deployment
 
 ---
 
