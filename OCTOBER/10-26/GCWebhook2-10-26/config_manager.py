@@ -63,21 +63,56 @@ class ConfigManager:
             "Telegram bot token"
         )
 
+        # Fetch database credentials for payment validation
+        instance_connection_name = self.fetch_secret(
+            "CLOUD_SQL_CONNECTION_NAME",
+            "Cloud SQL connection name"
+        )
+
+        db_name = self.fetch_secret(
+            "DATABASE_NAME_SECRET",
+            "Database name"
+        )
+
+        db_user = self.fetch_secret(
+            "DATABASE_USER_SECRET",
+            "Database user"
+        )
+
+        db_password = self.fetch_secret(
+            "DATABASE_PASSWORD_SECRET",
+            "Database password"
+        )
+
         # Validate critical configurations
         if not success_url_signing_key:
             print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
         if not telegram_bot_token:
             print(f"⚠️ [CONFIG] Warning: TELEGRAM_BOT_SECRET_NAME not available")
+        if not instance_connection_name:
+            print(f"⚠️ [CONFIG] Warning: CLOUD_SQL_CONNECTION_NAME not available")
+        if not db_name:
+            print(f"⚠️ [CONFIG] Warning: DATABASE_NAME_SECRET not available")
+        if not db_user:
+            print(f"⚠️ [CONFIG] Warning: DATABASE_USER_SECRET not available")
+        if not db_password:
+            print(f"⚠️ [CONFIG] Warning: DATABASE_PASSWORD_SECRET not available")
 
         config = {
             # Secrets
             'success_url_signing_key': success_url_signing_key,
-            'telegram_bot_token': telegram_bot_token
+            'telegram_bot_token': telegram_bot_token,
+            # Database credentials
+            'instance_connection_name': instance_connection_name,
+            'db_name': db_name,
+            'db_user': db_user,
+            'db_password': db_password
         }
 
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
         print(f"   TELEGRAM_BOT_TOKEN: {'✅' if config['telegram_bot_token'] else '❌'}")
+        print(f"   DATABASE_CREDENTIALS: {'✅' if all([db_name, db_user, db_password, instance_connection_name]) else '❌'}")
 
         return config

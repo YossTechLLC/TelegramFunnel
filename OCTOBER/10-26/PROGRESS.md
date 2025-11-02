@@ -4,6 +4,71 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 27: GCWebhook2 Payment Validation Security Fix ✅
+
+**Objective:** Add payment validation to GCWebhook2 to verify payment completion before sending Telegram invitations
+
+**Security Issue Identified:**
+- ❌ GCWebhook2 was sending Telegram invitations without validating payment completion
+- ❌ Service blindly trusted encrypted tokens from GCWebhook1
+- ❌ No verification of NowPayments IPN callback or payment_id
+- ❌ Race condition allowed invitations to be sent before payment confirmation
+
+**Actions Completed:**
+- ✅ Created `database_manager.py` with payment validation logic
+- ✅ Added `get_nowpayments_data()` method to query payment_id from database
+- ✅ Added `validate_payment_complete()` method to verify payment status
+- ✅ Updated `tph2-10-26.py` to validate payment before sending invitation
+- ✅ Updated `config_manager.py` to fetch database credentials from Secret Manager
+- ✅ Updated `requirements.txt` with Cloud SQL connector dependencies
+- ✅ Fixed Dockerfile to include `database_manager.py` in container
+- ✅ Rebuilt and deployed GCWebhook2 service with payment validation
+- ✅ Verified deployment - all components healthy
+
+**Code Changes:**
+```python
+# database_manager.py (NEW FILE)
+- DatabaseManager class with Cloud SQL Connector
+- get_nowpayments_data(): Queries payment_id, status, outcome_amount
+- validate_payment_complete(): Validates payment_id, status='finished', amount >= 80%
+
+# tph2-10-26.py (MODIFIED)
+- Added database_manager initialization
+- Added payment validation after token decryption
+- Returns 503 if IPN pending (Cloud Tasks retries)
+- Returns 400 if payment invalid (no retry)
+- Updated health check to include database_manager status
+
+# config_manager.py (MODIFIED)
+- Added CLOUD_SQL_CONNECTION_NAME secret fetch
+- Added DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+
+# requirements.txt (MODIFIED)
+- Added cloud-sql-python-connector[pg8000]==1.11.0
+- Added pg8000==1.31.2
+
+# Dockerfile (FIXED)
+- Added COPY database_manager.py . step
+```
+
+**Validation Logic:**
+1. Check payment_id exists in database (populated by np-webhook IPN)
+2. Verify payment_status = 'finished'
+3. Validate outcome_amount >= 80% of expected price (accounts for 15% NowPayments fee + 5% tolerance)
+4. Return appropriate status codes for Cloud Tasks retry logic
+
+**Impact:**
+- 🔐 Security fix: Prevents unauthorized Telegram access without payment
+- ✅ Payment verification: Validates IPN callback before sending invitations
+- 🔄 Retry logic: Returns 503 for IPN delays, 400 for invalid payments
+- 💰 Amount validation: Ensures sufficient payment received (accounts for fees)
+
+**Deployment:**
+- Service: gcwebhook2-10-26
+- URL: https://gcwebhook2-10-26-291176869049.us-central1.run.app
+- Revision: gcwebhook2-10-26-00011-w2t
+- Status: ✅ Healthy (all components operational)
+
 ## 2025-11-02 Session 26: TelePay Bot - Secret Manager Integration for IPN URL ✅
 
 **Objective:** Update TelePay bot to fetch IPN callback URL from Secret Manager instead of environment variable

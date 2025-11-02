@@ -15,6 +15,7 @@ RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 # Copy the app code
 COPY config_manager.py .
 COPY token_manager.py .
+COPY database_manager.py .
 COPY tph2-10-26.py .
 
 # Expose the port

@@ -19,6 +19,82 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: GCWebhook2 Payment Validation Security Fix
+
+**Decision:** Added payment validation to GCWebhook2 service to verify payment completion before sending Telegram invitations
+
+**Context:**
+- Security review revealed GCWebhook2 was sending Telegram invitations without payment verification
+- Service blindly trusted encrypted tokens from GCWebhook1
+- No check for NowPayments IPN callback or payment_id existence
+- Race condition could allow unauthorized access if payment failed after token generation
+- Critical security vulnerability in payment flow
+
+**Problem:**
+1. GCWebhook1 creates encrypted token and enqueues GCWebhook2 task immediately after creating subscription record
+2. GCWebhook2 receives token and sends Telegram invitation without checking payment status
+3. If NowPayments IPN callback is delayed or payment fails, user gets invitation without paying
+4. No validation of payment_id, payment_status, or payment amount
+
+**Implementation:**
+1. **New Database Manager:**
+   - Created `database_manager.py` with Cloud SQL Connector integration
+   - `get_nowpayments_data()`: Queries payment_id, status, address, outcome_amount
+   - `validate_payment_complete()`: Validates payment against business rules
+   - Returns tuple of (is_valid: bool, error_message: str)
+
+2. **Payment Validation Rules:**
+   - Check payment_id exists (populated by np-webhook IPN callback)
+   - Verify payment_status = 'finished'
+   - Validate outcome_amount >= 80% of expected price (accounts for 15% NowPayments fee + 5% tolerance)
+
+3. **Cloud Tasks Retry Logic:**
+   - Return 503 if IPN callback not yet processed → Cloud Tasks retries after 60s
+   - Return 400 if payment invalid (wrong amount, failed status) → Cloud Tasks stops retrying
+   - Return 200 only after payment validation succeeds
+
+4. **Configuration Updates:**
+   - Added database credential fetching to `config_manager.py`
+   - Fetches CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+   - Updated `requirements.txt` with cloud-sql-python-connector and pg8000
+   - Fixed Dockerfile to include database_manager.py
+
+**Rationale:**
+- **Security:** Prevents unauthorized Telegram access without payment confirmation
+- **Trust Model:** Zero-trust approach - validate payment even with signed tokens
+- **Race Condition Fix:** Handles IPN delays gracefully with retry logic
+- **Business Logic:** Validates payment amount to prevent underpayment fraud
+- **Reliability:** Cloud Tasks retry ensures eventual consistency when IPN delayed
+
+**Alternatives Considered:**
+1. **Skip validation, trust GCWebhook1 token:** Rejected - security vulnerability
+2. **Validate in GCWebhook1 before enqueueing:** Rejected - still has race condition
+3. **Poll NowPayments API directly:** Rejected - inefficient, rate limits, already have IPN data
+4. **Add payment_id to token payload:** Rejected - token created before payment_id available
+
+**Trade-offs:**
+- **Performance:** Additional database query per invitation (~50ms latency)
+- **Complexity:** Requires database credentials in GCWebhook2 service
+- **Dependencies:** Adds Cloud SQL Connector dependency to service
+- **Benefit:** Eliminates critical security vulnerability, worth the cost
+
+**Impact:**
+- GCWebhook2 now validates payment before sending invitations
+- Service health check includes database_manager status
+- Payment validation logs provide audit trail
+- Cloud Tasks retry logic handles IPN delays automatically
+
+**Files Modified:**
+- `/GCWebhook2-10-26/database_manager.py` (NEW)
+- `/GCWebhook2-10-26/tph2-10-26.py` (payment validation added)
+- `/GCWebhook2-10-26/config_manager.py` (database credentials)
+- `/GCWebhook2-10-26/requirements.txt` (dependencies)
+- `/GCWebhook2-10-26/Dockerfile` (copy database_manager.py)
+
+**Status:** ✅ Implemented and deployed (gcwebhook2-10-26-00011-w2t)
+
+---
+
 ### 2025-11-02: TelePay Bot - Secret Manager Integration for IPN Callback URL
 
 **Decision:** Modified TelePay bot to fetch IPN callback URL from Google Cloud Secret Manager instead of directly from environment variables

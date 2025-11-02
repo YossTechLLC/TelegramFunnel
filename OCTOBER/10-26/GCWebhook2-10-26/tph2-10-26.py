@@ -31,6 +31,7 @@ from telegram.error import TelegramError
 # Import service modules
 from config_manager import ConfigManager
 from token_manager import TokenManager
+from database_manager import DatabaseManager
 
 app = Flask(__name__)
 
@@ -38,6 +39,20 @@ app = Flask(__name__)
 print(f"🚀 [APP] Initializing GCWebhook2-10-26 Telegram Invite Sender Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
+
+# Initialize database manager for payment validation
+try:
+    db_manager = DatabaseManager(
+        instance_connection_name=config.get('instance_connection_name'),
+        db_name=config.get('db_name'),
+        db_user=config.get('db_user'),
+        db_password=config.get('db_password')
+    )
+    print(f"✅ [APP] Database manager initialized for payment validation")
+except Exception as e:
+    print(f"❌ [APP] Failed to initialize database manager: {e}")
+    print(f"⚠️ [APP] Payment validation will fail without database connection")
+    db_manager = None
 
 # Initialize token manager
 try:
@@ -112,6 +127,34 @@ def send_telegram_invite():
         except Exception as e:
             print(f"❌ [ENDPOINT] Token validation error: {e}")
             abort(400, f"Token error: {e}")
+
+        # ============================================================================
+        # PAYMENT VALIDATION - Verify payment completed before sending invite
+        # ============================================================================
+        if not db_manager:
+            print(f"❌ [ENDPOINT] Database manager not available - cannot validate payment")
+            abort(500, "Payment validation service unavailable")
+
+        print(f"🔐 [ENDPOINT] Validating payment completion...")
+        is_valid, error_message = db_manager.validate_payment_complete(
+            user_id=user_id,
+            closed_channel_id=closed_channel_id,
+            expected_price=subscription_price
+        )
+
+        if not is_valid:
+            if "IPN callback" in error_message or "pending" in error_message:
+                # IPN not yet processed - return 503 for Cloud Tasks retry
+                print(f"⏳ [ENDPOINT] Payment validation pending - Cloud Tasks will retry")
+                print(f"🔄 [ENDPOINT] Retry reason: {error_message}")
+                abort(503, error_message)
+            else:
+                # Payment invalid - return 400 (no retry)
+                print(f"❌ [ENDPOINT] Payment validation failed - will not retry")
+                print(f"🚫 [ENDPOINT] Failure reason: {error_message}")
+                abort(400, error_message)
+
+        print(f"✅ [ENDPOINT] Payment validation successful - proceeding with invitation")
 
         # Check bot token availability
         if not bot_token:
@@ -203,13 +246,17 @@ def send_telegram_invite():
 def health_check():
     """Health check endpoint for monitoring."""
     try:
+        # Check if all required components are healthy
+        all_healthy = all([token_manager, bot_token, db_manager])
+
         return jsonify({
-            "status": "healthy",
-            "service": "GCWebhook2-10-26 Telegram Invite Sender",
+            "status": "healthy" if all_healthy else "degraded",
+            "service": "GCWebhook2-10-26 Telegram Invite Sender (with Payment Validation)",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
-                "bot_token": "healthy" if bot_token else "unhealthy"
+                "bot_token": "healthy" if bot_token else "unhealthy",
+                "database_manager": "healthy" if db_manager else "unhealthy"
             }
         }), 200
 
@@ -217,7 +264,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCWebhook2-10-26 Telegram Invite Sender",
+            "service": "GCWebhook2-10-26 Telegram Invite Sender (with Payment Validation)",
             "error": str(e)
         }), 503
 
