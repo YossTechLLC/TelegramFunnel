@@ -4,6 +4,66 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 29: NowPayments Webhook Channel ID Fix - CRITICAL BUG FIX ✅
+
+**Objective:** Fix NowPayments IPN webhook failure to store payment_id due to channel ID sign mismatch
+
+**Root Cause Identified:**
+- Order ID format `PGP-{user_id}{open_channel_id}` treats negative sign as separator
+- Example: `PGP-6271402111-1003268562225` (should be `-1003268562225`)
+- Database lookup fails because webhook searches with positive channel ID
+
+**Actions Completed:**
+- ✅ **Phase 1**: Fixed order ID generation in `TelePay10-26/start_np_gateway.py`
+  - Changed separator from `-` to `|` (preserves negative sign)
+  - Format: `PGP-{user_id}|{open_channel_id}` → `PGP-6271402111|-1003268562225`
+  - Added validation to ensure channel IDs are negative
+  - Added comprehensive debug logging
+
+- ✅ **Phase 2**: Fixed IPN webhook parsing in `np-webhook-10-26/app.py`
+  - Created `parse_order_id()` function with new and old format support
+  - Implemented two-step database lookup:
+    1. Parse order_id → extract user_id and open_channel_id
+    2. Query main_clients_database → get closed_channel_id
+    3. Update private_channel_users_database using closed_channel_id
+  - Backward compatibility for old format during transition period
+
+- ✅ **Phase 3 & 4**: Enhanced logging and error handling
+  - Order ID validation logs with format detection
+  - Database lookup logs showing channel mapping
+  - Error handling for missing channel mapping
+  - Error handling for no subscription record
+  - Proper HTTP status codes (200/400/500) for IPN retry logic
+
+- ✅ **Phase 5**: Database schema validation via observability logs
+  - Confirmed database connectivity and schema structure
+  - Verified channel IDs stored as negative numbers (e.g., -1003296084379)
+  - Confirmed NowPayments columns exist in private_channel_users_database
+
+- ✅ **Deployment**: Updated np-webhook service
+  - Built Docker image: `gcr.io/telepay-459221/np-webhook-10-26`
+  - Deployed to Cloud Run: revision `np-webhook-00006-q7g`
+  - Service URL: `https://np-webhook-291176869049.us-east1.run.app`
+  - Health check: ✅ All components healthy
+
+**Key Architectural Decision:**
+- Using `|` separator instead of modifying database schema
+- Safer and faster than schema migration
+- Two-step lookup: open_channel_id → closed_channel_id → update
+
+**Impact:**
+- ✅ Payment IDs will now be captured correctly from NowPayments IPN
+- ✅ Fee discrepancy resolution unblocked
+- ✅ Customer support for payment disputes enabled
+- ✅ NowPayments API reconciliation functional
+
+**Related Files:**
+- Progress tracker: `NP_WEBHOOK_FIX_CHECKLIST_PROGRESS.md`
+- Implementation plan: `NP_WEBHOOK_FIX_CHECKLIST.md`
+- Root cause analysis: `NP_WEBHOOK_403_ROOT_CAUSE_ANALYSIS.md`
+
+---
+
 ## 2025-11-02 Session 28B: np-webhook Enhanced Logging Deployment ✅
 
 **Objective:** Deploy np-webhook with comprehensive startup logging similar to other webhook services

@@ -82,6 +82,57 @@ else:
 # DATABASE FUNCTIONS
 # ============================================================================
 
+def parse_order_id(order_id: str) -> tuple:
+    """
+    Parse NowPayments order_id to extract user_id and open_channel_id.
+
+    Format: PGP-{user_id}|{open_channel_id}
+    Example: PGP-6271402111|-1003268562225
+
+    Also supports old format for backward compatibility:
+    Old Format: PGP-{user_id}-{channel_id} (loses negative sign)
+    Example: PGP-6271402111-1003268562225
+
+    Returns:
+        Tuple of (user_id, open_channel_id) or (None, None) if invalid
+    """
+    try:
+        # Check for new format first (with | separator)
+        if '|' in order_id:
+            # New format: PGP-{user_id}|{open_channel_id}
+            prefix_and_user, channel_id_str = order_id.split('|')
+            if not prefix_and_user.startswith('PGP-'):
+                print(f"❌ [PARSE] order_id does not start with 'PGP-': {order_id}")
+                return None, None
+            user_id_str = prefix_and_user[4:]  # Remove 'PGP-' prefix
+            user_id = int(user_id_str)
+            open_channel_id = int(channel_id_str)  # Preserves negative sign
+            print(f"✅ [PARSE] New format detected")
+            print(f"   User ID: {user_id}")
+            print(f"   Open Channel ID: {open_channel_id}")
+            return user_id, open_channel_id
+
+        # Fallback to old format for backward compatibility (during transition)
+        else:
+            # Old format: PGP-{user_id}-{channel_id} (loses negative sign)
+            parts = order_id.split('-')
+            if len(parts) < 3 or parts[0] != 'PGP':
+                print(f"❌ [PARSE] Invalid order_id format: {order_id}")
+                return None, None
+            user_id = int(parts[1])
+            channel_id = int(parts[2])
+            # FIX: Add negative sign back (all Telegram channels are negative)
+            open_channel_id = -abs(channel_id)
+            print(f"⚠️ [PARSE] Old format detected - added negative sign")
+            print(f"   User ID: {user_id}")
+            print(f"   Open Channel ID: {open_channel_id} (corrected from {channel_id})")
+            return user_id, open_channel_id
+
+    except (ValueError, IndexError) as e:
+        print(f"❌ [PARSE] Failed to parse order_id '{order_id}': {e}")
+        return None, None
+
+
 def get_db_connection():
     """Create and return a database connection."""
     if not connector:
@@ -107,8 +158,13 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
     """
     Update private_channel_users_database with NowPayments payment data.
 
+    Two-step process:
+    1. Parse order_id to get user_id and open_channel_id
+    2. Look up closed_channel_id from main_clients_database using open_channel_id
+    3. Update private_channel_users_database using user_id and closed_channel_id (as private_channel_id)
+
     Args:
-        order_id: NowPayments order_id (format: PGP-{user_id}-{channel_id})
+        order_id: NowPayments order_id (format: PGP-{user_id}|{open_channel_id})
         payment_data: Dictionary with payment metadata from IPN
 
     Returns:
@@ -118,17 +174,16 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
     cur = None
 
     try:
-        # Parse order_id to extract user_id and channel_id
-        # Format: PGP-{user_id}-{channel_id}
-        parts = order_id.split('-')
-        if len(parts) < 3 or parts[0] != 'PGP':
+        # Step 1: Parse order_id
+        user_id, open_channel_id = parse_order_id(order_id)
+        if user_id is None or open_channel_id is None:
             print(f"❌ [DATABASE] Invalid order_id format: {order_id}")
             return False
 
-        user_id = int(parts[1])
-        channel_id = int(parts[2])
-
-        print(f"📝 [DATABASE] Updating payment data for user {user_id}, channel {channel_id}")
+        print(f"")
+        print(f"📝 [DATABASE] Parsed order_id successfully:")
+        print(f"   User ID: {user_id}")
+        print(f"   Open Channel ID: {open_channel_id}")
 
         conn = get_db_connection()
         if not conn:
@@ -136,7 +191,38 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
 
         cur = conn.cursor()
 
-        # Update the most recent subscription record with NowPayments data
+        # Step 2: Look up closed_channel_id (private_channel_id) from main_clients_database
+        print(f"")
+        print(f"🔍 [DATABASE] Looking up channel mapping...")
+        print(f"   Searching for open_channel_id: {open_channel_id}")
+
+        cur.execute(
+            "SELECT closed_channel_id FROM main_clients_database WHERE open_channel_id = %s",
+            (str(open_channel_id),)
+        )
+        result = cur.fetchone()
+
+        if not result or not result[0]:
+            print(f"")
+            print(f"❌ [DATABASE] No closed_channel_id found for open_channel_id: {open_channel_id}")
+            print(f"⚠️ [DATABASE] This channel may not be registered in main_clients_database")
+            print(f"💡 [HINT] Register this channel first:")
+            print(f"   INSERT INTO main_clients_database (open_channel_id, closed_channel_id, ...)")
+            print(f"   VALUES ('{open_channel_id}', '<closed_channel_id>', ...)")
+            return False
+
+        closed_channel_id = result[0]
+        print(f"✅ [DATABASE] Found channel mapping:")
+        print(f"   Open Channel ID (public): {open_channel_id}")
+        print(f"   Closed Channel ID (private): {closed_channel_id}")
+
+        # Step 3: Update private_channel_users_database
+        # Note: private_channel_id in this table = closed_channel_id from main_clients_database
+        print(f"")
+        print(f"🗄️ [DATABASE] Updating subscription record...")
+        print(f"   Target table: private_channel_users_database")
+        print(f"   WHERE user_id = {user_id} AND private_channel_id = {closed_channel_id}")
+
         update_query = """
             UPDATE private_channel_users_database
             SET
@@ -168,26 +254,40 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
             payment_data.get('pay_currency'),
             payment_data.get('outcome_amount'),
             user_id,
-            channel_id,
+            closed_channel_id,  # Use closed_channel_id (not open_channel_id!)
             user_id,
-            channel_id
+            closed_channel_id
         ))
 
         conn.commit()
         rows_updated = cur.rowcount
 
         if rows_updated > 0:
-            print(f"✅ [DATABASE] Updated {rows_updated} record(s)")
+            print(f"")
+            print(f"✅ [DATABASE] Successfully updated {rows_updated} record(s)")
+            print(f"   User ID: {user_id}")
+            print(f"   Private Channel ID: {closed_channel_id}")
             print(f"   Payment ID: {payment_data.get('payment_id')}")
+            print(f"   Invoice ID: {payment_data.get('invoice_id')}")
             print(f"   Status: {payment_data.get('payment_status')}")
             print(f"   Amount: {payment_data.get('outcome_amount')} {payment_data.get('pay_currency')}")
             return True
         else:
-            print(f"⚠️ [DATABASE] No records found to update for user {user_id}, channel {channel_id}")
+            print(f"")
+            print(f"⚠️ [DATABASE] No records found to update")
+            print(f"   User ID: {user_id}")
+            print(f"   Private Channel ID: {closed_channel_id}")
+            print(f"💡 [HINT] User may not have an active subscription record")
+            print(f"💡 [HINT] Check if record exists:")
+            print(f"   SELECT * FROM private_channel_users_database")
+            print(f"   WHERE user_id = {user_id} AND private_channel_id = {closed_channel_id}")
+            print(f"   ORDER BY id DESC LIMIT 1")
             return False
 
     except Exception as e:
-        print(f"❌ [DATABASE] Update failed: {e}")
+        print(f"")
+        print(f"❌ [DATABASE] Update failed with exception: {e}")
+        print(f"🔄 [DATABASE] Rolling back transaction...")
         if conn:
             conn.rollback()
         return False

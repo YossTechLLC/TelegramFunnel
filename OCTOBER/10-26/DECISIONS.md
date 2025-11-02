@@ -19,6 +19,105 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: NowPayments Order ID Format Change (Pipe Separator)
+
+**Decision:** Changed NowPayments order_id format from `PGP-{user_id}{open_channel_id}` to `PGP-{user_id}|{open_channel_id}` using pipe separator
+
+**Context:**
+- NowPayments IPN webhooks receiving callbacks but failing to store payment_id in database
+- Root cause: Order ID format `PGP-6271402111-1003268562225` loses negative sign
+- Telegram channel IDs are ALWAYS negative (e.g., -1003268562225)
+- When concatenating with `-`, negative sign becomes separator: `PGP-{user_id}-{abs(channel_id)}`
+- Database lookup fails: searches for +1003268562225, finds nothing (actual ID is -1003268562225)
+
+**Options Considered:**
+1. **Modify database schema** - Add open_channel_id to private_channel_users_database
+   - Pros: Direct lookup without intermediate query
+   - Cons: Requires migration, affects all services, breaks existing functionality
+
+2. **Use different separator (|)** - Change order_id format to preserve negative sign
+   - Pros: Quick fix, no schema changes, backward compatible
+   - Cons: Requires updating both TelePay bot and np-webhook
+
+3. **Store absolute value and add negative** - Assume all channel IDs are negative
+   - Pros: Works with existing format
+   - Cons: Fragile assumption, doesn't solve root cause
+
+**Decision Rationale:**
+- **Option 2 selected**: Change separator to pipe (`|`)
+- Safer than database migration (no risk to existing data)
+- Faster implementation (2 files vs. full system migration)
+- Backward compatible: old format supported during transition
+- Pipe separator cannot appear in user IDs or channel IDs (unambiguous)
+
+**Implementation:**
+1. TelePay Bot (`start_np_gateway.py:168`):
+   - OLD: `order_id = f"PGP-{user_id}{open_channel_id}"`
+   - NEW: `order_id = f"PGP-{user_id}|{open_channel_id}"`
+   - Added validation: ensure channel_id starts with `-`
+
+2. np-webhook (`app.py`):
+   - Created `parse_order_id()` function
+   - Detects format: `|` present → new format, else old format
+   - Old format fallback: adds negative sign back (`-abs(channel_id)`)
+   - Two-step database lookup:
+     - Parse order_id → extract user_id, open_channel_id
+     - Query main_clients_database → get closed_channel_id
+     - Update private_channel_users_database using closed_channel_id
+
+**Impact:**
+- ✅ Payment IDs captured correctly from NowPayments
+- ✅ Fee reconciliation unblocked
+- ✅ Customer support enabled for payment disputes
+- ⚠️ Old format orders processed with fallback logic (7-day transition window)
+
+**Trade-offs:**
+- Pros: Zero database changes, minimal code changes, immediate fix
+- Cons: Two parsing formats to maintain (temporary during transition)
+
+**References:**
+- Checklist: `NP_WEBHOOK_FIX_CHECKLIST.md`
+- Root cause: `NP_WEBHOOK_403_ROOT_CAUSE_ANALYSIS.md`
+- Progress: `NP_WEBHOOK_FIX_CHECKLIST_PROGRESS.md`
+
+---
+
+### 2025-11-02: np-webhook Two-Step Database Lookup
+
+**Decision:** Implemented two-step database lookup in np-webhook to correctly map channel IDs
+
+**Context:**
+- Order ID contains `open_channel_id` (public channel)
+- Database update targets `private_channel_users_database` using `private_channel_id` (private channel)
+- These are DIFFERENT channel IDs for the same Telegram channel group
+- Direct lookup impossible without intermediate mapping
+
+**Implementation:**
+```python
+# Step 1: Parse order_id
+user_id, open_channel_id = parse_order_id(order_id)
+
+# Step 2: Look up closed_channel_id from main_clients_database
+SELECT closed_channel_id FROM main_clients_database WHERE open_channel_id = %s
+
+# Step 3: Update private_channel_users_database
+UPDATE private_channel_users_database
+SET nowpayments_payment_id = %s, ...
+WHERE user_id = %s AND private_channel_id = %s
+```
+
+**Rationale:**
+- Database schema correctly normalized: one channel relationship per subscription
+- `main_clients_database` holds channel mapping (open → closed)
+- `private_channel_users_database` tracks subscription access (user → private channel)
+- Two-step lookup respects existing architecture without modifications
+
+**Trade-offs:**
+- Pros: Works with existing schema, no migrations, respects normalization
+- Cons: Two database queries per IPN (acceptable for low-volume webhook)
+
+---
+
 ### 2025-11-02: np-webhook Secret Configuration Fix
 
 **Decision:** Configured np-webhook Cloud Run service with required secrets for IPN processing and database updates

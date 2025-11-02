@@ -165,8 +165,26 @@ class PaymentGatewayManager:
             return
         
         # Create unique order ID
-        order_id = f"PGP-{user_id}{open_channel_id}"
-        
+        # FIXED: Use | separator to preserve negative sign in channel_id
+        # Format: PGP-{user_id}|{open_channel_id}
+        # Example: PGP-6271402111|-1003268562225
+
+        # Validate that open_channel_id is negative (Telegram requirement)
+        if not str(open_channel_id).startswith('-'):
+            print(f"⚠️ [VALIDATION] open_channel_id should be negative: {open_channel_id}")
+            print(f"⚠️ [VALIDATION] Telegram channel IDs are always negative for supergroups/channels")
+            # Add negative sign to fix misconfiguration
+            open_channel_id = f"-{open_channel_id}" if open_channel_id != "donation_default" else open_channel_id
+            print(f"✅ [VALIDATION] Corrected to: {open_channel_id}")
+
+        order_id = f"PGP-{user_id}|{open_channel_id}"
+
+        # Debug logging
+        print(f"📋 [ORDER] Created order_id: {order_id}")
+        print(f"   User ID: {user_id}")
+        print(f"   Open Channel ID: {open_channel_id}")
+        print(f"   Channel ID is negative: {str(open_channel_id).startswith('-')}")
+
         # Create payment invoice
         invoice_result = await self.create_payment_invoice(
             user_id=user_id,
