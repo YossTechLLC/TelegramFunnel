@@ -12,6 +12,129 @@
 
 ## Recently Fixed
 
+### 2025-11-02: Payment Validation Using Invoice Price Instead of Actual Received Amount ✅
+
+**Service:** GCWebhook2-10-26 (Payment Validation Service)
+**Severity:** Critical
+**Status:** FIXED ✅
+
+**Description:**
+- Payment validation checking subscription invoice price instead of actual received amount
+- Host wallet receives less than invoiced due to NowPayments fees
+- Result: Invitations sent even when host receives insufficient funds
+
+**Root Cause:**
+Validation using `price_amount` (invoice) instead of `outcome_amount` (actual received):
+
+1. **Invoice Amount** (`price_amount`)
+   ```python
+   # WRONG: Validating what user was charged
+   actual_usd = float(price_amount)  # $1.35 (invoice)
+   minimum_amount = expected_amount * 0.95  # $1.28
+   if actual_usd >= minimum_amount:  # $1.35 >= $1.28 ✅
+       return True  # PASSES but host may have received less!
+   ```
+
+2. **Actual Received** (`outcome_amount`)
+   ```
+   User pays: $1.35 USD
+   NowPayments fee: 20% ($0.27)
+   Host receives: 0.00026959 ETH (worth ~$1.08 USD)
+
+   Current validation: Checks $1.35 (invoice) ✅
+   Should validate: $1.08 (actual received)
+   ```
+
+**The Problem:**
+- `price_amount` = What customer was invoiced ($1.35)
+- `outcome_amount` = What host wallet received (0.00026959 ETH ≈ $1.08)
+- Validation should check actual received, not invoice
+- If fees are high, host could receive very little but invitation still sent
+
+**Fix Implemented:**
+
+1. **Crypto Price Feed Integration**
+   ```python
+   def get_crypto_usd_price(self, crypto_symbol: str) -> Optional[float]:
+       # Fetch current ETH/USD price from CoinGecko API
+       # Returns: 4000.00 (for ETH)
+
+   def convert_crypto_to_usd(self, amount: float, crypto_symbol: str) -> Optional[float]:
+       # Convert 0.00026959 ETH to USD
+       usd_price = get_crypto_usd_price('eth')  # $4,000
+       usd_value = 0.00026959 * 4000  # $1.08
+       return usd_value
+   ```
+
+2. **Updated Validation Logic** - 3-tier strategy
+   ```python
+   # TIER 1 (PRIMARY): Validate actual received amount
+   if outcome_amount and outcome_currency:
+       outcome_usd = convert_crypto_to_usd(outcome_amount, outcome_currency)
+       # 0.00026959 ETH → $1.08 USD
+
+       minimum_amount = expected_amount * 0.75  # 75% threshold
+       # $1.35 × 0.75 = $1.01
+
+       if outcome_usd >= minimum_amount:  # $1.08 >= $1.01 ✅
+           # Log fee reconciliation
+           fee = price_amount - outcome_usd  # $1.35 - $1.08 = $0.27 (20%)
+           return True
+
+   # TIER 2 (FALLBACK): If price feed fails, use invoice price
+   if price_amount:
+       # WARNING: Validating invoice, not actual received
+       return validate_invoice_price()
+
+   # TIER 3 (ERROR): No validation possible
+   return False
+   ```
+
+3. **Dependencies Added**
+   ```txt
+   requests==2.31.0  # For CoinGecko API calls
+   ```
+
+**Testing:**
+- ✅ Docker image built successfully
+- ✅ Deployed to Cloud Run: `gcwebhook2-10-26-00013-5ns`
+- ✅ Health check: All components healthy
+- ⏳ Pending: End-to-end test with real payment
+
+**Files Modified:**
+- `GCWebhook2-10-26/database_manager.py` (lines 1-9, 149-241, 295-364)
+- `GCWebhook2-10-26/requirements.txt` (line 6)
+
+**Deployment:**
+- gcwebhook2-10-26: Revision `gcwebhook2-10-26-00013-5ns`
+- Region: us-central1
+- URL: `https://gcwebhook2-10-26-291176869049.us-central1.run.app`
+
+**Impact:**
+- ✅ Payment validation now checks actual USD received
+- ✅ Host protected from excessive fee scenarios
+- ✅ Fee transparency via reconciliation logging
+- ✅ Backward compatible with price_amount fallback
+
+**Expected Logs After Fix:**
+```
+💰 [VALIDATION] Outcome: 0.000269520000000000 eth
+🔍 [PRICE] Fetching ETH price from CoinGecko...
+💰 [PRICE] ETH/USD = $4,000.00
+💰 [CONVERT] 0.00026952 ETH = $1.08 USD
+💰 [VALIDATION] Outcome in USD: $1.08
+✅ [VALIDATION] Outcome amount OK: $1.08 >= $1.01
+📊 [VALIDATION] Invoice: $1.35, Received: $1.08, Fee: $0.27 (20.0%)
+✅ [VALIDATION] Payment validation successful - payment_id: 5181195855
+```
+
+**Related:**
+- Analysis: `VALIDATION_OUTCOME_AMOUNT_FIX_CHECKLIST.md`
+- Previous fix: Session 30 (price_amount capture from IPN)
+- Decision: `DECISIONS.md` (Outcome amount USD conversion)
+
+---
+
 ### 2025-11-02: NowPayments Payment Validation Failing - Crypto vs USD Mismatch ✅
 
 **Service:** GCWebhook2-10-26 (Payment Validation Service)

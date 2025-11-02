@@ -19,6 +19,125 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: Outcome Amount USD Conversion for Payment Validation
+
+**Decision:** Validate payment using `outcome_amount` converted to USD (actual received) instead of `price_amount` (invoice price)
+
+**Context:**
+- Previous fix (Session 30) added `price_amount` validation
+- But `price_amount` is the subscription invoice amount, NOT what the host wallet receives
+- NowPayments takes fees (~15-20%) before sending crypto to host wallet
+- Host receives `outcome_amount` (e.g., 0.00026959 ETH) which is less than invoice
+- Need to validate what was ACTUALLY received, not what was invoiced
+
+**Problem Scenario:**
+```
+User pays: $1.35 subscription (price_amount)
+NowPayments processes: Takes 20% fee ($0.27)
+Host receives: 0.00026959 ETH (outcome_amount)
+Current validation: $1.35 >= $1.28 ✅ PASS
+Actual USD value received: 0.00026959 ETH × $4,000 = $1.08
+Should validate: $1.08 >= minimum expected
+```
+
+**Options Considered:**
+1. **Continue using price_amount** - Validate invoice price
+   - Pros: Simple, no external dependencies
+   - Cons: Doesn't validate actual received amount, can't detect excessive fees
+
+2. **Use outcome_amount with real-time price feed** - Convert crypto to USD
+   - Pros: Validates actual received value, fee transparency, accurate
+   - Cons: External API dependency, price volatility
+
+3. **Query NowPayments API for conversion** - Use NowPayments own conversion rates
+   - Pros: Authoritative source, no third-party dependency
+   - Cons: Requires API authentication, rate limits, extra latency
+
+4. **Hybrid approach** - outcome_amount conversion with price_amount fallback
+   - Pros: Best accuracy, graceful degradation if API fails
+   - Cons: Most complex implementation
+
+**Decision Rationale:**
+- **Option 4 selected**: Hybrid with outcome_amount conversion primary, price_amount fallback
+
+**Implementation:**
+
+**Tier 1 (PRIMARY)**: Outcome Amount USD Conversion
+```python
+# Convert crypto to USD using CoinGecko
+outcome_usd = convert_crypto_to_usd(outcome_amount, outcome_currency)
+# Example: 0.00026959 ETH × $4,000/ETH = $1.08 USD
+
+# Validate actual received amount
+minimum_amount = expected_amount * 0.75  # 75% threshold
+if outcome_usd >= minimum_amount:  # $1.08 >= $1.01 ✅
+    return True
+
+# Log fee reconciliation
+fee_lost = price_amount - outcome_usd  # $1.35 - $1.08 = $0.27
+fee_percentage = (fee_lost / price_amount) * 100  # 20%
+```
+
+**Tier 2 (FALLBACK)**: Invoice Price Validation
+```python
+# If price feed fails, fall back to price_amount
+if price_amount:
+    minimum = expected_amount * 0.95
+    if price_amount >= minimum:
+        # Log warning: validating invoice, not actual received
+        return True
+```
+
+**Tier 3 (ERROR)**: No Validation Possible
+```python
+# Neither outcome conversion nor price_amount available
+return False, "Cannot validate payment"
+```
+
+**Price Feed Choice:**
+- **CoinGecko Free API** selected
+  - No authentication required
+  - 50 calls/minute (sufficient for our volume)
+  - Supports all major cryptocurrencies
+  - Reliable and well-maintained
+
+**Validation Threshold:**
+```
+Subscription Price: $1.35 (100%)
+Expected Fees: ~20% = $0.27 (NowPayments 15% + network 5%)
+Expected Received: ~80% = $1.08
+Tolerance: 5% = $0.07
+Minimum: 75% = $1.01
+```
+
+**Trade-offs:**
+- ✅ Validates actual USD value received (accurate)
+- ✅ Fee transparency (logs actual fees)
+- ✅ Prevents invitations for underpaid transactions
+- ✅ Backward compatible (falls back to price_amount)
+- ⚠️ External API dependency (CoinGecko)
+- ⚠️ ~50-100ms additional latency per validation
+- ⚠️ Price volatility during conversion time (acceptable)
+
+**Alternative Rejected:**
+- **NowPayments API**: Requires authentication, rate limits, extra complexity
+- **price_amount only**: Doesn't validate actual received amount
+
+**Impact:**
+- Payment validation now checks actual wallet balance
+- Host protected from excessive fee scenarios
+- Fee reconciliation enabled for accounting
+- Transparent logging of invoice vs received amounts
+
+**Files Modified:**
+- `GCWebhook2-10-26/database_manager.py` (crypto price feed methods, validation logic)
+- `GCWebhook2-10-26/requirements.txt` (requests dependency)
+
+**Related Decision:**
+- Session 30: price_amount capture (prerequisite for fee reconciliation)
+
+---
+
 ### 2025-11-02: NowPayments Payment Validation Strategy (USD-to-USD Comparison)
 
 **Decision:** Use `price_amount` (original USD invoice amount) for payment validation instead of `outcome_amount` (crypto amount after fees)

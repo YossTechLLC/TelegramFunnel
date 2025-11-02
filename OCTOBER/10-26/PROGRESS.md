@@ -4,6 +4,79 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 31: Outcome Amount USD Conversion Validation Fix - CRITICAL BUG FIX ✅
+
+**Objective:** Fix GCWebhook2 payment validation to check actual received amount in USD instead of subscription invoice price
+
+**Root Cause Identified:**
+- Validation using `price_amount` (subscription price: $1.35 USD)
+- Should validate `outcome_amount` (actual crypto received: 0.00026959 ETH)
+- Problem: Validating invoice price, not actual wallet balance
+- Result: Could send invitations even if host received insufficient funds
+
+**Actions Completed:**
+- ✅ **Phase 1**: Added crypto price feed integration
+  - Integrated CoinGecko Free API for real-time crypto prices
+  - Added `get_crypto_usd_price()` method - fetches current USD price for crypto
+  - Added `convert_crypto_to_usd()` method - converts crypto amount to USD
+  - Supports 16 major cryptocurrencies (ETH, BTC, LTC, etc.)
+  - Stablecoin detection (USDT, USDC, BUSD, DAI treated as 1:1 USD)
+
+- ✅ **Phase 2**: Updated validation strategy (3-tier approach)
+  - **Strategy 1 (PRIMARY)**: Outcome amount USD conversion
+    - Convert `outcome_amount` (0.00026959 ETH) to USD using CoinGecko
+    - Validate converted USD >= 75% of subscription price
+    - Example: 0.00026959 ETH × $4,000 = $1.08 USD >= $1.01 ✅
+    - Logs fee reconciliation: Invoice $1.35 - Received $1.08 = Fee $0.27 (20%)
+
+  - **Strategy 2 (FALLBACK)**: price_amount validation
+    - Used if CoinGecko API fails or crypto not supported
+    - Validates invoice price instead (with warning logged)
+    - Tolerance: 95% (allows 5% rounding)
+
+  - **Strategy 3 (ERROR)**: No validation possible
+    - Both outcome conversion and price_amount unavailable
+    - Returns error, requires manual intervention
+
+- ✅ **Phase 3**: Updated dependencies
+  - Added `requests==2.31.0` to requirements.txt
+  - Import added to database_manager.py
+
+- ✅ **Phase 4**: Deployment
+  - Built Docker image: `gcr.io/telepay-459221/gcwebhook2-10-26`
+  - Deployed to Cloud Run: revision `gcwebhook2-10-26-00013-5ns`
+  - Health check: ✅ All components healthy
+  - Service URL: `https://gcwebhook2-10-26-291176869049.us-central1.run.app`
+
+**Key Architectural Decision:**
+- Use `outcome_amount` converted to USD for validation (actual received)
+- Fallback to `price_amount` if conversion fails (invoice price)
+- Minimum threshold: 75% of subscription price (accounts for ~20-25% fees)
+- Fee reconciliation logging: Track invoice vs received for transparency
+
+**Impact:**
+- ✅ Validation now checks actual USD value received in host wallet
+- ✅ Prevents invitations if insufficient funds received due to high fees
+- ✅ Fee transparency: Logs actual fees taken by NowPayments
+- ✅ Accurate validation: $1.08 received (0.00026959 ETH) vs $1.35 expected
+- ✅ Backward compatible: Falls back gracefully if price feed unavailable
+
+**Testing Needed:**
+- Create new payment and verify outcome_amount USD conversion
+- Verify CoinGecko API integration working
+- Confirm invitation sent after successful validation
+- Check fee reconciliation logs for accuracy
+
+**Files Modified:**
+- `GCWebhook2-10-26/database_manager.py` (lines 1-9, 149-241, 295-364)
+- `GCWebhook2-10-26/requirements.txt` (line 6)
+
+**Related:**
+- Checklist: `VALIDATION_OUTCOME_AMOUNT_FIX_CHECKLIST.md`
+- Previous fix: Session 30 (price_amount capture)
+
+---
+
 ## 2025-11-02 Session 30: NowPayments Amount Validation Fix - CRITICAL BUG FIX ✅
 
 **Objective:** Fix GCWebhook2 payment validation comparing crypto amounts to USD amounts
