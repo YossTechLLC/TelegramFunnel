@@ -245,6 +245,19 @@ def process_validated_payment():
         nowpayments_pay_address = payment_data.get('nowpayments_pay_address')
         nowpayments_outcome_amount = payment_data.get('nowpayments_outcome_amount')
 
+        # Normalize types immediately after extraction (defensive coding)
+        # JSON can send integers as strings, so convert to proper types
+        try:
+            user_id = int(user_id) if user_id is not None else None
+            closed_channel_id = int(closed_channel_id) if closed_channel_id is not None else None
+            subscription_time_days = int(subscription_time_days) if subscription_time_days is not None else None
+        except (ValueError, TypeError) as e:
+            print(f"❌ [VALIDATED] Type conversion error for integer fields: {e}")
+            print(f"   user_id: {payment_data.get('user_id')} (type: {type(payment_data.get('user_id'))})")
+            print(f"   closed_channel_id: {payment_data.get('closed_channel_id')} (type: {type(payment_data.get('closed_channel_id'))})")
+            print(f"   subscription_time_days: {payment_data.get('subscription_time_days')} (type: {type(payment_data.get('subscription_time_days'))})")
+            abort(400, f"Invalid integer field types: {e}")
+
         print(f"")
         print(f"✅ [VALIDATED] Payment Data Received:")
         print(f"   User ID: {user_id}")
@@ -371,13 +384,14 @@ def process_validated_payment():
             print(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
             abort(400, "Missing subscription data from payment")
 
-        # Ensure correct types
+        # Ensure subscription_price is string for token encryption
+        # (user_id, closed_channel_id, subscription_time_days already converted to int at line 251-253)
         try:
-            subscription_time_days = int(subscription_time_days)
             subscription_price = str(subscription_price)
         except (ValueError, TypeError) as e:
-            print(f"❌ [VALIDATED] Invalid subscription data types: {e}")
-            abort(400, "Invalid subscription data types")
+            print(f"❌ [VALIDATED] Invalid type for subscription_price: {e}")
+            print(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
+            abort(400, "Invalid subscription_price type")
 
         encrypted_token = token_manager.encrypt_token_for_gcwebhook2(
             user_id=user_id,
@@ -420,7 +434,7 @@ def process_validated_payment():
             "message": "Payment processed with actual outcome amount",
             "outcome_amount_usd": outcome_amount_usd,
             "declared_price": subscription_price,
-            "difference": outcome_amount_usd - subscription_price
+            "difference": outcome_amount_usd - float(subscription_price)
         }), 200
 
     except Exception as e:

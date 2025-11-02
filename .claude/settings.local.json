@@ -149,7 +149,9 @@
       "WebSearch",
       "WebFetch(domain:nowpayments.zendesk.com)",
       "Bash(do echo '=== $secret ===')",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(wait)",
+      "Bash(gcloud container images describe:*)"
     ],
     "deny": [],
     "ask": []

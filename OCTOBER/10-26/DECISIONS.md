@@ -19,6 +19,104 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: Cloud Tasks Queue Creation Strategy - Create Entry Point Queues First
+
+**Decision:** Always create **entry point queues** (external → service) BEFORE internal service queues
+
+**Context:**
+- Cloud Tasks queues must exist before tasks can be enqueued to them
+- Services can have multiple queue types:
+  1. **Entry point queues** - External systems/services sending tasks TO this service
+  2. **Exit point queues** - This service sending tasks TO other services
+  3. **Internal queues** - Service-to-service communication within orchestration flow
+- NP-Webhook → GCWebhook1 is the **critical entry point** for all payment processing
+- Missing entry point queue causes 404 errors and completely blocks payment flow
+
+**Problem:**
+- Deployment scripts created internal queues (GCWebhook1 → GCWebhook2, GCWebhook1 → GCSplit1)
+- **Forgot to create entry point queue** (NP-Webhook → GCWebhook1)
+- Secret Manager had `GCWEBHOOK1_QUEUE=gcwebhook1-queue` but queue never created
+- Result: 404 errors blocking ALL payment processing
+
+**Queue Creation Priority (MUST FOLLOW):**
+
+1. **Entry Point Queues (CRITICAL):**
+   - `gcwebhook1-queue` - NP-Webhook → GCWebhook1 (payment entry)
+   - `gcsplit-webhook-queue` - GCWebhook1 → GCSplit1 (payment processing)
+   - `accumulator-payment-queue` - GCWebhook1 → GCAccumulator (threshold payments)
+
+2. **Internal Processing Queues (HIGH PRIORITY):**
+   - `gcwebhook-telegram-invite-queue` - GCWebhook1 → GCWebhook2 (invites)
+   - `gcsplit-usdt-eth-estimate-queue` - GCSplit1 → GCSplit2 (conversions)
+   - `gcsplit-eth-client-swap-queue` - GCSplit2 → GCSplit3 (swaps)
+
+3. **HostPay Orchestration Queues (MEDIUM PRIORITY):**
+   - `gchostpay1-batch-queue` - Batch payment initiation
+   - `gchostpay2-status-check-queue` - ChangeNow status checks
+   - `gchostpay3-payment-exec-queue` - ETH payment execution
+
+4. **Response & Retry Queues (LOW PRIORITY):**
+   - `gchostpay1-response-queue` - Payment completion responses
+   - `gcaccumulator-response-queue` - Accumulator responses
+   - `gchostpay3-retry-queue` - Failed payment retries
+
+**Implementation Guidelines:**
+
+1. **Before deploying a new service:**
+   - Identify all queues the service will RECEIVE tasks from (entry points)
+   - Create those queues FIRST
+   - Then create queues the service will SEND tasks to (exit points)
+
+2. **Queue verification checklist:**
+   ```bash
+   # For each service, verify:
+   1. Entry point queues exist (critical path)
+   2. Exit point queues exist (orchestration)
+   3. Response queues exist (async patterns)
+   4. Retry queues exist (error handling)
+   ```
+
+3. **Secret Manager verification:**
+   ```bash
+   # Verify secret value matches actual queue:
+   QUEUE_NAME=$(gcloud secrets versions access latest --secret=QUEUE_SECRET)
+   gcloud tasks queues describe "$QUEUE_NAME" --location=us-central1
+   ```
+
+**Why This Approach:**
+- **Entry points are single points of failure** - Missing entry queue blocks entire flow
+- **Internal queues can be created lazily** - Services can retry until queue exists
+- **Priority ensures critical path works first** - Payments processed before optimizations
+- **Systematic approach prevents gaps** - Checklist ensures no missing queues
+
+**Example Application:**
+
+When deploying NP-Webhook:
+```bash
+# CORRECT ORDER:
+# 1. Create entry point queue (NP-Webhook receives from external)
+#    (None - NP-Webhook receives HTTP callbacks, not Cloud Tasks)
+#
+# 2. Create exit point queue (NP-Webhook sends to GCWebhook1)
+gcloud tasks queues create gcwebhook1-queue --location=us-central1 ...
+#
+# 3. Deploy service
+gcloud run deploy np-webhook-10-26 ...
+```
+
+**Consequences:**
+- ✅ Payment processing never blocked by missing entry queue
+- ✅ Deployment failures caught early (missing critical queues)
+- ✅ Clear priority for queue creation
+- ✅ Systematic checklist prevents gaps
+- ⚠️ Must maintain queue dependency map (documented in QUEUE_VERIFICATION_REPORT.md)
+
+**Status:** ✅ Implemented (Session 40)
+
+**Related:** Session 39 (newline fix), Session 40 (queue 404 fix)
+
+---
+
 ### 2025-11-02: Defensive Environment Variable Handling - Always Strip Whitespace
 
 **Decision:** ALL environment variable fetches MUST use defensive `.strip()` pattern to handle trailing/leading whitespace
