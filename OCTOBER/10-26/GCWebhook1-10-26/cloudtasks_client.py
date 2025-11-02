@@ -102,7 +102,8 @@ class CloudTasksClient:
         self,
         queue_name: str,
         target_url: str,
-        encrypted_token: str
+        encrypted_token: str,
+        payment_id: int
     ) -> Optional[str]:
         """
         Enqueue a Telegram invite request to GCWebhook2.
@@ -111,6 +112,7 @@ class CloudTasksClient:
             queue_name: Queue name (e.g., "gcwebhook-telegram-invite-queue")
             target_url: GCWebhook2 service URL
             encrypted_token: Encrypted token with user/channel data
+            payment_id: NowPayments payment_id for idempotency tracking
 
         Returns:
             Task name if successful, None if failed
@@ -119,7 +121,8 @@ class CloudTasksClient:
             print(f"📨 [CLOUD_TASKS] Enqueueing Telegram invite to GCWebhook2")
 
             payload = {
-                "token": encrypted_token
+                "token": encrypted_token,
+                "payment_id": payment_id
             }
 
             return self.create_task(

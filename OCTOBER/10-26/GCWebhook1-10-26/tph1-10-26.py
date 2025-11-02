@@ -416,7 +416,8 @@ def process_validated_payment():
             task_name_gcwebhook2 = cloudtasks_client.enqueue_gcwebhook2_telegram_invite(
                 queue_name=gcwebhook2_queue,
                 target_url=gcwebhook2_url,
-                encrypted_token=encrypted_token
+                encrypted_token=encrypted_token,
+                payment_id=nowpayments_payment_id
             )
 
             if task_name_gcwebhook2:
@@ -424,6 +425,27 @@ def process_validated_payment():
                 print(f"🆔 [VALIDATED] Task: {task_name_gcwebhook2}")
             else:
                 print(f"⚠️ [VALIDATED] Failed to enqueue Telegram invite")
+
+        # ============================================================================
+        # IDEMPOTENCY: Mark payment as processed
+        # ============================================================================
+
+        try:
+            db_manager.execute_query("""
+                UPDATE processed_payments
+                SET
+                    gcwebhook1_processed = TRUE,
+                    gcwebhook1_processed_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE payment_id = %s
+            """, (nowpayments_payment_id,))
+
+            print(f"")
+            print(f"✅ [IDEMPOTENCY] Marked payment {nowpayments_payment_id} as processed")
+        except Exception as e:
+            # Non-critical error - payment already enqueued successfully
+            print(f"⚠️ [IDEMPOTENCY] Failed to mark payment as processed: {e}")
+            print(f"⚠️ [IDEMPOTENCY] Payment processing will continue (non-blocking error)")
 
         print(f"")
         print(f"🎉 [VALIDATED] Payment processing completed successfully")

@@ -110,9 +110,65 @@ def send_telegram_invite():
             abort(400, "Malformed JSON payload")
 
         encrypted_token = request_data.get('token')
+        payment_id = request_data.get('payment_id')
+
         if not encrypted_token:
             print(f"❌ [ENDPOINT] Missing token")
             abort(400, "Missing token")
+
+        if not payment_id:
+            print(f"❌ [ENDPOINT] Missing payment_id")
+            abort(400, "Missing payment_id for idempotency tracking")
+
+        print(f"📋 [ENDPOINT] Payment ID: {payment_id}")
+
+        # ================================================================
+        # IDEMPOTENCY CHECK: Check if invite already sent for this payment
+        # ================================================================
+
+        print(f"")
+        print(f"🔍 [IDEMPOTENCY] Checking if invite already sent for payment {payment_id}...")
+
+        if not db_manager:
+            print(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
+            print(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
+        else:
+            try:
+                existing_invite = db_manager.execute_query("""
+                    SELECT
+                        telegram_invite_sent,
+                        telegram_invite_link,
+                        telegram_invite_sent_at
+                    FROM processed_payments
+                    WHERE payment_id = %s
+                """, (payment_id,))
+
+                if existing_invite and existing_invite[0]['telegram_invite_sent']:
+                    # Invite already sent - return success without re-sending
+                    existing_link = existing_invite[0]['telegram_invite_link']
+                    sent_at = existing_invite[0]['telegram_invite_sent_at']
+
+                    print(f"✅ [IDEMPOTENCY] Invite already sent for payment {payment_id}")
+                    print(f"   Sent at: {sent_at}")
+                    print(f"   Link: {existing_link}")
+                    print(f"🎉 [ENDPOINT] Returning success (invite already sent)")
+
+                    return jsonify({
+                        "status": "success",
+                        "message": "Telegram invite already sent",
+                        "payment_id": payment_id,
+                        "invite_sent_at": str(sent_at)
+                    }), 200
+                else:
+                    print(f"🆕 [IDEMPOTENCY] No existing invite found - proceeding to send")
+
+            except Exception as e:
+                print(f"⚠️ [IDEMPOTENCY] Error checking invite status: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
+
+        print(f"")
 
         # Decrypt token
         if not token_manager:
@@ -214,12 +270,41 @@ def send_telegram_invite():
         try:
             result = asyncio.run(send_invite_async())
 
+            # ================================================================
+            # IDEMPOTENCY: Mark invite as sent in database
+            # ================================================================
+
+            invite_link = result.get('invite_link')
+
+            if db_manager:
+                try:
+                    db_manager.execute_query("""
+                        UPDATE processed_payments
+                        SET
+                            telegram_invite_sent = TRUE,
+                            telegram_invite_sent_at = CURRENT_TIMESTAMP,
+                            telegram_invite_link = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE payment_id = %s
+                    """, (invite_link, payment_id))
+
+                    print(f"✅ [IDEMPOTENCY] Marked invite as sent for payment {payment_id}")
+                    print(f"   Link stored: {invite_link}")
+                except Exception as e:
+                    # Non-critical error - invite already sent to user
+                    print(f"⚠️ [IDEMPOTENCY] Failed to mark invite as sent: {e}")
+                    print(f"⚠️ [IDEMPOTENCY] User received invite, but DB update failed")
+                    print(f"⚠️ [IDEMPOTENCY] Will retry DB update on next task execution")
+            else:
+                print(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot mark invite as sent")
+
             print(f"🎉 [ENDPOINT] Telegram invite completed successfully")
             return jsonify({
                 "status": "success",
                 "message": "Telegram invite sent successfully",
                 "user_id": user_id,
-                "channel_id": closed_channel_id
+                "channel_id": closed_channel_id,
+                "payment_id": payment_id
             }), 200
 
         except TelegramError as te:

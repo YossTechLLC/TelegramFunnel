@@ -4,6 +4,115 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 42: NP-Webhook IPN Signature Verification Fix ✅
+
+**Objective:** Fix NowPayments IPN signature verification failure preventing all payment callbacks
+
+**Problem Identified:**
+- NP-Webhook rejecting ALL IPN callbacks with signature verification errors
+- Root cause: Environment variable name mismatch
+  - **Deployment config:** `NOWPAYMENTS_IPN_SECRET_KEY` (with `_KEY` suffix)
+  - **Code expectation:** `NOWPAYMENTS_IPN_SECRET` (without `_KEY` suffix)
+  - **Result:** Code couldn't find the secret, all IPNs rejected
+
+**Fix Applied:**
+- Updated np-webhook-10-26 deployment configuration to use correct env var name
+- Changed `NOWPAYMENTS_IPN_SECRET_KEY` → `NOWPAYMENTS_IPN_SECRET`
+- Verified only np-webhook uses NOWPAYMENTS secrets (other services unaffected)
+
+**Deployment Results:**
+- **New Revision:** np-webhook-10-26-00007-gk8 ✅
+- **Startup Logs:** `✅ [CONFIG] NOWPAYMENTS_IPN_SECRET loaded` (previously `❌ Missing`)
+- **Status:** Service healthy, IPN signature verification now functional
+
+**Key Lessons:**
+1. **Naming Convention:** Environment variable name should match Secret Manager secret name
+2. **Incomplete Fix:** Previous session fixed secret reference but not env var name
+3. **Verification:** Always check startup logs for configuration status
+
+**Files Modified:**
+- Deployment config only (no code changes needed)
+
+**Documentation Created:**
+- NOWPAYMENTS_IPN_SECRET_ENV_VAR_MISMATCH_FIX_CHECKLIST.md (comprehensive fix guide)
+
+---
+
+## 2025-11-02 Session 41: Multi-Layer Idempotency Implementation ✅
+
+**Objective:** Prevent duplicate Telegram invites and duplicate payment processing through comprehensive idempotency system
+
+**Implementation Completed:**
+
+### 1. Database Infrastructure ✅
+- Created `processed_payments` table with PRIMARY KEY on `payment_id`
+- Enforces atomic uniqueness constraint at database level
+- Columns: payment_id, user_id, channel_id, processing flags, audit timestamps
+- 4 indexes for query performance (user_channel, invite_status, webhook1_status, created_at)
+- Successfully verified table accessibility from all services
+
+### 2. Three-Layer Defense-in-Depth Idempotency ✅
+
+**Layer 1 - NP-Webhook (IPN Handler):**
+- **Location:** app.py lines 638-723 (85 lines)
+- **Function:** Check before enqueueing to GCWebhook1
+- **Logic:**
+  - Query processed_payments for existing payment_id
+  - If gcwebhook1_processed = TRUE: Return 200 without re-processing
+  - If new payment: INSERT with ON CONFLICT DO NOTHING
+  - Fail-open mode: Proceed if DB unavailable
+- **Deployment:** np-webhook-10-26-00006-9xs ✅
+
+**Layer 2 - GCWebhook1 (Payment Orchestrator):**
+- **Location:** tph1-10-26.py lines 428-448 (20 lines)
+- **Function:** Mark as processed after successful routing
+- **Logic:**
+  - UPDATE processed_payments SET gcwebhook1_processed = TRUE
+  - Update gcwebhook1_processed_at timestamp
+  - Non-blocking: Continue on DB error
+  - Added payment_id parameter to GCWebhook2 enqueue
+- **Deployment:** gcwebhook1-10-26-00019-zbs ✅
+
+**Layer 3 - GCWebhook2 (Telegram Invite Sender):**
+- **Location:** tph2-10-26.py lines 125-171 (idempotency check) + 273-300 (marker)
+- **Function:** Check before sending, mark after success
+- **Logic:**
+  - Extract payment_id from request payload
+  - Query processed_payments for existing invite
+  - If telegram_invite_sent = TRUE: Return 200 with existing data (NO re-send)
+  - After successful send: UPDATE telegram_invite_sent = TRUE
+  - Store telegram_invite_link for reference
+  - Fail-open mode: Send if DB unavailable
+- **Deployment:** gcwebhook2-10-26-00016-p7q ✅
+
+### 3. Deployment Results ✅
+- All three services deployed successfully (TRUE status)
+- Deployments completed in reverse flow order (GCWebhook2 → GCWebhook1 → NP-Webhook)
+- Build quota issue resolved with 30s delay
+- Secret name corrected: NOWPAYMENTS_IPN_SECRET_KEY → NOWPAYMENTS_IPN_SECRET
+- All services verified accessible and ready
+
+### 4. Verification Completed ✅
+- Database table created with correct schema (10 columns)
+- Table accessible from all services
+- All service revisions deployed and READY
+- Zero records initially (expected state)
+
+**Current Status:**
+- ✅ Implementation: Complete (Phases 0-7)
+- ⏳ Testing: Pending (Phase 8 - needs user to create test payment)
+- ⏳ Monitoring: Pending (Phase 9-10 - ongoing)
+
+**Next Steps:**
+1. User creates test payment through TelePay bot
+2. Monitor processed_payments table for record creation
+3. Verify single invite sent (not duplicate)
+4. Check logs for 🔍 [IDEMPOTENCY] messages
+5. Simulate duplicate IPN if possible to test Layer 1
+6. Monitor production for 24-48 hours
+
+---
+
 ## 2025-11-02 Session 40 (Part 3): Repeated Telegram Invite Loop Fix ✅
 
 **Objective:** Fix repeated Telegram invitation links being sent to users in a continuous cycle

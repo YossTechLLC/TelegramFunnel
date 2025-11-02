@@ -636,6 +636,93 @@ def handle_ipn():
                         conn.close()
 
                         # ============================================================================
+                        # IDEMPOTENCY CHECK: Prevent duplicate payment processing
+                        # ============================================================================
+
+                        nowpayments_payment_id = payment_data['payment_id']
+
+                        print(f"")
+                        print(f"🔍 [IDEMPOTENCY] Checking if payment {nowpayments_payment_id} already processed...")
+
+                        try:
+                            # Query database to check if payment already processed
+                            conn_check = get_db_connection()
+                            if conn_check:
+                                cur_check = conn_check.cursor()
+
+                                cur_check.execute("""
+                                    SELECT
+                                        gcwebhook1_processed,
+                                        telegram_invite_sent,
+                                        telegram_invite_sent_at
+                                    FROM processed_payments
+                                    WHERE payment_id = %s
+                                """, (nowpayments_payment_id,))
+
+                                existing_payment = cur_check.fetchone()
+
+                                cur_check.close()
+                                conn_check.close()
+
+                                if existing_payment and existing_payment[0]:  # gcwebhook1_processed = TRUE
+                                    print(f"✅ [IDEMPOTENCY] Payment {nowpayments_payment_id} already processed")
+                                    print(f"   GCWebhook1 processed: TRUE")
+                                    print(f"   Telegram invite sent: {existing_payment[1]}")
+                                    if existing_payment[2]:
+                                        print(f"   Invite sent at: {existing_payment[2]}")
+
+                                    # Already processed - return success without re-enqueueing
+                                    print(f"✅ [IPN] IPN acknowledged (payment already handled)")
+                                    print(f"=" * 80)
+                                    print(f"")
+                                    return jsonify({
+                                        "status": "success",
+                                        "message": "IPN processed (already handled)",
+                                        "payment_id": nowpayments_payment_id
+                                    }), 200
+
+                                elif existing_payment:
+                                    # Record exists but not fully processed
+                                    print(f"⚠️ [IDEMPOTENCY] Payment {nowpayments_payment_id} record exists but processing incomplete")
+                                    print(f"   GCWebhook1 processed: {existing_payment[0]}")
+                                    print(f"   Will allow re-processing to complete")
+                                else:
+                                    # No existing record - first time processing
+                                    print(f"🆕 [IDEMPOTENCY] Payment {nowpayments_payment_id} is new - creating processing record")
+
+                                    # Insert initial record (prevents race conditions)
+                                    conn_insert = get_db_connection()
+                                    if conn_insert:
+                                        cur_insert = conn_insert.cursor()
+
+                                        cur_insert.execute("""
+                                            INSERT INTO processed_payments (payment_id, user_id, channel_id)
+                                            VALUES (%s, %s, %s)
+                                            ON CONFLICT (payment_id) DO NOTHING
+                                        """, (nowpayments_payment_id, user_id, closed_channel_id))
+
+                                        conn_insert.commit()
+                                        cur_insert.close()
+                                        conn_insert.close()
+
+                                        print(f"✅ [IDEMPOTENCY] Created processing record for payment {nowpayments_payment_id}")
+                                    else:
+                                        print(f"⚠️ [IDEMPOTENCY] Failed to create processing record (DB connection failed)")
+                                        print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+                            else:
+                                print(f"⚠️ [IDEMPOTENCY] Database connection failed - cannot check idempotency")
+                                print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+
+                        except Exception as e:
+                            print(f"❌ [IDEMPOTENCY] Error during idempotency check: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+
+                        print(f"")
+                        print(f"🚀 [ORCHESTRATION] Proceeding to enqueue payment to GCWebhook1...")
+
+                        # ============================================================================
                         # NEW: Trigger GCWebhook1 for Payment Orchestration
                         # ============================================================================
                         if sub_data:

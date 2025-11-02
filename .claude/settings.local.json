@@ -151,7 +151,8 @@
       "Bash(do echo '=== $secret ===')",
       "Bash(awk:*)",
       "Bash(wait)",
-      "Bash(gcloud container images describe:*)"
+      "Bash(gcloud container images describe:*)",
+      "Bash(gcloud sql backups:*)"
     ],
     "deny": [],
     "ask": []

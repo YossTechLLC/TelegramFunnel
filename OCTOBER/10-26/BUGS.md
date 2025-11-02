@@ -12,6 +12,66 @@
 
 ## Recently Fixed
 
+### 2025-11-02: NP-Webhook IPN Signature Verification Failure ✅
+
+**Service:** np-webhook-10-26 (NowPayments IPN Callback Handler)
+**Severity:** CRITICAL - Blocks all payment processing
+**Status:** FIXED ✅
+
+**Description:**
+- NP-Webhook rejecting ALL IPN callbacks from NowPayments
+- Error logs: `❌ [IPN] Cannot verify signature - NOWPAYMENTS_IPN_SECRET not configured`
+- All payments failing to process despite successful completion in NowPayments
+- Database never updated with payment_id, downstream services never triggered
+
+**Root Cause:**
+Environment variable name mismatch between deployment configuration and application code:
+
+```yaml
+# Deployment configuration (WRONG):
+- name: NOWPAYMENTS_IPN_SECRET_KEY    # ← Has _KEY suffix
+  valueFrom:
+    secretKeyRef:
+      name: NOWPAYMENTS_IPN_SECRET    # ← Secret exists (no _KEY)
+      key: latest
+```
+
+```python
+# Application code (CORRECT):
+NOWPAYMENTS_IPN_SECRET = os.getenv('NOWPAYMENTS_IPN_SECRET')
+#                                   ^^^^^^^^^^^^^^^^^^^^^^^ Looking for env var WITHOUT _KEY
+```
+
+**Result:** Code couldn't find the environment variable, defaulted to `None`, signature verification failed
+
+**Fix Applied:**
+1. Updated np-webhook-10-26 deployment configuration
+2. Changed env var name from `NOWPAYMENTS_IPN_SECRET_KEY` → `NOWPAYMENTS_IPN_SECRET`
+3. Used `--set-secrets` flag to update all 10 environment variables at once
+
+**Deployment:**
+```bash
+gcloud run services update np-webhook-10-26 --region=us-central1 \
+  --set-secrets=NOWPAYMENTS_IPN_SECRET=NOWPAYMENTS_IPN_SECRET:latest,...
+```
+
+**Verification:**
+- **Old Logs:** `❌ [CONFIG] NOWPAYMENTS_IPN_SECRET not found`
+- **New Logs:** `✅ [CONFIG] NOWPAYMENTS_IPN_SECRET loaded`
+- **New Revision:** np-webhook-10-26-00007-gk8 ✅
+- **Status:** Service healthy, IPN signature verification functional
+
+**Prevention:**
+- Created NOWPAYMENTS_IPN_SECRET_ENV_VAR_MISMATCH_FIX_CHECKLIST.md
+- Documented naming convention: env var name = secret name (unless intentional aliasing)
+- Added to DECISIONS.md as architectural standard
+
+**Related Files:**
+- /OCTOBER/10-26/NOWPAYMENTS_IPN_SECRET_ENV_VAR_MISMATCH_FIX_CHECKLIST.md
+- /OCTOBER/10-26/np-webhook-10-26/app.py (line 31 - unchanged, was correct)
+
+---
+
 ### 2025-11-02: NowPayments success_url Invalid URI Error ✅
 
 **Service:** TelePay10-26 (Telegram Bot - Payment Gateway Manager)

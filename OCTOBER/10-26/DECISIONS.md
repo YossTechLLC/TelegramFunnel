@@ -19,6 +19,155 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: Environment Variable Naming Convention - Match Secret Manager Secret Names
+
+**Decision:** Environment variable names should match Secret Manager secret names unless aliasing is intentional and documented
+
+**Context:**
+- NP-Webhook service failed to load `NOWPAYMENTS_IPN_SECRET` despite secret existing in Secret Manager
+- Deployment configuration used `NOWPAYMENTS_IPN_SECRET_KEY` as env var name, mapping to `NOWPAYMENTS_IPN_SECRET` secret
+- Code read `os.getenv('NOWPAYMENTS_IPN_SECRET')`, which didn't exist
+- Previous session fixed secret reference but left env var name inconsistent
+
+**Alternatives Considered:**
+
+**Option 1: Fix deployment config (CHOSEN)**
+- Change env var name from `NOWPAYMENTS_IPN_SECRET_KEY` → `NOWPAYMENTS_IPN_SECRET`
+- Pros: Consistent naming, single deployment fix, no code changes
+- Cons: None
+
+**Option 2: Fix code to read different env var**
+- Change code to `os.getenv('NOWPAYMENTS_IPN_SECRET_KEY')`
+- Pros: Would work
+- Cons: Inconsistent naming (env var differs from secret), requires code rebuild
+
+**Rationale:**
+- **Consistency:** Env var name matching secret name reduces cognitive load
+- **Clarity:** Makes deployment configs self-documenting
+- **Maintainability:** Future developers can easily map env vars to secrets
+- **Error Prevention:** Reduces chance of similar mismatches
+
+**Implementation Pattern:**
+```yaml
+# CORRECT:
+- name: MY_SECRET              # ← Env var name
+  valueFrom:
+    secretKeyRef:
+      name: MY_SECRET          # ← Same as env var name
+      key: latest
+
+# WRONG (what we had):
+- name: MY_SECRET_KEY          # ← Different from secret name
+  valueFrom:
+    secretKeyRef:
+      name: MY_SECRET          # ← Code can't find it!
+      key: latest
+```
+
+**Enforcement:**
+- Documented in NOWPAYMENTS_IPN_SECRET_ENV_VAR_MISMATCH_FIX_CHECKLIST.md
+- Future deployments should verify env var names match secret names
+- Exception: Intentional aliasing (e.g., mapping `DB_PASSWORD` → `DATABASE_PASSWORD_SECRET`) must be documented
+
+**Related Files:**
+- np-webhook-10-26 deployment configuration (fixed)
+- NOWPAYMENTS_IPN_SECRET_ENV_VAR_MISMATCH_FIX_CHECKLIST.md (prevention guide)
+
+---
+
+### 2025-11-02: Multi-Layer Idempotency Architecture - Defense-in-Depth Against Duplicate Invites
+
+**Decision:** Implement three-layer idempotency system using database-enforced uniqueness + application-level checks
+
+**Context:**
+- Users receiving 11+ duplicate Telegram invites for single payment
+- Duplicate payment processing causing data integrity issues
+- Cloud Tasks retry mechanism amplifying the problem
+- Payment success page polling /api/payment-status repeatedly without idempotency
+
+**Alternatives Considered:**
+
+1. **Single-Layer at NP-Webhook Only**
+   - ❌ Rejected: Doesn't prevent GCWebhook1/GCWebhook2 internal retries
+   - ❌ Risk: If NP-Webhook check fails, entire flow unprotected
+
+2. **Application-Level Only (No Database)**
+   - ❌ Rejected: Race conditions between concurrent requests
+   - ❌ Risk: Multiple NP-Webhook instances could process same payment
+
+3. **Database-Level Only (No Application Checks)**
+   - ❌ Rejected: Would require catching PRIMARY KEY violations
+   - ❌ Risk: Error handling complexity, poor user feedback
+
+4. **Three-Layer Defense-in-Depth** ✅ SELECTED
+   - ✅ Database PRIMARY KEY enforces atomic uniqueness
+   - ✅ NP-Webhook checks before GCWebhook1 enqueue (prevents duplicate processing)
+   - ✅ GCWebhook1 marks processed after routing (audit trail)
+   - ✅ GCWebhook2 checks before send + marks after (prevents duplicate invites)
+   - ✅ Fail-open mode: System continues if DB unavailable (prefer duplicate over blocking)
+   - ✅ Non-blocking DB updates: Payment processing continues on DB error
+
+**Architecture:**
+
+```
+Payment Success Page Polling
+         ↓ (repeated /api/payment-status calls)
+    NP-Webhook IPN Handler
+         ↓ (Layer 1: Check processed_payments)
+         ├─ If gcwebhook1_processed = TRUE → Return 200 (no re-process)
+         └─ If new → INSERT payment_id with ON CONFLICT DO NOTHING
+         ↓
+    Enqueue to GCWebhook1
+         ↓
+    GCWebhook1 Orchestrator
+         ↓ (Routes to GCAccumulator/GCSplit1 + GCWebhook2)
+         ↓ (Layer 2: Mark after routing)
+         └─ UPDATE processed_payments SET gcwebhook1_processed = TRUE
+         ↓
+    Enqueue to GCWebhook2 (with payment_id)
+         ↓
+    GCWebhook2 Telegram Sender
+         ↓ (Layer 3: Check before send)
+         ├─ If telegram_invite_sent = TRUE → Return 200 (no re-send)
+         ├─ If new → Send Telegram invite
+         └─ UPDATE telegram_invite_sent = TRUE, store invite_link
+```
+
+**Implementation Details:**
+- Database: `processed_payments` table (payment_id PRIMARY KEY, boolean flags, timestamps)
+- NP-Webhook: 85-line idempotency check (lines 638-723)
+- GCWebhook1: 20-line processing marker (lines 428-448), added payment_id to CloudTasks payload
+- GCWebhook2: 47-line pre-check (lines 125-171) + 28-line post-marker (lines 273-300)
+- All layers use fail-open mode (proceed if DB unavailable)
+- All DB updates non-blocking (continue on error)
+
+**Benefits:**
+1. **Prevents duplicate invites:** Even with Cloud Tasks retries
+2. **Prevents duplicate processing:** Multiple IPN callbacks handled correctly
+3. **Audit trail:** Timestamps show when each layer processed payment
+4. **Graceful degradation:** System continues if DB temporarily unavailable
+5. **Performance:** Indexes on user_channel, invite_status, webhook1_status
+6. **Debugging:** Can query incomplete processing (flags not all TRUE)
+
+**Trade-offs:**
+- Added database table (minimal storage cost)
+- Additional DB queries per payment (3 SELECT, 2 UPDATE)
+- Code complexity increased (154 lines across 3 services)
+- BUT: Eliminates user-facing duplicate invite problem completely
+
+**Deployment:**
+- np-webhook-10-26-00006-9xs ✅
+- gcwebhook1-10-26-00019-zbs ✅
+- gcwebhook2-10-26-00016-p7q ✅
+
+**Testing Plan:**
+- Phase 8: User creates test payment, verify single invite
+- Monitor processed_payments for records
+- Check logs for 🔍 [IDEMPOTENCY] messages
+- Simulate duplicate IPN to test Layer 1
+
+---
+
 ### 2025-11-02: Cloud Tasks Queue Creation Strategy - Create Entry Point Queues First
 
 **Decision:** Always create **entry point queues** (external → service) BEFORE internal service queues
