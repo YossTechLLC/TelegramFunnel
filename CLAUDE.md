@@ -1,6 +1,7 @@
 - Always warn about the remaining context! Before starting a new task make sure the remaining context is enough for the new task or not. If not, ask the user to compact first.
-- Create PROGRESS.md, BUGS.md & DECISION.md if not already existing. Update the PROGRESS.md file after every turn with a concice checklist of what you've been able to accomplish, while adding bug reports to BUGS.md file. Use the DECISIONS.md file to log every architectural decision you make. Keep these notes short & concentrated.
+- Create PROGRESS.md, BUGS.md & DECISION.md if not already existing. Update the PROGRESS.md file after every turn with a concice checklist of what you've been able to accomplish (ONLY update PROGRESS.md DECISIONS.md & BUGS.md if you have changed any actual code NOT if you just produced a new .md file for me to read), while adding bug reports to BUGS.md file. Use the DECISIONS.md file to log every architectural decision you make. Keep these notes short & concentrated.
 - Make sure that any new entry you make to the PROGRESS.md DECISIONS.md & BUGS.md files are always first in --> Meaning every new entry should be at the top of the file.
+- Pay close attention to the token limit for reading a single file --> Once the length of PROGRESS.md DECISIONS.md & BUGS.md files start to creep up on that limit ~%80 --> Truncate the PROGRESS.md DECISIONS.md & BUGS.md files (always starting from the bottom of the file) and append that to the TOP of PROGRESS_ARCH.md DECISIONS_ARCH.md & BUGS_ARCH.md files respectively.
 - Please pay attention to the way in which the debug/error/print statements are written and use emojis, please continue to do so but and only use the emojis that have already been used.
 - MONITOR FOR THIS PACKAGE ERROR - google-cloud-sql-connector is not a package, instead call cloud-sql-python-connector --> it imports as google.cloud.sql.connector.
 - Remember USER : PASS for 'www.paygateprime.com' --> user1user1 : user1TEST$
@@ -13,6 +14,6 @@
 - You are to deploy the google cloud functions you have built.
 - You are to deploy the google queues/tasks you have built.
 - You are still NOT to make any GitHub commits, I will do that manually afterwards.
-- If a .md you're looking for isn't found in the /10-26 folder you can find it in /TelegramFunnel/ARCHIVES/NOTES10-31
-- Old entries to PROGRESS.md & DECISION.md get systematically cleaned out, if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md & DECISIONS_ARCH.md which hold all the archived entries if you search for your terms explicitly.
+- If a .md you're looking for isn't found in the /10-26 folder you can find it in /TelegramFunnel/ARCHIVES/NOTES_10-31 or /TelegramFunnel/ARCHIVES/NOTES_11-1
+- If something isn't found in PROGRESS.md DECISION.md &or BUGS.md, and if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md DECISIONS_ARCH.md &or BUGS_ARCH.md which hold all the archived entries if you search for your terms explicitly.
 - DO NOT MAKE PSQL requests like 'Bash(PGPASSWORD='Chigdabeast123$' psql -h /cloudsql/telepay-459221:us-central1:telepaypsql -U postgres -d telepaydb -c "\d batch_conversions")' --> INSTEAD USE observability - list_log_entries (MCP)
