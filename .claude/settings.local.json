@@ -134,7 +134,8 @@
       "Bash(DECISIONS_ARCH.md)",
       "Bash(BUGS_ARCH.md)",
       "Bash(find:*)",
-      "Bash(gcloud scheduler jobs update:*)"
+      "Bash(gcloud scheduler jobs update:*)",
+      "Bash(gcloud run revisions describe:*)"
     ],
     "deny": [],
     "ask": []

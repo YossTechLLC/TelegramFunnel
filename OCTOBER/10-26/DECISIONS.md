@@ -19,6 +19,94 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: np-webhook Secret Configuration Fix
+
+**Decision:** Configured np-webhook Cloud Run service with required secrets for IPN processing and database updates
+
+**Context:**
+- GCWebhook2 payment validation implementation revealed payment_id always NULL in database
+- Investigation showed NowPayments sending IPN callbacks but np-webhook returning 403 Forbidden
+- np-webhook service configuration inspection revealed ZERO secrets mounted
+- Service couldn't verify IPN signatures or connect to database without secrets
+- Critical blocker preventing payment_id capture throughout payment flow
+
+**Problem:**
+1. np-webhook deployed without any environment variables or secrets
+2. Service receives IPN POST from NowPayments with payment metadata
+3. Without NOWPAYMENTS_IPN_SECRET, can't verify callback signature → rejects with 403
+4. Without database credentials, can't write payment_id even if signature verified
+5. NowPayments retries IPN callbacks but eventually gives up
+6. Database never populated with payment_id from successful payments
+7. Downstream services (GCWebhook1, GCWebhook2, GCAccumulator) all working correctly but no data to process
+
+**Implementation:**
+1. **Mounted 5 Required Secrets:**
+   ```bash
+   gcloud run services update np-webhook --region=us-east1 \
+     --update-secrets=NOWPAYMENTS_IPN_SECRET=NOWPAYMENTS_IPN_SECRET:latest,\
+   CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest,\
+   DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,\
+   DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,\
+   DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest
+   ```
+
+2. **Deployed New Revision:**
+   - Created revision: `np-webhook-00004-kpk`
+   - Routed 100% traffic to new revision
+   - Old revision (00003-r27) with no secrets deprecated
+
+3. **Secrets Mounted:**
+   - **NOWPAYMENTS_IPN_SECRET**: IPN callback signature verification
+   - **CLOUD_SQL_CONNECTION_NAME**: PostgreSQL connection string
+   - **DATABASE_NAME_SECRET**: Database name (telepaydb)
+   - **DATABASE_USER_SECRET**: Database user (postgres)
+   - **DATABASE_PASSWORD_SECRET**: Database authentication
+
+4. **Verification:**
+   - Inspected service description → all 5 secrets present as environment variables
+   - IAM permissions already correct (service account has secretAccessor role)
+   - Service health check returns 405 for GET (expected - only accepts POST)
+
+**Rationale:**
+- **Critical Path**: np-webhook is the only service that receives payment_id from NowPayments
+- **Single Point of Failure**: Without np-webhook processing IPNs, payment_id never enters system
+- **Graceful Degradation**: System worked without payment_id but lacked fee reconciliation capability
+- **Security First**: IPN signature verification prevents forged payment confirmations
+- **Database Integration**: Must connect to database to update payment metadata
+
+**Alternatives Considered:**
+1. **Query NowPayments API directly in GCWebhook1:** Rejected - inefficient, rate limits, IPN already available
+2. **Store payment_id in token payload:** Rejected - payment_id not available when token created (race condition)
+3. **Use different service for IPN handling:** Rejected - np-webhook already exists and deployed
+4. **Make payment_id optional permanently:** Rejected - defeats purpose of fee reconciliation implementation
+
+**Trade-offs:**
+- **Pro**: Enables complete payment_id flow from NowPayments through entire system
+- **Pro**: Fixes 100% of payment validation failures in GCWebhook2
+- **Pro**: Minimal code changes (configuration only, no code deployment)
+- **Pro**: Immediate effect - next IPN callback will succeed
+- **Con**: Requires retest of entire payment flow to verify
+- **Con**: Historical payments missing payment_id (can backfill if needed)
+
+**Impact:**
+- ✅ np-webhook can now process IPN callbacks from NowPayments
+- ✅ Database will be updated with payment_id for new payments
+- ✅ GCWebhook2 payment validation will succeed instead of retry loop
+- ✅ Telegram invitations will be sent immediately after payment
+- ✅ Fee reconciliation data now captured for all future payments
+- ⏳ Requires payment test to verify end-to-end flow working
+
+**Files Modified:**
+- np-webhook Cloud Run service configuration (5 secrets added)
+
+**Files Created:**
+- `/NP_WEBHOOK_403_ROOT_CAUSE_ANALYSIS.md` (investigation details)
+- `/NP_WEBHOOK_FIX_SUMMARY.md` (fix summary and verification)
+
+**Status:** ✅ Deployed - Awaiting payment test for verification
+
+---
+
 ### 2025-11-02: GCWebhook2 Payment Validation Security Fix
 
 **Decision:** Added payment validation to GCWebhook2 service to verify payment completion before sending Telegram invitations

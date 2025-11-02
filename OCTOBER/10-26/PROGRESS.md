@@ -4,6 +4,133 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 28B: np-webhook Enhanced Logging Deployment ✅
+
+**Objective:** Deploy np-webhook with comprehensive startup logging similar to other webhook services
+
+**Actions Completed:**
+- ✅ Created new np-webhook-10-26 service with detailed logging
+- ✅ Added emoji-based status indicators matching GCWebhook1/GCWebhook2 pattern
+- ✅ Comprehensive startup checks for all required secrets
+- ✅ Clear configuration status logging for:
+  - NOWPAYMENTS_IPN_SECRET (IPN signature verification)
+  - CLOUD_SQL_CONNECTION_NAME (database connection)
+  - DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+- ✅ Built and pushed Docker image: `gcr.io/telepay-459221/np-webhook-10-26`
+- ✅ Deployed to Cloud Run: revision `np-webhook-00005-pvx`
+- ✅ Verified all secrets loaded successfully in startup logs
+
+**Enhanced Logging Output:**
+```
+🚀 [APP] Initializing np-webhook-10-26 - NowPayments IPN Handler
+📋 [APP] This service processes IPN callbacks from NowPayments
+🔐 [APP] Verifies signatures and updates database with payment_id
+⚙️ [CONFIG] Loading configuration from Secret Manager...
+✅ [CONFIG] NOWPAYMENTS_IPN_SECRET loaded
+📊 [CONFIG] Database Configuration Status:
+   CLOUD_SQL_CONNECTION_NAME: ✅ Loaded
+   DATABASE_NAME_SECRET: ✅ Loaded
+   DATABASE_USER_SECRET: ✅ Loaded
+   DATABASE_PASSWORD_SECRET: ✅ Loaded
+✅ [CONFIG] All database credentials loaded successfully
+🗄️ [CONFIG] Database: client_table
+🔗 [CONFIG] Instance: telepay-459221:us-central1:telepaypsql
+🎯 [APP] Initialization complete - Ready to process IPN callbacks
+✅ [DATABASE] Cloud SQL Connector initialized
+🌐 [APP] Starting Flask server on port 8080
+```
+
+**Health Check Status:**
+```json
+{
+  "service": "np-webhook-10-26 NowPayments IPN Handler",
+  "status": "healthy",
+  "components": {
+    "ipn_secret": "configured",
+    "database_credentials": "configured",
+    "connector": "initialized"
+  }
+}
+```
+
+**Files Created:**
+- `/np-webhook-10-26/app.py` - Complete IPN handler with enhanced logging
+- `/np-webhook-10-26/requirements.txt` - Dependencies
+- `/np-webhook-10-26/Dockerfile` - Container build file
+- `/np-webhook-10-26/.dockerignore` - Build exclusions
+
+**Deployment:**
+- Image: `gcr.io/telepay-459221/np-webhook-10-26`
+- Service: `np-webhook` (us-east1)
+- Revision: `np-webhook-00005-pvx`
+- URL: `https://np-webhook-291176869049.us-east1.run.app`
+
+**Result:** ✅ np-webhook now has comprehensive logging matching other services - easy to troubleshoot configuration issues
+
+---
+
+## 2025-11-02 Session 28: np-webhook Secret Configuration Fix ✅
+
+**Objective:** Fix np-webhook 403 errors preventing payment_id capture in database
+
+**Problem Identified:**
+- ❌ GCWebhook2 payment validation failing - payment_id NULL in database
+- ❌ NowPayments sending IPN callbacks but np-webhook rejecting with 403 Forbidden
+- ❌ np-webhook service had ZERO secrets configured (no IPN secret, no database credentials)
+- ❌ Without NOWPAYMENTS_IPN_SECRET, service couldn't verify IPN signatures → rejected all callbacks
+- ❌ Database never updated with payment_id from NowPayments
+
+**Root Cause Analysis:**
+- Checked np-webhook logs → Multiple 403 errors from NowPayments IP (51.75.77.69)
+- Inspected service configuration → No environment variables or secrets mounted
+- IAM permissions correct, Secret Manager configured, but secrets not mounted to service
+- NowPayments payment successful (payment_id: 6260719507) but data never reached database
+
+**Actions Completed:**
+- ✅ Identified np-webhook missing all required secrets
+- ✅ Mounted 5 secrets to np-webhook service:
+  - NOWPAYMENTS_IPN_SECRET (IPN signature verification)
+  - CLOUD_SQL_CONNECTION_NAME (database connection)
+  - DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+- ✅ Deployed new revision: `np-webhook-00004-kpk`
+- ✅ Routed 100% traffic to new revision with secrets
+- ✅ Verified secrets properly mounted via service description
+- ✅ Documented root cause analysis and fix in NP_WEBHOOK_FIX_SUMMARY.md
+
+**Deployment:**
+```bash
+# Updated np-webhook with required secrets
+gcloud run services update np-webhook --region=us-east1 \
+  --update-secrets=NOWPAYMENTS_IPN_SECRET=NOWPAYMENTS_IPN_SECRET:latest,\
+CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest,\
+DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,\
+DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,\
+DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest
+
+# Routed traffic to new revision
+gcloud run services update-traffic np-webhook --region=us-east1 --to-latest
+```
+
+**Result:**
+- ✅ np-webhook now has all required secrets for IPN processing
+- ✅ Can verify IPN signatures from NowPayments
+- ✅ Can connect to database and update payment_id
+- ⏳ Ready for next payment test to verify end-to-end flow
+
+**Expected Behavior After Fix:**
+1. NowPayments sends IPN → np-webhook verifies signature ✅
+2. np-webhook updates database with payment_id ✅
+3. GCWebhook2 finds payment_id → validates payment ✅
+4. Customer receives Telegram invitation immediately ✅
+
+**Files Created:**
+- `NP_WEBHOOK_403_ROOT_CAUSE_ANALYSIS.md` - Detailed investigation
+- `NP_WEBHOOK_FIX_SUMMARY.md` - Fix summary and verification steps
+
+**Status:** ✅ Fix deployed - awaiting payment test for verification
+
+---
+
 ## 2025-11-02 Session 27: GCWebhook2 Payment Validation Security Fix ✅
 
 **Objective:** Add payment validation to GCWebhook2 to verify payment completion before sending Telegram invitations
