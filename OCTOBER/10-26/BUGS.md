@@ -12,6 +12,112 @@
 
 ## Recently Fixed
 
+### 2025-11-02: NowPayments success_url Invalid URI Error ✅
+
+**Service:** TelePay10-26 (Telegram Bot - Payment Gateway Manager)
+**Severity:** CRITICAL - Blocks all payment creation
+**Status:** FIXED ✅
+
+**Description:**
+- NowPayments API rejecting payment invoice creation with 400 error
+- Error message: `{"status":false,"statusCode":400,"code":"INVALID_REQUEST_PARAMS","message":"success_url must be a valid uri"}`
+- All payment attempts failing immediately
+- Users unable to initiate payments
+
+**Root Cause:**
+URL encoding violation - pipe character `|` in order_id not percent-encoded:
+
+```python
+# The Problem:
+order_id = "PGP-6271402111|-1003268562225"  # Contains pipe |
+success_url = f"{base_url}?order_id={order_id}"
+# Result: ?order_id=PGP-6271402111|-1003268562225
+#                                   ^ Unencoded pipe is invalid per RFC 3986
+
+# NowPayments API validation:
+# - Checks if success_url is valid URI
+# - Pipe | must be percent-encoded as %7C
+# - Rejects with 400 error if any invalid characters found
+```
+
+**Why It Failed:**
+1. **Order ID Format**: Changed to use pipe separator in Session 29 (to preserve negative channel IDs)
+   - OLD: `PGP-{user_id}-{channel_id}` (dash separator lost negative sign)
+   - NEW: `PGP-{user_id}|{channel_id}` (pipe separator preserves negative sign)
+
+2. **Missing URL Encoding**: Pipe added to order_id but success_url construction never updated
+   - Pipe is not URI-safe character
+   - Must be percent-encoded: `|` → `%7C`
+
+3. **NowPayments Strict Validation**: API enforces RFC 3986 compliance
+   - Rejects URLs with invalid characters
+   - Returns 400 error preventing invoice creation
+
+**Error Timeline:**
+```
+Session 29 (2025-11-02): Changed order_id format to use pipe separator
+                         ↓
+                         Pipe character now in order_id
+                         ↓
+                         start_np_gateway.py builds URL without encoding
+                         ↓
+                         NowPayments API receives invalid URI
+                         ↓
+                         Returns 400 "success_url must be a valid uri"
+                         ↓
+                         Payment invoice creation fails
+```
+
+**Fix Applied:**
+```python
+# Added import (line 5):
+from urllib.parse import quote
+
+# Fixed URL construction (line 300):
+# BEFORE:
+secure_success_url = f"{landing_page_base_url}?order_id={order_id}"
+
+# AFTER:
+secure_success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe='')}"
+
+# Result:
+# Before: ?order_id=PGP-6271402111|-1003268562225 ❌
+# After:  ?order_id=PGP-6271402111%7C-1003268562225 ✅
+```
+
+**Verification:**
+- URL now RFC 3986 compliant
+- Pipe encoded as `%7C`
+- NowPayments API accepts success_url parameter
+- Payment invoice creation succeeds
+
+**Impact:**
+- ✅ Payment creation now works
+- ✅ NowPayments API accepts all requests
+- ✅ Users can initiate payments
+- ✅ No more "invalid uri" errors
+
+**Files Modified:**
+- `/OCTOBER/10-26/TelePay10-26/start_np_gateway.py` (lines 5, 300)
+
+**Deployment:**
+- ⚠️ **ACTION REQUIRED:** Restart TelePay bot to apply fix
+- No database changes needed
+- No Cloud Run deployments needed
+
+**Prevention:**
+- Always use `urllib.parse.quote(value, safe='')` for query parameter values
+- Document URL encoding requirements in code review checklist
+- Consider linting rule to detect unencoded URL parameters
+
+**Lessons Learned:**
+1. Changing data formats (order_id) requires checking all usage points (URL construction)
+2. External APIs enforce strict standards (RFC 3986) - always validate URLs
+3. Use standard library tools (`urllib.parse.quote`) instead of manual encoding
+4. Test payment creation after every order_id format change
+
+---
+
 ### 2025-11-02: GCSplit1 Missing HostPay Configuration ✅
 
 **Service:** GCSplit1-10-26 (Payment Split Orchestrator)

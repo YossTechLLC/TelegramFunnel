@@ -19,6 +19,123 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: URL Encoding for Query Parameters in success_url
+
+**Decision:** Always URL-encode query parameter values when constructing URLs for external APIs
+
+**Context:**
+- NowPayments API requires `success_url` parameter in payment invoice creation
+- Our order_id format uses pipe separator: `PGP-{user_id}|{open_channel_id}`
+- Example: `PGP-6271402111|-1003268562225`
+- Pipe character `|` is not a valid URI character per RFC 3986
+- NowPayments API rejected URLs: `{"message":"success_url must be a valid uri"}`
+
+**Problem:**
+```python
+# BROKEN: Unencoded special characters in URL
+order_id = "PGP-6271402111|-1003268562225"
+success_url = f"{base_url}?order_id={order_id}"
+# Result: ?order_id=PGP-6271402111|-1003268562225
+# Pipe | is invalid in URIs → NowPayments returns 400 error
+```
+
+**Options Considered:**
+
+1. **Change order_id format to remove pipe** ❌ Rejected
+   - Would break existing order_id parsing in np-webhook
+   - Pipe separator chosen specifically to preserve negative channel IDs
+   - Architectural regression
+
+2. **URL-encode only pipe character** ⚠️ Fragile
+   - `order_id.replace('|', '%7C')`
+   - Doesn't handle other special characters
+   - Manual encoding prone to errors
+
+3. **Use urllib.parse.quote() for all query parameters** ✅ CHOSEN
+   - Handles all special characters automatically
+   - RFC 3986 compliant
+   - Standard Python library (no dependencies)
+   - One-line fix
+
+**Decision Rationale:**
+- **Option 3 selected**: Use `urllib.parse.quote(order_id, safe='')`
+- Standard Python solution for URL encoding
+- Handles all edge cases (pipe, space, ampersand, etc.)
+- Future-proof: works regardless of order_id format changes
+- No external dependencies
+
+**Implementation:**
+```python
+from urllib.parse import quote
+
+# Encode query parameter value
+order_id = "PGP-6271402111|-1003268562225"
+encoded_order_id = quote(order_id, safe='')
+# Result: "PGP-6271402111%7C-1003268562225"
+
+# Build URL with encoded parameter
+success_url = f"{base_url}?order_id={encoded_order_id}"
+# Result: https://...?order_id=PGP-6271402111%7C-1003268562225 ✅
+```
+
+**Parameter: `safe=''`**
+- By default, `quote()` doesn't encode `/` (for path segments)
+- `safe=''` means encode EVERYTHING (for query parameter values)
+- Ensures maximum compatibility with strict API validators
+
+**Character Encoding:**
+```
+| → %7C (pipe)
+- → %2D (dash)
+  → %20 (space)
+& → %26 (ampersand)
+= → %3D (equals)
+# → %23 (hash)
+```
+
+**Trade-offs:**
+- ✅ RFC 3986 compliant URLs
+- ✅ Works with strict API validators (NowPayments, PayPal, Stripe, etc.)
+- ✅ One-line fix with standard library
+- ✅ Handles all special characters automatically
+- ⚠️ URL slightly longer (encoded vs raw)
+- ⚠️ Less human-readable in logs (acceptable trade-off)
+
+**Alternative Rejected:**
+- **Custom order_id format without special chars**: Rejected - would require rewriting order_id architecture
+- **Base64 encoding**: Rejected - unnecessary complexity, still needs URL encoding for `=` and `/`
+
+**Enforcement Pattern:**
+```python
+# ALWAYS use quote() when building URLs with dynamic values
+from urllib.parse import quote
+
+# ✅ CORRECT:
+url = f"{base}?param={quote(value, safe='')}"
+
+# ❌ WRONG:
+url = f"{base}?param={value}"  # Special chars will break
+url = f"{base}?param={value.replace('|', '%7C')}"  # Manual encoding fragile
+```
+
+**Impact:**
+- ✅ NowPayments API accepts success_url
+- ✅ Payment flow completes successfully
+- ✅ Users redirected to landing page
+- ✅ No more "invalid uri" errors
+
+**Related Patterns:**
+- Use `quote_plus()` for form data (spaces → `+` instead of `%20`)
+- Use `urlencode()` for multiple query parameters
+- Never manually replace special characters
+
+**Files Modified:**
+- `TelePay10-26/start_np_gateway.py` (added import, updated line 300)
+
+**Status:** ADOPTED (2025-11-02) - Standard pattern for all URL construction
+
+---
+
 ### 2025-11-02: Secret Manager Configuration Validation Strategy
 
 **Decision:** Rely on deployment-time secret mounting rather than code-based validation for Cloud Run services

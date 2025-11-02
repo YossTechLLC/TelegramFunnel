@@ -4,6 +4,79 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 38: NowPayments Success URL Encoding Fix ✅
+
+**Objective:** Fix NowPayments API error "success_url must be a valid uri" caused by unencoded pipe character in order_id
+
+**Problem:**
+- NowPayments API rejecting success_url with HTTP 400 error
+- Error: `{"status":false,"statusCode":400,"code":"INVALID_REQUEST_PARAMS","message":"success_url must be a valid uri"}`
+- Root cause: Pipe character `|` in order_id was not URL-encoded
+- Example: `?order_id=PGP-6271402111|-1003268562225` (pipe `|` is invalid in URIs)
+- Should be: `?order_id=PGP-6271402111%7C-1003268562225` (pipe encoded as `%7C`)
+
+**Root Cause:**
+```python
+# BROKEN (line 299):
+secure_success_url = f"{landing_page_base_url}?order_id={order_id}"
+# Result: ?order_id=PGP-6271402111|-1003268562225
+# Pipe character not URL-encoded → NowPayments rejects as invalid URI
+```
+
+**Fix Applied:**
+```python
+# FIXED (added import):
+from urllib.parse import quote  # Line 5
+
+# FIXED (line 300):
+secure_success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe='')}"
+# Result: ?order_id=PGP-6271402111%7C-1003268562225
+# Pipe encoded as %7C → Valid URI
+```
+
+**Files Changed:**
+1. `/OCTOBER/10-26/TelePay10-26/start_np_gateway.py`
+   - Added `from urllib.parse import quote` import (line 5)
+   - Updated success_url generation to encode order_id (line 300)
+
+**Impact:**
+- ✅ NowPayments API will now accept success_url parameter
+- ✅ Payment flow will complete successfully
+- ✅ Users will be redirected to landing page after payment
+- ✅ No more "invalid uri" errors from NowPayments
+
+**Technical Details:**
+- RFC 3986 URI standard requires special characters be percent-encoded
+- Pipe `|` → `%7C`, Dash `-` → unchanged (safe character)
+- `quote(order_id, safe='')` encodes ALL special characters
+- `safe=''` parameter means no characters are exempt from encoding
+
+**Deployment:**
+- ⚠️ **ACTION REQUIRED:** Restart TelePay bot to apply changes
+- No database migration needed
+- No service redeployment needed (bot runs locally)
+
+**Verification:**
+Bot logs should show:
+```
+🔗 [SUCCESS_URL] Using static landing page
+   URL: https://storage.googleapis.com/paygateprime-static/payment-processing.html?order_id=PGP-6271402111%7C-1003268562225
+```
+
+NowPayments API response should be:
+```json
+{
+  "success": true,
+  "status_code": 200,
+  "data": {
+    "invoice_url": "https://nowpayments.io/payment/...",
+    ...
+  }
+}
+```
+
+---
+
 ## 2025-11-02 Session 37: GCSplit1 Missing HostPay Configuration Fix ✅
 
 **Objective:** Fix missing HOSTPAY_WEBHOOK_URL and HOSTPAY_QUEUE environment variables in GCSplit1

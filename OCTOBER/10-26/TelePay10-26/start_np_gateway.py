@@ -2,6 +2,7 @@
 import os
 import httpx
 from typing import Dict, Any, Optional
+from urllib.parse import quote
 from google.cloud import secretmanager
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
@@ -296,7 +297,7 @@ class PaymentGatewayManager:
         # OLD: Used signed webhook URL with token (deprecated)
         # NEW: Static landing page with order_id parameter
         landing_page_base_url = "https://storage.googleapis.com/paygateprime-static/payment-processing.html"
-        secure_success_url = f"{landing_page_base_url}?order_id={order_id}"
+        secure_success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe='')}"
 
         print(f"🔗 [SUCCESS_URL] Using static landing page")
         print(f"   URL: {secure_success_url}")

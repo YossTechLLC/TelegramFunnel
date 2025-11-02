@@ -4,9 +4,21 @@ Minimal orchestrator for the Telegram Payment Bot.
 This file coordinates all the modular components.
 """
 import asyncio
+import os
+from pathlib import Path
 from threading import Thread
+from dotenv import load_dotenv
 from app_initializer import AppInitializer
 from server_manager import ServerManager
+
+# Load environment variables from .env file (if it exists)
+# This must happen BEFORE any modules try to access environment variables
+env_path = Path(__file__).parent / '.env'
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+    print(f"✅ Loaded environment variables from {env_path}")
+else:
+    print(f"⚠️ No .env file found at {env_path} - using system environment variables")
 
 async def run_application(app):
     """Run both the Telegram bot and subscription monitoring concurrently."""

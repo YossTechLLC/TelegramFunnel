@@ -145,7 +145,8 @@
       "Bash(/tmp/test.html)",
       "Bash(gsutil cp:*)",
       "Bash(gsutil rm:*)",
-      "Bash(gcloud tasks delete:*)"
+      "Bash(gcloud tasks delete:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
