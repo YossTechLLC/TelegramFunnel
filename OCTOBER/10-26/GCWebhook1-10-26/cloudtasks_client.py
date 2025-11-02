@@ -223,7 +223,10 @@ class CloudTasksClient:
         payout_currency: str,
         payout_network: str,
         subscription_price: str,
-        subscription_id: int
+        subscription_id: int,
+        nowpayments_payment_id: str = None,
+        nowpayments_pay_address: str = None,
+        nowpayments_outcome_amount: str = None
     ) -> Optional[str]:
         """
         Enqueue a payment accumulation request to GCAccumulator.
@@ -238,6 +241,9 @@ class CloudTasksClient:
             payout_network: Client's payout network
             subscription_price: Subscription price as string
             subscription_id: ID from private_channel_users_database
+            nowpayments_payment_id: NowPayments payment ID (optional, from IPN)
+            nowpayments_pay_address: Customer's payment address (optional, from IPN)
+            nowpayments_outcome_amount: Actual received amount (optional, from IPN)
 
         Returns:
             Task name if successful, None if failed
@@ -246,6 +252,13 @@ class CloudTasksClient:
             print(f"📊 [CLOUD_TASKS] Enqueueing payment accumulation to GCAccumulator")
             print(f"👤 [CLOUD_TASKS] User: {user_id}, Client: {client_id}")
             print(f"💵 [CLOUD_TASKS] Amount: ${subscription_price} → USDT accumulation")
+
+            if nowpayments_payment_id:
+                print(f"💳 [CLOUD_TASKS] NowPayments payment_id: {nowpayments_payment_id}")
+                print(f"📬 [CLOUD_TASKS] Pay address: {nowpayments_pay_address}")
+                print(f"💰 [CLOUD_TASKS] Outcome amount: {nowpayments_outcome_amount}")
+            else:
+                print(f"⚠️ [CLOUD_TASKS] NowPayments payment_id not available (IPN may arrive later)")
 
             # Prepare payload
             payload = {
@@ -256,7 +269,11 @@ class CloudTasksClient:
                 "payout_network": payout_network,
                 "payment_amount_usd": subscription_price,
                 "subscription_id": subscription_id,
-                "payment_timestamp": datetime.datetime.now().isoformat()
+                "payment_timestamp": datetime.datetime.now().isoformat(),
+                # NEW: NowPayments fields (optional)
+                "nowpayments_payment_id": nowpayments_payment_id,
+                "nowpayments_pay_address": nowpayments_pay_address,
+                "nowpayments_outcome_amount": nowpayments_outcome_amount
             }
 
             return self.create_task(

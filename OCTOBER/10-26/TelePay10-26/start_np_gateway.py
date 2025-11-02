@@ -7,14 +7,16 @@ from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import ContextTypes
 
 class PaymentGatewayManager:
-    def __init__(self, payment_token: str = None):
+    def __init__(self, payment_token: str = None, ipn_callback_url: str = None):
         """
         Initialize the PaymentGatewayManager.
-        
+
         Args:
             payment_token: The NowPayments API token. If None, will fetch from secrets
+            ipn_callback_url: The IPN callback URL. If None, will fetch from secrets
         """
         self.payment_token = payment_token or self.fetch_payment_provider_token()
+        self.ipn_callback_url = ipn_callback_url or self.fetch_ipn_callback_url()
         self.api_url = "https://api.nowpayments.io/v1/invoice"
     
     def fetch_payment_provider_token(self) -> Optional[str]:
@@ -29,29 +31,52 @@ class PaymentGatewayManager:
         except Exception as e:
             print(f"❌ Error fetching the PAYMENT_PROVIDER_TOKEN: {e}")
             return None
+
+    def fetch_ipn_callback_url(self) -> Optional[str]:
+        """Fetch the IPN callback URL from Secret Manager."""
+        try:
+            client = secretmanager.SecretManagerServiceClient()
+            secret_path = os.getenv("NOWPAYMENTS_IPN_CALLBACK_URL")
+            if not secret_path:
+                print(f"⚠️ [IPN] Environment variable NOWPAYMENTS_IPN_CALLBACK_URL is not set")
+                print(f"⚠️ [IPN] Payment ID capture will not work - IPN callback URL unavailable")
+                return None
+            response = client.access_secret_version(request={"name": secret_path})
+            ipn_url = response.payload.data.decode("UTF-8")
+            print(f"✅ [IPN] Successfully fetched IPN callback URL from Secret Manager")
+            return ipn_url
+        except Exception as e:
+            print(f"❌ [IPN] Error fetching IPN callback URL from Secret Manager: {e}")
+            print(f"⚠️ [IPN] Payment ID capture will not work - falling back to None")
+            return None
     
     async def create_payment_invoice(self, user_id: int, amount: float, success_url: str, order_id: str) -> Dict[str, Any]:
         """
         Create a payment invoice with NowPayments.
-        
+
         Args:
             user_id: The user's Telegram ID
             amount: The payment amount in USD
             success_url: The URL to redirect to after successful payment
             order_id: Unique order identifier
-            
+
         Returns:
             Dictionary containing the API response
         """
         if not self.payment_token:
             return {"error": "Payment provider token not available"}
-        
+
+        # Use IPN callback URL from instance (fetched from Secret Manager in __init__)
+        if not self.ipn_callback_url:
+            print(f"⚠️ [INVOICE] IPN callback URL not configured - payment_id won't be captured")
+
         invoice_payload = {
             "price_amount": amount,
             "price_currency": "USD",
             "order_id": order_id,
             "order_description": "Payment-Test-1",
             "success_url": success_url,
+            "ipn_callback_url": self.ipn_callback_url,  # IPN endpoint for payment_id capture
             "is_fixed_rate": False,
             "is_fee_paid_by_user": False
         }
@@ -70,10 +95,21 @@ class PaymentGatewayManager:
                 )
                 
                 if resp.status_code == 200:
+                    response_data = resp.json()
+                    invoice_id = response_data.get('id')
+
+                    # Log invoice creation with IPN callback URL
+                    print(f"📋 [INVOICE] Created invoice_id: {invoice_id}")
+                    print(f"📋 [INVOICE] Order ID: {order_id}")
+                    if self.ipn_callback_url:
+                        print(f"📋 [INVOICE] IPN will be sent to: {self.ipn_callback_url}")
+                    else:
+                        print(f"⚠️ [INVOICE] IPN callback URL not set - payment_id won't be captured")
+
                     return {
                         "success": True,
                         "status_code": resp.status_code,
-                        "data": resp.json()
+                        "data": response_data
                     }
                 else:
                     return {

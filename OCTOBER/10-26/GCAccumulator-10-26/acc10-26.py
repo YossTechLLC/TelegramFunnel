@@ -97,10 +97,22 @@ def accumulate_payment():
         subscription_id = request_data.get('subscription_id')
         payment_timestamp = request_data.get('payment_timestamp')
 
+        # NEW: Extract NowPayments fields (optional)
+        nowpayments_payment_id = request_data.get('nowpayments_payment_id')
+        nowpayments_pay_address = request_data.get('nowpayments_pay_address')
+        nowpayments_outcome_amount = request_data.get('nowpayments_outcome_amount')
+
         print(f"👤 [ENDPOINT] User ID: {user_id}")
         print(f"🏢 [ENDPOINT] Client ID: {client_id}")
         print(f"💰 [ENDPOINT] Payment Amount: ${payment_amount_usd}")
         print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
+
+        if nowpayments_payment_id:
+            print(f"💳 [ENDPOINT] NowPayments Payment ID: {nowpayments_payment_id}")
+            print(f"📬 [ENDPOINT] Pay Address: {nowpayments_pay_address}")
+            print(f"💰 [ENDPOINT] Outcome Amount: {nowpayments_outcome_amount}")
+        else:
+            print(f"⚠️ [ENDPOINT] NowPayments payment_id not available (may arrive via IPN later)")
 
         # Calculate adjusted amount (remove TP fee like GCSplit1 does)
         tp_flat_fee = Decimal(config.get('tp_flat_fee', '3'))
@@ -133,7 +145,10 @@ def accumulate_payment():
             accumulated_eth=accumulated_eth,
             client_wallet_address=wallet_address,
             client_payout_currency=payout_currency,
-            client_payout_network=payout_network
+            client_payout_network=payout_network,
+            nowpayments_payment_id=nowpayments_payment_id,
+            nowpayments_pay_address=nowpayments_pay_address,
+            nowpayments_outcome_amount=nowpayments_outcome_amount
         )
 
         if not accumulation_id:

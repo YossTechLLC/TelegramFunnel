@@ -280,3 +280,79 @@ class DatabaseManager:
             if conn:
                 conn.close()
                 print(f"🔌 [DATABASE] Connection closed")
+
+    def get_nowpayments_data(self, user_id: int, closed_channel_id: int) -> Optional[dict]:
+        """
+        Get NowPayments payment_id and related data for a user/channel subscription.
+
+        This data is populated by the np-webhook service when it receives IPN callbacks
+        from NowPayments. If the IPN hasn't arrived yet, this will return None.
+
+        Args:
+            user_id: User's Telegram ID
+            closed_channel_id: The closed (private) channel ID
+
+        Returns:
+            Dict with NowPayments fields or None if not available:
+            {
+                'nowpayments_payment_id': str,
+                'nowpayments_pay_address': str,
+                'nowpayments_outcome_amount': Decimal
+            }
+        """
+        conn = None
+        cur = None
+        try:
+            print(f"🔍 [DATABASE] Looking up NowPayments payment_id for user {user_id}, channel {closed_channel_id}")
+
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Could not establish connection")
+                return None
+
+            cur = conn.cursor()
+
+            # Query for NowPayments data from most recent subscription
+            query = """
+                SELECT
+                    nowpayments_payment_id,
+                    nowpayments_pay_address,
+                    nowpayments_outcome_amount
+                FROM private_channel_users_database
+                WHERE user_id = %s AND private_channel_id = %s
+                ORDER BY id DESC
+                LIMIT 1
+            """
+            cur.execute(query, (user_id, closed_channel_id))
+            result = cur.fetchone()
+
+            if result:
+                payment_id, pay_address, outcome_amount = result
+
+                if payment_id:
+                    print(f"✅ [DATABASE] Found NowPayments payment_id: {payment_id}")
+                    print(f"💰 [DATABASE] Outcome amount: {outcome_amount}")
+                    print(f"📬 [DATABASE] Pay address: {pay_address}")
+
+                    return {
+                        'nowpayments_payment_id': payment_id,
+                        'nowpayments_pay_address': pay_address,
+                        'nowpayments_outcome_amount': str(outcome_amount) if outcome_amount else None
+                    }
+                else:
+                    print(f"⚠️ [DATABASE] Subscription found but payment_id not yet available (IPN may arrive later)")
+                    return None
+            else:
+                print(f"⚠️ [DATABASE] No subscription found")
+                return None
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Error fetching NowPayments data: {e}")
+            return None
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+                print(f"🔌 [DATABASE] Connection closed")

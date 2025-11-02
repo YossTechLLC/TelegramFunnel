@@ -171,6 +171,24 @@ def process_payment():
             # Continue anyway - enqueue tasks for retry
 
         # ============================================================================
+        # NEW: Lookup NowPayments payment_id (populated by np-webhook IPN)
+        # ============================================================================
+        print(f"🔍 [ENDPOINT] Looking up NowPayments payment_id from database")
+        nowpayments_data = db_manager.get_nowpayments_data(user_id, closed_channel_id)
+
+        nowpayments_payment_id = None
+        nowpayments_pay_address = None
+        nowpayments_outcome_amount = None
+
+        if nowpayments_data:
+            nowpayments_payment_id = nowpayments_data.get('nowpayments_payment_id')
+            nowpayments_pay_address = nowpayments_data.get('nowpayments_pay_address')
+            nowpayments_outcome_amount = nowpayments_data.get('nowpayments_outcome_amount')
+            print(f"✅ [ENDPOINT] NowPayments payment_id found: {nowpayments_payment_id}")
+        else:
+            print(f"⚠️ [ENDPOINT] NowPayments payment_id not yet available (IPN may arrive later)")
+
+        # ============================================================================
         # NEW: Check payout strategy and route accordingly
         # ============================================================================
         print(f"🔍 [ENDPOINT] Checking payout strategy for channel {closed_channel_id}")
@@ -192,7 +210,7 @@ def process_payment():
                 print(f"⚠️ [ENDPOINT] GCAccumulator config missing - falling back to instant payout")
                 payout_strategy = 'instant'  # Fallback to instant
             else:
-                # Enqueue to GCAccumulator
+                # Enqueue to GCAccumulator with NowPayments payment_id
                 task_name_accumulator = cloudtasks_client.enqueue_gcaccumulator_payment(
                     queue_name=gcaccumulator_queue,
                     target_url=gcaccumulator_url,
@@ -202,7 +220,10 @@ def process_payment():
                     payout_currency=payout_currency,
                     payout_network=payout_network,
                     subscription_price=subscription_price,
-                    subscription_id=subscription_id
+                    subscription_id=subscription_id,
+                    nowpayments_payment_id=nowpayments_payment_id,
+                    nowpayments_pay_address=nowpayments_pay_address,
+                    nowpayments_outcome_amount=nowpayments_outcome_amount
                 )
 
                 if task_name_accumulator:

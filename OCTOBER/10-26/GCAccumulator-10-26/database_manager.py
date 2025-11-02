@@ -67,7 +67,10 @@ class DatabaseManager:
         accumulated_eth: Decimal,
         client_wallet_address: str,
         client_payout_currency: str,
-        client_payout_network: str
+        client_payout_network: str,
+        nowpayments_payment_id: str = None,
+        nowpayments_pay_address: str = None,
+        nowpayments_outcome_amount: str = None
     ) -> Optional[int]:
         """
         Insert a payment accumulation record with pending conversion status.
@@ -83,6 +86,9 @@ class DatabaseManager:
             client_wallet_address: Client's payout wallet address
             client_payout_currency: Target currency (e.g., XMR)
             client_payout_network: Payout network
+            nowpayments_payment_id: NowPayments payment ID (optional, from IPN)
+            nowpayments_pay_address: Customer's payment address (optional, from IPN)
+            nowpayments_outcome_amount: Actual received amount (optional, from IPN)
 
         Returns:
             Accumulation ID if successful, None if failed
@@ -100,19 +106,26 @@ class DatabaseManager:
             print(f"💰 [DATABASE] Payment Amount: ${payment_amount_usd}")
             print(f"💰 [DATABASE] Accumulated USD: ${accumulated_eth} (pending conversion)")
 
+            if nowpayments_payment_id:
+                print(f"💳 [DATABASE] NowPayments Payment ID: {nowpayments_payment_id}")
+                print(f"📬 [DATABASE] Pay Address: {nowpayments_pay_address}")
+                print(f"💰 [DATABASE] Outcome Amount: {nowpayments_outcome_amount}")
+
             cur.execute(
                 """INSERT INTO payout_accumulation (
                     client_id, user_id, subscription_id,
                     payment_amount_usd, payment_currency, payment_timestamp,
                     accumulated_amount_usdt, conversion_status,
-                    client_wallet_address, client_payout_currency, client_payout_network
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    client_wallet_address, client_payout_currency, client_payout_network,
+                    nowpayments_payment_id, nowpayments_pay_address, nowpayments_outcome_amount
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id""",
                 (
                     client_id, user_id, subscription_id,
                     payment_amount_usd, payment_currency, payment_timestamp,
                     accumulated_eth, 'pending',
-                    client_wallet_address, client_payout_currency, client_payout_network
+                    client_wallet_address, client_payout_currency, client_payout_network,
+                    nowpayments_payment_id, nowpayments_pay_address, nowpayments_outcome_amount
                 )
             )
 
@@ -122,6 +135,9 @@ class DatabaseManager:
 
             print(f"✅ [DATABASE] Accumulation record inserted successfully (pending conversion)")
             print(f"🆔 [DATABASE] Accumulation ID: {accumulation_id}")
+
+            if nowpayments_payment_id:
+                print(f"🔗 [DATABASE] Linked to NowPayments payment_id: {nowpayments_payment_id}")
 
             return accumulation_id
 
