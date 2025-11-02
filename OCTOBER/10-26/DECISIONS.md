@@ -19,6 +19,51 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: Database Access Pattern - Use get_connection() Not execute_query()
+
+**Decision:** Always use DatabaseManager's `get_connection()` method + cursor operations for custom queries, NOT a generic `execute_query()` method
+
+**Context:**
+- Idempotency implementation assumed DatabaseManager had an `execute_query()` method
+- DatabaseManager only provides specific methods (`record_private_channel_user()`, `get_payout_strategy()`, etc.)
+- For custom queries, must use: `get_connection()` → `cursor()` → `execute()` → `commit()` → `close()`
+- NP-Webhook correctly used this pattern; GCWebhook1/2 did not
+
+**Rationale:**
+- **Design Philosophy:** DatabaseManager uses specific, purpose-built methods for common operations
+- **Flexibility:** `get_connection()` provides full control for complex queries
+- **Consistency:** All custom queries should follow same pattern as NP-Webhook
+- **pg8000 Behavior:** Returns tuples, not dicts - must use index access `result[0]` not `result['column']`
+
+**Implementation Pattern:**
+```python
+# CORRECT PATTERN (for UPDATE/INSERT):
+conn = db_manager.get_connection()
+if conn:
+    cur = conn.cursor()
+    cur.execute(query, params)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# CORRECT PATTERN (for SELECT):
+conn = db_manager.get_connection()
+if conn:
+    cur = conn.cursor()
+    cur.execute(query, params)
+    result = cur.fetchone()  # Returns tuple: (val1, val2, val3)
+    cur.close()
+    conn.close()
+# Access: result[0], result[1], result[2] (NOT result['column'])
+
+# WRONG:
+db_manager.execute_query(query, params)  # Method doesn't exist!
+```
+
+**Impact:** Fixed critical idempotency bugs in GCWebhook1 and GCWebhook2
+
+---
+
 ### 2025-11-02: Environment Variable Naming Convention - Match Secret Manager Secret Names
 
 **Decision:** Environment variable names should match Secret Manager secret names unless aliasing is intentional and documented

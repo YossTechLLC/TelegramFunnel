@@ -134,19 +134,29 @@ def send_telegram_invite():
             print(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
         else:
             try:
-                existing_invite = db_manager.execute_query("""
-                    SELECT
-                        telegram_invite_sent,
-                        telegram_invite_link,
-                        telegram_invite_sent_at
-                    FROM processed_payments
-                    WHERE payment_id = %s
-                """, (payment_id,))
+                conn = db_manager.get_connection()
+                if conn:
+                    cur = conn.cursor()
+                    cur.execute("""
+                        SELECT
+                            telegram_invite_sent,
+                            telegram_invite_link,
+                            telegram_invite_sent_at
+                        FROM processed_payments
+                        WHERE payment_id = %s
+                    """, (payment_id,))
+                    existing_invite = cur.fetchone()
+                    cur.close()
+                    conn.close()
+                else:
+                    existing_invite = None
 
-                if existing_invite and existing_invite[0]['telegram_invite_sent']:
+                if existing_invite and existing_invite[0]:  # telegram_invite_sent is index 0
                     # Invite already sent - return success without re-sending
-                    existing_link = existing_invite[0]['telegram_invite_link']
-                    sent_at = existing_invite[0]['telegram_invite_sent_at']
+                    # Tuple indexes: 0=telegram_invite_sent, 1=telegram_invite_link, 2=telegram_invite_sent_at
+                    telegram_invite_sent = existing_invite[0]
+                    existing_link = existing_invite[1]
+                    sent_at = existing_invite[2]
 
                     print(f"✅ [IDEMPOTENCY] Invite already sent for payment {payment_id}")
                     print(f"   Sent at: {sent_at}")
@@ -278,18 +288,26 @@ def send_telegram_invite():
 
             if db_manager:
                 try:
-                    db_manager.execute_query("""
-                        UPDATE processed_payments
-                        SET
-                            telegram_invite_sent = TRUE,
-                            telegram_invite_sent_at = CURRENT_TIMESTAMP,
-                            telegram_invite_link = %s,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE payment_id = %s
-                    """, (invite_link, payment_id))
+                    conn = db_manager.get_connection()
+                    if conn:
+                        cur = conn.cursor()
+                        cur.execute("""
+                            UPDATE processed_payments
+                            SET
+                                telegram_invite_sent = TRUE,
+                                telegram_invite_sent_at = CURRENT_TIMESTAMP,
+                                telegram_invite_link = %s,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE payment_id = %s
+                        """, (invite_link, payment_id))
+                        conn.commit()
+                        cur.close()
+                        conn.close()
 
-                    print(f"✅ [IDEMPOTENCY] Marked invite as sent for payment {payment_id}")
-                    print(f"   Link stored: {invite_link}")
+                        print(f"✅ [IDEMPOTENCY] Marked invite as sent for payment {payment_id}")
+                        print(f"   Link stored: {invite_link}")
+                    else:
+                        print(f"⚠️ [IDEMPOTENCY] Could not get database connection")
                 except Exception as e:
                     # Non-critical error - invite already sent to user
                     print(f"⚠️ [IDEMPOTENCY] Failed to mark invite as sent: {e}")

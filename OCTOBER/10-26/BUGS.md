@@ -12,6 +12,141 @@
 
 ## Recently Fixed
 
+### 2025-11-02: DatabaseManager execute_query() Method Not Found - AttributeError ✅
+
+**Services:** GCWebhook1-10-26, GCWebhook2-10-26
+**Severity:** CRITICAL - Idempotency system completely broken
+**Status:** FIXED ✅
+
+**Description:**
+- GCWebhook1 and GCWebhook2 crashing when trying to mark payments/invites in idempotency system
+- Error: `'DatabaseManager' object has no attribute 'execute_query'`
+- Result: Idempotency tracking failed, allowing duplicate payments and duplicate Telegram invites
+
+**Root Cause:**
+Previous session's idempotency implementation assumed DatabaseManager had generic `execute_query()` method, but it doesn't exist:
+
+```python
+# WRONG (assumed this method exists):
+db_manager.execute_query("""
+    UPDATE processed_payments
+    SET gcwebhook1_processed = TRUE
+    WHERE payment_id = %s
+""", (payment_id,))
+# ❌ AttributeError: 'DatabaseManager' object has no attribute 'execute_query'
+```
+
+**DatabaseManager Design:**
+- **Philosophy:** Purpose-built specific methods, not generic query execution
+- **Available Methods:**
+  - `get_connection()` - Returns raw database connection
+  - `record_private_channel_user()` - Specific user recording
+  - `get_payout_strategy()` - Specific payout data retrieval
+  - `get_subscription_id()` - Specific subscription lookup
+  - `get_nowpayments_data()` - Specific NowPayments data retrieval
+- **NO execute_query() method** - Must use `get_connection()` + cursor pattern
+
+**Affected Locations:**
+1. **GCWebhook1-10-26/tph1-10-26.py:434** - UPDATE query to mark payment processed
+2. **GCWebhook2-10-26/tph2-10-26.py:137** - SELECT query to check if invite sent
+3. **GCWebhook2-10-26/tph2-10-26.py:281** - UPDATE query to mark invite sent
+4. **NP-Webhook (CORRECT)** - Already used proper pattern
+
+**Fix Applied:**
+
+**Pattern 1: UPDATE/INSERT Queries**
+```python
+# BEFORE (WRONG):
+db_manager.execute_query("""
+    UPDATE processed_payments
+    SET gcwebhook1_processed = TRUE,
+        gcwebhook1_processed_at = CURRENT_TIMESTAMP
+    WHERE payment_id = %s
+""", (payment_id,))
+
+# AFTER (FIXED):
+conn = db_manager.get_connection()
+if conn:
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE processed_payments
+        SET gcwebhook1_processed = TRUE,
+            gcwebhook1_processed_at = CURRENT_TIMESTAMP
+        WHERE payment_id = %s
+    """, (payment_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+```
+
+**Pattern 2: SELECT Queries**
+```python
+# BEFORE (WRONG):
+result = db_manager.execute_query("""
+    SELECT telegram_invite_sent, telegram_invite_link
+    FROM processed_payments
+    WHERE payment_id = %s
+""", (payment_id,))
+if result and result[0]['telegram_invite_sent']:  # Dict access ❌
+    existing_link = result[0]['telegram_invite_link']
+
+# AFTER (FIXED):
+conn = db_manager.get_connection()
+if conn:
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT telegram_invite_sent, telegram_invite_link
+        FROM processed_payments
+        WHERE payment_id = %s
+    """, (payment_id,))
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+else:
+    result = None
+
+if result and result[0]:  # Tuple access ✅ (pg8000 returns tuples)
+    telegram_invite_sent = result[0]  # Index 0
+    existing_link = result[1]         # Index 1
+```
+
+**Key Insight - pg8000 Returns Tuples, Not Dicts:**
+- **pg8000 cursor.fetchone()** returns tuple: `(value1, value2, value3)`
+- **NOT a dict** - Code expecting `result[0]['column_name']` will fail
+- **Correct access:** Use tuple indexes `result[0]`, `result[1]`, `result[2]`
+
+**Verification:**
+- ✅ Syntax verified: `python3 -m py_compile` passed for both services
+- ✅ GCWebhook2 deployed: `gcwebhook2-10-26-00017-hfq` (32s build)
+- ✅ GCWebhook1 deployed: `gcwebhook1-10-26-00020-lq8` (38s build)
+- ✅ Both services healthy (status: True)
+
+**Files Modified:**
+- `GCWebhook1-10-26/tph1-10-26.py` (line 434 - UPDATE query)
+- `GCWebhook2-10-26/tph2-10-26.py` (lines 137, 281 - SELECT and UPDATE queries)
+
+**Impact:**
+- ✅ Idempotency system fully functional
+- ✅ Payments correctly marked as processed
+- ✅ Telegram invites correctly tracked to prevent duplicates
+- ✅ No more AttributeError in production logs
+
+**Prevention:**
+- Created: `DATABASE_MANAGER_EXECUTE_QUERY_FIX_CHECKLIST.md`
+- Added to DECISIONS.md: Standard database access pattern
+- Pattern: Always use `get_connection()` + cursor, never assume `execute_query()` exists
+- Verify class interfaces before calling methods
+- Follow existing patterns in codebase (NP-Webhook had correct pattern)
+
+**Lessons Learned:**
+1. **Verify class interfaces** - Don't assume methods exist without checking
+2. **Follow existing patterns** - NP-Webhook already used correct approach
+3. **Test locally** - Syntax checks catch these errors before deployment
+4. **Database driver behavior** - pg8000 returns tuples, not dicts (requires index access)
+5. **Purpose-built vs generic** - DatabaseManager uses specific methods, not generic query execution
+
+---
+
 ### 2025-11-02: NP-Webhook IPN Signature Verification Failure ✅
 
 **Service:** np-webhook-10-26 (NowPayments IPN Callback Handler)

@@ -431,17 +431,25 @@ def process_validated_payment():
         # ============================================================================
 
         try:
-            db_manager.execute_query("""
-                UPDATE processed_payments
-                SET
-                    gcwebhook1_processed = TRUE,
-                    gcwebhook1_processed_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE payment_id = %s
-            """, (nowpayments_payment_id,))
+            conn = db_manager.get_connection()
+            if conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE processed_payments
+                    SET
+                        gcwebhook1_processed = TRUE,
+                        gcwebhook1_processed_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE payment_id = %s
+                """, (nowpayments_payment_id,))
+                conn.commit()
+                cur.close()
+                conn.close()
 
-            print(f"")
-            print(f"✅ [IDEMPOTENCY] Marked payment {nowpayments_payment_id} as processed")
+                print(f"")
+                print(f"✅ [IDEMPOTENCY] Marked payment {nowpayments_payment_id} as processed")
+            else:
+                print(f"⚠️ [IDEMPOTENCY] Could not get database connection")
         except Exception as e:
             # Non-critical error - payment already enqueued successfully
             print(f"⚠️ [IDEMPOTENCY] Failed to mark payment as processed: {e}")

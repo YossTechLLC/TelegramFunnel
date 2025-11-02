@@ -4,6 +4,74 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 43: Fixed DatabaseManager execute_query() Bug in Idempotency Code ✅
+
+**Objective:** Fix critical bug in idempotency implementation where GCWebhook1 and GCWebhook2 were calling non-existent `execute_query()` method
+
+**Problem Identified:**
+- GCWebhook1 logging: `⚠️ [IDEMPOTENCY] Failed to mark payment as processed: 'DatabaseManager' object has no attribute 'execute_query'`
+- Root cause: Idempotency code (previous session) called `db_manager.execute_query()` which doesn't exist
+- DatabaseManager only has specific methods: `get_connection()`, `record_private_channel_user()`, etc.
+- Correct pattern: Use `get_connection()` + `cursor()` + `execute()` + `commit()` + `close()`
+
+**Affected Services:**
+1. GCWebhook1-10-26 (line 434) - UPDATE processed_payments SET gcwebhook1_processed = TRUE
+2. GCWebhook2-10-26 (line 137) - SELECT from processed_payments (idempotency check)
+3. GCWebhook2-10-26 (line 281) - UPDATE processed_payments SET telegram_invite_sent = TRUE
+4. NP-Webhook - ✅ CORRECT (already using proper connection pattern)
+
+**Fixes Applied:**
+
+**GCWebhook1 (tph1-10-26.py line 434):**
+```python
+# BEFORE (WRONG):
+db_manager.execute_query("""UPDATE...""", params)
+
+# AFTER (FIXED):
+conn = db_manager.get_connection()
+if conn:
+    cur = conn.cursor()
+    cur.execute("""UPDATE...""", params)
+    conn.commit()
+    cur.close()
+    conn.close()
+```
+
+**GCWebhook2 (tph2-10-26.py lines 137 & 281):**
+- Fixed SELECT query (line 137): Now uses proper connection pattern + tuple result access
+- Fixed UPDATE query (line 281): Now uses proper connection pattern with commit
+- **Important:** Changed result access from dict `result[0]['column']` to tuple `result[0]` (pg8000 returns tuples)
+
+**Deployment Results:**
+- **GCWebhook2:** gcwebhook2-10-26-00017-hfq ✅ (deployed first - downstream)
+  - Build time: 32 seconds
+  - Status: True (healthy)
+- **GCWebhook1:** gcwebhook1-10-26-00020-lq8 ✅ (deployed second - upstream)
+  - Build time: 38 seconds
+  - Status: True (healthy)
+
+**Key Lessons:**
+1. **Always verify class interfaces** before calling methods
+2. **Follow existing patterns** in codebase (NP-Webhook had correct pattern)
+3. **pg8000 returns tuples, not dicts** - use index access `result[0]` not `result['column']`
+4. **Test locally** with syntax checks before deployment
+5. **Check for similar issues** across all affected services
+
+**Files Modified:**
+- GCWebhook1-10-26/tph1-10-26.py (1 location fixed)
+- GCWebhook2-10-26/tph2-10-26.py (2 locations fixed)
+
+**Documentation Created:**
+- DATABASE_MANAGER_EXECUTE_QUERY_FIX_CHECKLIST.md (comprehensive fix guide)
+
+**Impact:**
+- ✅ Idempotency system now fully functional
+- ✅ Payments can be marked as processed correctly
+- ✅ Telegram invites tracked properly in database
+- ✅ No more AttributeError in logs
+
+---
+
 ## 2025-11-02 Session 42: NP-Webhook IPN Signature Verification Fix ✅
 
 **Objective:** Fix NowPayments IPN signature verification failure preventing all payment callbacks
