@@ -1,6 +1,6 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Archived previous entries to BUGS_ARCH.md)
+**Last Updated:** 2025-11-02 (Archived previous entries to BUGS_ARCH.md)
 
 ---
 
@@ -11,6 +11,126 @@
 ---
 
 ## Recently Fixed
+
+### 2025-11-02: GCSplit1 Missing HostPay Configuration ✅
+
+**Service:** GCSplit1-10-26 (Payment Split Orchestrator)
+**Severity:** MEDIUM - Service runs but cannot trigger GCHostPay
+**Status:** FIXED ✅ (Deployed revision 00012-j7w)
+
+**Description:**
+- GCSplit1 missing HOSTPAY_WEBHOOK_URL and HOSTPAY_QUEUE environment variables
+- Service started successfully but could not trigger GCHostPay for final ETH transfers
+- Payment workflow incomplete - stopped at GCSplit3
+- Host payouts would fail silently
+
+**Root Cause:**
+Deployment configuration issue - secrets exist in Secret Manager but were never mounted to Cloud Run service:
+```bash
+# Secrets existed:
+$ gcloud secrets list --filter="name~'HOSTPAY'"
+HOSTPAY_WEBHOOK_URL  # ✅ Exists
+HOSTPAY_QUEUE        # ✅ Exists
+
+# But NOT mounted on Cloud Run:
+$ gcloud run services describe gcsplit1-10-26 | grep HOSTPAY
+# Only showed: GCHOSTPAY1_QUEUE, GCHOSTPAY1_URL, TPS_HOSTPAY_SIGNING_KEY
+# Missing: HOSTPAY_WEBHOOK_URL, HOSTPAY_QUEUE
+```
+
+**Fix Applied:**
+```bash
+gcloud run services update gcsplit1-10-26 \
+  --region=us-central1 \
+  --update-secrets=HOSTPAY_WEBHOOK_URL=HOSTPAY_WEBHOOK_URL:latest,HOSTPAY_QUEUE=HOSTPAY_QUEUE:latest
+```
+
+**Verification:**
+- ✅ New revision deployed: `gcsplit1-10-26-00012-j7w`
+- ✅ Configuration logs now show:
+  ```
+  HOSTPAY_WEBHOOK_URL: ✅
+  HostPay Queue: ✅
+  ```
+- ✅ Health check passes: `{"status":"healthy","components":{"database":"healthy","token_manager":"healthy","cloudtasks":"healthy"}}`
+- ✅ Service can now trigger GCHostPay for final payments
+
+**Impact:**
+- ✅ Payment workflow now complete end-to-end
+- ✅ GCHostPay integration fully functional
+- ✅ Host payouts will succeed
+
+**Prevention:**
+- Created comprehensive checklist: `GCSPLIT1_MISSING_HOSTPAY_CONFIG_FIX.md`
+- Verified no other services affected (GCSplit2, GCSplit3 don't need these secrets)
+
+---
+
+### 2025-11-02: GCSplit1 NoneType AttributeError on .strip() ✅
+
+**Service:** GCSplit1-10-26 (Payment Split Orchestrator)
+**Severity:** CRITICAL - Service crash on every payment
+**Status:** FIXED ✅ (Deployed revision 00011-xn4)
+
+**Description:**
+- GCSplit1 crashed with `'NoneType' object has no attribute 'strip'` error
+- Occurred when processing payment split requests from GCWebhook1
+- Caused complete service failure for payment processing
+
+**Root Cause:**
+Python's `.get(key, default)` does NOT use default value when key exists with `None`:
+```python
+# The Problem:
+data = {"wallet_address": None}  # Database returns NULL → JSON null → Python None
+
+# WRONG (crashes):
+wallet_address = data.get('wallet_address', '').strip()
+# data.get() returns None (key exists, value is None)
+# None.strip() → AttributeError ❌
+
+# CORRECT (works):
+wallet_address = (data.get('wallet_address') or '').strip()
+# (None or '') returns ''
+# ''.strip() → '' ✅
+```
+
+**Affected Code (tps1-10-26.py:299-301):**
+```python
+# BEFORE (crashed):
+wallet_address = webhook_data.get('wallet_address', '').strip()
+payout_currency = webhook_data.get('payout_currency', '').strip().lower()
+payout_network = webhook_data.get('payout_network', '').strip().lower()
+
+# AFTER (fixed):
+wallet_address = (webhook_data.get('wallet_address') or '').strip()
+payout_currency = (webhook_data.get('payout_currency') or '').strip().lower()
+payout_network = (webhook_data.get('payout_network') or '').strip().lower()
+```
+
+**Fix Applied:**
+- Updated GCSplit1-10-26/tps1-10-26.py lines 296-304
+- Added null-safe handling using `(value or '')` pattern
+- Added explanatory comments for future maintainers
+- Built and deployed: `gcr.io/telepay-459221/gcsplit1-10-26:latest`
+- Deployed revision: `gcsplit1-10-26-00011-xn4`
+
+**Verification:**
+- Service health check: ✅ Healthy
+- All components operational: database ✅ token_manager ✅ cloudtasks ✅
+- No other services affected (verified via grep search)
+
+**Prevention:**
+- Created comprehensive fix checklist: `GCSPLIT1_NONETYPE_STRIP_FIX_CHECKLIST.md`
+- Documented null-safety pattern for future code reviews
+- Recommended: Add linter rule to catch `.get().strip()` pattern
+
+**Lessons Learned:**
+1. JSON `null` !== Missing key (both valid, different behavior)
+2. Database NULL → JSON null → Python None (must handle explicitly)
+3. Always use `(value or default)` pattern for string method chaining
+4. `.get(key, default)` only works when key is MISSING, not when value is None
+
+---
 
 ### 2025-11-02: Payment Validation Using Invoice Price Instead of Actual Received Amount ✅
 

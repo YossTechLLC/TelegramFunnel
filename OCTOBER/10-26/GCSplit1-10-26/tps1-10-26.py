@@ -293,13 +293,15 @@ def initial_webhook():
             print(f"❌ [ENDPOINT_1] JSON parsing error: {e}")
             abort(400, "Malformed JSON payload")
 
-        # Extract required data
+        # Extract required data with null-safe handling
+        # Note: webhook_data.get('key', '') doesn't protect against None values
+        # (None is truthy in dict.get context). Use (value or '') pattern instead.
         user_id = webhook_data.get('user_id')
         closed_channel_id = webhook_data.get('closed_channel_id')
-        wallet_address = webhook_data.get('wallet_address', '').strip()
-        payout_currency = webhook_data.get('payout_currency', '').strip().lower()
-        payout_network = webhook_data.get('payout_network', '').strip().lower()
-        subscription_price = webhook_data.get('subscription_price') or webhook_data.get('sub_price')
+        wallet_address = (webhook_data.get('wallet_address') or '').strip()
+        payout_currency = (webhook_data.get('payout_currency') or '').strip().lower()
+        payout_network = (webhook_data.get('payout_network') or '').strip().lower()
+        subscription_price = webhook_data.get('subscription_price') or webhook_data.get('sub_price') or '0'
 
         print(f"👤 [ENDPOINT_1] User ID: {user_id}")
         print(f"🏢 [ENDPOINT_1] Channel ID: {closed_channel_id}")

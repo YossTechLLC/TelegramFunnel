@@ -139,22 +139,24 @@ class PaymentGatewayManager:
             return update.callback_query.from_user.id
         return None
     
-    async def start_payment_flow(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                                sub_value: float, open_channel_id: str, 
+    async def start_payment_flow(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+                                sub_value: float, open_channel_id: str,
                                 secure_success_url: str, closed_channel_title: str = "Premium Channel",
-                                closed_channel_description: str = "exclusive content", sub_time: int = 30) -> None:
+                                closed_channel_description: str = "exclusive content", sub_time: int = 30,
+                                order_id: str = None) -> None:
         """
         Start the complete payment flow for a user.
-        
+
         Args:
             update: The Telegram update object
             context: The bot context
             sub_value: The subscription amount
             open_channel_id: The open channel ID
-            secure_success_url: The signed success URL for post-payment redirect
+            secure_success_url: The success URL for post-payment redirect (now points to landing page)
             closed_channel_title: The title of the closed channel
             closed_channel_description: The description of the closed channel
             sub_time: The subscription duration in days
+            order_id: Optional pre-created order_id (to avoid duplication)
         """
         print(f"💳 [DEBUG] Starting payment flow: amount=${sub_value:.2f}, channel_id={open_channel_id}")
         user_id = self.get_telegram_user_id(update)
@@ -163,27 +165,30 @@ class PaymentGatewayManager:
             if chat_id:
                 await context.bot.send_message(chat_id, "❌ Could not determine user ID.")
             return
-        
-        # Create unique order ID
-        # FIXED: Use | separator to preserve negative sign in channel_id
-        # Format: PGP-{user_id}|{open_channel_id}
-        # Example: PGP-6271402111|-1003268562225
 
-        # Validate that open_channel_id is negative (Telegram requirement)
-        if not str(open_channel_id).startswith('-'):
-            print(f"⚠️ [VALIDATION] open_channel_id should be negative: {open_channel_id}")
-            print(f"⚠️ [VALIDATION] Telegram channel IDs are always negative for supergroups/channels")
-            # Add negative sign to fix misconfiguration
-            open_channel_id = f"-{open_channel_id}" if open_channel_id != "donation_default" else open_channel_id
-            print(f"✅ [VALIDATION] Corrected to: {open_channel_id}")
+        # Create unique order ID if not provided
+        if not order_id:
+            # FIXED: Use | separator to preserve negative sign in channel_id
+            # Format: PGP-{user_id}|{open_channel_id}
+            # Example: PGP-6271402111|-1003268562225
 
-        order_id = f"PGP-{user_id}|{open_channel_id}"
+            # Validate that open_channel_id is negative (Telegram requirement)
+            if not str(open_channel_id).startswith('-'):
+                print(f"⚠️ [VALIDATION] open_channel_id should be negative: {open_channel_id}")
+                print(f"⚠️ [VALIDATION] Telegram channel IDs are always negative for supergroups/channels")
+                # Add negative sign to fix misconfiguration
+                open_channel_id = f"-{open_channel_id}" if open_channel_id != "donation_default" else open_channel_id
+                print(f"✅ [VALIDATION] Corrected to: {open_channel_id}")
 
-        # Debug logging
-        print(f"📋 [ORDER] Created order_id: {order_id}")
-        print(f"   User ID: {user_id}")
-        print(f"   Open Channel ID: {open_channel_id}")
-        print(f"   Channel ID is negative: {str(open_channel_id).startswith('-')}")
+            order_id = f"PGP-{user_id}|{open_channel_id}"
+
+            # Debug logging
+            print(f"📋 [ORDER] Created order_id: {order_id}")
+            print(f"   User ID: {user_id}")
+            print(f"   Open Channel ID: {open_channel_id}")
+            print(f"   Channel ID is negative: {str(open_channel_id).startswith('-')}")
+        else:
+            print(f"📋 [ORDER] Using provided order_id: {order_id}")
 
         # Create payment invoice
         invoice_result = await self.create_payment_invoice(
@@ -269,22 +274,32 @@ class PaymentGatewayManager:
             print(f"🏷️ [DEBUG] Retrieved channel info: title='{closed_channel_title}', description='{closed_channel_description}'")
 
 
-        if not webhook_manager.signing_key:
-            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
-            if chat_id:
-                await context.bot.send_message(chat_id, "❌ Signing key missing, cannot generate secure URL.")
-            return
+        # Create order_id for NowPayments tracking
+        # Format: PGP-{user_id}|{open_channel_id}
+        # Example: PGP-6271402111|-1003268562225
 
-        # Build secure success URL with wallet info, network, subscription time and price
-        secure_success_url = webhook_manager.build_signed_success_url(
-            user_id=user_id,
-            closed_channel_id=closed_channel_id,
-            client_wallet_address=wallet_address or "",
-            client_payout_currency=payout_currency or "",
-            client_payout_network=payout_network or "",
-            subscription_time=global_sub_time,
-            subscription_price=str(global_sub_value)
-        )
+        # Validate that open_channel_id is negative (Telegram requirement)
+        if not str(global_open_channel_id).startswith('-') and global_open_channel_id != "donation_default":
+            print(f"⚠️ [VALIDATION] open_channel_id should be negative: {global_open_channel_id}")
+            # Add negative sign to fix misconfiguration
+            global_open_channel_id = f"-{global_open_channel_id}"
+            print(f"✅ [VALIDATION] Corrected to: {global_open_channel_id}")
+
+        order_id = f"PGP-{user_id}|{global_open_channel_id}"
+
+        print(f"📋 [ORDER] Created order_id: {order_id}")
+        print(f"   User ID: {user_id}")
+        print(f"   Open Channel ID: {global_open_channel_id}")
+
+        # Build success URL pointing to static landing page
+        # The landing page will poll payment status via API
+        # OLD: Used signed webhook URL with token (deprecated)
+        # NEW: Static landing page with order_id parameter
+        landing_page_base_url = "https://storage.googleapis.com/paygateprime-static/payment-processing.html"
+        secure_success_url = f"{landing_page_base_url}?order_id={order_id}"
+
+        print(f"🔗 [SUCCESS_URL] Using static landing page")
+        print(f"   URL: {secure_success_url}")
         
         # Use the new payment flow method with channel info
         await self.start_payment_flow(
@@ -295,5 +310,6 @@ class PaymentGatewayManager:
             secure_success_url=secure_success_url,
             closed_channel_title=closed_channel_title,
             closed_channel_description=closed_channel_description,
-            sub_time=global_sub_time
+            sub_time=global_sub_time,
+            order_id=order_id  # Pass order_id to avoid duplicate creation
         )

@@ -338,6 +338,7 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
                 nowpayments_price_amount = %s,
                 nowpayments_price_currency = %s,
                 nowpayments_outcome_currency = %s,
+                payment_status = 'confirmed',
                 nowpayments_created_at = CURRENT_TIMESTAMP,
                 nowpayments_updated_at = CURRENT_TIMESTAMP
             WHERE user_id = %s AND private_channel_id = %s
@@ -376,7 +377,8 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
             print(f"   Private Channel ID: {closed_channel_id}")
             print(f"   Payment ID: {payment_data.get('payment_id')}")
             print(f"   Invoice ID: {payment_data.get('invoice_id')}")
-            print(f"   Status: {payment_data.get('payment_status')}")
+            print(f"   NowPayments Status: {payment_data.get('payment_status')}")
+            print(f"   Payment Status: confirmed ✅")
             print(f"   Amount: {payment_data.get('outcome_amount')} {payment_data.get('pay_currency')}")
             return True
         else:
@@ -698,6 +700,180 @@ def handle_ipn():
     print(f"=" * 80)
     print(f"")
     return jsonify({"status": "success", "message": "IPN processed"}), 200
+
+
+# ============================================================================
+# PAYMENT STATUS API ENDPOINT (FOR LANDING PAGE POLLING)
+# ============================================================================
+
+@app.route('/api/payment-status', methods=['GET'])
+def payment_status_api():
+    """
+    API endpoint for landing page to poll payment confirmation status.
+
+    Query Parameters:
+        order_id (str): NowPayments order_id (format: PGP-{user_id}|{open_channel_id})
+
+    Returns:
+        JSON: {
+            "status": "pending" | "confirmed" | "error",
+            "message": "descriptive message",
+            "data": {
+                "order_id": str,
+                "payment_status": str,
+                "confirmed": bool
+            }
+        }
+    """
+    print(f"")
+    print(f"=" * 80)
+    print(f"📡 [API] Payment Status Request Received")
+    print(f"=" * 80)
+
+    # Get order_id from query parameters
+    order_id = request.args.get('order_id')
+
+    if not order_id:
+        print(f"❌ [API] Missing order_id parameter")
+        return jsonify({
+            "status": "error",
+            "message": "Missing order_id parameter",
+            "data": None
+        }), 400
+
+    print(f"🔍 [API] Looking up payment status for order_id: {order_id}")
+
+    try:
+        # Parse order_id to get user_id and open_channel_id
+        user_id, open_channel_id = parse_order_id(order_id)
+
+        if not user_id or not open_channel_id:
+            print(f"❌ [API] Invalid order_id format: {order_id}")
+            return jsonify({
+                "status": "error",
+                "message": "Invalid order_id format",
+                "data": None
+            }), 400
+
+        print(f"✅ [API] Parsed order_id:")
+        print(f"   User ID: {user_id}")
+        print(f"   Open Channel ID: {open_channel_id}")
+
+        # Connect to database
+        conn = get_db_connection()
+        if not conn:
+            print(f"❌ [API] Failed to connect to database")
+            return jsonify({
+                "status": "error",
+                "message": "Database connection failed",
+                "data": None
+            }), 500
+
+        cur = conn.cursor()
+
+        # Look up closed_channel_id from main_clients_database
+        cur.execute("""
+            SELECT closed_channel_id
+            FROM main_clients_database
+            WHERE open_channel_id = %s
+        """, (open_channel_id,))
+
+        result = cur.fetchone()
+
+        if not result:
+            print(f"❌ [API] No channel mapping found for open_channel_id: {open_channel_id}")
+            cur.close()
+            conn.close()
+            return jsonify({
+                "status": "error",
+                "message": "Channel not found",
+                "data": None
+            }), 404
+
+        closed_channel_id = result[0]
+        print(f"✅ [API] Found closed_channel_id: {closed_channel_id}")
+
+        # Query payment_status from private_channel_users_database
+        cur.execute("""
+            SELECT payment_status, nowpayments_payment_id, nowpayments_payment_status
+            FROM private_channel_users_database
+            WHERE user_id = %s AND private_channel_id = %s
+            ORDER BY id DESC LIMIT 1
+        """, (user_id, closed_channel_id))
+
+        payment_record = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        if not payment_record:
+            print(f"⚠️ [API] No payment record found")
+            print(f"   User ID: {user_id}")
+            print(f"   Private Channel ID: {closed_channel_id}")
+            return jsonify({
+                "status": "pending",
+                "message": "Payment record not found - still pending",
+                "data": {
+                    "order_id": order_id,
+                    "payment_status": "pending",
+                    "confirmed": False
+                }
+            }), 200
+
+        payment_status = payment_record[0] or 'pending'
+        nowpayments_payment_id = payment_record[1]
+        nowpayments_payment_status = payment_record[2]
+
+        print(f"✅ [API] Found payment record:")
+        print(f"   Payment Status: {payment_status}")
+        print(f"   NowPayments Payment ID: {nowpayments_payment_id}")
+        print(f"   NowPayments Status: {nowpayments_payment_status}")
+
+        # Determine response based on payment_status
+        if payment_status == 'confirmed':
+            print(f"✅ [API] Payment CONFIRMED - IPN validated")
+            return jsonify({
+                "status": "confirmed",
+                "message": "Payment confirmed - redirecting to Telegram",
+                "data": {
+                    "order_id": order_id,
+                    "payment_status": payment_status,
+                    "confirmed": True,
+                    "payment_id": nowpayments_payment_id
+                }
+            }), 200
+        elif payment_status == 'failed':
+            print(f"❌ [API] Payment FAILED")
+            return jsonify({
+                "status": "failed",
+                "message": "Payment failed",
+                "data": {
+                    "order_id": order_id,
+                    "payment_status": payment_status,
+                    "confirmed": False
+                }
+            }), 200
+        else:
+            print(f"⏳ [API] Payment PENDING - IPN not yet received")
+            return jsonify({
+                "status": "pending",
+                "message": "Payment pending - waiting for confirmation",
+                "data": {
+                    "order_id": order_id,
+                    "payment_status": payment_status,
+                    "confirmed": False
+                }
+            }), 200
+
+    except Exception as e:
+        print(f"❌ [API] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": f"Internal server error: {str(e)}",
+            "data": None
+        }), 500
 
 
 # ============================================================================

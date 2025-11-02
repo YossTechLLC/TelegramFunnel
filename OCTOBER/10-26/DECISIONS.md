@@ -19,6 +19,318 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: Secret Manager Configuration Validation Strategy
+
+**Decision:** Rely on deployment-time secret mounting rather than code-based validation for Cloud Run services
+
+**Context:**
+- GCSplit1 was missing HOSTPAY_WEBHOOK_URL and HOSTPAY_QUEUE environment variables
+- Secrets existed in Secret Manager but were never mounted via `--set-secrets`
+- Service started successfully but silently failed when trying to use missing configuration
+- This created a "silent failure" scenario that's hard to debug
+
+**Problem:**
+```python
+# In config_manager.py:
+hostpay_webhook_url = self.fetch_secret("HOSTPAY_WEBHOOK_URL")
+hostpay_queue = self.fetch_secret("HOSTPAY_QUEUE")
+
+# Returns None if secret not mounted, but doesn't fail startup
+# Later in code:
+if not hostpay_queue or not hostpay_webhook_url:
+    abort(500, "HostPay configuration error")  # Only fails when used
+```
+
+**Solution Chosen:** Deployment Configuration Fix
+```bash
+gcloud run services update gcsplit1-10-26 \
+  --update-secrets=HOSTPAY_WEBHOOK_URL=HOSTPAY_WEBHOOK_URL:latest,HOSTPAY_QUEUE=HOSTPAY_QUEUE:latest
+```
+
+**Alternatives Considered:**
+
+1. **Make secrets required in code** ❌ Rejected
+   ```python
+   if not hostpay_webhook_url:
+       raise ValueError("HOSTPAY_WEBHOOK_URL is required")
+   ```
+   - Pros: Fail fast at startup if missing
+   - Cons: Too strict - might prevent service from starting even if feature not needed yet
+
+2. **Add pre-deployment validation script** ⚠️ Considered for future
+   ```bash
+   ./scripts/verify_service_config.sh gcsplit1-10-26
+   ```
+   - Pros: Catches issues before deployment
+   - Cons: Requires maintaining separate validation logic
+
+3. **Use deployment templates** ⚠️ Considered for future
+   - Pros: Declarative configuration ensures consistency
+   - Cons: More complex deployment process
+
+**Decision Rationale:**
+- Keep code flexible (don't require all secrets for all deployments)
+- Fix at deployment layer where the issue actually occurred
+- Use monitoring/logs to catch missing configuration warnings
+- Consider stricter validation for production-critical services only
+
+**Implementation:**
+- Fixed GCSplit1 by adding missing secrets to deployment
+- Created comprehensive checklist: `GCSPLIT1_MISSING_HOSTPAY_CONFIG_FIX.md`
+- Verified no other services affected (only GCSplit1 needs these secrets)
+
+**Monitoring Strategy:**
+Always check startup logs for ❌ indicators:
+```bash
+gcloud logging read \
+  "resource.labels.service_name=gcsplit1-10-26 AND textPayload:CONFIG" \
+  --limit=20
+```
+
+**Future Improvements:**
+- Consider adding deployment validation for production services
+- Monitor for ❌ in configuration logs and alert if critical secrets missing
+- Document required secrets per service in deployment README
+
+**Status:** ADOPTED (2025-11-02) - Use deployment-time mounting with log monitoring
+
+---
+
+### 2025-11-02: Null-Safe String Handling Pattern for JSON Parsing
+
+**Decision:** Use `(value or default)` pattern instead of `.get(key, default)` for string method chaining
+
+**Context:**
+- GCSplit1 crashed with `'NoneType' object has no attribute 'strip'` error
+- Database NULL values sent as JSON `null` → Python `None`
+- Python's `.get(key, default)` only uses default when key is MISSING, not when value is `None`
+
+**Problem:**
+```python
+# Database returns NULL → JSON: {"wallet_address": null} → Python: None
+data = {"wallet_address": None}
+
+# BROKEN: .get(key, default) doesn't protect against None values
+wallet_address = data.get('wallet_address', '').strip()
+# Returns: None (key exists!)
+# Then: None.strip() → AttributeError ❌
+```
+
+**Solution Chosen:** Or-coalescing pattern `(value or default)`
+```python
+# CORRECT: Use or-coalescing to handle None explicitly
+wallet_address = (data.get('wallet_address') or '').strip()
+# Returns: (None or '') → ''
+# Then: ''.strip() → '' ✅
+```
+
+**Alternatives Considered:**
+1. **Helper Function** (most verbose)
+   ```python
+   def safe_str(value, default=''):
+       return str(value).strip() if value not in (None, '') else default
+   ```
+   - Rejected: Too verbose, adds function overhead
+
+2. **Explicit None Check** (clearest but verbose)
+   ```python
+   value = data.get('wallet_address')
+   wallet_address = value.strip() if value else ''
+   ```
+   - Rejected: Requires 2 lines per field (verbose)
+
+3. **Or-Coalescing** (most Pythonic) ✅ CHOSEN
+   ```python
+   wallet_address = (data.get('wallet_address') or '').strip()
+   ```
+   - ✅ One-liner, readable, handles all cases
+   - ✅ Works for None, empty string, missing key
+   - ✅ Common Python idiom
+
+**Rationale:**
+- Most concise and Pythonic solution
+- Single line of code per field
+- Handles all edge cases: None, '', missing key
+- Widely used pattern in Python community
+- No performance overhead
+
+**Impact:**
+- Applied to GCSplit1-10-26 ENDPOINT_1 (wallet_address, payout_currency, payout_network, subscription_price)
+- Pattern should be used in ALL services for JSON parsing
+- Prevents future NoneType AttributeError crashes
+
+**Implementation:**
+```python
+# Standard pattern for all JSON field extraction with string methods:
+field = (json_data.get('field_name') or '').strip()
+field_lower = (json_data.get('field_name') or '').strip().lower()
+field_upper = (json_data.get('field_name') or '').strip().upper()
+
+# For numeric fields:
+amount = json_data.get('amount') or 0
+price = json_data.get('price') or '0'
+
+# For lists:
+items = json_data.get('items') or []
+```
+
+**Related Documents:**
+- Bug Report: `BUGS.md` (2025-11-02: GCSplit1 NoneType AttributeError)
+- Fix Checklist: `GCSPLIT1_NONETYPE_STRIP_FIX_CHECKLIST.md`
+- Code Change: `/GCSplit1-10-26/tps1-10-26.py` lines 296-304
+
+**Status:** ADOPTED (2025-11-02) - Standard pattern for all future JSON parsing
+
+---
+
+### 2025-11-02: Static Landing Page Architecture for Payment Confirmation
+
+**Decision:** Replace GCWebhook1 token-based redirect with static landing page + payment status polling API
+
+**Context:**
+- Previous architecture: NowPayments success_url → GCWebhook1 (token encryption) → GCWebhook2 (Telegram invite)
+- Problems:
+  - Token encryption/decryption overhead
+  - Cloud Run cold starts delaying redirects (up to 10 seconds)
+  - Complex token signing/verification logic
+  - Poor user experience (blank page while waiting)
+  - Difficult to debug token encryption failures
+
+**Options Considered:**
+
+1. **Keep existing token-based flow** - Status quo
+   - Pros: Already implemented, working
+   - Cons: Slow, complex, poor UX, hard to debug
+
+2. **Direct Telegram redirect from NowPayments** - Skip intermediate pages
+   - Pros: Fastest possible redirect
+   - Cons: No payment confirmation, race condition with IPN, security risk
+
+3. **Static landing page with client-side polling** - CHOSEN
+   - Pros: Fast initial load, real-time status updates, good UX, simple architecture
+   - Cons: Requires polling API, client-side JavaScript dependency
+
+4. **Server-side redirect with database poll** - Dynamic page with server-side logic
+   - Pros: No client JavaScript needed
+   - Cons: Still has Cloud Run cold starts, more complex than static page
+
+**Decision Rationale:**
+
+Selected Option 3 (Static Landing Page) because:
+
+1. **Performance:**
+   - Static page loads instantly (Cloud Storage CDN)
+   - No Cloud Run cold starts
+   - Parallel processing: IPN updates database while user sees landing page
+
+2. **User Experience:**
+   - Visual feedback: "Processing payment..."
+   - Real-time status updates every 5 seconds
+   - Progress indication (time elapsed, status changes)
+   - Clear error messages if payment fails
+
+3. **Simplicity:**
+   - No token encryption/decryption
+   - No signed URLs
+   - Simple URL: `?order_id={order_id}` instead of `?token={encrypted_blob}`
+   - Easier debugging (just check payment_status in database)
+
+4. **Cost:**
+   - Cloud Storage cheaper than Cloud Run
+   - Fewer Cloud Run invocations (no GCWebhook1 token endpoint hits)
+   - Reduced compute costs
+
+5. **Reliability:**
+   - No dependency on GCWebhook1 service availability
+   - Graceful degradation: polling continues even if API temporarily unavailable
+   - Timeout handling: clear message after 10 minutes
+
+**Implementation:**
+
+**Components:**
+1. **Cloud Storage Bucket:** `gs://paygateprime-static`
+   - Public read access
+   - CORS configured for GET requests
+
+2. **Static Landing Page:** `payment-processing.html`
+   - JavaScript polls `/api/payment-status` every 5 seconds
+   - Displays payment status with visual indicators
+   - Auto-redirects to Telegram on confirmation
+   - Timeout after 10 minutes (120 polls)
+
+3. **Payment Status API:** `GET /api/payment-status?order_id={order_id}`
+   - Returns: {status: pending|confirmed|failed|error, message, data}
+   - Queries `payment_status` column in database
+   - Two-step lookup: order_id → closed_channel_id → payment_status
+
+4. **Database Schema:**
+   - Added `payment_status` column to `private_channel_users_database`
+   - Values: 'pending' (default) | 'confirmed' (IPN validated) | 'failed'
+   - Index: `idx_nowpayments_order_id_status` for fast lookups
+
+5. **IPN Handler Update:**
+   - np-webhook sets `payment_status='confirmed'` on successful IPN validation
+   - Atomic update with nowpayments_payment_id
+
+**Data Flow:**
+```
+1. User completes payment on NowPayments
+2. NowPayments redirects to: static-landing-page?order_id=PGP-XXX
+3. Landing page starts polling: GET /api/payment-status?order_id=PGP-XXX
+   - Response: {status: "pending"} (IPN not yet received)
+4. (In parallel) NowPayments sends IPN → np-webhook
+5. np-webhook validates IPN → sets payment_status='confirmed'
+6. Next poll: GET /api/payment-status?order_id=PGP-XXX
+   - Response: {status: "confirmed"}
+7. Landing page auto-redirects to Telegram after 3 seconds
+```
+
+**Trade-offs:**
+
+**Advantages:**
+- ✅ Faster initial page load (static vs Cloud Run)
+- ✅ Better UX with real-time status updates
+- ✅ Simpler architecture (no token encryption)
+- ✅ Easier debugging (check payment_status column)
+- ✅ Lower costs (Cloud Storage cheaper than Cloud Run)
+- ✅ No cold starts delaying user experience
+
+**Disadvantages:**
+- ⚠️ Requires client-side JavaScript (not accessible if JS disabled)
+- ⚠️ Polling overhead (API calls every 5 seconds)
+- ⚠️ Additional database column (payment_status)
+- ⚠️ Slight increase in API surface (new endpoint)
+
+**Acceptance Criteria:**
+- JavaScript widely supported in modern browsers (>99% coverage)
+- Polling overhead acceptable (5-second intervals, max 10 minutes)
+- Database storage cost negligible (VARCHAR(20) column)
+- API security handled by existing authentication/validation
+
+**Migration Strategy:**
+- Phased rollout: Keep GCWebhook1 endpoint active during transition
+- TelePay bot updated to use landing page URL
+- Old token-based flow deprecated but not removed
+- Can revert by changing success_url back to GCWebhook1
+
+**Monitoring:**
+- Track landing page load times (Cloud Storage metrics)
+- Monitor API polling rate (np-webhook logs)
+- Measure time-to-redirect (user-facing latency)
+- Alert on high timeout rate (>5% of payments)
+
+**Future Enhancements:**
+- Server-Sent Events (SSE) instead of polling (push vs pull)
+- WebSocket connection for real-time updates
+- Progressive Web App (PWA) for offline support
+- Branded landing page with channel preview
+
+**Related Decisions:**
+- Session 29: NowPayments order_id format change (pipe separator)
+- Session 30: USD-to-USD payment validation strategy
+
+---
+
 ### 2025-11-02: Database Query Pattern - JOIN for Multi-Table Data Retrieval
 
 **Decision:** Use explicit JOINs when data spans multiple tables instead of assuming all data exists in a single table

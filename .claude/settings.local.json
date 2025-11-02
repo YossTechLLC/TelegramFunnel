@@ -138,7 +138,14 @@
       "Bash(gcloud run revisions describe:*)",
       "WebFetch(domain:documenter.getpostman.com)",
       "Bash(docker build:*)",
-      "Bash(.venv/bin/python3:*)"
+      "Bash(.venv/bin/python3:*)",
+      "Bash(gcloud auth list:*)",
+      "Bash(gcloud config get-value:*)",
+      "Bash(gsutil cors:*)",
+      "Bash(/tmp/test.html)",
+      "Bash(gsutil cp:*)",
+      "Bash(gsutil rm:*)",
+      "Bash(gcloud tasks delete:*)"
     ],
     "deny": [],
     "ask": []
