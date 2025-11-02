@@ -8,6 +8,7 @@ import os
 import hmac
 import hashlib
 import json
+import requests
 from flask import Flask, request, jsonify, abort
 from google.cloud.sql.connector import Connector
 from typing import Optional
@@ -76,6 +77,106 @@ if all([CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWO
         print(f"❌ [DATABASE] Failed to initialize Cloud SQL Connector: {e}")
 else:
     print(f"⚠️ [DATABASE] Skipping connector initialization - missing credentials")
+
+# ============================================================================
+# CLOUD TASKS INITIALIZATION
+# ============================================================================
+
+print(f"")
+print(f"⚙️ [CONFIG] Loading Cloud Tasks configuration...")
+
+# Cloud Tasks configuration for triggering GCWebhook1
+CLOUD_TASKS_PROJECT_ID = os.getenv('CLOUD_TASKS_PROJECT_ID')
+CLOUD_TASKS_LOCATION = os.getenv('CLOUD_TASKS_LOCATION')
+GCWEBHOOK1_QUEUE = os.getenv('GCWEBHOOK1_QUEUE')
+GCWEBHOOK1_URL = os.getenv('GCWEBHOOK1_URL')
+
+print(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
+print(f"   CLOUD_TASKS_LOCATION: {'✅ Loaded' if CLOUD_TASKS_LOCATION else '❌ Missing'}")
+print(f"   GCWEBHOOK1_QUEUE: {'✅ Loaded' if GCWEBHOOK1_QUEUE else '❌ Missing'}")
+print(f"   GCWEBHOOK1_URL: {'✅ Loaded' if GCWEBHOOK1_URL else '❌ Missing'}")
+
+# Initialize Cloud Tasks client
+cloudtasks_client = None
+if all([CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION]):
+    try:
+        from cloudtasks_client import CloudTasksClient
+        cloudtasks_client = CloudTasksClient(CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION)
+        print(f"✅ [CLOUDTASKS] Client initialized successfully")
+    except Exception as e:
+        print(f"❌ [CLOUDTASKS] Failed to initialize client: {e}")
+        print(f"⚠️ [CLOUDTASKS] GCWebhook1 triggering will not work!")
+else:
+    print(f"⚠️ [CLOUDTASKS] Skipping initialization - missing configuration")
+    print(f"⚠️ [CLOUDTASKS] GCWebhook1 will NOT be triggered after IPN validation!")
+
+print(f"")
+
+
+# ============================================================================
+# COINGECKO PRICE FETCHING
+# ============================================================================
+
+def get_crypto_usd_price(crypto_symbol: str) -> Optional[float]:
+    """
+    Fetch current USD price for a cryptocurrency from CoinGecko API.
+
+    Args:
+        crypto_symbol: Cryptocurrency symbol (e.g., 'ETH', 'BTC')
+
+    Returns:
+        Current USD price or None if fetch fails
+    """
+    # Map common symbols to CoinGecko IDs
+    coin_id_map = {
+        'ETH': 'ethereum',
+        'BTC': 'bitcoin',
+        'USDT': 'tether',
+        'USDC': 'usd-coin',
+        'LTC': 'litecoin',
+        'TRX': 'tron',
+        'BNB': 'binancecoin',
+        'SOL': 'solana',
+        'MATIC': 'matic-network'
+    }
+
+    coin_id = coin_id_map.get(crypto_symbol.upper())
+    if not coin_id:
+        print(f"❌ [PRICE] Unsupported crypto symbol: {crypto_symbol}")
+        print(f"💡 [PRICE] Supported symbols: {', '.join(coin_id_map.keys())}")
+        return None
+
+    try:
+        print(f"🔍 [PRICE] Fetching {crypto_symbol} price from CoinGecko...")
+
+        url = f"https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            'ids': coin_id,
+            'vs_currencies': 'usd'
+        }
+
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        usd_price = data.get(coin_id, {}).get('usd')
+
+        if usd_price:
+            print(f"💰 [PRICE] {crypto_symbol}/USD = ${usd_price:,.2f}")
+            return float(usd_price)
+        else:
+            print(f"❌ [PRICE] Price not found in CoinGecko response")
+            return None
+
+    except requests.exceptions.Timeout:
+        print(f"❌ [PRICE] CoinGecko API timeout after 10 seconds")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"❌ [PRICE] Failed to fetch price from CoinGecko: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ [PRICE] Unexpected error fetching price: {e}")
+        return None
 
 
 # ============================================================================
@@ -434,20 +535,169 @@ def handle_ipn():
 
     success = update_payment_data(order_id, payment_data)
 
-    if success:
-        print(f"")
-        print(f"✅ [IPN] IPN processed successfully")
-        print(f"🎯 [IPN] payment_id {payment_data['payment_id']} stored in database")
-        print(f"=" * 80)
-        print(f"")
-        return jsonify({"status": "success", "message": "IPN processed"}), 200
-    else:
+    if not success:
         print(f"")
         print(f"⚠️ [IPN] Database update failed")
         print(f"🔄 [IPN] Returning 500 - NowPayments will retry")
         print(f"=" * 80)
         print(f"")
         abort(500, "Database update failed")
+
+    # ============================================================================
+    # NEW: Calculate Outcome Amount in USD using CoinGecko
+    # ============================================================================
+    print(f"")
+    print(f"💱 [CONVERSION] Calculating USD value of outcome amount...")
+
+    outcome_amount = payment_data.get('outcome_amount')
+    outcome_currency = payment_data.get('outcome_currency', payment_data.get('pay_currency'))
+    outcome_amount_usd = None
+
+    # Check if outcome is already in USD/stablecoin
+    if outcome_currency and outcome_currency.upper() in ['USDT', 'USDC', 'USD', 'BUSD', 'DAI']:
+        # Already in USD equivalent - no conversion needed
+        outcome_amount_usd = float(outcome_amount) if outcome_amount else None
+        if outcome_amount_usd:
+            print(f"✅ [CONVERSION] Already in USD equivalent: ${outcome_amount_usd:.2f}")
+    elif outcome_currency and outcome_amount:
+        # Fetch current market price from CoinGecko
+        crypto_usd_price = get_crypto_usd_price(outcome_currency)
+
+        if crypto_usd_price:
+            # Calculate USD value
+            outcome_amount_usd = float(outcome_amount) * crypto_usd_price
+            print(f"💰 [CONVERT] {outcome_amount} {outcome_currency} × ${crypto_usd_price:,.2f}")
+            print(f"💰 [CONVERT] = ${outcome_amount_usd:.2f} USD")
+        else:
+            print(f"❌ [CONVERT] Failed to fetch {outcome_currency} price from CoinGecko")
+            print(f"⚠️ [CONVERT] Will not calculate outcome_amount_usd")
+    else:
+        print(f"⚠️ [CONVERT] Missing outcome_amount or outcome_currency")
+        print(f"   outcome_amount: {outcome_amount}")
+        print(f"   outcome_currency: {outcome_currency}")
+
+    if outcome_amount_usd:
+        print(f"💰 [VALIDATION] Final Outcome in USD: ${outcome_amount_usd:.2f}")
+
+        # Update database with outcome_amount_usd
+        try:
+            # Need to get user_id and closed_channel_id again
+            user_id, open_channel_id = parse_order_id(order_id)
+            if user_id and open_channel_id:
+                conn = get_db_connection()
+                if conn:
+                    cur = conn.cursor()
+
+                    # Get closed_channel_id
+                    cur.execute(
+                        "SELECT closed_channel_id FROM main_clients_database WHERE open_channel_id = %s",
+                        (str(open_channel_id),)
+                    )
+                    result = cur.fetchone()
+
+                    if result:
+                        closed_channel_id = result[0]
+
+                        # Update outcome_amount_usd
+                        cur.execute("""
+                            UPDATE private_channel_users_database
+                            SET nowpayments_outcome_amount_usd = %s
+                            WHERE user_id = %s AND private_channel_id = %s
+                            AND id = (
+                                SELECT id FROM private_channel_users_database
+                                WHERE user_id = %s AND private_channel_id = %s
+                                ORDER BY id DESC LIMIT 1
+                            )
+                        """, (outcome_amount_usd, user_id, closed_channel_id, user_id, closed_channel_id))
+
+                        conn.commit()
+                        print(f"✅ [DATABASE] Updated nowpayments_outcome_amount_usd: ${outcome_amount_usd:.2f}")
+
+                        # Now fetch subscription details for GCWebhook1 triggering
+                        # JOIN with main_clients_database to get wallet/payout info
+                        cur.execute("""
+                            SELECT
+                                c.client_wallet_address,
+                                c.client_payout_currency::text,
+                                c.client_payout_network::text,
+                                u.sub_time,
+                                u.sub_price
+                            FROM private_channel_users_database u
+                            JOIN main_clients_database c ON u.private_channel_id = c.closed_channel_id
+                            WHERE u.user_id = %s AND u.private_channel_id = %s
+                            ORDER BY u.id DESC LIMIT 1
+                        """, (user_id, closed_channel_id))
+
+                        sub_data = cur.fetchone()
+
+                        cur.close()
+                        conn.close()
+
+                        # ============================================================================
+                        # NEW: Trigger GCWebhook1 for Payment Orchestration
+                        # ============================================================================
+                        if sub_data:
+                            wallet_address = sub_data[0]
+                            payout_currency = sub_data[1]
+                            payout_network = sub_data[2]
+                            subscription_time_days = sub_data[3]
+                            subscription_price = str(sub_data[4])  # Ensure string type
+
+                            print(f"")
+                            print(f"🚀 [ORCHESTRATION] Triggering GCWebhook1 for payment processing...")
+
+                            if not cloudtasks_client:
+                                print(f"❌ [ORCHESTRATION] Cloud Tasks client not initialized")
+                                print(f"⚠️ [ORCHESTRATION] Cannot trigger GCWebhook1 - payment will not be processed!")
+                            elif not GCWEBHOOK1_QUEUE or not GCWEBHOOK1_URL:
+                                print(f"❌ [ORCHESTRATION] GCWebhook1 configuration missing")
+                                print(f"⚠️ [ORCHESTRATION] Cannot trigger GCWebhook1 - payment will not be processed!")
+                            else:
+                                try:
+                                    task_name = cloudtasks_client.enqueue_gcwebhook1_validated_payment(
+                                        queue_name=GCWEBHOOK1_QUEUE,
+                                        target_url=f"{GCWEBHOOK1_URL}/process-validated-payment",
+                                        user_id=user_id,
+                                        closed_channel_id=closed_channel_id,
+                                        wallet_address=wallet_address,
+                                        payout_currency=payout_currency,
+                                        payout_network=payout_network,
+                                        subscription_time_days=subscription_time_days,
+                                        subscription_price=subscription_price,
+                                        outcome_amount_usd=outcome_amount_usd,  # CRITICAL: Real amount
+                                        nowpayments_payment_id=payment_data['payment_id'],
+                                        nowpayments_pay_address=ipn_data.get('pay_address'),
+                                        nowpayments_outcome_amount=outcome_amount
+                                    )
+
+                                    if task_name:
+                                        print(f"✅ [ORCHESTRATION] Successfully enqueued to GCWebhook1")
+                                        print(f"🆔 [ORCHESTRATION] Task: {task_name}")
+                                    else:
+                                        print(f"❌ [ORCHESTRATION] Failed to enqueue to GCWebhook1")
+                                        print(f"⚠️ [ORCHESTRATION] Payment validated but not queued for processing!")
+
+                                except Exception as e:
+                                    print(f"❌ [ORCHESTRATION] Error queuing to GCWebhook1: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                        else:
+                            print(f"⚠️ [ORCHESTRATION] Could not fetch subscription data for GCWebhook1 triggering")
+
+                    cur.close()
+                    conn.close()
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Failed to update outcome_amount_usd: {e}")
+            import traceback
+            traceback.print_exc()
+
+    print(f"")
+    print(f"✅ [IPN] IPN processed successfully")
+    print(f"🎯 [IPN] payment_id {payment_data['payment_id']} stored in database")
+    print(f"=" * 80)
+    print(f"")
+    return jsonify({"status": "success", "message": "IPN processed"}), 200
 
 
 # ============================================================================

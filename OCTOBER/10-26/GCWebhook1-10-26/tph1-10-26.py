@@ -165,81 +165,220 @@ def process_payment():
                 print(f"✅ [ENDPOINT] Database: Successfully recorded subscription")
             else:
                 print(f"⚠️ [ENDPOINT] Database: Failed to record subscription")
-                # Continue anyway - enqueue tasks for retry
+                # Continue anyway
         except Exception as e:
             print(f"❌ [ENDPOINT] Database error: {e}")
-            # Continue anyway - enqueue tasks for retry
+            # Continue anyway
 
         # ============================================================================
-        # NEW: Lookup NowPayments payment_id (populated by np-webhook IPN)
+        # DEPRECATED: Payment queuing removed
         # ============================================================================
-        print(f"🔍 [ENDPOINT] Looking up NowPayments payment_id from database")
-        nowpayments_data = db_manager.get_nowpayments_data(user_id, closed_channel_id)
+        print(f"")
+        print(f"⚠️ [DEPRECATED] This endpoint no longer queues payments")
+        print(f"ℹ️ [DEPRECATED] Payment processing happens via /process-validated-payment")
+        print(f"ℹ️ [DEPRECATED] Triggered by np-webhook after IPN validation")
+        print(f"")
 
-        nowpayments_payment_id = None
-        nowpayments_pay_address = None
-        nowpayments_outcome_amount = None
+        print(f"🎉 [ENDPOINT] Payment processing completed successfully")
+        return jsonify({"status": "ok"}), 200
 
-        if nowpayments_data:
-            nowpayments_payment_id = nowpayments_data.get('nowpayments_payment_id')
-            nowpayments_pay_address = nowpayments_data.get('nowpayments_pay_address')
-            nowpayments_outcome_amount = nowpayments_data.get('nowpayments_outcome_amount')
-            print(f"✅ [ENDPOINT] NowPayments payment_id found: {nowpayments_payment_id}")
-        else:
-            print(f"⚠️ [ENDPOINT] NowPayments payment_id not yet available (IPN may arrive later)")
+    except Exception as e:
+        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Processing error: {str(e)}"
+        }), 500
 
-        # ============================================================================
-        # NEW: Check payout strategy and route accordingly
-        # ============================================================================
-        print(f"🔍 [ENDPOINT] Checking payout strategy for channel {closed_channel_id}")
-        payout_strategy, payout_threshold = db_manager.get_payout_strategy(closed_channel_id)
 
-        print(f"💰 [ENDPOINT] Payout strategy: {payout_strategy}")
-        if payout_strategy == 'threshold':
-            print(f"🎯 [ENDPOINT] Threshold payout mode - ${payout_threshold} threshold")
-            print(f"📊 [ENDPOINT] Will accumulate in USDT to eliminate volatility")
+# ============================================================================
+# NEW ENDPOINT: POST /process-validated-payment
+# Receives validated payment data from NP-Webhook and orchestrates processing
+# ============================================================================
+
+@app.route("/process-validated-payment", methods=["POST"])
+def process_validated_payment():
+    """
+    Process a payment that has been validated by np-webhook.
+
+    This endpoint is called by np-webhook AFTER:
+    - IPN signature validation
+    - CoinGecko price fetch
+    - Outcome USD amount calculation
+    - Database update with outcome_amount_usd
+
+    Flow:
+    1. Receive validated payment data from np-webhook
+    2. Extract outcome_amount_usd (ACTUAL USD value)
+    3. Lookup payout strategy (instant vs threshold)
+    4. Route to GCSplit1 (instant) or GCAccumulator (threshold) with REAL amount
+    5. Queue Telegram invite to GCWebhook2
+
+    CRITICAL: This endpoint ensures all payments are processed with
+    the ACTUAL crypto outcome value in USD, not the declared subscription price.
+    """
+    try:
+        print(f"")
+        print(f"=" * 80)
+        print(f"🎯 [VALIDATED] Received validated payment from NP-Webhook")
+
+        # Get validated payment data from NP-Webhook
+        payment_data = request.get_json()
+
+        if not payment_data:
+            print(f"❌ [VALIDATED] No JSON payload received")
+            abort(400, "Missing payment data")
+
+        # Extract all required fields
+        user_id = payment_data.get('user_id')
+        closed_channel_id = payment_data.get('closed_channel_id')
+        wallet_address = payment_data.get('wallet_address')
+        payout_currency = payment_data.get('payout_currency')
+        payout_network = payment_data.get('payout_network')
+        subscription_time_days = payment_data.get('subscription_time_days')
+        subscription_price = payment_data.get('subscription_price')
+
+        # CRITICAL: This is the ACTUAL outcome amount in USD from CoinGecko
+        outcome_amount_usd = payment_data.get('outcome_amount_usd')
+
+        # NowPayments metadata
+        nowpayments_payment_id = payment_data.get('nowpayments_payment_id')
+        nowpayments_pay_address = payment_data.get('nowpayments_pay_address')
+        nowpayments_outcome_amount = payment_data.get('nowpayments_outcome_amount')
+
+        print(f"")
+        print(f"✅ [VALIDATED] Payment Data Received:")
+        print(f"   User ID: {user_id}")
+        print(f"   Channel ID: {closed_channel_id}")
+        print(f"   Wallet: {wallet_address}")
+        print(f"   Payout: {payout_currency} on {payout_network}")
+        print(f"   Subscription Days: {subscription_time_days}")
+        print(f"   Declared Price: ${subscription_price}")
+        print(f"   💰 ACTUAL Outcome (USD): ${outcome_amount_usd}")
+        print(f"   Payment ID: {nowpayments_payment_id}")
+
+        # Validate required fields
+        if not all([user_id, closed_channel_id, outcome_amount_usd]):
+            print(f"❌ [VALIDATED] Missing required fields")
+            print(f"   user_id: {user_id}")
+            print(f"   closed_channel_id: {closed_channel_id}")
+            print(f"   outcome_amount_usd: {outcome_amount_usd}")
+            abort(400, "Missing required payment data")
+
+        # ========================================================================
+        # PAYOUT ROUTING DECISION
+        # ========================================================================
+        print(f"")
+        print(f"🔍 [VALIDATED] Checking payout strategy for channel {closed_channel_id}")
+
+        if not db_manager:
+            print(f"❌ [VALIDATED] Database manager not available")
+            abort(500, "Database unavailable")
+
+        payout_mode, payout_threshold = db_manager.get_payout_strategy(closed_channel_id)
+        print(f"💰 [VALIDATED] Payout mode: {payout_mode}")
+
+        if payout_mode == "threshold":
+            print(f"🎯 [VALIDATED] Threshold payout mode - ${payout_threshold} threshold")
+            print(f"📊 [VALIDATED] Routing to GCAccumulator for accumulation")
 
             # Get subscription ID for accumulation record
             subscription_id = db_manager.get_subscription_id(user_id, closed_channel_id)
 
-            # Route to GCAccumulator instead of GCSplit1
+            # Get GCAccumulator configuration
             gcaccumulator_queue = config.get('gcaccumulator_queue')
             gcaccumulator_url = config.get('gcaccumulator_url')
 
             if not gcaccumulator_queue or not gcaccumulator_url:
-                print(f"⚠️ [ENDPOINT] GCAccumulator config missing - falling back to instant payout")
-                payout_strategy = 'instant'  # Fallback to instant
+                print(f"❌ [VALIDATED] GCAccumulator configuration missing")
+                abort(500, "GCAccumulator configuration error")
+
+            # Queue to GCAccumulator with ACTUAL outcome amount
+            print(f"")
+            print(f"🚀 [VALIDATED] Queuing to GCAccumulator...")
+            print(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
+
+            task_name = cloudtasks_client.enqueue_gcaccumulator_payment(
+                queue_name=gcaccumulator_queue,
+                target_url=gcaccumulator_url,
+                user_id=user_id,
+                client_id=closed_channel_id,
+                wallet_address=wallet_address,
+                payout_currency=payout_currency,
+                payout_network=payout_network,
+                subscription_price=outcome_amount_usd,  # ✅ ACTUAL USD amount
+                subscription_id=subscription_id,
+                nowpayments_payment_id=nowpayments_payment_id,
+                nowpayments_pay_address=nowpayments_pay_address,
+                nowpayments_outcome_amount=nowpayments_outcome_amount
+            )
+
+            if task_name:
+                print(f"✅ [VALIDATED] Successfully enqueued to GCAccumulator")
+                print(f"🆔 [VALIDATED] Task: {task_name}")
             else:
-                # Enqueue to GCAccumulator with NowPayments payment_id
-                task_name_accumulator = cloudtasks_client.enqueue_gcaccumulator_payment(
-                    queue_name=gcaccumulator_queue,
-                    target_url=gcaccumulator_url,
-                    user_id=user_id,
-                    client_id=closed_channel_id,
-                    wallet_address=wallet_address,
-                    payout_currency=payout_currency,
-                    payout_network=payout_network,
-                    subscription_price=subscription_price,
-                    subscription_id=subscription_id,
-                    nowpayments_payment_id=nowpayments_payment_id,
-                    nowpayments_pay_address=nowpayments_pay_address,
-                    nowpayments_outcome_amount=nowpayments_outcome_amount
-                )
+                print(f"❌ [VALIDATED] Failed to enqueue to GCAccumulator")
+                abort(500, "Failed to enqueue to GCAccumulator")
 
-                if task_name_accumulator:
-                    print(f"✅ [ENDPOINT] Enqueued to GCAccumulator for threshold payout")
-                    print(f"🆔 [ENDPOINT] Task: {task_name_accumulator}")
-                else:
-                    print(f"❌ [ENDPOINT] Failed to enqueue to GCAccumulator - falling back to instant")
-                    payout_strategy = 'instant'  # Fallback to instant
-        else:
-            print(f"⚡ [ENDPOINT] Instant payout mode - processing immediately")
+        else:  # instant payout
+            print(f"⚡ [VALIDATED] Instant payout mode - processing immediately")
+            print(f"📊 [VALIDATED] Routing to GCSplit1 for payment split")
 
-        # ============================================================================
-        # Continue with existing flow (Telegram invite always sent)
-        # ============================================================================
+            # Get GCSplit1 configuration
+            gcsplit1_queue = config.get('gcsplit1_queue')
+            gcsplit1_url = config.get('gcsplit1_url')
 
-        # Encrypt token for GCWebhook2
+            if not gcsplit1_queue or not gcsplit1_url:
+                print(f"❌ [VALIDATED] GCSplit1 configuration missing")
+                abort(500, "GCSplit1 configuration error")
+
+            # Queue to GCSplit1 with ACTUAL outcome amount
+            print(f"")
+            print(f"🚀 [VALIDATED] Queuing to GCSplit1...")
+            print(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
+
+            task_name = cloudtasks_client.enqueue_gcsplit1_payment_split(
+                queue_name=gcsplit1_queue,
+                target_url=gcsplit1_url,
+                user_id=user_id,
+                closed_channel_id=closed_channel_id,
+                wallet_address=wallet_address,
+                payout_currency=payout_currency,
+                payout_network=payout_network,
+                subscription_price=outcome_amount_usd  # ✅ ACTUAL USD amount
+            )
+
+            if task_name:
+                print(f"✅ [VALIDATED] Successfully enqueued to GCSplit1")
+                print(f"🆔 [VALIDATED] Task: {task_name}")
+            else:
+                print(f"❌ [VALIDATED] Failed to enqueue to GCSplit1")
+                abort(500, "Failed to enqueue to GCSplit1")
+
+        # ========================================================================
+        # TELEGRAM INVITE
+        # ========================================================================
+        print(f"")
+        print(f"📱 [VALIDATED] Queuing Telegram invite to GCWebhook2")
+
+        if not token_manager:
+            print(f"❌ [VALIDATED] Token manager not available")
+            abort(500, "Token manager unavailable")
+
+        # Validate subscription data before encryption
+        if not subscription_time_days or not subscription_price:
+            print(f"❌ [VALIDATED] Missing subscription data:")
+            print(f"   subscription_time_days: {subscription_time_days} (type: {type(subscription_time_days)})")
+            print(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
+            abort(400, "Missing subscription data from payment")
+
+        # Ensure correct types
+        try:
+            subscription_time_days = int(subscription_time_days)
+            subscription_price = str(subscription_price)
+        except (ValueError, TypeError) as e:
+            print(f"❌ [VALIDATED] Invalid subscription data types: {e}")
+            abort(400, "Invalid subscription data types")
+
         encrypted_token = token_manager.encrypt_token_for_gcwebhook2(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
@@ -251,72 +390,46 @@ def process_payment():
         )
 
         if not encrypted_token:
-            print(f"❌ [ENDPOINT] Failed to encrypt token for GCWebhook2")
+            print(f"❌ [VALIDATED] Failed to encrypt token for GCWebhook2")
             abort(500, "Token encryption failed")
-
-        # Enqueue Telegram invite to GCWebhook2
-        if not cloudtasks_client:
-            print(f"❌ [ENDPOINT] Cloud Tasks client not available")
-            abort(500, "Cloud Tasks unavailable")
 
         gcwebhook2_queue = config.get('gcwebhook2_queue')
         gcwebhook2_url = config.get('gcwebhook2_url')
 
         if not gcwebhook2_queue or not gcwebhook2_url:
-            print(f"❌ [ENDPOINT] GCWebhook2 configuration missing")
-            abort(500, "Service configuration error")
-
-        task_name_gcwebhook2 = cloudtasks_client.enqueue_gcwebhook2_telegram_invite(
-            queue_name=gcwebhook2_queue,
-            target_url=gcwebhook2_url,
-            encrypted_token=encrypted_token
-        )
-
-        if not task_name_gcwebhook2:
-            print(f"❌ [ENDPOINT] Failed to enqueue Telegram invite to GCWebhook2")
-            # Don't abort - continue to enqueue payment split
+            print(f"⚠️ [VALIDATED] GCWebhook2 configuration missing - skipping invite")
         else:
-            print(f"✅ [ENDPOINT] Enqueued Telegram invite to GCWebhook2")
-            print(f"🆔 [ENDPOINT] Task: {task_name_gcwebhook2}")
-
-        # Enqueue payment split to GCSplit1 (ONLY for instant payout)
-        if payout_strategy == 'instant':
-            print(f"⚡ [ENDPOINT] Routing to GCSplit1 for instant payout")
-            gcsplit1_queue = config.get('gcsplit1_queue')
-            gcsplit1_url = config.get('gcsplit1_url')
-
-            if not gcsplit1_queue or not gcsplit1_url:
-                print(f"❌ [ENDPOINT] GCSplit1 configuration missing")
-                abort(500, "Service configuration error")
-
-            task_name_gcsplit1 = cloudtasks_client.enqueue_gcsplit1_payment_split(
-                queue_name=gcsplit1_queue,
-                target_url=gcsplit1_url,
-                user_id=user_id,
-                closed_channel_id=closed_channel_id,
-                wallet_address=wallet_address,
-                payout_currency=payout_currency,
-                payout_network=payout_network,
-                subscription_price=subscription_price
+            task_name_gcwebhook2 = cloudtasks_client.enqueue_gcwebhook2_telegram_invite(
+                queue_name=gcwebhook2_queue,
+                target_url=gcwebhook2_url,
+                encrypted_token=encrypted_token
             )
 
-            if not task_name_gcsplit1:
-                print(f"❌ [ENDPOINT] Failed to enqueue payment split to GCSplit1")
-                # Don't abort - at least Telegram invite was enqueued
+            if task_name_gcwebhook2:
+                print(f"✅ [VALIDATED] Enqueued Telegram invite to GCWebhook2")
+                print(f"🆔 [VALIDATED] Task: {task_name_gcwebhook2}")
             else:
-                print(f"✅ [ENDPOINT] Enqueued payment split to GCSplit1")
-                print(f"🆔 [ENDPOINT] Task: {task_name_gcsplit1}")
-        else:
-            print(f"📊 [ENDPOINT] Skipping GCSplit1 - using threshold accumulation instead")
+                print(f"⚠️ [VALIDATED] Failed to enqueue Telegram invite")
 
-        print(f"🎉 [ENDPOINT] Payment processing completed successfully")
-        return jsonify({"status": "ok"}), 200
+        print(f"")
+        print(f"🎉 [VALIDATED] Payment processing completed successfully")
+        print(f"=" * 80)
+
+        return jsonify({
+            "status": "success",
+            "message": "Payment processed with actual outcome amount",
+            "outcome_amount_usd": outcome_amount_usd,
+            "declared_price": subscription_price,
+            "difference": outcome_amount_usd - subscription_price
+        }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        print(f"❌ [VALIDATED] Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "status": "error",
-            "message": f"Processing error: {str(e)}"
+            "message": str(e)
         }), 500
 
 

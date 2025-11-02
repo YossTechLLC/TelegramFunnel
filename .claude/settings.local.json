@@ -137,7 +137,8 @@
       "Bash(gcloud scheduler jobs update:*)",
       "Bash(gcloud run revisions describe:*)",
       "WebFetch(domain:documenter.getpostman.com)",
-      "Bash(docker build:*)"
+      "Bash(docker build:*)",
+      "Bash(.venv/bin/python3:*)"
     ],
     "deny": [],
     "ask": []

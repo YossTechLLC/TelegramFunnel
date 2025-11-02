@@ -208,6 +208,16 @@ class TokenManager:
             Base64-encoded encrypted token or None if failed
         """
         try:
+            # Validate input types
+            if not isinstance(user_id, int):
+                raise ValueError(f"user_id must be integer, got {type(user_id).__name__}: {user_id}")
+            if not isinstance(closed_channel_id, int):
+                raise ValueError(f"closed_channel_id must be integer, got {type(closed_channel_id).__name__}: {closed_channel_id}")
+            if not isinstance(subscription_time_days, int):
+                raise ValueError(f"subscription_time_days must be integer, got {type(subscription_time_days).__name__}: {subscription_time_days}")
+            if not isinstance(subscription_price, str):
+                raise ValueError(f"subscription_price must be string, got {type(subscription_price).__name__}: {subscription_price}")
+
             # Convert IDs to 48-bit format (handle negative IDs)
             if user_id < 0:
                 user_id += 2**48

@@ -19,6 +19,220 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: Database Query Pattern - JOIN for Multi-Table Data Retrieval
+
+**Decision:** Use explicit JOINs when data spans multiple tables instead of assuming all data exists in a single table
+
+**Context:**
+- Token encryption was failing in GCWebhook1 with "required argument is not an integer"
+- Root cause: np-webhook was querying wrong column names (`subscription_time` vs `sub_time`)
+- Deeper issue: Wallet/payout data stored in different table than subscription data
+
+**Problem:**
+```python
+# BROKEN (np-webhook original):
+cur.execute("""
+    SELECT wallet_address, payout_currency, payout_network,
+           subscription_time, subscription_price
+    FROM private_channel_users_database
+    WHERE user_id = %s AND private_channel_id = %s
+""")
+# Returns None for all fields (columns don't exist in this table)
+```
+
+**Database Architecture Discovery:**
+- **Table 1:** `private_channel_users_database`
+  - Contains: `sub_time`, `sub_price` (subscription info)
+  - Does NOT contain: wallet/payout data
+
+- **Table 2:** `main_clients_database`
+  - Contains: `client_wallet_address`, `client_payout_currency`, `client_payout_network`
+  - Does NOT contain: subscription info
+
+- **JOIN Key:** `private_channel_id = closed_channel_id`
+
+**Solution Implemented:**
+```python
+# FIXED (np-webhook with JOIN):
+cur.execute("""
+    SELECT
+        c.client_wallet_address,
+        c.client_payout_currency::text,
+        c.client_payout_network::text,
+        u.sub_time,
+        u.sub_price
+    FROM private_channel_users_database u
+    JOIN main_clients_database c ON u.private_channel_id = c.closed_channel_id
+    WHERE u.user_id = %s AND u.private_channel_id = %s
+    ORDER BY u.id DESC LIMIT 1
+""")
+```
+
+**Type Safety Added:**
+- Convert ENUM types to text: `::text` for currency and network
+- Ensure string type: `str(sub_price)` before passing to encryption
+- Validate types before encryption in token_manager.py
+
+**Rationale:**
+1. **Correctness:** Query actual column names from database schema
+2. **Completeness:** JOIN tables to get all required data in one query
+3. **Performance:** Single query better than multiple round-trips
+4. **Type Safety:** Explicit type conversions prevent runtime errors
+
+**Impact on Services:**
+- ✅ np-webhook: Now fetches complete payment data correctly
+- ✅ GCWebhook1: Receives valid data for token encryption
+- ✅ Token encryption: No longer fails with type errors
+
+**Enforcement:**
+- Always verify database schema before writing queries
+- Use JOINs when data spans multiple tables
+- Add defensive type checking at service boundaries
+
+---
+
+### 2025-11-02: Defensive Type Validation in Token Encryption
+
+**Decision:** Add explicit type validation before binary struct packing operations
+
+**Context:**
+- `struct.pack(">H", None)` produces cryptic error: "required argument is not an integer"
+- Error occurs deep in token encryption, making debugging difficult
+- No validation of input types before binary operations
+
+**Problem:**
+```python
+# BROKEN (token_manager.py original):
+def encrypt_token_for_gcwebhook2(self, user_id, closed_channel_id, subscription_time_days, subscription_price):
+    packed_data.extend(struct.pack(">H", subscription_time_days))  # Fails if None!
+    price_bytes = subscription_price.encode('utf-8')  # Fails if None!
+```
+
+**Solution Implemented:**
+```python
+# FIXED (token_manager.py with validation):
+def encrypt_token_for_gcwebhook2(self, user_id, closed_channel_id, subscription_time_days, subscription_price):
+    # Validate input types
+    if not isinstance(user_id, int):
+        raise ValueError(f"user_id must be integer, got {type(user_id).__name__}: {user_id}")
+    if not isinstance(subscription_time_days, int):
+        raise ValueError(f"subscription_time_days must be integer, got {type(subscription_time_days).__name__}: {subscription_time_days}")
+    if not isinstance(subscription_price, str):
+        raise ValueError(f"subscription_price must be string, got {type(subscription_price).__name__}: {subscription_price}")
+
+    # Now safe to use struct.pack
+    packed_data.extend(struct.pack(">H", subscription_time_days))
+```
+
+**Additional Safeguards in GCWebhook1:**
+```python
+# Validate before calling token encryption
+if not subscription_time_days or not subscription_price:
+    print(f"❌ Missing subscription data")
+    abort(400, "Missing subscription data from payment")
+
+# Ensure correct types
+subscription_time_days = int(subscription_time_days)
+subscription_price = str(subscription_price)
+```
+
+**Rationale:**
+1. **Clear Errors:** "must be integer, got NoneType" vs "required argument is not an integer"
+2. **Early Detection:** Fail at service boundary, not deep in encryption
+3. **Type Safety:** Explicit isinstance() checks prevent silent coercion
+4. **Debugging:** Include actual value and type in error message
+
+**Pattern for Binary Operations:**
+- Always validate types before `struct.pack()`, `struct.unpack()`
+- Use isinstance() checks, not duck typing
+- Raise ValueError with clear type information
+- Validate at service boundaries AND in shared libraries
+
+---
+
+### 2025-11-02: Dockerfile Module Copy Pattern Standardization
+
+**Decision:** Enforce explicit `COPY` commands for all local Python modules in Dockerfiles instead of relying on `COPY . .`
+
+**Context:**
+- np-webhook service failed to initialize CloudTasks client
+- Error: `No module named 'cloudtasks_client'`
+- Root cause: Dockerfile missing `COPY cloudtasks_client.py .` command
+- File existed in source but wasn't copied into container
+
+**Problem:**
+```dockerfile
+# BROKEN (np-webhook original):
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY app.py .  # Missing cloudtasks_client.py!
+
+# WORKING (GCWebhook1 pattern):
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY cloudtasks_client.py .
+COPY database_manager.py .
+COPY app.py .
+```
+
+**Options Considered:**
+1. **Explicit COPY for each file** (CHOSEN)
+   - Pros: Clear dependencies, reproducible builds, smaller image size
+   - Cons: More verbose, must remember to add new files
+   - Pattern: `COPY module.py .` for each module
+
+2. **COPY . . (copy everything)**
+   - Pros: Simple, never misses files
+   - Cons: Larger images, cache invalidation, unclear dependencies
+   - Used by: GCMicroBatchProcessor (acceptable for simple services)
+
+3. **.dockerignore with COPY . .**
+   - Pros: Flexible, can exclude unnecessary files
+   - Cons: Still unclear what's actually needed
+
+**Decision Rationale:**
+- **Explicit is better than implicit** (Python Zen)
+- Clear dependency graph visible in Dockerfile
+- Easier to audit what's being deployed
+- Smaller Docker images (only copy what's needed)
+- Better cache utilization (change app.py doesn't invalidate module layers)
+
+**Implementation:**
+```dockerfile
+# Standard pattern for all services:
+FROM python:3.11-slim
+WORKDIR /app
+
+# Step 1: Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Step 2: Copy modules in dependency order
+COPY config_manager.py .      # Config (no dependencies)
+COPY database_manager.py .    # DB (depends on config)
+COPY token_manager.py .       # Token (depends on config)
+COPY cloudtasks_client.py .   # CloudTasks (depends on config)
+COPY app.py .                 # Main app (depends on all above)
+
+# Step 3: Run
+CMD ["python", "app.py"]
+```
+
+**Services Verified:**
+- ✅ GCWebhook1: Explicit COPY pattern
+- ✅ GCSplit1, GCSplit2, GCSplit3: Explicit COPY pattern
+- ✅ GCAccumulator, GCBatchProcessor: Explicit COPY pattern
+- ✅ GCHostPay1, GCHostPay2, GCHostPay3: Explicit COPY pattern
+- ✅ np-webhook: FIXED to explicit COPY pattern
+- ✅ GCMicroBatchProcessor: Uses `COPY . .` (acceptable, simple service)
+
+**Enforcement:**
+- All new services MUST use explicit COPY pattern
+- Document required modules in Dockerfile comments
+- Code review checklist: Verify all Python imports have corresponding COPY commands
+
+---
+
 ### 2025-11-02: Outcome Amount USD Conversion for Payment Validation
 
 **Decision:** Validate payment using `outcome_amount` converted to USD (actual received) instead of `price_amount` (invoice price)

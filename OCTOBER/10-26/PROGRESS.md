@@ -4,6 +4,134 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 33: Token Encryption Error Fix - DATABASE COLUMN MISMATCH ✅
+
+**Objective:** Fix token encryption error caused by database column name mismatch in np-webhook
+
+**Error Detected:**
+```
+❌ [TOKEN] Error encrypting token for GCWebhook2: required argument is not an integer
+❌ [VALIDATED] Failed to encrypt token for GCWebhook2
+❌ [VALIDATED] Unexpected error: 500 Internal Server Error: Token encryption failed
+```
+
+**Root Cause Chain:**
+1. **Database Column Mismatch (np-webhook):**
+   - Query was selecting: `subscription_time`, `subscription_price`
+   - Actual columns: `sub_time`, `sub_price`
+   - Result: Both fields returned as `None`
+
+2. **Missing Wallet/Payout Data:**
+   - Query only looked in `private_channel_users_database`
+   - Wallet/payout data stored in `main_clients_database`
+   - Required JOIN between tables
+
+3. **Type Error in Token Encryption:**
+   - `struct.pack(">H", None)` fails with "required argument is not an integer"
+   - No type validation before encryption
+
+**Actions Completed:**
+
+- ✅ **Database Analysis**:
+  - Verified actual column names in `private_channel_users_database`: `sub_time`, `sub_price`
+  - Found wallet data in `main_clients_database`: `client_wallet_address`, `client_payout_currency`, `client_payout_network`
+  - Tested JOIN query successfully
+
+- ✅ **Fixed np-webhook Query** (`app.py` lines 616-644):
+  - Changed from single-table query to JOIN query
+  - Now JOINs `private_channel_users_database` with `main_clients_database`
+  - Fetches all required data in one query
+  - Ensures `subscription_price` is converted to string
+
+- ✅ **Added Defensive Validation** (`GCWebhook1/tph1-10-26.py` lines 367-380):
+  - Validates `subscription_time_days` and `subscription_price` are not None
+  - Converts to correct types (int and str) before token encryption
+  - Returns clear error message if data missing
+
+- ✅ **Added Type Checking** (`GCWebhook1/token_manager.py` lines 211-219):
+  - Validates all input types before encryption
+  - Raises clear ValueError with type information if wrong type
+  - Prevents cryptic struct.pack errors
+
+- ✅ **Service Audit**:
+  - Checked all 11 services for similar issues
+  - Only np-webhook had this problem (other services use correct column names or fallbacks)
+
+- ✅ **Deployments**:
+  - np-webhook: Revision `00003-9m4` ✅
+  - GCWebhook1: Revision `00015-66c` ✅
+  - Both services healthy and operational
+
+**Files Modified:**
+1. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/np-webhook-10-26/app.py` (lines 616-644)
+2. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCWebhook1-10-26/tph1-10-26.py` (lines 367-380)
+3. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCWebhook1-10-26/token_manager.py` (lines 211-219)
+
+**Files Created:**
+- `TOKEN_ENCRYPTION_ERROR_FIX_CHECKLIST.md` - Comprehensive fix documentation
+
+**Status:** ✅ RESOLVED - Token encryption now works correctly with proper database queries and type validation
+
+**Impact:**
+- Critical fix for payment flow: np-webhook → GCWebhook1 → GCWebhook2
+- Ensures Telegram invites can be sent after payment validation
+- Prevents silent failures in token encryption
+
+---
+
+## 2025-11-02 Session 32: NP-Webhook CloudTasks Import Fix - CRITICAL BUG FIX ✅
+
+**Objective:** Fix CloudTasks initialization error in np-webhook service preventing GCWebhook1 orchestration
+
+**Error Detected:**
+```
+❌ [CLOUDTASKS] Failed to initialize client: No module named 'cloudtasks_client'
+⚠️ [CLOUDTASKS] GCWebhook1 triggering will not work!
+```
+
+**Root Cause Identified:**
+- `cloudtasks_client.py` file exists in source directory
+- Dockerfile missing `COPY cloudtasks_client.py .` command
+- File never copied into Docker container → Python import fails at runtime
+
+**Actions Completed:**
+- ✅ **Analysis**: Compared np-webhook Dockerfile vs GCWebhook1 Dockerfile
+  - GCWebhook1: Has `COPY cloudtasks_client.py .` (line 26) ✅
+  - np-webhook: Missing this copy command ❌
+
+- ✅ **Fix Applied**: Updated np-webhook Dockerfile
+  - Added `COPY cloudtasks_client.py .` before `COPY app.py .`
+  - File: `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/np-webhook-10-26/Dockerfile`
+
+- ✅ **Deployment**: Redeployed np-webhook-10-26
+  - New revision: `np-webhook-10-26-00002-cmd`
+  - Build successful, container deployed
+  - Service URL: `https://np-webhook-10-26-291176869049.us-central1.run.app`
+
+- ✅ **Verification**: Confirmed CloudTasks initialization
+  - Log: `✅ [CLOUDTASKS] Client initialized successfully`
+  - Log: `✅ [CLOUDTASKS] Client initialized for project: telepay-459221, location: us-central1`
+  - Health endpoint: All components healthy
+
+- ✅ **Prevention**: Audited all other services
+  - Checked 10 services for similar Dockerfile issues
+  - All services verified:
+    - GCWebhook1, GCSplit1, GCSplit2, GCSplit3: ✅ Has COPY cloudtasks_client.py
+    - GCAccumulator, GCBatchProcessor: ✅ Has COPY cloudtasks_client.py
+    - GCMicroBatchProcessor: ✅ Uses `COPY . .` (includes all files)
+    - GCHostPay1, GCHostPay2, GCHostPay3: ✅ Has COPY cloudtasks_client.py
+    - GCWebhook2: N/A (doesn't use cloudtasks_client.py)
+
+**Files Modified:**
+- `np-webhook-10-26/Dockerfile` - Added cloudtasks_client.py copy command
+
+**Documentation Created:**
+- `NP_WEBHOOK_CLOUDTASKS_IMPORT_FIX_CHECKLIST.md` - Comprehensive fix checklist
+
+**Status:** ✅ RESOLVED - np-webhook can now trigger GCWebhook1 via Cloud Tasks
+
+**Impact:** This fix is critical for Phase 6 testing of the NowPayments outcome amount architecture. Without this, validated payments would not route to GCWebhook1 for processing.
+
 ## 2025-11-02 Session 31: Outcome Amount USD Conversion Validation Fix - CRITICAL BUG FIX ✅
 
 **Objective:** Fix GCWebhook2 payment validation to check actual received amount in USD instead of subscription invoice price
