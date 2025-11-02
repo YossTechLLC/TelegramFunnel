@@ -109,12 +109,14 @@ def process_eth_client_swap():
         wallet_address = decrypted_data['wallet_address']
         payout_currency = decrypted_data['payout_currency']
         payout_network = decrypted_data['payout_network']
-        eth_amount = decrypted_data['eth_amount']
+        eth_amount = decrypted_data['eth_amount']  # Estimated
+        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: ACTUAL ETH
 
         print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
         print(f"👤 [ENDPOINT] User ID: {user_id}")
         print(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
-        print(f"💰 [ENDPOINT] Amount: {eth_amount} ETH")
+        print(f"💰 [ENDPOINT] Estimated ETH: {eth_amount}")
+        print(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")  # ✅ ADDED
         print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
         # Create ChangeNow fixed-rate transaction with infinite retry
@@ -176,7 +178,8 @@ def process_eth_client_swap():
             payout_address=api_payout_address,
             refund_address=api_refund_address,
             flow=api_flow,
-            type_=api_type
+            type_=api_type,
+            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Pass through ACTUAL ETH to GCSplit1
         )
 
         if not encrypted_response_token:

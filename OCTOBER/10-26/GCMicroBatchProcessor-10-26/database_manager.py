@@ -467,3 +467,45 @@ class DatabaseManager:
                 conn.rollback()
                 conn.close()
             return False
+
+    def get_total_pending_actual_eth(self) -> float:
+        """
+        Get total ACTUAL ETH from nowpayments_outcome_amount for pending conversions.
+
+        This sums all actual ETH received from NowPayments for payments
+        awaiting micro-batch conversion.
+
+        Returns:
+            Total actual ETH amount
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [DATABASE] Failed to establish connection")
+                return 0.0
+
+            cur = conn.cursor()
+            print(f"🔍 [DATABASE] Querying total pending ACTUAL ETH")
+
+            cur.execute(
+                """SELECT COALESCE(SUM(CAST(nowpayments_outcome_amount AS NUMERIC)), 0)
+                   FROM payout_accumulation
+                   WHERE conversion_status = 'pending'
+                     AND nowpayments_outcome_amount IS NOT NULL"""
+            )
+
+            result = cur.fetchone()
+            total_eth = float(result[0]) if result and result[0] else 0.0
+
+            print(f"💰 [DATABASE] Total pending ACTUAL ETH: {total_eth} ETH")
+
+            cur.close()
+            conn.close()
+            return total_eth
+
+        except Exception as e:
+            print(f"❌ [DATABASE] Query error: {e}")
+            if conn:
+                conn.close()
+            return 0.0

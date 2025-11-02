@@ -124,6 +124,25 @@ class WalletManager:
                 "gasPrice": default_gas
             }
 
+    def get_wallet_balance(self) -> float:
+        """
+        Get current wallet balance in ETH.
+
+        Returns:
+            Balance in ETH (as float)
+        """
+        try:
+            balance_wei = self.w3.eth.get_balance(self.wallet_address)
+            balance_eth = self.w3.from_wei(balance_wei, 'ether')
+
+            print(f"💰 [WALLET] Current balance: {balance_eth} ETH ({balance_wei} Wei)")
+
+            return float(balance_eth)
+
+        except Exception as e:
+            print(f"❌ [WALLET] Failed to get balance: {e}")
+            return 0.0
+
     def send_eth_payment_with_infinite_retry(
         self,
         to_address: str,

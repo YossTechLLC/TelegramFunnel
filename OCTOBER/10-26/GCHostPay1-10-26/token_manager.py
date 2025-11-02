@@ -145,11 +145,49 @@ class TokenManager:
         from_network = raw[offset:offset+from_network_len].decode('utf-8')
         offset += from_network_len
 
-        # Parse 8-byte double for amount
+        # Parse amount(s) - BACKWARD COMPATIBILITY CHECK
+        # New format: actual_eth_amount (8 bytes) + estimated_eth_amount (8 bytes)
+        # Old format: from_amount (8 bytes) only
         if offset + 8 > len(raw):
             raise ValueError("Invalid token: incomplete from_amount")
-        from_amount = struct.unpack(">d", raw[offset:offset+8])[0]
+
+        # Read first amount (always present)
+        first_amount = struct.unpack(">d", raw[offset:offset+8])[0]
         offset += 8
+
+        # Check if there's a second amount (new format) by looking ahead
+        # We need: second_amount (8) + payin_address_len (1) + payin_address (>=1) + timestamp (4) + sig (16)
+        # So minimum remaining after first amount: 1 + 1 + 4 + 16 = 22 bytes
+        # If we have 8 more bytes before those 22, it's the new format
+        remaining_after_first = len(raw) - offset
+
+        # Try to detect new format by checking if we can read another 8 bytes
+        # and still have enough bytes for the rest of the token
+        if remaining_after_first >= 30:  # At least 8 (second amount) + 22 (minimum rest)
+            # Likely new format - try to read second amount
+            try:
+                second_amount = struct.unpack(">d", raw[offset:offset+8])[0]
+                offset += 8
+
+                # New format detected
+                actual_eth_amount = first_amount
+                estimated_eth_amount = second_amount
+                print(f"✅ [TOKEN_DEC] New format detected (two amounts)")
+                print(f"💰 [TOKEN_DEC] ACTUAL ETH: {actual_eth_amount}")
+                print(f"💰 [TOKEN_DEC] ESTIMATED ETH: {estimated_eth_amount}")
+
+            except Exception:
+                # If unpacking fails, fall back to old format
+                actual_eth_amount = first_amount
+                estimated_eth_amount = first_amount
+                print(f"⚠️ [TOKEN_DEC] Old format detected (single amount)")
+                print(f"💰 [TOKEN_DEC] Amount: {first_amount} ETH")
+        else:
+            # Old format - only one amount
+            actual_eth_amount = first_amount
+            estimated_eth_amount = first_amount
+            print(f"⚠️ [TOKEN_DEC] Old format detected (single amount)")
+            print(f"💰 [TOKEN_DEC] Amount: {first_amount} ETH")
 
         # Parse variable-length payin_address
         if offset + 1 > len(raw):
@@ -197,7 +235,9 @@ class TokenManager:
             "cn_api_id": cn_api_id,
             "from_currency": from_currency,
             "from_network": from_network,
-            "from_amount": from_amount,
+            "from_amount": first_amount,  # Keep for backward compat
+            "actual_eth_amount": actual_eth_amount,      # ✅ ADD THIS
+            "estimated_eth_amount": estimated_eth_amount, # ✅ ADD THIS
             "payin_address": payin_address,
             "timestamp": timestamp
         }

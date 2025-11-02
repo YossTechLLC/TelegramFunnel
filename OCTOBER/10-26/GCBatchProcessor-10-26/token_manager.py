@@ -32,7 +32,8 @@ class TokenManager:
         wallet_address: str,
         payout_currency: str,
         payout_network: str,
-        total_amount_usdt: str  # ✅ Accept string to preserve Decimal precision
+        total_amount_usdt: str,  # ✅ Accept string to preserve Decimal precision
+        actual_eth_amount: float = 0.0  # ✅ NEW: Summed actual ETH from NowPayments
     ) -> Optional[str]:
         """
         Encrypt token for GCSplit1 batch payout request.
@@ -44,6 +45,7 @@ class TokenManager:
             payout_currency: Target currency (e.g., XMR)
             payout_network: Payout network
             total_amount_usdt: Total USDT to convert (string for precision)
+            actual_eth_amount: Summed actual ETH from nowpayments_outcome_amount
 
         Returns:
             Encrypted token string or None if failed
@@ -52,7 +54,8 @@ class TokenManager:
             print(f"🔐 [TOKEN] Encrypting batch token for GCSplit1")
             print(f"🆔 [TOKEN] Batch ID: {batch_id}")
             print(f"🏢 [TOKEN] Client ID: {client_id}")
-            print(f"💰 [TOKEN] Amount: ${total_amount_usdt} USDT")
+            print(f"💰 [TOKEN] USDT Amount: ${total_amount_usdt}")
+            print(f"💎 [TOKEN] ACTUAL ETH Amount: {actual_eth_amount} ETH")
 
             # Create payload
             payload = {
@@ -61,7 +64,8 @@ class TokenManager:
                 'wallet_address': wallet_address,
                 'payout_currency': payout_currency,
                 'payout_network': payout_network,
-                'amount_usdt': total_amount_usdt
+                'amount_usdt': total_amount_usdt,
+                'actual_eth_amount': actual_eth_amount  # ✅ NEW: For GCHostPay1 payment
             }
 
             # Convert to JSON bytes

@@ -116,6 +116,14 @@ def process_batches():
                 print(f"📊 [ENDPOINT] Payment count: {payment_count}")
                 print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
+                # Get summed ACTUAL ETH for this client (for GCHostPay1 payment)
+                actual_eth_total = db_manager.get_accumulated_actual_eth(client_id)
+                print(f"💎 [ENDPOINT] ACTUAL ETH accumulated: {actual_eth_total} ETH")
+
+                if actual_eth_total <= 0:
+                    print(f"⚠️ [ENDPOINT] WARNING: No actual ETH found for client {client_id}")
+                    print(f"⚠️ [ENDPOINT] Will use USD→ETH conversion fallback")
+
                 # Generate batch ID
                 batch_id = str(uuid.uuid4())
                 print(f"🆔 [ENDPOINT] Generated batch ID: {batch_id}")
@@ -146,7 +154,8 @@ def process_batches():
                     wallet_address=wallet_address,
                     payout_currency=payout_currency,
                     payout_network=payout_network,
-                    total_amount_usdt=str(total_usdt)  # ✅ Preserve Decimal precision
+                    total_amount_usdt=str(total_usdt),  # ✅ Preserve Decimal precision
+                    actual_eth_amount=actual_eth_total  # ✅ NEW: Pass summed actual ETH
                 )
 
                 if not batch_token:

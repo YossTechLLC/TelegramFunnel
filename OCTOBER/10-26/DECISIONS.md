@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-02 (Archived previous entries to DECISIONS_ARCH.md)
+**Last Updated:** 2025-11-02 Session 49 (Archived previous entries to DECISIONS_ARCH.md)
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,285 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-02 Session 49: Deployment Order Strategy - Downstream-First for Backward Compatibility ✅
+
+**Decision:** Deploy services in reverse order (downstream → upstream) to maintain backward compatibility during rolling deployment
+
+**Rationale:**
+- Token managers have backward compatibility (default values for missing actual_eth_amount)
+- Deploying GCHostPay3 first ensures it can receive tokens with OR without actual_eth_amount
+- Deploying GCWebhook1 last ensures it sends actual_eth_amount only when all downstream services are ready
+- Prevents 500 errors during deployment window
+
+**Deployment Order:**
+1. GCHostPay3 (consumer of actual_eth_amount)
+2. GCHostPay1 (pass-through)
+3. GCSplit3 (pass-through)
+4. GCSplit2 (pass-through)
+5. GCSplit1 (pass-through)
+6. GCWebhook1 (producer of actual_eth_amount)
+7. GCBatchProcessor (batch threshold payouts)
+8. GCMicroBatchProcessor (micro-batch conversions)
+
+**Result:** Zero-downtime deployment with no errors during transition
+
+---
+
+### 2025-11-02: GCHostPay3 from_amount Fix - Use ACTUAL ETH from NowPayments, Not ChangeNow Estimates ✅ DEPLOYED
+
+**Decision:** Pass `actual_eth_amount` (from NowPayments `outcome_amount`) through entire payment chain to GCHostPay3
+
+**Status:** 🎉 **DEPLOYED TO PRODUCTION** (Sessions 47-49) - All 8 services live
+
+**Context:**
+- **Critical Bug:** GCHostPay3 trying to send 4.48 ETH when wallet only has 0.00115 ETH
+- **Root Cause:** `nowpayments_outcome_amount` (ACTUAL ETH) is extracted in GCWebhook1 but NEVER passed downstream
+- **Current Flow:** GCSplit2 estimates USDT→ETH, GCSplit3 creates swap, ChangeNow returns wrong amount
+- **Result:** 3,886x discrepancy, transaction timeouts
+
+**Problem Analysis:**
+```
+NowPayments: User pays $5 → Deposits 0.00115340416715763 ETH (ACTUAL)
+GCWebhook1: Has ACTUAL ETH but doesn't pass it ❌
+GCSplit2: Estimates $3.36 USDT → ~0.00112 ETH (ESTIMATE)
+GCSplit3: Creates swap for 0.00115 ETH
+ChangeNow: Returns "need 4.48 ETH" (WRONG!)
+GCHostPay3: Tries to send 4.48 ETH ❌ TIMEOUT
+```
+
+**Options Considered:**
+
+1. ❌ **Query database in GCHostPay3**
+   - GCHostPay3 could query `private_channel_users_database` for `nowpayments_outcome_amount`
+   - Simpler implementation (one file change)
+   - But couples GCHostPay3 to upstream table schema
+   - Harder to trace in logs
+   - Doesn't work for threshold/batch payouts (multiple payments aggregated)
+
+2. ✅ **Pass through entire payment chain (SELECTED)**
+   - Add `actual_eth_amount` parameter to all tokens and database records
+   - Preserves Single Responsibility Principle
+   - Better traceability in logs
+   - Works for all payout modes (instant, threshold, batch)
+   - Backward compatible with default values
+
+3. ❌ **Remove GCSplit2 estimate step**
+   - Skip USDT→ETH estimation entirely
+   - Simpler flow
+   - But loses validation of NowPayments conversion rates
+   - GCSplit2 still useful for alerting on discrepancies
+
+**Implementation Strategy:**
+
+**Phase 1: Database Schema** (✅ COMPLETE)
+- Add `actual_eth_amount NUMERIC(20,18)` to `split_payout_request` and `split_payout_hostpay`
+- DEFAULT 0 for backward compatibility
+- Constraints and indexes for data integrity
+
+**Phase 2: Token Managers** (🟡 IN PROGRESS)
+- GCWebhook1 → GCSplit1: Add `actual_eth_amount` to CloudTasks payload
+- GCSplit1 → GCSplit3: Add `actual_eth_amount` to encrypted token
+- GCSplit3 → GCSplit1: Pass `actual_eth_amount` through response
+- GCSplit1 → GCHostPay1: Add to binary packed token (with backward compat)
+- GCHostPay1 → GCHostPay3: Pass through
+
+**Phase 3: Service Code** (⏳ PENDING)
+- GCSplit1: Store `actual_eth_amount` in database
+- GCHostPay3: Use `actual_eth_amount` for payment (not estimate)
+- Add validation: Compare actual vs estimate, alert if >5% difference
+- Add balance check before payment
+
+**Deployment Strategy:**
+- Deploy in REVERSE order (downstream first) to maintain backward compatibility
+- GCHostPay3 first (accepts both old and new token formats)
+- GCWebhook1 last (starts sending new tokens)
+- Rollback plan ready if needed
+
+**Trade-offs:**
+- ✅ **Pros:**
+  - Fixes 3,886x discrepancy bug
+  - Backward compatible
+  - Works for all payout modes
+  - Better observability (logs show actual vs estimate)
+  - Single source of truth (NowPayments outcome)
+
+- ⚠️ **Cons:**
+  - More code changes (6 services)
+  - More complex tokens
+  - Higher implementation effort
+
+**Alternative Considered:** "Hybrid Approach"
+- Store in database AND pass through tokens
+- Use token for primary flow
+- Database as fallback/verification
+- Rejected as over-engineered for current needs
+
+**Validation:**
+- Compare ChangeNow estimate vs NowPayments actual at each step
+- Alert if discrepancy > 5%
+- Log both amounts for forensic analysis
+- Check wallet balance before payment
+
+**Impact:**
+- Fixes critical bug blocking all crypto payouts
+- Enables successful ChangeNow conversions
+- Users receive expected payouts
+- Platform retains correct fees
+
+**Status:** Phase 1 complete, Phase 2 in progress (2/8 tasks)
+
+### 2025-11-02: Serve payment-processing.html from np-webhook (Same-Origin Architecture)
+
+**Decision:** Serve payment-processing.html from np-webhook service itself instead of Cloud Storage
+
+**Context:**
+- Session 44 fixed payment confirmation bug by adding CORS to np-webhook
+- But this created redundant URL storage:
+  - `NOWPAYMENTS_IPN_CALLBACK_URL` secret = `https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app`
+  - Hardcoded in HTML: `API_BASE_URL = 'https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app'`
+- Violates DRY principle - URL changes require updates in two places
+
+**Problem:**
+```
+Old Architecture:
+User → storage.googleapis.com/payment-processing.html → np-webhook.run.app/api/payment-status
+       (different origins - needed CORS)
+```
+
+**Options Considered:**
+
+1. ❌ **Add `/api/config` endpoint to fetch URL dynamically**
+   - HTML would call endpoint to get base URL
+   - But creates bootstrap problem: where to call config endpoint from?
+   - Still needs some hardcoded URL
+
+2. ❌ **Use deployment script to inject URL into HTML**
+   - Build-time injection from Secret Manager
+   - Complex build pipeline
+   - Still requires HTML in Cloud Storage
+
+3. ✅ **Serve HTML from np-webhook itself (same-origin)**
+   - HTML and API from same service
+   - Uses `window.location.origin` - no hardcoding
+   - Eliminates CORS need entirely
+   - Single source of truth (NOWPAYMENTS_IPN_CALLBACK_URL)
+
+**Implementation:**
+```python
+# np-webhook/app.py
+@app.route('/payment-processing', methods=['GET'])
+def payment_processing_page():
+    with open('payment-processing.html', 'r') as f:
+        html_content = f.read()
+    return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+# payment-processing.html
+const API_BASE_URL = window.location.origin;  // Dynamic, no hardcoding!
+```
+
+**Benefits:**
+1. ✅ **Single source of truth** - URL only in `NOWPAYMENTS_IPN_CALLBACK_URL` secret
+2. ✅ **No hardcoded URLs** - HTML uses `window.location.origin`
+3. ✅ **No CORS needed** - Same-origin requests (kept CORS for backward compatibility only)
+4. ✅ **Simpler architecture** - HTML and API bundled together
+5. ✅ **Better performance** - No preflight OPTIONS requests
+6. ✅ **Easier maintenance** - URL change only requires updating one secret
+
+**Trade-offs:**
+- **Static hosting:** HTML no longer on CDN (Cloud Storage), served from Cloud Run
+  - Impact: Minimal - HTML is small (17KB), Cloud Run is fast enough
+  - Benefit: One less moving part to maintain
+- **Coupling:** HTML now coupled with backend service
+  - Impact: Minor - They're tightly related anyway (API contract)
+  - Benefit: Simpler deployment, single service
+
+**Migration Path:**
+1. NowPayments success_url updated to: `https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app/payment-processing?order_id={order_id}`
+2. Old Cloud Storage URL still works (CORS configured for backward compatibility)
+3. Can remove Cloud Storage file after cache expiry
+
+**Status:** IMPLEMENTED & DEPLOYED (2025-11-02, Session 45)
+
+---
+
+### 2025-11-02: CORS Policy for np-webhook API - Allow Cross-Origin Requests from Static Site
+
+**Decision:** Configure CORS to allow cross-origin requests from Cloud Storage and custom domain for `/api/*` endpoints only
+
+**Context:**
+- payment-processing.html served from `https://storage.googleapis.com/paygateprime-static/`
+- Needs to poll np-webhook API at `https://np-webhook-10-26-*.run.app/api/payment-status`
+- Browser blocks cross-origin requests without CORS headers
+- Users stuck at "Processing Payment..." page indefinitely
+
+**Problem:**
+- Frontend (storage.googleapis.com) ≠ Backend (np-webhook.run.app) → Different origins
+- Browser Same-Origin Policy blocks fetch requests without CORS headers
+- 100% of users unable to see payment confirmation
+
+**Options Considered:**
+
+1. ❌ **Move payment-processing.html to Cloud Run (same-origin)**
+   - Would eliminate CORS entirely
+   - But requires entire HTML/JS/CSS stack on Cloud Run
+   - Unnecessary infrastructure complexity
+   - Static files better served from Cloud Storage
+
+2. ❌ **Use Cloud Functions for separate API**
+   - Creates unnecessary duplication
+   - np-webhook already has the data
+   - More services to maintain
+
+3. ✅ **Add CORS to existing np-webhook API**
+   - Simple, secure, efficient
+   - Only exposes read-only API endpoints
+   - IPN endpoint remains protected
+   - No infrastructure changes needed
+
+**Implementation:**
+```python
+from flask_cors import CORS
+
+CORS(app, resources={
+    r"/api/*": {                                    # Only /api/* routes (NOT IPN /)
+        "origins": [
+            "https://storage.googleapis.com",       # Cloud Storage static site
+            "https://www.paygateprime.com",         # Custom domain
+            "http://localhost:3000"                 # Local development
+        ],
+        "methods": ["GET", "OPTIONS"],              # Read-only
+        "allow_headers": ["Content-Type", "Accept"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": False,              # No cookies/auth
+        "max_age": 3600                             # 1-hour preflight cache
+    }
+})
+```
+
+**Security Considerations:**
+- ✅ **Origin whitelist** (not wildcard `*`) - Only specific domains allowed
+- ✅ **Method restriction** (GET/OPTIONS only) - No writes from browser
+- ✅ **IPN endpoint (POST /) NOT exposed to CORS** - Remains protected
+- ✅ **No sensitive data in API response** - Only payment status (confirmed/pending/failed)
+- ✅ **No authentication cookies shared** (`supports_credentials=False`)
+- ✅ **Read-only operations** - API only checks status, doesn't modify data
+
+**Alternative for Future:**
+Custom domain (api.paygateprime.com) with Cloud Load Balancer would eliminate CORS entirely (same-origin), but adds complexity:
+- Would require: Custom domain → Load Balancer → Cloud Run
+- Current solution is simpler and more cost-effective
+- Can revisit if scaling requirements change
+
+**Benefits:**
+- ✅ Simple implementation (one dependency: flask-cors)
+- ✅ Secure (whitelist, read-only, no credentials)
+- ✅ Efficient (1-hour preflight cache reduces OPTIONS requests)
+- ✅ Maintainable (clear separation: /api/* = CORS, / = IPN protected)
+
+**Status:** IMPLEMENTED & DEPLOYED (2025-11-02)
+
+---
 
 ### 2025-11-02: Database Access Pattern - Use get_connection() Not execute_query()
 

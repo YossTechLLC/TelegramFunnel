@@ -250,7 +250,7 @@
 
     <script>
         // Configuration
-        const API_BASE_URL = 'https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app';
+        const API_BASE_URL = window.location.origin; // Use same origin (no hardcoded URL needed!)
         const POLL_INTERVAL = 5000; // 5 seconds
         const MAX_POLL_ATTEMPTS = 120; // 10 minutes total (120 * 5s)
         const REDIRECT_DELAY = 3000; // 3 seconds after confirmation

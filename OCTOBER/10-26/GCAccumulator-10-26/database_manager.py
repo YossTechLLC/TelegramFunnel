@@ -343,3 +343,47 @@ class DatabaseManager:
         finally:
             if conn:
                 conn.close()
+
+    def get_accumulated_actual_eth(self, client_id: int) -> float:
+        """
+        Get total ACTUAL ETH accumulated for a client.
+
+        Sums all nowpayments_outcome_amount values for confirmed but unpaid payments.
+
+        Args:
+            client_id: Channel/client ID
+
+        Returns:
+            Total actual ETH amount
+        """
+        conn = self.get_connection()
+        if not conn:
+            print(f"❌ [DB] Could not get database connection")
+            return 0.0
+
+        try:
+            cur = conn.cursor()
+
+            cur.execute("""
+                SELECT COALESCE(SUM(nowpayments_outcome_amount), 0)
+                FROM private_channel_users_database
+                WHERE private_channel_id = %s
+                  AND payment_status = 'confirmed'
+                  AND (payout_status IS NULL OR payout_status = 'pending')
+            """, (client_id,))
+
+            result = cur.fetchone()
+            total_eth = float(result[0]) if result and result[0] else 0.0
+
+            cur.close()
+
+            print(f"💰 [ACCUMULATOR] Total actual ETH for client {client_id}: {total_eth}")
+
+            return total_eth
+
+        except Exception as e:
+            print(f"❌ [ACCUMULATOR] Failed to get accumulated ETH: {e}")
+            return 0.0
+        finally:
+            if conn:
+                conn.close()

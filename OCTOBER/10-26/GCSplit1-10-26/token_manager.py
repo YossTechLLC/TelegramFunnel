@@ -74,7 +74,8 @@ class TokenManager:
         wallet_address: str,
         payout_currency: str,
         payout_network: str,
-        adjusted_amount_usdt: Union[str, float, Decimal]  # ✅ Accept str/Decimal for precision
+        adjusted_amount_usdt: Union[str, float, Decimal],  # ✅ Accept str/Decimal for precision
+        actual_eth_amount: float = 0.0  # ✅ ADDED: ACTUAL ETH from NowPayments
     ) -> Optional[str]:
         """
         Encrypt token for GCSplit1 → GCSplit2 (USDT estimate request).
@@ -86,6 +87,7 @@ class TokenManager:
         - 1 byte: payout_currency length + variable bytes
         - 1 byte: payout_network length + variable bytes
         - 8 bytes: adjusted_amount_usdt (double)
+        - 8 bytes: actual_eth_amount (double) [✅ ADDED]
         - 4 bytes: timestamp (uint32)
         - 16 bytes: HMAC signature (truncated)
 
@@ -123,6 +125,9 @@ class TokenManager:
 
             # adjusted_amount_usdt (8 bytes double)
             packed_data.extend(struct.pack(">d", amount))
+
+            # ✅ ADDED: actual_eth_amount (8 bytes double)
+            packed_data.extend(struct.pack(">d", actual_eth_amount))
 
             # timestamp (4 bytes)
             current_timestamp = int(time.time())
@@ -332,6 +337,19 @@ class TokenManager:
             withdrawal_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
 
+            # ✅ ADDED: actual_eth_amount (8 bytes double) with backward compatibility
+            actual_eth_amount = 0.0
+            if offset + 8 <= len(payload):
+                try:
+                    actual_eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
+                    offset += 8
+                    print(f"💰 [TOKEN_DEC] ACTUAL ETH extracted: {actual_eth_amount}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
+                    actual_eth_amount = 0.0
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no actual_eth_amount (backward compat)")
+
             timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
             offset += 4
 
@@ -351,6 +369,7 @@ class TokenManager:
                 "to_amount_eth_post_fee": to_amount_eth_post_fee,
                 "deposit_fee": deposit_fee,
                 "withdrawal_fee": withdrawal_fee,
+                "actual_eth_amount": actual_eth_amount,  # ✅ ADDED
                 "timestamp": timestamp
             }
 
@@ -366,7 +385,8 @@ class TokenManager:
         wallet_address: str,
         payout_currency: str,
         payout_network: str,
-        eth_amount: float
+        eth_amount: float,
+        actual_eth_amount: float = 0.0  # ✅ ADD THIS
     ) -> Optional[str]:
         """
         Encrypt token for GCSplit1 → GCSplit3 (ETH→Client swap request).
@@ -376,7 +396,8 @@ class TokenManager:
         - 8 bytes: user_id (uint64)
         - 16 bytes: closed_channel_id (fixed)
         - Strings: wallet_address, payout_currency, payout_network
-        - 8 bytes: eth_amount
+        - 8 bytes: eth_amount (estimated from GCSplit2)
+        - 8 bytes: actual_eth_amount (ACTUAL from NowPayments)
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
 
@@ -385,6 +406,8 @@ class TokenManager:
         """
         try:
             print(f"🔐 [TOKEN_ENC] GCSplit1→GCSplit3: Encrypting swap request")
+            print(f"💰 [TOKEN_ENC] Estimated ETH: {eth_amount}")
+            print(f"💰 [TOKEN_ENC] ACTUAL ETH: {actual_eth_amount}")  # ✅ ADD LOG
 
             unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
             closed_channel_id_bytes = closed_channel_id.encode('utf-8')[:16].ljust(16, b'\x00')
@@ -396,7 +419,8 @@ class TokenManager:
             packed_data.extend(self._pack_string(wallet_address))
             packed_data.extend(self._pack_string(payout_currency))
             packed_data.extend(self._pack_string(payout_network))
-            packed_data.extend(struct.pack(">d", eth_amount))
+            packed_data.extend(struct.pack(">d", eth_amount))  # Estimated
+            packed_data.extend(struct.pack(">d", actual_eth_amount))  # ✅ ADD ACTUAL
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -619,6 +643,17 @@ class TokenManager:
             timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
             offset += 4
 
+            # ✅ Extract actual_eth_amount if available (backward compatibility)
+            actual_eth_amount = 0.0
+            if offset + 8 <= len(payload):
+                try:
+                    actual_eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
+                    offset += 8
+                    print(f"💰 [TOKEN_DEC] ACTUAL ETH extracted: {actual_eth_amount}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
+                    actual_eth_amount = 0.0
+
             now = int(time.time())
             if not (now - 86400 <= timestamp <= now + 300):
                 raise ValueError("Token expired")
@@ -641,7 +676,8 @@ class TokenManager:
                 "refund_address": refund_address,
                 "flow": flow,
                 "type": type_,
-                "timestamp": timestamp
+                "timestamp": timestamp,
+                "actual_eth_amount": actual_eth_amount  # ✅ ADD FIELD
             }
 
         except Exception as e:

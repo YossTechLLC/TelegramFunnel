@@ -10,10 +10,42 @@ import hashlib
 import json
 import requests
 from flask import Flask, request, jsonify, abort
+from flask_cors import CORS
 from google.cloud.sql.connector import Connector
 from typing import Optional
 
 app = Flask(__name__)
+
+# ============================================================================
+# CORS CONFIGURATION
+# ============================================================================
+# NOTE: CORS is now only for backward compatibility with cached URLs.
+# The payment-processing.html is served from this same service (GET /payment-processing)
+# so it uses same-origin requests which don't need CORS.
+# CORS is kept here in case old Cloud Storage URLs are still cached somewhere.
+
+# Configure CORS to allow requests from Cloud Storage and custom domain
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://storage.googleapis.com",  # Backward compatibility
+            "https://www.paygateprime.com",
+            "http://localhost:3000",  # For local testing
+            "http://localhost:*"
+        ],
+        "methods": ["GET", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Accept"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": False,
+        "max_age": 3600
+    }
+})
+
+print(f"✅ [CORS] Configured for /api/* routes (backward compatibility)")
+print(f"   NOTE: Main flow (GET /payment-processing) uses same-origin, no CORS needed")
+print(f"   Allowed origins: storage.googleapis.com, www.paygateprime.com, localhost")
+print(f"   IPN endpoint (POST /) remains protected (no CORS)")
+print(f"")
 
 # ============================================================================
 # CONFIGURATION AND INITIALIZATION
@@ -958,6 +990,30 @@ def payment_status_api():
             "message": f"Internal server error: {str(e)}",
             "data": None
         }), 500
+
+
+# ============================================================================
+# PAYMENT PROCESSING PAGE - Serve static HTML
+# ============================================================================
+
+@app.route('/payment-processing', methods=['GET'])
+def payment_processing_page():
+    """
+    Serve the payment processing page.
+
+    This page polls /api/payment-status to check if payment is confirmed.
+    By serving it from the same origin as the API, we eliminate CORS complexity
+    and avoid hardcoding URLs (uses window.location.origin).
+    """
+    try:
+        # Read the HTML file
+        with open('payment-processing.html', 'r') as f:
+            html_content = f.read()
+
+        return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
+    except Exception as e:
+        print(f"❌ [PAGE] Failed to serve payment-processing.html: {e}")
+        return jsonify({"error": "Failed to load payment processing page"}), 500
 
 
 # ============================================================================

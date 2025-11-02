@@ -279,6 +279,10 @@ def main_webhook():
         from_amount = decrypted_data['from_amount']
         payin_address = decrypted_data['payin_address']
 
+        # Extract actual/estimated amounts if available (for proper auditing)
+        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)
+        estimated_eth_amount = decrypted_data.get('estimated_eth_amount', 0.0)
+
         print(f"📋 [ENDPOINT_1] Token source: {token_source}")
         print(f"📋 [ENDPOINT_1] Context: {context}")
         print(f"🆔 [ENDPOINT_1] Unique ID: {unique_id}")

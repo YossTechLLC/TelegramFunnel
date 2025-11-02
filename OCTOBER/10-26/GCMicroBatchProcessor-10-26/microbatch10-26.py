@@ -101,10 +101,14 @@ def check_threshold():
         threshold = config_manager.get_micro_batch_threshold()
         print(f"💰 [ENDPOINT] Current threshold: ${threshold}")
 
-        # Query total pending USD
+        # Query total pending USD and ACTUAL ETH
         print(f"🔍 [ENDPOINT] Querying total pending USD")
         total_pending = db_manager.get_total_pending_usd()
         print(f"📊 [ENDPOINT] Total pending: ${total_pending}")
+
+        print(f"🔍 [ENDPOINT] Querying total pending ACTUAL ETH")
+        total_actual_eth = db_manager.get_total_pending_actual_eth()
+        print(f"💎 [ENDPOINT] Total ACTUAL ETH: {total_actual_eth} ETH")
 
         # Check if threshold reached
         if total_pending < threshold:
@@ -146,41 +150,45 @@ def check_threshold():
 
         print(f"🏦 [ENDPOINT] Host USDT wallet: {host_wallet_usdt}")
 
-        # Step 1: Convert USD value to ETH equivalent using ChangeNow estimate API
-        # The total_pending is a USD VALUE, not actual ETH!
-        # We need to find out how much ETH equals this USD value
-        print(f"📊 [ENDPOINT] Step 1: Converting USD to ETH equivalent")
-        print(f"💰 [ENDPOINT] Total pending: ${total_pending} USD")
-        print(f"🔄 [ENDPOINT] Calling ChangeNow estimate API: USDT → ETH")
+        # Determine ETH amount to use for swap
+        # Priority: ACTUAL ETH > USD estimate fallback
+        if total_actual_eth > 0:
+            eth_for_swap = total_actual_eth
+            print(f"✅ [ENDPOINT] Using ACTUAL ETH from NowPayments: {eth_for_swap} ETH")
+            print(f"📊 [ENDPOINT] This represents ${total_pending} USD in accumulated payments")
+        else:
+            print(f"⚠️ [ENDPOINT] WARNING: No actual ETH found, falling back to USD→ETH estimation")
+            print(f"📊 [ENDPOINT] Step 1: Converting USD to ETH equivalent")
+            print(f"💰 [ENDPOINT] Total pending: ${total_pending} USD")
+            print(f"🔄 [ENDPOINT] Calling ChangeNow estimate API: USDT → ETH")
 
-        # Use USDT→ETH estimate to find ETH equivalent of USD amount
-        # (treating USD as USDT for conversion rate purposes)
-        estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
-            from_currency='usdt',
-            to_currency='eth',
-            from_network='eth',
-            to_network='eth',
-            from_amount=str(total_pending),
-            flow='standard',
-            type_='direct'
-        )
+            # Fallback: Use USDT→ETH estimate to find ETH equivalent of USD amount
+            estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
+                from_currency='usdt',
+                to_currency='eth',
+                from_network='eth',
+                to_network='eth',
+                from_amount=str(total_pending),
+                flow='standard',
+                type_='direct'
+            )
 
-        if not estimate_response or 'toAmount' not in estimate_response:
-            print(f"❌ [ENDPOINT] Failed to get ETH estimate from ChangeNow")
-            abort(500, "Failed to calculate ETH equivalent")
+            if not estimate_response or 'toAmount' not in estimate_response:
+                print(f"❌ [ENDPOINT] Failed to get ETH estimate from ChangeNow")
+                abort(500, "Failed to calculate ETH equivalent")
 
-        eth_equivalent = estimate_response['toAmount']
-        print(f"✅ [ENDPOINT] USD→ETH conversion estimate received")
-        print(f"💰 [ENDPOINT] ${total_pending} USD ≈ {eth_equivalent} ETH")
+            eth_for_swap = estimate_response['toAmount']
+            print(f"✅ [ENDPOINT] USD→ETH conversion estimate received")
+            print(f"💰 [ENDPOINT] ${total_pending} USD ≈ {eth_for_swap} ETH")
 
-        # Step 2: Create actual ETH→USDT swap with the calculated ETH amount
-        print(f"📊 [ENDPOINT] Step 2: Creating ChangeNow swap: ETH → USDT")
-        print(f"💰 [ENDPOINT] Swap amount: {eth_equivalent} ETH → ~${total_pending} USDT")
+        # Create ETH→USDT swap with determined ETH amount
+        print(f"📊 [ENDPOINT] Creating ChangeNow swap: ETH → USDT")
+        print(f"💰 [ENDPOINT] Swap amount: {eth_for_swap} ETH → ~${total_pending} USDT")
 
         swap_result = changenow_client.create_fixed_rate_transaction_with_retry(
             from_currency='eth',
             to_currency='usdt',
-            from_amount=float(eth_equivalent),
+            from_amount=float(eth_for_swap),  # ✅ Use ACTUAL ETH or fallback estimate
             address=host_wallet_usdt,
             from_network='eth',
             to_network='eth'  # USDT on Ethereum network (ERC-20)
@@ -232,12 +240,15 @@ def check_threshold():
             abort(500, "Service configuration error")
 
         # Encrypt token for GCHostPay1
+        print(f"🔐 [ENDPOINT] Encrypting token for GCHostPay1")
+        print(f"💰 [ENDPOINT] Passing ACTUAL ETH amount: {eth_for_swap} ETH")
+
         encrypted_token = token_manager.encrypt_microbatch_to_gchostpay1_token(
             batch_conversion_id=batch_conversion_id,
             cn_api_id=cn_api_id,
             from_currency='eth',
             from_network='eth',
-            from_amount=float(total_pending),
+            from_amount=float(eth_for_swap),  # ✅ Use ACTUAL ETH, not USD!
             payin_address=payin_address
         )
 

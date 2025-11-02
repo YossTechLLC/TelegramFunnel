@@ -111,10 +111,12 @@ def process_usdt_eth_estimate():
         payout_currency = decrypted_data['payout_currency']
         payout_network = decrypted_data['payout_network']
         adjusted_amount_usdt = decrypted_data['adjusted_amount_usdt']
+        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: Extract ACTUAL ETH
 
         print(f"👤 [ENDPOINT] User ID: {user_id}")
         print(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
         print(f"💰 [ENDPOINT] Amount: {adjusted_amount_usdt} USDT")
+        print(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")  # ✅ ADDED
         print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
         # Call ChangeNow API with infinite retry
@@ -163,7 +165,8 @@ def process_usdt_eth_estimate():
             from_amount_usdt=float(from_amount),
             to_amount_eth_post_fee=float(to_amount),
             deposit_fee=float(deposit_fee),
-            withdrawal_fee=float(withdrawal_fee)
+            withdrawal_fee=float(withdrawal_fee),
+            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Pass through ACTUAL ETH
         )
 
         if not encrypted_response_token:

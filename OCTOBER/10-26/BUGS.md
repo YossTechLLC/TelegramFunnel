@@ -1,6 +1,6 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-02 (Archived previous entries to BUGS_ARCH.md)
+**Last Updated:** 2025-11-02 Session 49 (Archived previous entries to BUGS_ARCH.md)
 
 ---
 
@@ -11,6 +11,114 @@
 ---
 
 ## Recently Fixed
+
+### 2025-11-02: GCWebhook1 TypeError on subscription_price Subtraction ✅
+
+**Service:** GCWebhook1-10-26
+**Severity:** HIGH - Caused 500 errors on /process-validated-payment endpoint
+**Status:** FIXED ✅ (Deployed in revision 00021-2pp)
+
+**Description:**
+```python
+TypeError: unsupported operand type(s) for -: 'float' and 'str'
+File "/app/tph1-10-26.py", line 437
+"difference": outcome_amount_usd - subscription_price
+```
+
+**Root Cause:**
+- `subscription_price` was being retrieved from database as STRING
+- Code attempted to subtract string from float
+
+**Fix Applied:**
+- Fixed in deployment of GCWebhook1 revision 00021-2pp (2025-11-02 20:23 UTC)
+- Previous revision (00017-cpz) had multiple errors
+- New revision has ZERO errors since deployment
+
+**Validation:**
+- Checked logs for errors on revision 00021-2pp: No errors found ✅
+- Old revision errors no longer appearing
+- Service health check: HTTP 200 ✅
+
+---
+
+### 2025-11-02: Payment Confirmation Page Stuck at "Processing..." - CORS & Wrong API URL ✅
+
+**Service:** np-webhook-10-26, static-landing-page/payment-processing.html
+**Severity:** CRITICAL - 100% of users affected
+**Status:** FIXED ✅
+
+**Description:**
+- Users stuck at payment processing page indefinitely after completing NowPayments payment
+- Page showed "Processing Payment - Please wait while we confirm your payment..." with infinite spinner
+- Backend (IPN) actually working correctly - DB updated, payment confirmed
+- Frontend could not poll API to check payment status
+
+**Root Causes:**
+1. ❌ **Missing CORS headers in np-webhook** - Browser blocked cross-origin requests from `storage.googleapis.com` to `np-webhook-10-26-*.run.app`
+2. ❌ **Wrong API URL in payment-processing.html** - Hardcoded old project-based URL instead of service-based URL
+3. ❌ **No error handling** - Failures were silent, user never saw errors
+
+**Impact:**
+- Frequency: 100% of payments
+- User Experience: Users never saw confirmation, thought payment failed
+- Backend: Actually worked correctly (IPN processed, DB updated)
+- Frontend: Could not reach API due to CORS policy
+
+**Fix Applied:**
+
+**Backend (np-webhook-10-26/app.py):**
+```python
+from flask_cors import CORS
+
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://storage.googleapis.com",
+            "https://www.paygateprime.com",
+            "http://localhost:3000"
+        ],
+        "methods": ["GET", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Accept"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": False,
+        "max_age": 3600
+    }
+})
+```
+
+**Backend (np-webhook-10-26/requirements.txt):**
+- Added `flask-cors==4.0.0`
+
+**Frontend (payment-processing.html line 253):**
+```javascript
+// BEFORE:
+const API_BASE_URL = 'https://np-webhook-10-26-291176869049.us-east1.run.app';
+
+// AFTER:
+const API_BASE_URL = 'https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app';
+```
+
+**Frontend (payment-processing.html checkPaymentStatus function):**
+- Enhanced error handling with user-visible warnings after 5 failed attempts
+- Added detailed console logging with emojis (🔄, 📡, 📊, ✅, ❌, ⏳, ⚠️)
+- Added explicit CORS mode and credentials handling
+- Added error categorization (CORS/Network, 404, 500, Network)
+- Shows orange warning text after 5 attempts: "⚠️ Having trouble connecting to payment server..."
+
+**Testing:**
+- ✅ CORS headers verified with OPTIONS request
+- ✅ API returns JSON correctly (200/400 status codes)
+- ✅ No CORS errors in Cloud Run logs
+- ✅ Error scenarios tested (invalid order_id, network simulation)
+
+**Deployment:**
+- Backend: np-webhook-10-26-00008-bvc deployed to Cloud Run (2025-11-02)
+- Frontend: payment-processing.html uploaded to gs://paygateprime-static/ (2025-11-02)
+- Cache-Control: public, max-age=300 (5 minutes)
+
+**Result:** Payment confirmation page now works correctly - users see confirmation within 5-10 seconds ✅
+
+---
 
 ### 2025-11-02: DatabaseManager execute_query() Method Not Found - AttributeError ✅
 

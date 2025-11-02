@@ -90,7 +90,8 @@ class DatabaseManager:
         client_wallet_address: str,
         refund_address: str = "",
         flow: str = "standard",
-        type_: str = "direct"
+        type_: str = "direct",
+        actual_eth_amount: float = 0.0  # ✅ ADD THIS
     ) -> Optional[str]:
         """
         Insert a new record into the split_payout_request table.
@@ -111,6 +112,7 @@ class DatabaseManager:
             refund_address: Refund address (optional)
             flow: Exchange flow type (default "standard")
             type_: Exchange type (default "direct")
+            actual_eth_amount: ACTUAL ETH from NowPayments (default 0 for backward compat)
 
         Returns:
             Generated unique_id if successful, None otherwise
@@ -123,6 +125,7 @@ class DatabaseManager:
             print(f"🏦 [DB_INSERT] Wallet: {client_wallet_address}")
             print(f"💰 [DB_INSERT] From: {from_amount} {from_currency.upper()}")
             print(f"💰 [DB_INSERT] To: {to_amount} {to_currency.upper()} (PURE MARKET VALUE)")
+            print(f"💰 [DB_INSERT] ACTUAL ETH: {actual_eth_amount}")  # ✅ ADD LOG
 
             # Generate unique ID
             unique_id = self.generate_unique_id()
@@ -133,12 +136,12 @@ class DatabaseManager:
                     unique_id, user_id, closed_channel_id,
                     from_currency, to_currency, from_network, to_network,
                     from_amount, to_amount, client_wallet_address, refund_address,
-                    flow, type
+                    flow, type, actual_eth_amount
                 ) VALUES (
                     %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s, %s
+                    %s, %s, %s
                 )
             """
 
@@ -148,7 +151,8 @@ class DatabaseManager:
                 from_network.upper(), to_network.upper(),
                 from_amount, to_amount,
                 client_wallet_address, refund_address,
-                flow, type_
+                flow, type_,
+                actual_eth_amount  # ✅ ADD VALUE
             )
 
             # Execute insertion
@@ -189,7 +193,8 @@ class DatabaseManager:
                 return self.insert_split_payout_request(
                     user_id, closed_channel_id, from_currency, to_currency,
                     from_network, to_network, from_amount, to_amount,
-                    client_wallet_address, refund_address, flow, type_
+                    client_wallet_address, refund_address, flow, type_,
+                    actual_eth_amount  # ✅ ADD PARAMETER
                 )
             else:
                 print(f"❌ [DB_INSERT] Error: {e}")

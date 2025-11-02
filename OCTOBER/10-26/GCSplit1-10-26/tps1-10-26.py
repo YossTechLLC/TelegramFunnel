@@ -127,7 +127,8 @@ def build_hostpay_token(
     cn_api_id: str,
     from_currency: str,
     from_network: str,
-    from_amount: float,
+    actual_eth_amount: float,      # ✅ RENAMED from from_amount
+    estimated_eth_amount: float,   # ✅ ADDED
     payin_address: str,
     signing_key: str
 ) -> Optional[str]:
@@ -139,7 +140,8 @@ def build_hostpay_token(
     - 1 byte: cn_api_id length + variable bytes
     - 1 byte: from_currency length + variable bytes
     - 1 byte: from_network length + variable bytes
-    - 8 bytes: from_amount (double)
+    - 8 bytes: actual_eth_amount (double) - ACTUAL from NowPayments
+    - 8 bytes: estimated_eth_amount (double) - ChangeNow estimate
     - 1 byte: payin_address length + variable bytes
     - 4 bytes: timestamp (uint32)
     - 16 bytes: HMAC-SHA256 signature (truncated)
@@ -167,7 +169,8 @@ def build_hostpay_token(
         packed_data.extend(from_currency_bytes)
         packed_data.append(len(from_network_bytes))
         packed_data.extend(from_network_bytes)
-        packed_data.extend(struct.pack(">d", from_amount))
+        packed_data.extend(struct.pack(">d", actual_eth_amount))      # ✅ ACTUAL (for payment)
+        packed_data.extend(struct.pack(">d", estimated_eth_amount))   # ✅ ESTIMATED (for comparison)
         packed_data.append(len(payin_address_bytes))
         packed_data.extend(payin_address_bytes)
         packed_data.extend(struct.pack(">I", current_timestamp))
@@ -183,7 +186,8 @@ def build_hostpay_token(
         print(f"✅ [HOSTPAY_TOKEN] Token generated successfully ({len(token)} chars)")
         print(f"🆔 [HOSTPAY_TOKEN] Unique ID: {unique_id}")
         print(f"🆔 [HOSTPAY_TOKEN] CN API ID: {cn_api_id}")
-        print(f"💰 [HOSTPAY_TOKEN] Amount: {from_amount} {from_currency.upper()}")
+        print(f"💰 [HOSTPAY_TOKEN] ACTUAL amount: {actual_eth_amount} {from_currency.upper()}")       # ✅ LOG ACTUAL
+        print(f"💰 [HOSTPAY_TOKEN] ESTIMATED amount: {estimated_eth_amount} {from_currency.upper()}") # ✅ LOG ESTIMATED
 
         return token
 
@@ -302,11 +306,17 @@ def initial_webhook():
         payout_currency = (webhook_data.get('payout_currency') or '').strip().lower()
         payout_network = (webhook_data.get('payout_network') or '').strip().lower()
         subscription_price = webhook_data.get('subscription_price') or webhook_data.get('sub_price') or '0'
+        actual_eth_amount = float(webhook_data.get('actual_eth_amount', 0.0))  # ✅ ADDED: Extract ACTUAL ETH from NowPayments
 
         print(f"👤 [ENDPOINT_1] User ID: {user_id}")
         print(f"🏢 [ENDPOINT_1] Channel ID: {closed_channel_id}")
         print(f"💰 [ENDPOINT_1] Subscription Price: ${subscription_price}")
+        print(f"💎 [ENDPOINT_1] ACTUAL ETH Amount (NowPayments): {actual_eth_amount}")  # ✅ ADDED: Log actual amount
         print(f"🏦 [ENDPOINT_1] Target: {wallet_address} ({payout_currency.upper()} on {payout_network.upper()})")
+
+        # ✅ ADDED: Validation warning if actual_eth_amount is missing/zero
+        if actual_eth_amount == 0.0:
+            print(f"⚠️ [ENDPOINT_1] WARNING: actual_eth_amount is zero (backward compat mode - using estimates)")
 
         # Validate required fields
         if not all([user_id, closed_channel_id, wallet_address, payout_currency, payout_network, subscription_price]):
@@ -339,7 +349,8 @@ def initial_webhook():
             wallet_address=wallet_address,
             payout_currency=payout_currency,
             payout_network=payout_network,
-            adjusted_amount_usdt=adjusted_amount_usdt
+            adjusted_amount_usdt=adjusted_amount_usdt,
+            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Pass ACTUAL ETH to GCSplit2
         )
 
         if not encrypted_token:
@@ -441,10 +452,12 @@ def receive_usdt_eth_estimate():
         to_amount_eth_post_fee = decrypted_data['to_amount_eth_post_fee']
         deposit_fee = decrypted_data['deposit_fee']
         withdrawal_fee = decrypted_data['withdrawal_fee']
+        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: Extract ACTUAL ETH
 
         print(f"👤 [ENDPOINT_2] User ID: {user_id}")
         print(f"💰 [ENDPOINT_2] From: {from_amount_usdt} USDT")
         print(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_eth_post_fee} ETH")
+        print(f"💎 [ENDPOINT_2] ACTUAL ETH (from NowPayments): {actual_eth_amount}")  # ✅ ADDED
 
         # Calculate pure market conversion
         pure_market_eth_value = calculate_pure_market_conversion(
@@ -458,6 +471,7 @@ def receive_usdt_eth_estimate():
 
         print(f"💾 [ENDPOINT_2] Inserting into split_payout_request")
         print(f"   NOTE: to_amount = PURE MARKET VALUE ({pure_market_eth_value} ETH)")
+        print(f"   💎 ACTUAL ETH: {actual_eth_amount}")  # ✅ ADDED
 
         unique_id = database_manager.insert_split_payout_request(
             user_id=user_id,
@@ -471,7 +485,8 @@ def receive_usdt_eth_estimate():
             client_wallet_address=wallet_address,
             refund_address="",
             flow="standard",
-            type_="direct"
+            type_="direct",
+            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Store ACTUAL ETH in database
         )
 
         if not unique_id:
@@ -489,7 +504,8 @@ def receive_usdt_eth_estimate():
             wallet_address=wallet_address,
             payout_currency=payout_currency,
             payout_network=payout_network,
-            eth_amount=pure_market_eth_value
+            eth_amount=pure_market_eth_value,
+            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Pass ACTUAL ETH to GCSplit3
         )
 
         if not encrypted_token_for_split3:
@@ -590,19 +606,48 @@ def receive_eth_client_swap():
         to_currency = decrypted_data['to_currency']
         from_network = decrypted_data['from_network']
         to_network = decrypted_data['to_network']
-        from_amount = decrypted_data['from_amount']
+        from_amount = decrypted_data['from_amount']  # ChangeNow estimate
         to_amount = decrypted_data['to_amount']
         payin_address = decrypted_data['payin_address']
         payout_address = decrypted_data['payout_address']
         refund_address = decrypted_data['refund_address']
         flow = decrypted_data['flow']
         type_ = decrypted_data['type']
+        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: ACTUAL ETH from NowPayments
 
         print(f"🆔 [ENDPOINT_3] Unique ID: {unique_id}")
         print(f"🆔 [ENDPOINT_3] ChangeNow API ID: {cn_api_id}")
         print(f"👤 [ENDPOINT_3] User ID: {user_id}")
-        print(f"💰 [ENDPOINT_3] From: {from_amount} {from_currency.upper()}")
+        print(f"💰 [ENDPOINT_3] ChangeNow estimate: {from_amount} {from_currency.upper()}")
+        print(f"💎 [ENDPOINT_3] ACTUAL ETH (from NowPayments): {actual_eth_amount} ETH")  # ✅ ADDED
         print(f"💰 [ENDPOINT_3] To: {to_amount} {to_currency.upper()}")
+
+        # ✅ ADDED: Validation - Compare actual vs estimate
+        if actual_eth_amount > 0 and from_amount > 0:
+            discrepancy = abs(from_amount - actual_eth_amount)
+            discrepancy_pct = (discrepancy / actual_eth_amount) * 100
+
+            print(f"📊 [ENDPOINT_3] Amount comparison:")
+            print(f"   ChangeNow estimate: {from_amount} ETH")
+            print(f"   ACTUAL from NowPayments: {actual_eth_amount} ETH")
+            print(f"   Discrepancy: {discrepancy} ETH ({discrepancy_pct:.2f}%)")
+
+            if discrepancy_pct > 10:
+                print(f"⚠️ [ENDPOINT_3] WARNING: Large discrepancy (>10%)!")
+            elif discrepancy_pct > 5:
+                print(f"⚠️ [ENDPOINT_3] Moderate discrepancy (>5%)")
+            else:
+                print(f"✅ [ENDPOINT_3] Amounts match within tolerance (<5%)")
+
+        # ✅ ADDED: Decide which amount to use for payment
+        if actual_eth_amount > 0:
+            payment_amount_eth = actual_eth_amount
+            estimated_amount_eth = from_amount
+            print(f"✅ [ENDPOINT_3] Using ACTUAL ETH for payment: {payment_amount_eth}")
+        else:
+            payment_amount_eth = from_amount
+            estimated_amount_eth = from_amount
+            print(f"⚠️ [ENDPOINT_3] ACTUAL ETH not available, using ChangeNow estimate: {payment_amount_eth}")
 
         # Insert into split_payout_que table
         if not database_manager:
@@ -647,7 +692,8 @@ def receive_eth_client_swap():
             cn_api_id=cn_api_id,
             from_currency=from_currency,
             from_network=from_network,
-            from_amount=from_amount,
+            actual_eth_amount=payment_amount_eth,  # ✅ UPDATED: Use ACTUAL ETH for payment
+            estimated_eth_amount=estimated_amount_eth,  # ✅ UPDATED: Pass estimate for comparison
             payin_address=payin_address,
             signing_key=tps_hostpay_signing_key
         )

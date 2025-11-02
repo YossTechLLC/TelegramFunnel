@@ -186,6 +186,19 @@ class TokenManager:
             adjusted_amount_usdt = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
 
+            # ✅ ADDED: actual_eth_amount (8 bytes double) with backward compatibility
+            actual_eth_amount = 0.0
+            if offset + 8 <= len(payload):
+                try:
+                    actual_eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
+                    offset += 8
+                    print(f"💰 [TOKEN_DEC] ACTUAL ETH extracted: {actual_eth_amount}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
+                    actual_eth_amount = 0.0
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no actual_eth_amount (backward compat)")
+
             # timestamp (4 bytes)
             timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
             offset += 4
@@ -204,6 +217,7 @@ class TokenManager:
                 "payout_currency": payout_currency,
                 "payout_network": payout_network,
                 "adjusted_amount_usdt": adjusted_amount_usdt,
+                "actual_eth_amount": actual_eth_amount,  # ✅ ADDED
                 "timestamp": timestamp
             }
 
@@ -221,16 +235,18 @@ class TokenManager:
         from_amount_usdt: float,
         to_amount_eth_post_fee: float,
         deposit_fee: float,
-        withdrawal_fee: float
+        withdrawal_fee: float,
+        actual_eth_amount: float = 0.0  # ✅ ADDED: Pass through actual ETH
     ) -> Optional[str]:
         """
         Encrypt token for GCSplit2 → GCSplit1 (USDT estimate response).
 
         Token Structure:
-        - 4 bytes: user_id
+        - 8 bytes: user_id
         - 16 bytes: closed_channel_id (fixed)
         - Strings: wallet_address, payout_currency, payout_network
         - 8 bytes each: from_amount, to_amount, deposit_fee, withdrawal_fee
+        - 8 bytes: actual_eth_amount [✅ ADDED]
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
 
@@ -252,6 +268,7 @@ class TokenManager:
             packed_data.extend(struct.pack(">d", to_amount_eth_post_fee))
             packed_data.extend(struct.pack(">d", deposit_fee))
             packed_data.extend(struct.pack(">d", withdrawal_fee))
+            packed_data.extend(struct.pack(">d", actual_eth_amount))  # ✅ ADDED: Pass through
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))

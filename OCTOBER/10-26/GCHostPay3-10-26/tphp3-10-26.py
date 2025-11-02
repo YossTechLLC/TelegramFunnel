@@ -159,7 +159,9 @@ def execute_eth_payment():
             cn_api_id = decrypted_data['cn_api_id']
             from_currency = decrypted_data['from_currency']
             from_network = decrypted_data['from_network']
-            from_amount = decrypted_data['from_amount']
+            from_amount = decrypted_data.get('from_amount', 0.0)  # Backward compat (old field)
+            actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: ACTUAL ETH
+            estimated_eth_amount = decrypted_data.get('estimated_eth_amount', 0.0)  # ✅ ADDED: Estimate
             payin_address = decrypted_data['payin_address']
             context = decrypted_data.get('context', 'instant')
 
@@ -168,12 +170,28 @@ def execute_eth_payment():
             first_attempt_at = decrypted_data.get('first_attempt_at', int(time.time()))
             last_error_code = decrypted_data.get('last_error_code')
 
+            # ✅ CRITICAL: Determine payment amount (ACTUAL or fallback to estimate)
+            if actual_eth_amount > 0:
+                payment_amount = actual_eth_amount
+                print(f"✅ [ENDPOINT] Using ACTUAL ETH from NowPayments: {payment_amount}")
+            elif estimated_eth_amount > 0:
+                payment_amount = estimated_eth_amount
+                print(f"⚠️ [ENDPOINT] Using ESTIMATED ETH (actual not available): {payment_amount}")
+            elif from_amount > 0:
+                payment_amount = from_amount
+                print(f"⚠️ [ENDPOINT] Using legacy from_amount (backward compat): {payment_amount}")
+            else:
+                print(f"❌ [ENDPOINT] No valid amount found in token!")
+                abort(400, "Invalid payment amount")
+
             print(f"✅ [ENDPOINT] Token decoded successfully")
             print(f"🔢 [ENDPOINT] Attempt #{attempt_count}/3")
             print(f"📋 [ENDPOINT] Context: {context}")
             print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
             print(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
-            print(f"💰 [ENDPOINT] Amount: {from_amount} {from_currency.upper()}")
+            print(f"💎 [ENDPOINT] ACTUAL ETH: {actual_eth_amount} (from NowPayments)")  # ✅ ADDED
+            print(f"📊 [ENDPOINT] ESTIMATED ETH: {estimated_eth_amount} (from ChangeNow)")  # ✅ ADDED
+            print(f"💰 [ENDPOINT] PAYMENT AMOUNT: {payment_amount} ETH")  # ✅ THIS IS WHAT WE'LL SEND
             print(f"🏦 [ENDPOINT] Payin Address: {payin_address}")
             if last_error_code:
                 print(f"⚠️ [ENDPOINT] Previous error: {last_error_code}")
@@ -196,13 +214,25 @@ def execute_eth_payment():
             print(f"❌ [ENDPOINT] Wallet manager not available")
             abort(500, "Wallet manager unavailable")
 
+        # ✅ ADDED: Check wallet balance BEFORE payment
+        print(f"🔍 [ENDPOINT] Checking wallet balance before payment...")
+        wallet_balance = wallet_manager.get_wallet_balance()
+
+        if wallet_balance < payment_amount:
+            error_msg = f"Insufficient funds: need {payment_amount} ETH, have {wallet_balance} ETH"
+            print(f"❌ [ENDPOINT] {error_msg}")
+            abort(400, error_msg)
+        else:
+            print(f"✅ [ENDPOINT] Sufficient balance: {wallet_balance} ETH >= {payment_amount} ETH")
+
         print(f"💰 [ENDPOINT] Executing ETH payment (attempt {attempt_count}/3)")
+        print(f"💎 [ENDPOINT] Amount to send: {payment_amount} ETH (ACTUAL from NowPayments)")
 
         # NEW: Wrap payment execution in try/except to catch failures
         try:
             tx_result = wallet_manager.send_eth_payment_with_infinite_retry(
                 to_address=payin_address,
-                amount=from_amount,
+                amount=payment_amount,  # ✅ UPDATED: Use ACTUAL amount instead of wrong estimate
                 unique_id=unique_id
             )
 

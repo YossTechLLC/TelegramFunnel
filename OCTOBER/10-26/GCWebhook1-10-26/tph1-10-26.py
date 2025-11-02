@@ -267,6 +267,7 @@ def process_validated_payment():
         print(f"   Subscription Days: {subscription_time_days}")
         print(f"   Declared Price: ${subscription_price}")
         print(f"   💰 ACTUAL Outcome (USD): ${outcome_amount_usd}")
+        print(f"   💰 ACTUAL Outcome (ETH): {nowpayments_outcome_amount}")  # ✅ ADD LOG
         print(f"   Payment ID: {nowpayments_payment_id}")
 
         # Validate required fields
@@ -357,7 +358,8 @@ def process_validated_payment():
                 wallet_address=wallet_address,
                 payout_currency=payout_currency,
                 payout_network=payout_network,
-                subscription_price=outcome_amount_usd  # ✅ ACTUAL USD amount
+                subscription_price=outcome_amount_usd,  # ✅ ACTUAL USD amount
+                actual_eth_amount=float(nowpayments_outcome_amount) if nowpayments_outcome_amount else 0.0  # ✅ ADD ACTUAL ETH
             )
 
             if task_name:

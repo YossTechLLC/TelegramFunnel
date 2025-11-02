@@ -152,7 +152,10 @@
       "Bash(awk:*)",
       "Bash(wait)",
       "Bash(gcloud container images describe:*)",
-      "Bash(gcloud sql backups:*)"
+      "Bash(gcloud sql backups:*)",
+      "Bash(gsutil cat:*)",
+      "Bash(/mnt/c/Users/YossTech/Desktop/2025/.venv/bin/pip3 install:*)",
+      "Bash(gcloud builds list:*)"
     ],
     "deny": [],
     "ask": []
