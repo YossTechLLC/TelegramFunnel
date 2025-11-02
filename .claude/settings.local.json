@@ -127,7 +127,13 @@
       "Bash(gcloud tasks list:*)",
       "Bash(gcloud run services get-iam-policy:*)",
       "Bash(gcloud projects:*)",
-      "Bash(gcloud run services add-iam-policy-binding:*)"
+      "Bash(gcloud run services add-iam-policy-binding:*)",
+      "Bash(/mnt/c/Users/YossTech/Desktop/2025/.venv/bin/pip3 list:*)",
+      "Bash(playwright --version:*)",
+      "Bash(PROGRESS_ARCH.md)",
+      "Bash(DECISIONS_ARCH.md)",
+      "Bash(BUGS_ARCH.md)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
