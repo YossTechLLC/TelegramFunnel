@@ -135,7 +135,8 @@
       "Bash(BUGS_ARCH.md)",
       "Bash(find:*)",
       "Bash(gcloud scheduler jobs update:*)",
-      "Bash(gcloud run revisions describe:*)"
+      "Bash(gcloud run revisions describe:*)",
+      "WebFetch(domain:documenter.getpostman.com)"
     ],
     "deny": [],
     "ask": []

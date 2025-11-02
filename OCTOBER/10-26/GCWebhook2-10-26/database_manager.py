@@ -93,7 +93,11 @@ class DatabaseManager:
                     nowpayments_payment_id,
                     nowpayments_payment_status,
                     nowpayments_pay_address,
-                    nowpayments_outcome_amount
+                    nowpayments_outcome_amount,
+                    nowpayments_price_amount,
+                    nowpayments_price_currency,
+                    nowpayments_outcome_currency,
+                    nowpayments_pay_currency
                 FROM private_channel_users_database
                 WHERE user_id = %s AND private_channel_id = %s
                 ORDER BY id DESC
@@ -103,19 +107,25 @@ class DatabaseManager:
             result = cur.fetchone()
 
             if result:
-                payment_id, payment_status, pay_address, outcome_amount = result
+                (payment_id, payment_status, pay_address, outcome_amount,
+                 price_amount, price_currency, outcome_currency, pay_currency) = result
 
                 if payment_id:
                     print(f"✅ [VALIDATION] Found NowPayments payment_id: {payment_id}")
                     print(f"📊 [VALIDATION] Payment status: {payment_status}")
-                    print(f"💰 [VALIDATION] Outcome amount: {outcome_amount}")
+                    print(f"💰 [VALIDATION] Price amount: {price_amount} {price_currency}")
+                    print(f"💰 [VALIDATION] Outcome amount: {outcome_amount} {outcome_currency}")
                     print(f"📬 [VALIDATION] Pay address: {pay_address}")
 
                     return {
                         'nowpayments_payment_id': payment_id,
                         'nowpayments_payment_status': payment_status,
                         'nowpayments_pay_address': pay_address,
-                        'nowpayments_outcome_amount': str(outcome_amount) if outcome_amount else None
+                        'nowpayments_outcome_amount': str(outcome_amount) if outcome_amount else None,
+                        'nowpayments_price_amount': str(price_amount) if price_amount else None,
+                        'nowpayments_price_currency': price_currency,
+                        'nowpayments_outcome_currency': outcome_currency,
+                        'nowpayments_pay_currency': pay_currency
                     }
                 else:
                     print(f"⚠️ [VALIDATION] Subscription found but payment_id not yet available (IPN pending)")
@@ -138,6 +148,8 @@ class DatabaseManager:
     def validate_payment_complete(self, user_id: int, closed_channel_id: int, expected_price: str) -> tuple[bool, str]:
         """
         Validate that payment has been completed and confirmed via IPN callback.
+        Uses price_amount (USD) for validation when available.
+        Falls back to crypto conversion if needed.
 
         Args:
             user_id: User's Telegram ID
@@ -161,7 +173,10 @@ class DatabaseManager:
 
         payment_id = payment_data.get('nowpayments_payment_id')
         payment_status = payment_data.get('nowpayments_payment_status')
+        price_amount = payment_data.get('nowpayments_price_amount')
+        price_currency = payment_data.get('nowpayments_price_currency')
         outcome_amount = payment_data.get('nowpayments_outcome_amount')
+        outcome_currency = payment_data.get('nowpayments_outcome_currency')
 
         # Validate payment_id exists
         if not payment_id:
@@ -175,27 +190,62 @@ class DatabaseManager:
             print(f"❌ [VALIDATION] {error_msg}")
             return False, error_msg
 
-        # Validate payment amount (allow 5% tolerance for fees/price fluctuations)
+        # Validate payment amount
         try:
             expected_amount = float(expected_price)
-            actual_amount = float(outcome_amount) if outcome_amount else 0.0
 
-            # NowPayments takes ~15% fee, so outcome_amount should be ~85% of price
-            # We allow 5% additional tolerance (80% minimum)
-            minimum_amount = expected_amount * 0.80
+            # Strategy 1: Use price_amount if available (preferred - USD to USD comparison)
+            if price_amount and price_currency:
+                actual_usd = float(price_amount)
+                print(f"💰 [VALIDATION] Using price_amount for validation: ${actual_usd:.2f} {price_currency}")
 
-            if actual_amount < minimum_amount:
-                error_msg = f"Insufficient payment amount: received ${actual_amount:.2f}, expected at least ${minimum_amount:.2f}"
-                print(f"❌ [VALIDATION] {error_msg}")
-                return False, error_msg
+                # Allow 5% tolerance for rounding/fees
+                minimum_amount = expected_amount * 0.95
 
-            print(f"✅ [VALIDATION] Payment amount OK: ${actual_amount:.2f} >= ${minimum_amount:.2f}")
+                if actual_usd < minimum_amount:
+                    error_msg = f"Insufficient payment: received ${actual_usd:.2f} {price_currency}, expected at least ${minimum_amount:.2f}"
+                    print(f"❌ [VALIDATION] {error_msg}")
+                    return False, error_msg
+
+                print(f"✅ [VALIDATION] Payment amount OK: ${actual_usd:.2f} >= ${minimum_amount:.2f}")
+                print(f"✅ [VALIDATION] Payment validation successful - payment_id: {payment_id}")
+                return True, ""
+
+            # Strategy 2: Fallback - Convert crypto to USD (for old records or missing price_amount)
+            else:
+                print(f"⚠️ [VALIDATION] price_amount not available, falling back to crypto conversion")
+
+                # Check if outcome is already in USD-based stablecoin
+                if outcome_currency and outcome_currency.lower() in ['usd', 'usdt', 'usdc', 'busd']:
+                    actual_usd = float(outcome_amount) if outcome_amount else 0.0
+                    print(f"💰 [VALIDATION] Outcome is in stablecoin: ${actual_usd:.2f} {outcome_currency}")
+
+                    # NowPayments takes ~15% fee, so outcome should be ~85% of price
+                    # Allow 20% tolerance (80% minimum)
+                    minimum_amount = expected_amount * 0.80
+
+                    if actual_usd < minimum_amount:
+                        error_msg = f"Insufficient payment: received ${actual_usd:.2f} {outcome_currency}, expected at least ${minimum_amount:.2f}"
+                        print(f"❌ [VALIDATION] {error_msg}")
+                        return False, error_msg
+
+                    print(f"✅ [VALIDATION] Payment amount OK: ${actual_usd:.2f} >= ${minimum_amount:.2f}")
+                    print(f"✅ [VALIDATION] Payment validation successful - payment_id: {payment_id}")
+                    return True, ""
+
+                # Strategy 3: Crypto amount - needs conversion (NOT RECOMMENDED - requires price feed)
+                else:
+                    error_msg = f"Cannot validate crypto payment: outcome_amount is in {outcome_currency}, price_amount not available"
+                    print(f"❌ [VALIDATION] {error_msg}")
+                    print(f"💡 [VALIDATION] This payment requires manual verification or NowPayments API call")
+                    print(f"💡 [VALIDATION] Payment ID: {payment_id}")
+                    print(f"💡 [VALIDATION] Outcome: {outcome_amount} {outcome_currency}")
+
+                    # For now, fail validation and require manual intervention
+                    # TODO: Implement crypto-to-USD conversion using price feed or NowPayments API
+                    return False, error_msg
 
         except (ValueError, TypeError) as e:
             error_msg = f"Invalid payment amount data: {e}"
             print(f"❌ [VALIDATION] {error_msg}")
             return False, error_msg
-
-        # All validation checks passed
-        print(f"✅ [VALIDATION] Payment validation successful - payment_id: {payment_id}")
-        return True, ""

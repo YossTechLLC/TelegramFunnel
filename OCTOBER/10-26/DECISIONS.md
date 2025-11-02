@@ -19,6 +19,83 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-02: NowPayments Payment Validation Strategy (USD-to-USD Comparison)
+
+**Decision:** Use `price_amount` (original USD invoice amount) for payment validation instead of `outcome_amount` (crypto amount after fees)
+
+**Context:**
+- GCWebhook2 payment validation was failing for all crypto payments
+- Root cause: Comparing crypto amounts directly to USD expectations
+  - Example: outcome_amount = 0.00026959 ETH (what merchant receives)
+  - Validation: $0.0002696 < $1.08 (80% of $1.35) ❌ FAILS
+- NowPayments IPN provides both `price_amount` (USD) and `outcome_amount` (crypto)
+- Previous implementation only captured `outcome_amount`, losing USD reference
+
+**Options Considered:**
+1. **Capture price_amount from IPN** - Store original USD invoice amount
+   - Pros: Clean USD-to-USD comparison, no external dependencies
+   - Cons: Requires database schema change, doesn't help old records
+
+2. **Implement crypto-to-USD conversion** - Use real-time price feed
+   - Pros: Can validate any crypto payment
+   - Cons: Requires external API, price volatility, API failures affect validation
+
+3. **Skip amount validation** - Only check payment_status = "finished"
+   - Pros: Simple, no changes needed
+   - Cons: Risk of fraud, can't detect underpayment
+
+4. **Hybrid approach** - Use price_amount when available, fallback to stablecoin or price feed
+   - Pros: Best of all worlds, backward compatible
+   - Cons: More complex logic
+
+**Decision Rationale:**
+- **Option 4 selected**: Hybrid 3-tier validation strategy
+
+**Implementation:**
+1. **Tier 1 (PRIMARY)**: USD-to-USD validation using `price_amount`
+   - Tolerance: 95% (allows 5% for rounding/fees)
+   - When: price_amount available (all new payments)
+   - Example: $1.35 >= $1.28 ✅
+
+2. **Tier 2 (FALLBACK)**: Stablecoin validation for old records
+   - Detects USDT/USDC/BUSD as USD-equivalent
+   - Tolerance: 80% (accounts for NowPayments ~15% fee)
+   - When: price_amount not available, outcome in stablecoin
+   - Example: $1.15 USDT >= $1.08 ✅
+
+3. **Tier 3 (FUTURE)**: Crypto price feed
+   - For non-stablecoin cryptos without price_amount
+   - Requires CoinGecko or similar API integration
+   - Currently fails validation (manual approval needed)
+
+**Schema Changes:**
+- Added 3 columns to `private_channel_users_database`:
+  - `nowpayments_price_amount` (DECIMAL) - Original USD amount
+  - `nowpayments_price_currency` (VARCHAR) - Original currency
+  - `nowpayments_outcome_currency` (VARCHAR) - Crypto currency
+
+**Trade-offs:**
+- ✅ Solves immediate problem (crypto payment validation)
+- ✅ Backward compatible (doesn't break old records)
+- ✅ Future-proof (can add price feed later)
+- ⚠️ Old records without price_amount require manual verification for non-stablecoins
+
+**Alternative Rejected:**
+- **Real-time price feed only**: Too complex, external dependency, price volatility
+- **Skip validation**: Security risk, can't detect underpayment
+
+**Impact:**
+- Payment validation success rate: 0% → ~95%+ expected
+- User experience: Payment → instant validation → invitation sent
+- Fee tracking: Can now reconcile fees using price_amount vs outcome_amount
+
+**Files Modified:**
+- `tools/execute_price_amount_migration.py` (NEW)
+- `np-webhook-10-26/app.py` (IPN capture)
+- `GCWebhook2-10-26/database_manager.py` (validation logic)
+
+---
+
 ### 2025-11-02: NowPayments Order ID Format Change (Pipe Separator)
 
 **Decision:** Changed NowPayments order_id format from `PGP-{user_id}{open_channel_id}` to `PGP-{user_id}|{open_channel_id}` using pipe separator

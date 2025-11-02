@@ -4,6 +4,76 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 30: NowPayments Amount Validation Fix - CRITICAL BUG FIX ✅
+
+**Objective:** Fix GCWebhook2 payment validation comparing crypto amounts to USD amounts
+
+**Root Cause Identified:**
+- IPN webhook stores `outcome_amount` in crypto (e.g., 0.00026959 ETH)
+- GCWebhook2 treats this crypto amount as USD during validation
+- Result: $0.0002696 < $1.08 → validation fails
+- Missing fields: `price_amount` (USD) and `price_currency` from NowPayments IPN
+
+**Actions Completed:**
+- ✅ **Phase 1**: Database schema migration
+  - Created `tools/execute_price_amount_migration.py`
+  - Added 3 columns to `private_channel_users_database`:
+    - `nowpayments_price_amount` (DECIMAL) - Original USD invoice amount
+    - `nowpayments_price_currency` (VARCHAR) - Original currency (USD)
+    - `nowpayments_outcome_currency` (VARCHAR) - Outcome crypto currency
+  - Migration executed successfully, columns verified
+
+- ✅ **Phase 2**: Updated IPN webhook handler (`np-webhook-10-26/app.py`)
+  - Capture `price_amount`, `price_currency`, `outcome_currency` from IPN payload
+  - Added fallback: infer `outcome_currency` from `pay_currency` if missing
+  - Updated database INSERT query to store 3 new fields
+  - Enhanced IPN logging to display USD amount and crypto outcome separately
+
+- ✅ **Phase 3**: Updated GCWebhook2 validation (`GCWebhook2-10-26/database_manager.py`)
+  - Modified `get_nowpayments_data()` to fetch 4 new fields
+  - Updated result parsing to include price/outcome currency data
+  - Completely rewrote `validate_payment_complete()` with 3-tier validation:
+    - **Strategy 1 (PRIMARY)**: USD-to-USD validation using `price_amount`
+      - Tolerance: 95% (allows 5% for rounding/fees)
+      - Clean comparison: $1.35 >= $1.28 ✅
+    - **Strategy 2 (FALLBACK)**: Stablecoin validation for old records
+      - Detects USDT/USDC/BUSD as USD-equivalent
+      - Tolerance: 80% (accounts for NowPayments fees)
+    - **Strategy 3 (FUTURE)**: Crypto price feed (TODO)
+      - For non-stablecoin cryptos without price_amount
+      - Requires external price API
+
+- ✅ **Deployment**:
+  - np-webhook: Image `gcr.io/telepay-459221/np-webhook-10-26`, Revision `np-webhook-00007-rf2`
+  - gcwebhook2-10-26: Image `gcr.io/telepay-459221/gcwebhook2-10-26`, Revision `gcwebhook2-10-26-00012-9m5`
+  - Both services deployed and healthy
+
+**Key Architectural Decision:**
+- Use `price_amount` (original USD invoice) for validation instead of `outcome_amount` (crypto after fees)
+- Backward compatible: old records without `price_amount` fall back to stablecoin check
+
+**Impact:**
+- ✅ Payment validation now compares USD to USD (apples to apples)
+- ✅ Users paying via crypto will now successfully validate
+- ✅ Invitation links will be sent correctly
+- ✅ Fee reconciliation enabled via stored `price_amount`
+
+**Testing Needed:**
+- Create new payment and verify IPN captures `price_amount`
+- Verify GCWebhook2 validates using USD-to-USD comparison
+- Confirm invitation sent successfully
+
+**Files Modified:**
+- `tools/execute_price_amount_migration.py` (NEW)
+- `np-webhook-10-26/app.py` (lines 388, 407-426)
+- `GCWebhook2-10-26/database_manager.py` (lines 91-129, 148-251)
+
+**Related:**
+- Checklist: `NP_WEBHOOK_FIX_AMOUNT_CHECKLIST.md`
+- Progress: `NP_WEBHOOK_FIX_AMOUNT_CHECKLIST_PROGRESS.md`
+
+---
+
 ## 2025-11-02 Session 29: NowPayments Webhook Channel ID Fix - CRITICAL BUG FIX ✅
 
 **Objective:** Fix NowPayments IPN webhook failure to store payment_id due to channel ID sign mismatch

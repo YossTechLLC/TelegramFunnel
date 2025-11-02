@@ -234,6 +234,9 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
                 nowpayments_pay_amount = %s,
                 nowpayments_pay_currency = %s,
                 nowpayments_outcome_amount = %s,
+                nowpayments_price_amount = %s,
+                nowpayments_price_currency = %s,
+                nowpayments_outcome_currency = %s,
                 nowpayments_created_at = CURRENT_TIMESTAMP,
                 nowpayments_updated_at = CURRENT_TIMESTAMP
             WHERE user_id = %s AND private_channel_id = %s
@@ -253,6 +256,9 @@ def update_payment_data(order_id: str, payment_data: dict) -> bool:
             payment_data.get('pay_amount'),
             payment_data.get('pay_currency'),
             payment_data.get('outcome_amount'),
+            payment_data.get('price_amount'),         # NEW
+            payment_data.get('price_currency'),       # NEW
+            payment_data.get('outcome_currency'),     # NEW
             user_id,
             closed_channel_id,  # Use closed_channel_id (not open_channel_id!)
             user_id,
@@ -385,7 +391,8 @@ def handle_ipn():
         print(f"   Order ID: {ipn_data.get('order_id', 'N/A')}")
         print(f"   Payment Status: {ipn_data.get('payment_status', 'N/A')}")
         print(f"   Pay Amount: {ipn_data.get('pay_amount', 'N/A')} {ipn_data.get('pay_currency', 'N/A')}")
-        print(f"   Outcome Amount: {ipn_data.get('outcome_amount', 'N/A')}")
+        print(f"   Outcome Amount: {ipn_data.get('outcome_amount', 'N/A')} {ipn_data.get('outcome_currency', ipn_data.get('pay_currency', 'N/A'))}")
+        print(f"   Price Amount: {ipn_data.get('price_amount', 'N/A')} {ipn_data.get('price_currency', 'N/A')}")
         print(f"   Pay Address: {ipn_data.get('pay_address', 'N/A')}")
 
     except Exception as e:
@@ -412,8 +419,18 @@ def handle_ipn():
         'payment_status': ipn_data.get('payment_status'),
         'pay_amount': ipn_data.get('pay_amount'),
         'pay_currency': ipn_data.get('pay_currency'),
-        'outcome_amount': ipn_data.get('outcome_amount')
+        'outcome_amount': ipn_data.get('outcome_amount'),
+        'price_amount': ipn_data.get('price_amount'),           # NEW: Original USD amount
+        'price_currency': ipn_data.get('price_currency'),       # NEW: Original currency
+        'outcome_currency': ipn_data.get('outcome_currency')    # NEW: Outcome currency
     }
+
+    # If outcome_currency not provided, infer from pay_currency
+    # (NowPayments might not always include outcome_currency)
+    if not payment_data.get('outcome_currency'):
+        # Assume outcome is in same currency as payment
+        payment_data['outcome_currency'] = payment_data.get('pay_currency')
+        print(f"💡 [IPN] outcome_currency not provided, inferring from pay_currency: {payment_data['outcome_currency']}")
 
     success = update_payment_data(order_id, payment_data)
 
