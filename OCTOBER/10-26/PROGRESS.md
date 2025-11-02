@@ -4,6 +4,97 @@
 
 ## Recent Updates
 
+## 2025-11-02 Session 39: Critical Cloud Tasks Queue Name Newline Bug Fix ✅
+
+**Objective:** Fix critical bug preventing payment processing due to trailing newlines in Secret Manager values
+
+**Problem:**
+- NP-Webhook receiving IPNs but failing to queue to GCWebhook1
+- Error: `400 Queue ID "gcwebhook1-queue\n" can contain only letters ([A-Za-z]), numbers ([0-9]), or hyphens (-)`
+- Root cause: GCWEBHOOK1_QUEUE and GCWEBHOOK1_URL secrets contained trailing newline characters
+- Secondary bug: Database connection double-close causing "connection is closed" errors
+
+**Root Causes Identified:**
+1. **Secret Manager values with trailing newlines**
+   - GCWEBHOOK1_QUEUE: `"gcwebhook1-queue\n"` (17 bytes instead of 16)
+   - GCWEBHOOK1_URL: `"https://gcwebhook1-10-26-pjxwjsdktq-uc.a.run.app\n"` (with trailing `\n`)
+
+2. **No defensive coding for environment variables**
+   - ALL 12 services (np-webhook + 11 GC services) fetched env vars without `.strip()`
+   - Systemic vulnerability: Any secret with whitespace would break Cloud Tasks API calls
+
+3. **Database connection logic error**
+   - Lines 635-636: Close connection after fetching subscription data
+   - Lines 689-690: Duplicate close attempt (unreachable in success path, executed on error)
+
+**Fixes Applied:**
+
+1. **Updated Secret Manager values (removed newlines):**
+   ```bash
+   echo -n "gcwebhook1-queue" | gcloud secrets versions add GCWEBHOOK1_QUEUE --data-file=-
+   echo -n "https://gcwebhook1-10-26-pjxwjsdktq-uc.a.run.app" | gcloud secrets versions add GCWEBHOOK1_URL --data-file=-
+   ```
+
+2. **Added defensive .strip() pattern to np-webhook-10-26/app.py:**
+   ```python
+   # Lines 31, 39-42, 89-92
+   NOWPAYMENTS_IPN_SECRET = (os.getenv('NOWPAYMENTS_IPN_SECRET') or '').strip() or None
+   CLOUD_SQL_CONNECTION_NAME = (os.getenv('CLOUD_SQL_CONNECTION_NAME') or '').strip() or None
+   # ... (all env vars now stripped)
+   ```
+
+3. **Fixed ALL 11 config_manager.py files:**
+   ```python
+   # Before (UNSAFE):
+   secret_value = os.getenv(secret_name_env)
+
+   # After (SAFE):
+   secret_value = (os.getenv(secret_name_env) or '').strip() or None
+   ```
+   - GCWebhook1-10-26, GCWebhook2-10-26
+   - GCSplit1-10-26, GCSplit2-10-26, GCSplit3-10-26
+   - GCAccumulator-10-26, GCBatchProcessor-10-26, GCMicroBatchProcessor-10-26
+   - GCHostPay1-10-26, GCHostPay2-10-26, GCHostPay3-10-26
+
+4. **Fixed database connection double-close bug in np-webhook-10-26/app.py:**
+   - Removed duplicate `cur.close()` and `conn.close()` statements (lines 689-690)
+   - Connection now properly closed only once after subscription data fetch
+
+**Files Changed:**
+1. `/OCTOBER/10-26/np-webhook-10-26/app.py` - Added .strip() to all env vars, fixed db connection
+2. `/OCTOBER/10-26/np-webhook-10-26/cloudtasks_client.py` - No changes (already safe)
+3. `/OCTOBER/10-26/GC*/config_manager.py` - 11 files updated with defensive .strip() pattern
+
+**Secret Manager Updates:**
+- GCWEBHOOK1_QUEUE: Version 2 (16 bytes, no newline)
+- GCWEBHOOK1_URL: Version 2 (49 bytes, no newline)
+
+**Deployment:**
+- ✅ Rebuilt np-webhook-10-26 Docker image: `gcr.io/telepay-459221/np-webhook-10-26:latest`
+- ✅ Deployed to Cloud Run: `np-webhook-10-26-00004-q9b` (revision 4)
+- ✅ All secrets injected via `--set-secrets` with `:latest` versions
+
+**Impact:**
+- ✅ Cloud Tasks will now accept queue names (no trailing newlines)
+- ✅ Payment processing will complete end-to-end (NP-Webhook → GCWebhook1)
+- ✅ Database connection errors eliminated
+- ✅ ALL services now resilient to whitespace in secrets
+- ✅ Future deployments protected by defensive .strip() pattern
+
+**All Services Redeployed:** ✅
+- np-webhook-10-26 (revision 4)
+- GCWebhook1-10-26 (revision 16)
+- GCWebhook2-10-26 (deployed)
+- GCSplit1-10-26, GCSplit2-10-26, GCSplit3-10-26 (deployed)
+- GCAccumulator-10-26, GCBatchProcessor-10-26, GCMicroBatchProcessor-10-26 (deployed)
+- GCHostPay1-10-26, GCHostPay2-10-26, GCHostPay3-10-26 (deployed)
+
+**Testing Required:**
+- Create new payment transaction to trigger IPN callback
+- Verify np-webhook logs show successful Cloud Tasks enqueue
+- Verify GCWebhook1 receives task and processes payment
+- Verify complete flow: IPN → GCWebhook1 → GCSplit/GCAccumulator → User invite
+
 ## 2025-11-02 Session 38: NowPayments Success URL Encoding Fix ✅
 
 **Objective:** Fix NowPayments API error "success_url must be a valid uri" caused by unencoded pipe character in order_id

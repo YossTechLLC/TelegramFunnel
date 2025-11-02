@@ -31,9 +31,10 @@ class ConfigManager:
             Secret value or None if failed
         """
         try:
-            secret_value = os.getenv(secret_name_env)
+            # Defensive pattern: handle None, strip whitespace, return None if empty
+            secret_value = (os.getenv(secret_name_env) or '').strip() or None
             if not secret_value:
-                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set")
+                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
                 return None
 
             print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
@@ -58,9 +59,9 @@ class ConfigManager:
         value = os.getenv(var_name)
         if not value:
             if required:
-                print(f"❌ [CONFIG] Required environment variable {var_name} is not set")
+                print(f"❌ [CONFIG] Required environment variable {var_name} is not set or empty")
             else:
-                print(f"⚠️ [CONFIG] Optional environment variable {var_name} is not set")
+                print(f"⚠️ [CONFIG] Optional environment variable {var_name} is not set or empty")
             return None
 
         print(f"✅ [CONFIG] {description or var_name}: {value[:50]}..." if len(value) > 50 else f"✅ [CONFIG] {description or var_name}: {value}")

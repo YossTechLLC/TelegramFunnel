@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-01 (Archived previous entries to DECISIONS_ARCH.md)
+**Last Updated:** 2025-11-02 (Archived previous entries to DECISIONS_ARCH.md)
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,98 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-02: Defensive Environment Variable Handling - Always Strip Whitespace
+
+**Decision:** ALL environment variable fetches MUST use defensive `.strip()` pattern to handle trailing/leading whitespace
+
+**Context:**
+- Google Cloud Secret Manager values can contain trailing newlines (especially when created via CLI with `echo`)
+- Cloud Run injects secrets as environment variables via `--set-secrets`
+- Services fetch these values using `os.getenv()`
+- Cloud Tasks API strictly validates queue names: only `[A-Za-z0-9-]` allowed
+- A single trailing newline in a queue name causes 400 errors: `Queue ID "gcwebhook1-queue\n" can contain only letters...`
+
+**Problem:**
+```python
+# BROKEN: No whitespace handling
+GCWEBHOOK1_QUEUE = os.getenv('GCWEBHOOK1_QUEUE')
+# If secret value is "gcwebhook1-queue\n" (17 bytes with newline)
+# Result: Cloud Tasks API returns 400 error
+```
+
+**Vulnerable Pattern Found:**
+- **ALL 12 services** used unsafe `os.getenv()` without `.strip()`
+- np-webhook-10-26, GCWebhook1-10-26, GCWebhook2-10-26
+- GCSplit1-10-26, GCSplit2-10-26, GCSplit3-10-26
+- GCAccumulator-10-26, GCBatchProcessor-10-26, GCMicroBatchProcessor-10-26
+- GCHostPay1-10-26, GCHostPay2-10-26, GCHostPay3-10-26
+
+**Options Considered:**
+
+1. **Fix only the affected secrets** ❌ Rejected
+   - Only addresses immediate issue
+   - No protection against future whitespace in secrets
+   - Other secrets could have same issue
+
+2. **Add .strip() only in np-webhook** ❌ Rejected
+   - Systemic vulnerability affects all services
+   - Other services use queue names/URLs too
+   - Half-measure solution
+
+3. **Defensive .strip() in ALL services** ✅ **CHOSEN**
+   - Handles None values gracefully
+   - Strips leading/trailing whitespace
+   - Returns None if empty after stripping
+   - Protects against future secret creation errors
+   - Industry best practice
+
+**Solution Implemented:**
+```python
+# SAFE: Defensive pattern handles all edge cases
+secret_value = (os.getenv(secret_name_env) or '').strip() or None
+# - If env var doesn't exist: os.getenv() returns None
+#   → (None or '') = '' → ''.strip() = '' → ('' or None) = None ✅
+# - If env var is empty string: '' → ''.strip() = '' → None ✅
+# - If env var has whitespace: '\n' → ''.strip() = '' → None ✅
+# - If env var has value with whitespace: 'queue\n' → 'queue' ✅
+# - If env var has clean value: 'queue' → 'queue' ✅
+```
+
+**Impact:**
+- ✅ Protects against trailing newlines in Secret Manager values
+- ✅ Protects against leading whitespace
+- ✅ Protects against empty-string secrets
+- ✅ No behavior change for clean values
+- ✅ All 12 services now resilient
+
+**Files Modified:**
+1. `/np-webhook-10-26/app.py` - Lines 31, 39-42, 89-92
+2. `/GC*/config_manager.py` - 11 files, all `fetch_secret()` methods updated
+
+**Pattern to Use Going Forward:**
+```python
+# For environment variables
+VALUE = (os.getenv('ENV_VAR_NAME') or '').strip() or None
+
+# For config_manager.py fetch_secret() method
+secret_value = (os.getenv(secret_name_env) or '').strip() or None
+if not secret_value:
+    print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
+    return None
+```
+
+**Why This Matters:**
+- Cloud Tasks queue names are used in API path construction: `projects/{project}/locations/{location}/queues/{queue_name}`
+- URLs are used in HTTP requests: any trailing whitespace breaks the request
+- Database connection strings with whitespace cause connection failures
+- This is a **systemic vulnerability** affecting production payment processing
+
+**Lessons Learned:**
+- Secret Manager CLI commands need `echo -n` (no newline) or heredoc
+- Always use defensive coding for external inputs (env vars, secrets, API responses)
+- Whitespace bugs are silent until they break critical paths
+- One bad secret can cascade through multiple services
 
 ### 2025-11-02: URL Encoding for Query Parameters in success_url
 

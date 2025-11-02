@@ -28,7 +28,7 @@ print(f"")
 print(f"⚙️ [CONFIG] Loading configuration from Secret Manager...")
 
 # IPN Secret for signature verification
-NOWPAYMENTS_IPN_SECRET = os.getenv('NOWPAYMENTS_IPN_SECRET')
+NOWPAYMENTS_IPN_SECRET = (os.getenv('NOWPAYMENTS_IPN_SECRET') or '').strip() or None
 if NOWPAYMENTS_IPN_SECRET:
     print(f"✅ [CONFIG] NOWPAYMENTS_IPN_SECRET loaded")
 else:
@@ -36,10 +36,10 @@ else:
     print(f"⚠️ [CONFIG] IPN signature verification will fail!")
 
 # Database credentials
-CLOUD_SQL_CONNECTION_NAME = os.getenv('CLOUD_SQL_CONNECTION_NAME')
-DATABASE_NAME = os.getenv('DATABASE_NAME_SECRET')
-DATABASE_USER = os.getenv('DATABASE_USER_SECRET')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD_SECRET')
+CLOUD_SQL_CONNECTION_NAME = (os.getenv('CLOUD_SQL_CONNECTION_NAME') or '').strip() or None
+DATABASE_NAME = (os.getenv('DATABASE_NAME_SECRET') or '').strip() or None
+DATABASE_USER = (os.getenv('DATABASE_USER_SECRET') or '').strip() or None
+DATABASE_PASSWORD = (os.getenv('DATABASE_PASSWORD_SECRET') or '').strip() or None
 
 print(f"")
 print(f"📊 [CONFIG] Database Configuration Status:")
@@ -86,10 +86,10 @@ print(f"")
 print(f"⚙️ [CONFIG] Loading Cloud Tasks configuration...")
 
 # Cloud Tasks configuration for triggering GCWebhook1
-CLOUD_TASKS_PROJECT_ID = os.getenv('CLOUD_TASKS_PROJECT_ID')
-CLOUD_TASKS_LOCATION = os.getenv('CLOUD_TASKS_LOCATION')
-GCWEBHOOK1_QUEUE = os.getenv('GCWEBHOOK1_QUEUE')
-GCWEBHOOK1_URL = os.getenv('GCWEBHOOK1_URL')
+CLOUD_TASKS_PROJECT_ID = (os.getenv('CLOUD_TASKS_PROJECT_ID') or '').strip() or None
+CLOUD_TASKS_LOCATION = (os.getenv('CLOUD_TASKS_LOCATION') or '').strip() or None
+GCWEBHOOK1_QUEUE = (os.getenv('GCWEBHOOK1_QUEUE') or '').strip() or None
+GCWEBHOOK1_URL = (os.getenv('GCWEBHOOK1_URL') or '').strip() or None
 
 print(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
 print(f"   CLOUD_TASKS_LOCATION: {'✅ Loaded' if CLOUD_TASKS_LOCATION else '❌ Missing'}")
@@ -685,9 +685,6 @@ def handle_ipn():
                                     traceback.print_exc()
                         else:
                             print(f"⚠️ [ORCHESTRATION] Could not fetch subscription data for GCWebhook1 triggering")
-
-                    cur.close()
-                    conn.close()
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to update outcome_amount_usd: {e}")
