@@ -4,8 +4,45 @@ ChangeNow API Client for GCHostPay1-10-26.
 Handles ChangeNow transaction status queries to get actual USDT received.
 """
 import requests
+import decimal
 from decimal import Decimal
 from typing import Dict, Any, Optional
+
+
+def _safe_decimal(value, default='0') -> Decimal:
+    """
+    Safely convert value to Decimal, return default if invalid.
+
+    Handles:
+    - None values
+    - Empty strings
+    - 'null'/'none' strings
+    - Invalid numeric strings
+
+    Args:
+        value: Value to convert (can be None, str, int, float)
+        default: Default Decimal string if conversion fails
+
+    Returns:
+        Decimal instance
+    """
+    # Handle None
+    if value is None:
+        return Decimal(default)
+
+    # Convert to string and strip whitespace
+    str_value = str(value).strip()
+
+    # Handle empty or null strings
+    if not str_value or str_value.lower() in ('null', 'none', ''):
+        return Decimal(default)
+
+    # Attempt conversion
+    try:
+        return Decimal(str_value)
+    except (ValueError, decimal.InvalidOperation):
+        print(f"⚠️ [SAFE_DECIMAL] Could not convert '{value}' to Decimal, using default: {default}")
+        return Decimal(default)
 
 
 class ChangeNowClient:
@@ -69,8 +106,11 @@ class ChangeNowClient:
             data = response.json()
 
             status = data.get('status', 'unknown')
-            amount_from = Decimal(str(data.get('amountFrom', 0)))
-            amount_to = Decimal(str(data.get('amountTo', 0)))
+
+            # ✅ DEFENSIVE CONVERSION: Handle null/empty/invalid values
+            amount_from = _safe_decimal(data.get('amountFrom'), '0')
+            amount_to = _safe_decimal(data.get('amountTo'), '0')
+
             payin_hash = data.get('payinHash', '')
             payout_hash = data.get('payoutHash', '')
 
@@ -79,6 +119,12 @@ class ChangeNowClient:
             print(f"💰 [CHANGENOW_STATUS] Amount to: {amount_to} (ACTUAL USDT RECEIVED)")
             print(f"🔗 [CHANGENOW_STATUS] Payin hash: {payin_hash}")
             print(f"🔗 [CHANGENOW_STATUS] Payout hash: {payout_hash}")
+
+            # ⚠️ WARN if amounts are zero (not available yet)
+            if amount_to == Decimal('0'):
+                print(f"⚠️ [CHANGENOW_STATUS] amountTo is zero/null - swap may not be finished yet (status={status})")
+            if amount_from == Decimal('0') and status not in ['new', 'waiting']:
+                print(f"⚠️ [CHANGENOW_STATUS] amountFrom is zero/null - unexpected for status={status}")
 
             return {
                 'status': status,

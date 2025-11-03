@@ -97,6 +97,17 @@ class ConfigManager:
             "GCHostPay3 service URL"
         )
 
+        # Get GCHostPay1 (Self) configuration for retry callbacks
+        gchostpay1_url = self.fetch_secret(
+            "GCHOSTPAY1_URL",
+            "GCHostPay1 service URL (for self-callbacks)"
+        )
+
+        gchostpay1_response_queue = self.fetch_secret(
+            "GCHOSTPAY1_RESPONSE_QUEUE",
+            "GCHostPay1 response queue name (for retry callbacks)"
+        )
+
         # Get ChangeNow API key for transaction status queries
         changenow_api_key = self.fetch_secret(
             "CHANGENOW_API_KEY",
@@ -152,6 +163,8 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
+            'gchostpay1_url': gchostpay1_url,
+            'gchostpay1_response_queue': gchostpay1_response_queue,
             'gchostpay2_queue': gchostpay2_queue,
             'gchostpay2_url': gchostpay2_url,
             'gchostpay3_queue': gchostpay3_queue,
@@ -173,6 +186,8 @@ class ConfigManager:
         print(f"   CHANGENOW_API_KEY: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
+        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
+        print(f"   GCHostPay1 Response Queue: {'✅' if config['gchostpay1_response_queue'] else '❌'}")
         print(f"   GCHostPay2 Queue: {'✅' if config['gchostpay2_queue'] else '❌'}")
         print(f"   GCHostPay2 URL: {'✅' if config['gchostpay2_url'] else '❌'}")
         print(f"   GCHostPay3 Queue: {'✅' if config['gchostpay3_queue'] else '❌'}")

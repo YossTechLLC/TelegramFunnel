@@ -526,7 +526,8 @@ class TokenManager:
         payout_address: str,
         refund_address: str,
         flow: str,
-        type_: str
+        type_: str,
+        actual_eth_amount: float = 0.0
     ) -> Optional[str]:
         """
         Encrypt token for GCSplit3 → GCSplit1 (ETH→Client swap response).
@@ -537,6 +538,7 @@ class TokenManager:
         - 16 bytes: closed_channel_id
         - Strings: cn_api_id, currencies, networks, addresses, flow, type
         - 8 bytes each: from_amount, to_amount
+        - 8 bytes: actual_eth_amount (ACTUAL from NowPayments)
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
 
@@ -565,6 +567,10 @@ class TokenManager:
             packed_data.extend(self._pack_string(refund_address))
             packed_data.extend(self._pack_string(flow))
             packed_data.extend(self._pack_string(type_))
+
+            # Pack actual_eth_amount (ACTUAL from NowPayments) - 8 bytes
+            packed_data.extend(struct.pack(">d", actual_eth_amount))
+            print(f"💰 [TOKEN_ENC] ACTUAL ETH: {actual_eth_amount}")
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -640,19 +646,20 @@ class TokenManager:
             flow, offset = self._unpack_string(payload, offset)
             type_, offset = self._unpack_string(payload, offset)
 
-            timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
-            offset += 4
-
-            # ✅ Extract actual_eth_amount if available (backward compatibility)
+            # ✅ Extract actual_eth_amount FIRST (comes before timestamp in GCSplit3's packing)
             actual_eth_amount = 0.0
-            if offset + 8 <= len(payload):
+            if offset + 8 + 4 <= len(payload):  # Ensure room for double + timestamp
                 try:
                     actual_eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
                     offset += 8
                     print(f"💰 [TOKEN_DEC] ACTUAL ETH extracted: {actual_eth_amount}")
-                except Exception:
-                    print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
+                except Exception as e:
+                    print(f"⚠️ [TOKEN_DEC] Error extracting actual_eth_amount: {e}")
                     actual_eth_amount = 0.0
+
+            # THEN read timestamp
+            timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
+            offset += 4
 
             now = int(time.time())
             if not (now - 86400 <= timestamp <= now + 300):

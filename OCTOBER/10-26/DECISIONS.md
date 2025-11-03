@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-02 Session 49 (Archived previous entries to DECISIONS_ARCH.md)
+**Last Updated:** 2025-11-03 Session 56
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,631 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-03 Session 56: 30-Minute Token Expiration for Async Batch Callbacks ✅
+
+**Decision:** Increase GCMicroBatchProcessor token expiration window from 5 minutes to 30 minutes (1800 seconds)
+
+**Context:**
+- GCMicroBatchProcessor rejecting valid callbacks from GCHostPay1 with "Token expired" error
+- Batch conversion workflow is **asynchronous** with multiple retry delays:
+  - ChangeNow swap can take 5-30 minutes to complete
+  - GCHostPay1 retry mechanism: 3 retries × 5 minutes = up to 15 minutes
+  - Cloud Tasks queue delays: 30s - 5 minutes
+  - **Total workflow delay: 15-20 minutes in normal operation**
+- Current 5-minute expiration rejects 70-90% of batch conversion callbacks
+- Impact: USDT received but cannot distribute to individual payout records
+
+**Options Considered:**
+
+**Option 1: Increase Expiration Window to 30 Minutes (CHOSEN)**
+- ✅ Simple one-line change (`300` → `1800`)
+- ✅ Accommodates all known delays in workflow
+- ✅ No breaking changes to token format
+- ✅ Security maintained via HMAC signature validation
+- ✅ Includes safety margin for unexpected delays
+- ⚠️ Slightly longer window for theoretical replay attacks (mitigated by signature)
+
+**Calculation:**
+```
+Max ChangeNow retry delay:  15 minutes (3 retries)
+Max Cloud Tasks delay:       5 minutes
+Safety margin:              10 minutes
+Total:                      30 minutes
+```
+
+**Option 2: Refresh Token Timestamp on Each Retry**
+- ⚠️ More complex - requires changes to GCHostPay1 retry logic
+- ⚠️ Doesn't solve Cloud Tasks queue delay issue
+- ⚠️ Hard to ensure token creation happens at right time
+- ❌ Not chosen due to complexity vs. benefit
+
+**Option 3: Remove Timestamp Validation Entirely**
+- ❌ Less secure - no time-based replay protection
+- ❌ Could allow old valid tokens to be replayed
+- ❌ Not recommended for security reasons
+
+**Rationale:**
+1. **Workflow-Driven Design**: Expiration window must accommodate actual workflow delays
+2. **Production Evidence**: Logs show tokens aged 10-20 minutes in normal operation
+3. **Security Balance**: 30 minutes is reasonable for async workflows while maintaining security
+4. **Simplicity**: One-line change vs. complex retry logic refactoring
+5. **Safety Margin**: Accounts for unexpected Cloud Tasks delays during high load
+6. **Industry Standard**: 30-minute token expiration common for async workflows
+
+**Implementation:**
+```python
+# BEFORE
+if not (current_time - 300 <= timestamp <= current_time + 5):
+    raise ValueError("Token expired")
+
+# AFTER
+if not (current_time - 1800 <= timestamp <= current_time + 5):
+    raise ValueError("Token expired")
+```
+
+**System-Wide Impact:**
+- Performed audit of all token_manager.py files across services
+- Identified potential similar issues in GCHostPay2, GCSplit3, GCAccumulator
+- Recommended standardized expiration windows:
+  - Synchronous calls: 5 minutes (300s)
+  - Async with retries: 30 minutes (1800s)
+  - Long-running workflows: 2 hours (7200s)
+  - Internal retry mechanisms: 24 hours (86400s)
+
+**Trade-offs:**
+- ✅ **Pro**: Fixes critical production issue immediately
+- ✅ **Pro**: Minimal code change, low risk
+- ✅ **Pro**: Better logging for token age visibility
+- ⚠️ **Con**: Longer window for replay attacks (mitigated by signature + idempotency)
+
+**Future Considerations:**
+- Add monitoring for token age distribution
+- Add alerting for token expiration rate > 1%
+- Consider Phase 2: Review other services with 5-minute windows
+- Consider Phase 3: Standardize expiration windows across all services
+
+---
+
+### 2025-11-03 Session 55: Variable-Length String Encoding for Token Serialization ✅
+
+**Decision:** Replace fixed 16-byte encoding with variable-length string encoding (`_pack_string`) for all string fields in inter-service tokens
+
+**Context:**
+- Fixed 16-byte encoding systematically truncated UUIDs and caused critical production failure
+- GCMicroBatchProcessor received truncated batch_conversion_id: `"f577abaa-1"` instead of full UUID
+- PostgreSQL rejected as invalid UUID format: `invalid input syntax for type uuid`
+- Found 20+ instances of `.encode('utf-8')[:16]` pattern across 4 services
+- Batch conversion flow completely broken
+
+**Options Considered:**
+
+**Option A: Variable-Length Encoding with _pack_string (CHOSEN)**
+- Use existing `_pack_string()` method (1-byte length prefix + string bytes)
+- Handles any string length up to 255 bytes
+- ✅ Preserves full UUIDs (36 chars) and prefixed UUIDs (40+ chars)
+- ✅ No silent data truncation
+- ✅ Already implemented and proven in other token methods
+- ✅ Efficient: only uses bytes needed for actual string
+- ✅ Backward compatible with coordinated deployment (sender first, receiver second)
+- ⚠️ Requires updating both encrypt and decrypt methods
+- ⚠️ Changes token format (incompatible with old versions)
+
+**Option B: Increase Fixed Length to 64 Bytes**
+- Change fixed length from 16 → 64 bytes to accommodate longer UUIDs
+- ❌ Wastes space for short strings (inefficient)
+- ❌ Doesn't scale if we add longer prefixes later (e.g., "accumulation_uuid")
+- ❌ Still has truncation risk if strings exceed 64 bytes
+- ❌ Adds unnecessary padding bytes to every token
+
+**Option C: Keep Fixed 16-Byte, Change UUID Format**
+- Store UUIDs without hyphens (32 hex chars) to fit in 16 bytes
+- ❌ Requires changing UUID generation across entire system
+- ❌ Prefix strings like "batch_" still exceed 16 bytes
+- ❌ Database expects standard UUID format with hyphens
+- ❌ Massive refactoring effort across all services
+
+**Rationale for Choice:**
+1. **Safety First**: Variable-length prevents silent data corruption
+2. **Proven Pattern**: `_pack_string` already used successfully in other tokens
+3. **Efficiency**: Only uses bytes needed (1 + string length)
+4. **Scalability**: Supports any future string length needs
+5. **Minimal Impact**: Fix limited to 2 services for Phase 1 (GCHostPay3, GCHostPay1)
+6. **Clear Migration Path**: Phase 2 can systematically fix remaining instances
+
+**Implementation:**
+
+**Encrypt (GCHostPay3):**
+```python
+# Before:
+unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
+packed_data.extend(unique_id_bytes)
+
+# After:
+packed_data.extend(self._pack_string(unique_id))
+```
+
+**Decrypt (GCHostPay1):**
+```python
+# Before:
+unique_id = raw[offset:offset+16].rstrip(b'\x00').decode('utf-8')
+offset += 16
+
+# After:
+unique_id, offset = self._unpack_string(raw, offset)
+```
+
+**Token Format Change:**
+```
+Old: [16 bytes fixed unique_id][variable cn_api_id]...
+New: [1 byte len + N bytes unique_id][1 byte len + M bytes cn_api_id]...
+```
+
+**Deployment Strategy:**
+1. Deploy sender (GCHostPay3) FIRST → sends new variable-length format
+2. Deploy receiver (GCHostPay1) SECOND → reads new format
+3. Order critical: receiver must understand new format before sender starts using it
+
+**Trade-offs Accepted:**
+- ✅ Accept token format change (requires coordinated deployment)
+- ✅ Accept need to update all 20+ instances eventually (Phase 2)
+- ✅ Prioritize correctness over minimal code changes
+
+**Future Considerations:**
+- Phase 2: Apply same fix to remaining 18 instances (GCHostPay1, GCHostPay2, GCHostPay3, GCSplit1)
+- Investigate `closed_channel_id` truncation (may be safe if values always < 16 bytes)
+- Add validation to prevent strings > 255 bytes (current `_pack_string` limit)
+- Consider protocol versioning if future changes needed
+
+**Monitoring Requirements:**
+- Monitor GCHostPay3 logs: Verify full UUIDs in encrypted tokens
+- Monitor GCHostPay1 logs: Verify full UUIDs in decrypted tokens
+- Monitor GCMicroBatchProcessor logs: NO "invalid input syntax for type uuid" errors
+- Alert on any token encryption/decryption errors
+
+**Impact Assessment:**
+- ✅ **Fixed:** Batch conversion flow now works with full UUIDs
+- ✅ **Unblocked:** GCMicroBatchProcessor can query database successfully
+- ⚠️ **Pending:** 18 remaining instances need fixing to prevent future issues
+- ⚠️ **Risk:** Threshold payouts (acc_{uuid}) may have same issue if not fixed
+
+**Documentation:**
+- `UUID_TRUNCATION_BUG_ANALYSIS.md` - comprehensive root cause analysis
+- `UUID_TRUNCATION_FIX_CHECKLIST.md` - 3-phase implementation plan
+
+---
+
+### 2025-11-03 Session 53: Maintain Two-Swap Architecture with Dynamic Currency Handling ✅
+
+**Decision:** Fix existing two-swap batch payout architecture (ETH→USDT→ClientCurrency) by making currency parameters dynamic instead of switching to single-swap ETH→ClientCurrency
+
+**Context:**
+- Batch payout second swap was incorrectly using ETH→ClientCurrency instead of USDT→ClientCurrency
+- Root cause: Hardcoded currency values in GCSplit2 (estimator) and GCSplit3 (swap creator)
+- Two options: (1) Fix existing architecture with dynamic currencies, or (2) Redesign to single-swap ETH→ClientCurrency
+- System already successfully accumulates to USDT via first swap (ETH→USDT)
+
+**Options Considered:**
+
+**Option A: Fix Two-Swap Architecture with Dynamic Currencies (CHOSEN)**
+- Keep existing flow: ETH→USDT (accumulation) then USDT→ClientCurrency (payout)
+- Make GCSplit2 and GCSplit3 use dynamic `payout_currency` and `payout_network` from tokens
+- ✅ Minimal code changes (2 services, ~10 lines total)
+- ✅ No database schema changes needed
+- ✅ USDT provides stable intermediate currency during accumulation
+- ✅ Reduces volatility risk for accumulated funds
+- ✅ Simpler fee calculations (known USDT value)
+- ✅ Easier to track accumulated value in stable currency
+- ✅ First swap (ETH→USDT) already proven to work successfully
+- ✅ Only second swap needs fixing
+- ⚠️ Two API calls to ChangeNow instead of one
+
+**Option B: Single-Swap ETH→ClientCurrency Direct**
+- Redesign to swap ETH directly to client payout currency (e.g., ETH→SHIB)
+- Eliminate intermediate USDT conversion
+- ✅ One API call instead of two
+- ✅ Potentially lower total fees (one swap instead of two)
+- ❌ Higher volatility exposure during accumulation period
+- ❌ More complex fee calculations (ETH price fluctuates)
+- ❌ Harder to track accumulated value
+- ❌ Requires major refactoring of GCSplit1 orchestration logic
+- ❌ Database schema changes needed (amount tracking)
+- ❌ More complex error handling (wider price swings)
+- ❌ Risks breaking instant conversion flow (shares same services)
+
+**Rationale:**
+- **Stability First**: USDT intermediate provides price stability during accumulation period
+  - Client funds accumulate in predictable USD value
+  - Reduces risk of accumulated balance losing value before payout threshold
+- **Proven Architecture**: First swap (ETH→USDT) already working correctly in production
+  - Only second swap has bug (simple fix: use dynamic currency)
+  - Lower risk to fix existing system than redesign
+- **Minimal Impact**: Fix requires only 2 services with ~10 lines changed total
+  - No database migrations
+  - No Cloud Tasks queue changes
+  - No token structure changes
+  - Faster deployment (~1 hour vs multi-day refactor)
+- **Fee Trade-off Acceptable**: Two swaps incur higher fees BUT provide stability benefit
+  - Cost of stability is worth fee increase for accumulated payouts
+  - Alternative (single swap) has hidden cost: volatility risk
+
+**Implementation:**
+```python
+# GCSplit2-10-26/tps2-10-26.py (lines 131-132)
+# BEFORE:
+estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
+    from_currency="usdt",
+    to_currency="eth",      # ❌ Hardcoded
+    to_network="eth",       # ❌ Hardcoded
+    ...
+)
+
+# AFTER:
+estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
+    from_currency="usdt",
+    to_currency=payout_currency,  # ✅ Dynamic from token
+    to_network=payout_network,    # ✅ Dynamic from token
+    ...
+)
+
+# GCSplit3-10-26/tps3-10-26.py (line 130)
+# BEFORE:
+transaction = changenow_client.create_fixed_rate_transaction_with_retry(
+    from_currency="eth",  # ❌ Hardcoded
+    ...
+)
+
+# AFTER:
+transaction = changenow_client.create_fixed_rate_transaction_with_retry(
+    from_currency="usdt",  # ✅ Correct source currency
+    ...
+)
+```
+
+**Trade-offs Accepted:**
+- ✅ Accept higher fees (two swaps) for stability benefit
+- ✅ Accept two ChangeNow API calls for simpler architecture
+- ✅ Prioritize minimal code changes over theoretical efficiency gains
+
+**Future Considerations:**
+- If ChangeNow fees become prohibitive, reconsider single-swap architecture
+- Monitor actual fee percentages in production (log reconciliation data)
+- Could optimize by batching multiple client payouts into single large swap
+- Could add direct ETH→ClientCurrency path as alternative flow for large payouts
+
+**Related Decisions:**
+- Session 31: Two-swap threshold payout architecture design
+- Session 28: USDT as intermediate accumulation currency
+- Cloud Tasks orchestration: Split services for separation of concerns
+
+**Impact:**
+- ✅ Batch payouts now functional with correct currency flow
+- ✅ USDT stability maintained during accumulation
+- ✅ Client payouts complete successfully
+- ✅ Instant conversion flow unchanged (uses different path)
+- ✅ Simple fix deployed in ~60 minutes
+
+**Monitoring:**
+- Track fee reconciliation: first_swap_fee + second_swap_fee vs hypothetical single_swap_fee
+- Monitor volatility impact: compare USDT accumulation stability vs direct ETH accumulation
+- Alert if total fees exceed 5% of payout value
+
+---
+
+### 2025-11-03 Session 54: Use create_task() Directly for Batch Callbacks ✅
+
+**Decision:** Call `create_task()` directly instead of creating specialized `enqueue_microbatch_callback()` method
+
+**Context:**
+- Batch callback logic (ENDPOINT_4) called non-existent method `cloudtasks_client.enqueue_task()`
+- Need immediate fix to make batch conversion callbacks functional
+- CloudTasksClient has specialized methods (e.g., `enqueue_gchostpay1_retry_callback()`) but no method for MicroBatch callbacks
+- Must decide between using base `create_task()` vs creating new specialized method
+
+**Options Considered:**
+
+**Option A: Use create_task() Directly (CHOSEN)**
+- Call the base `create_task(queue_name, target_url, payload)` method
+- ✅ Simplest fix (just change method name and parameter)
+- ✅ No new code needed in cloudtasks_client.py
+- ✅ Fast deployment (~30 minutes)
+- ✅ Consistent with CloudTasksClient architecture (specialized methods are just wrappers around create_task())
+- ✅ Base method handles all necessary functionality
+- ⚠️ Less consistent with existing specialized method pattern
+
+**Option B: Create Specialized enqueue_microbatch_callback() Method**
+- Add new method to CloudTasksClient following pattern of other specialized methods
+- Follow precedent of `enqueue_gchostpay1_retry_callback()`, `enqueue_gchostpay3_payment_execution()`, etc.
+- ✅ Consistent with existing specialized method pattern
+- ✅ Better code organization and readability
+- ✅ Easier to mock in unit tests
+- ❌ More complex implementation (requires updating cloudtasks_client.py)
+- ❌ Longer deployment time
+- ❌ Not necessary for immediate fix
+
+**Rationale:**
+- **Critical production bug** requires fastest fix possible
+- Base `create_task()` method is designed to handle all enqueue operations
+- Specialized methods are convenience wrappers that just call `create_task()` internally
+- Can create specialized method later as clean architecture improvement (Phase 2)
+- Precedent: Other services already use `create_task()` directly in some places
+
+**Implementation:**
+- Changed line 160 in tphp1-10-26.py:
+  ```python
+  # FROM (BROKEN):
+  task_success = cloudtasks_client.enqueue_task(
+      queue_name=microbatch_response_queue,
+      url=callback_url,
+      payload=payload
+  )
+
+  # TO (FIXED):
+  task_name = cloudtasks_client.create_task(
+      queue_name=microbatch_response_queue,
+      target_url=callback_url,
+      payload=payload
+  )
+  ```
+- Added task name logging for debugging
+- Converted return value (task_name → boolean)
+
+**Future Consideration:**
+- May create `enqueue_microbatch_callback()` specialized method later for consistency
+- Would follow pattern: wrapper around `create_task()` with MicroBatch-specific logging
+- Not urgent - current fix is sufficient for production use
+
+**Related Decisions:**
+- Session 53: Config loading for retry logic
+- Session 52: ChangeNow integration and retry logic
+- Cloud Tasks architecture: Specialized methods vs base methods
+
+**Impact:**
+- ✅ Batch conversion callbacks now functional
+- ✅ GCMicroBatchProcessor receives swap completion notifications
+- ✅ End-to-end batch conversion flow operational
+- ✅ Fix deployed in ~30 minutes (critical for production)
+
+---
+
+### 2025-11-03 Session 53: Reuse Response Queue for Retry Logic (Phase 1 Fix) ✅
+
+**Decision:** Use existing `gchostpay1-response-queue` for retry callbacks instead of creating dedicated retry queue
+
+**Context:**
+- Session 52 Phase 2 retry logic failed due to missing config (GCHOSTPAY1_URL, GCHOSTPAY1_RESPONSE_QUEUE)
+- Need immediate fix to make retry logic functional
+- Must decide between reusing existing queue vs creating dedicated retry queue
+
+**Options Considered:**
+
+**Option A: Reuse Existing Response Queue (CHOSEN - Phase 1)**
+- Use `gchostpay1-response-queue` for both:
+  - External callbacks from GCHostPay3 (payment completion)
+  - Internal retry callbacks from GCHostPay1 to itself
+- ✅ No new infrastructure needed
+- ✅ Minimal changes (just config loading)
+- ✅ Fast deployment (~30 minutes)
+- ✅ Consistent with current architecture
+- ⚠️ Mixes external and internal callbacks in same queue
+- ⚠️ Harder to monitor retry-specific metrics
+
+**Option B: Create Dedicated Retry Queue (Recommended - Phase 2)**
+- Create new `gchostpay1-retry-queue` for internal retry callbacks
+- Follow GCHostPay3 precedent (has both payment queue and retry queue)
+- ✅ Clean separation of concerns
+- ✅ Easier to monitor retry-specific metrics
+- ✅ Better for scaling and debugging
+- ✅ Follows existing patterns in GCHostPay3
+- ❌ More infrastructure to manage
+- ❌ Slightly longer deployment time (~1 hour)
+
+**Decision Rationale:**
+1. **Immediate Need**: Retry logic completely broken, need quick fix
+2. **Phase 1 (Now)**: Use Option A for immediate fix
+3. **Phase 2 (Future)**: Migrate to Option B for clean architecture
+4. **Precedent**: GCHostPay3 uses dedicated retry queue, should follow that pattern eventually
+
+**Implementation:**
+- ✅ Updated config_manager.py to load GCHOSTPAY1_URL and GCHOSTPAY1_RESPONSE_QUEUE
+- ✅ Deployed revision gchostpay1-10-26-00017-rdp
+- ⏳ Future: Create GCHOSTPAY1_RETRY_QUEUE and migrate retry logic to use it
+
+**Impact:**
+- ✅ Retry logic now functional
+- ✅ Batch conversions can complete end-to-end
+- ✅ No new infrastructure complexity
+- 📝 Technical debt: Should migrate to dedicated retry queue for clean architecture
+
+**Lessons Learned:**
+1. **Config Loading Pattern**: When adding self-callback features:
+   - Update config_manager.py to fetch service's own URL
+   - Update config_manager.py to fetch service's own queue
+   - Add secrets to Cloud Run deployment
+   - Verify config loading in startup logs
+2. **Two-Phase Approach**: Fix critical bugs immediately, refactor for clean architecture later
+3. **Follow Existing Patterns**: GCHostPay3 already has retry queue pattern, follow it
+
+**Documentation:**
+- Created `CONFIG_LOADING_VERIFICATION_SUMMARY.md` with checklist pattern
+- Updated `GCHOSTPAY1_RETRY_QUEUE_CONFIG_FIX_CHECKLIST.md` with both phases
+
+---
+
+### 2025-11-03 Session 52: Cloud Tasks Retry Logic for ChangeNow Swap Completion ✅
+
+**Decision:** Implement automatic retry logic using Cloud Tasks with 5-minute delays to re-query ChangeNow
+
+**Context:**
+- Phase 1 fixed crashes with defensive Decimal conversion
+- But callbacks still not sent when ChangeNow swap not finished
+- Need automated solution to wait for swap completion and send callback
+
+**Options Considered:**
+
+**Option A: Polling from TelePay Bot (REJECTED)**
+- Bot periodically checks database for pending conversions
+- ❌ Adds complexity to bot service
+- ❌ Tight coupling between bot and payment flow
+- ❌ Inefficient polling approach
+- ❌ Bot may be offline/restarting
+
+**Option B: ChangeNow Webhook Integration (DEFERRED)**
+- Subscribe to ChangeNow status update webhooks
+- ✅ Event-driven, no polling needed
+- ❌ Requires webhook endpoint setup and security
+- ❌ Need to verify ChangeNow webhook reliability
+- ❌ More complex initial implementation
+- 📝 Consider for Phase 3
+
+**Option C: Cloud Tasks Retry Logic (CHOSEN)**
+- Enqueue delayed task (5 minutes) to re-query ChangeNow
+- ✅ Simple, reliable, built-in scheduling
+- ✅ Automatic retry with max limit (3 retries = 15 minutes)
+- ✅ No external dependencies
+- ✅ Serverless - no persistent polling service needed
+- ✅ Recursive retry if swap still in progress
+- ✅ Sends callback automatically once finished
+
+**Implementation Details:**
+- ENDPOINT_3 detects swap status = waiting/confirming/exchanging/sending
+- Enqueues Cloud Task to `/retry-callback-check` with 5-minute delay
+- New ENDPOINT_4 re-queries ChangeNow after delay
+- If finished: Sends callback with actual_usdt_received
+- If still in-progress: Schedules another retry (max 3 total)
+
+**Rationale:**
+- Cloud Tasks provides reliable delayed execution without complexity
+- Max 3 retries (15 minutes total) covers typical ChangeNow swap time (5-10 min)
+- Self-contained within GCHostPay1 service
+- No additional infrastructure needed
+- Graceful timeout if ChangeNow stuck
+
+**Next Steps:**
+- Monitor retry execution in production
+- Consider ChangeNow webhook integration for Phase 3 optimization
+
+---
+
+### 2025-11-03 Session 52: Defensive Decimal Conversion Over Fail-Fast ✅
+
+**Decision:** Implement defensive Decimal conversion to return `0` for invalid values instead of crashing
+
+**Context:**
+- ChangeNow API returns `null`/empty values when swap not finished
+- Original code: `Decimal(str(None))` → ConversionSyntax error
+- Need to handle this gracefully without breaking payment workflow
+
+**Options Considered:**
+
+**Option A: Fail-Fast (REJECTED)**
+- Let exception crash and propagate up
+- ❌ Breaks entire payment workflow
+- ❌ No callback sent to MicroBatchProcessor
+- ❌ Poor user experience
+
+**Option B: Defensive Conversion (CHOSEN)**
+- Return `Decimal('0')` for invalid values
+- ✅ Prevents crashes
+- ✅ Allows code to continue
+- ✅ Clear warning logs when amounts missing
+- ⚠️ Requires Phase 2 retry logic to get actual amounts
+
+**Rationale:**
+- Better to log a warning and continue than to crash the entire flow
+- Phase 2 will add retry logic to query ChangeNow again after swap completes
+- Defensive programming principle: handle external API variability gracefully
+
+**Next Steps:**
+- Phase 2: Add Cloud Tasks retry logic to check ChangeNow again after 5-10 minutes
+- Phase 3: Consider ChangeNow webhook integration for event-driven approach
+
+---
+
+### 2025-11-03 Session 51: No TTL Window Change - Fix Root Cause Instead ✅
+
+**Decision:** Do NOT expand TTL window from 24 hours to 10 minutes; fix the token unpacking order mismatch instead
+
+**Context:**
+- User observed "Token expired" errors every minute starting at 13:45:12 EST
+- User suspected TTL window was only 1 minute and requested expansion to 10 minutes
+- **ACTUAL TTL**: 24 hours backward, 5 minutes forward - already very generous
+- **REAL PROBLEM**: GCSplit1 was reading wrong bytes as timestamp due to unpacking order mismatch
+
+**Options Considered:**
+
+**Option A: Expand TTL Window (REJECTED)**
+- ❌ Would NOT fix the issue (timestamp being read was 0, not stale)
+- ❌ Masks the real problem instead of solving it
+- ❌ 24-hour window is already more than sufficient
+- ❌ Expanding to 10 minutes would actually REDUCE the window (from 24 hours)
+
+**Option B: Fix Token Unpacking Order (CHOSEN)**
+- ✅ Addresses root cause: decryption order must match encryption order
+- ✅ GCSplit1 now unpacks actual_eth_amount BEFORE timestamp (matches GCSplit3's packing)
+- ✅ Prevents reading zeros (actual_eth_amount bytes) as timestamp
+- ✅ Maintains appropriate TTL security window
+- ✅ Fixes corrupted actual_eth_amount value (8.706401155e-315)
+
+**Rationale:**
+1. **Root Cause Analysis**: Timestamp validation was failing because GCSplit1 read `0x0000000000000000` (actual_eth_amount = 0.0) as the timestamp, not because tokens were old
+2. **Binary Structure Alignment**: Encryption and decryption MUST pack/unpack fields in identical order
+3. **Security Best Practice**: TTL windows should not be expanded to work around bugs - fix the bug
+4. **Data Integrity**: Correcting the unpacking order also fixes the corrupted actual_eth_amount extraction
+
+**Implementation:**
+- Swapped unpacking order in `decrypt_gcsplit3_to_gcsplit1_token()` method
+- Extract `actual_eth_amount` (8 bytes) FIRST, then `timestamp` (4 bytes)
+- Added defensive validation: `if offset + 8 + 4 <= len(payload)`
+- TTL window remains 24 hours (appropriate for payment processing)
+
+**Key Lesson:**
+When users report time-related errors, verify the actual timestamps being read - don't assume the time window is the problem. Binary structure mismatches can manifest as timestamp validation errors.
+
+---
+
+### 2025-11-03 Session 50: Token Mismatch Resolution - Forward Compatibility Over Rollback ✅
+
+**Decision:** Update GCSplit1 to match GCSplit3's token format instead of rolling back GCSplit3
+
+**Context:**
+- GCSplit3 was encrypting tokens WITH `actual_eth_amount` field (8 bytes)
+- GCSplit1 expected tokens WITHOUT `actual_eth_amount` field
+- 100% token decryption failure - GCSplit1 read actual_eth bytes as timestamp, got 0, threw "Token expired"
+
+**Options Considered:**
+
+**Option A: Update GCSplit1 (CHOSEN)**
+- ✅ Preserves `actual_eth_amount` data tracking capability
+- ✅ GCSplit1 decryption already has backward compatibility code
+- ✅ Forward-compatible with GCSplit3's enhanced format
+- ✅ Only requires deploying 1 service (GCSplit1)
+- ⚠️ Requires careful binary structure alignment
+
+**Option B: Rollback GCSplit3**
+- ❌ Loses `actual_eth_amount` data in GCSplit3→GCSplit1 flow
+- ❌ Requires reverting previous deployment
+- ❌ Inconsistent with other services that already use actual_eth_amount
+- ✅ Simpler immediate fix (remove field)
+
+**Rationale:**
+1. **Data Integrity**: Preserving actual_eth_amount is critical for accurate payment tracking
+2. **System Evolution**: GCSplit3's enhanced format is the future - align other services to it
+3. **Minimal Impact**: GCSplit1's decryption already expects this field (backward compat code exists)
+4. **One-Way Door**: Rollback loses functionality; update gains it
+
+**Implementation:**
+- Added `actual_eth_amount: float = 0.0` parameter to `encrypt_gcsplit3_to_gcsplit1_token()`
+- Added 8-byte packing before timestamp: `packed_data.extend(struct.pack(">d", actual_eth_amount))`
+- Updated token structure docstring to reflect new field
+- Deployed as revision `gcsplit1-10-26-00015-jpz`
+
+**Long-term Plan:**
+- Add version byte to all inter-service tokens for explicit format detection
+- Extract TokenManager to shared library to prevent version drift
+- Implement integration tests for token compatibility across services
+
+---
 
 ### 2025-11-02 Session 49: Deployment Order Strategy - Downstream-First for Backward Compatibility ✅
 

@@ -156,15 +156,16 @@ def _route_batch_callback(
         callback_url = f"{microbatch_url}/swap-executed"
         print(f"📡 [BATCH_CALLBACK] Enqueueing callback to: {callback_url}")
 
-        # Enqueue callback task
-        task_success = cloudtasks_client.enqueue_task(
+        # Enqueue callback task using create_task()
+        task_name = cloudtasks_client.create_task(
             queue_name=microbatch_response_queue,
-            url=callback_url,
+            target_url=callback_url,
             payload=payload
         )
 
-        if task_success:
+        if task_name:
             print(f"✅ [BATCH_CALLBACK] Callback enqueued successfully")
+            print(f"🆔 [BATCH_CALLBACK] Task name: {task_name}")
             return True
         else:
             print(f"❌ [BATCH_CALLBACK] Failed to enqueue callback")
@@ -172,6 +173,98 @@ def _route_batch_callback(
 
     except Exception as e:
         print(f"❌ [BATCH_CALLBACK] Unexpected error: {e}")
+        return False
+
+
+def _enqueue_delayed_callback_check(
+    unique_id: str,
+    cn_api_id: str,
+    tx_hash: str,
+    context: str,
+    retry_count: int = 0,
+    retry_after_seconds: int = 300
+) -> bool:
+    """
+    Enqueue delayed callback check to retry ChangeNow query after swap completes.
+
+    This handles the timing issue where ETH payment completes before ChangeNow
+    swap finishes. We retry after 5 minutes to check if amountTo is available.
+
+    Args:
+        unique_id: Unique transaction ID (e.g., batch_xxx)
+        cn_api_id: ChangeNow API transaction ID
+        tx_hash: Ethereum transaction hash
+        context: 'batch' or 'threshold'
+        retry_count: Current retry attempt (max 3)
+        retry_after_seconds: Delay before retry (default 300 = 5 minutes)
+
+    Returns:
+        True if retry enqueued successfully, False otherwise
+    """
+    try:
+        # Check max retries
+        if retry_count >= 3:
+            print(f"❌ [RETRY_ENQUEUE] Max retries reached ({retry_count}/3) for {unique_id}")
+            print(f"⚠️ [RETRY_ENQUEUE] Manual intervention required - ChangeNow swap not finishing")
+            return False
+
+        print(f"🔄 [RETRY_ENQUEUE] Scheduling retry #{retry_count + 1} in {retry_after_seconds}s")
+        print(f"🆔 [RETRY_ENQUEUE] Unique ID: {unique_id}")
+        print(f"🆔 [RETRY_ENQUEUE] CN API ID: {cn_api_id}")
+
+        # Validate Cloud Tasks client
+        if not cloudtasks_client:
+            print(f"❌ [RETRY_ENQUEUE] Cloud Tasks client not available")
+            return False
+
+        # Get queue configuration
+        gchostpay1_response_queue = config.get('gchostpay1_response_queue')
+        gchostpay1_url = config.get('gchostpay1_url')
+
+        if not gchostpay1_response_queue or not gchostpay1_url:
+            print(f"❌ [RETRY_ENQUEUE] GCHostPay1 response queue config missing")
+            return False
+
+        # Encrypt retry token
+        if not token_manager:
+            print(f"❌ [RETRY_ENQUEUE] Token manager not available")
+            return False
+
+        retry_token = token_manager.encrypt_gchostpay1_retry_token(
+            unique_id=unique_id,
+            cn_api_id=cn_api_id,
+            tx_hash=tx_hash,
+            context=context,
+            retry_count=retry_count + 1
+        )
+
+        if not retry_token:
+            print(f"❌ [RETRY_ENQUEUE] Failed to encrypt retry token")
+            return False
+
+        # Prepare retry URL
+        retry_url = f"{gchostpay1_url}/retry-callback-check"
+        print(f"📡 [RETRY_ENQUEUE] Enqueueing retry to: {retry_url}")
+
+        # Enqueue retry task with delay
+        task_name = cloudtasks_client.enqueue_gchostpay1_retry_callback(
+            queue_name=gchostpay1_response_queue,
+            target_url=retry_url,
+            encrypted_token=retry_token,
+            delay_seconds=retry_after_seconds
+        )
+
+        if task_name:
+            print(f"✅ [RETRY_ENQUEUE] Retry task enqueued (will execute in {retry_after_seconds}s)")
+            return True
+        else:
+            print(f"❌ [RETRY_ENQUEUE] Failed to enqueue retry task")
+            return False
+
+    except Exception as e:
+        print(f"❌ [RETRY_ENQUEUE] Unexpected error: {e}")
+        import traceback
+        print(f"❌ [RETRY_ENQUEUE] Traceback: {traceback.format_exc()}")
         return False
 
 
@@ -597,14 +690,49 @@ def payment_completed():
                     print(f"🔍 [ENDPOINT_3] Querying ChangeNow for actual USDT received...")
                     cn_status = changenow_client.get_transaction_status(cn_api_id)
 
-                    if cn_status and cn_status.get('status') == 'finished':
-                        actual_usdt_received = float(cn_status.get('amountTo', 0))
-                        print(f"✅ [ENDPOINT_3] Actual USDT received: ${actual_usdt_received}")
+                    if cn_status:
+                        status = cn_status.get('status')
+                        amount_to_decimal = cn_status.get('amountTo')  # This is a Decimal now
+
+                        print(f"📊 [ENDPOINT_3] ChangeNow status: {status}")
+
+                        # Check if swap is finished AND has actual amounts
+                        if status == 'finished' and amount_to_decimal and float(amount_to_decimal) > 0:
+                            actual_usdt_received = float(amount_to_decimal)
+                            print(f"✅ [ENDPOINT_3] Actual USDT received: ${actual_usdt_received}")
+
+                        elif status in ['waiting', 'confirming', 'exchanging', 'sending']:
+                            # Swap still in progress - ENQUEUE RETRY
+                            print(f"⏳ [ENDPOINT_3] ChangeNow swap not finished yet: {status}")
+                            print(f"⚠️ [ENDPOINT_3] amountTo not available yet")
+                            print(f"🔄 [ENDPOINT_3] Enqueueing delayed retry to check when swap completes")
+
+                            # Enqueue retry task to check again after 5 minutes
+                            _enqueue_delayed_callback_check(
+                                unique_id=unique_id,
+                                cn_api_id=cn_api_id,
+                                tx_hash=tx_hash,
+                                context=context,
+                                retry_count=0,  # First retry
+                                retry_after_seconds=300  # 5 minutes
+                            )
+
+                        elif status == 'finished' and float(amount_to_decimal) == 0:
+                            # Finished but zero amount - unexpected
+                            print(f"⚠️ [ENDPOINT_3] ChangeNow status=finished but amountTo=0 (UNEXPECTED)")
+                            print(f"⚠️ [ENDPOINT_3] This may indicate a ChangeNow API issue")
+
+                        else:
+                            # Failed, refunded, or unknown status
+                            print(f"❌ [ENDPOINT_3] ChangeNow transaction in unexpected state: {status}")
+
                     else:
-                        print(f"⚠️ [ENDPOINT_3] ChangeNow transaction not finished yet: {cn_status.get('status') if cn_status else 'unknown'}")
+                        print(f"❌ [ENDPOINT_3] ChangeNow query returned no data")
 
                 except Exception as e:
                     print(f"❌ [ENDPOINT_3] ChangeNow query error: {e}")
+                    import traceback
+                    print(f"❌ [ENDPOINT_3] Traceback: {traceback.format_exc()}")
 
         # Route callback based on context
         if context == 'batch' and actual_usdt_received is not None:
@@ -644,6 +772,199 @@ def payment_completed():
 
     except Exception as e:
         print(f"❌ [ENDPOINT_3] Unexpected error: {e}")
+        return jsonify({
+            "status": "error",
+            "message": f"Processing error: {str(e)}"
+        }), 500
+
+
+# ============================================================================
+# ENDPOINT 4: POST /retry-callback-check - Retry ChangeNow query (internal)
+# ============================================================================
+
+@app.route("/retry-callback-check", methods=["POST"])
+def retry_callback_check():
+    """
+    Retry endpoint to re-query ChangeNow for actual USDT received.
+
+    This endpoint is called by Cloud Tasks after a delay (5 minutes) to check
+    if the ChangeNow swap has completed and amountTo is now available.
+
+    Flow:
+    1. Decrypt retry token
+    2. Extract: unique_id, cn_api_id, tx_hash, context, retry_count
+    3. Query ChangeNow API again
+    4. If finished: Send callback to MicroBatchProcessor
+    5. If still in progress: Enqueue another retry (max 3 total)
+
+    Returns:
+        JSON response with status
+    """
+    try:
+        print(f"🔄 [ENDPOINT_4] Retry callback check received")
+
+        # Parse JSON payload
+        try:
+            request_data = request.get_json()
+            if not request_data:
+                abort(400, "Invalid JSON payload")
+        except Exception as e:
+            print(f"❌ [ENDPOINT_4] JSON parsing error: {e}")
+            abort(400, "Malformed JSON payload")
+
+        token = request_data.get('token')
+        if not token:
+            print(f"❌ [ENDPOINT_4] Missing token")
+            abort(400, "Missing token")
+
+        # Decrypt retry token
+        if not token_manager:
+            print(f"❌ [ENDPOINT_4] Token manager not available")
+            abort(500, "Service configuration error")
+
+        try:
+            decrypted_data = token_manager.decrypt_gchostpay1_retry_token(token)
+            if not decrypted_data:
+                print(f"❌ [ENDPOINT_4] Failed to decrypt retry token")
+                abort(401, "Invalid token")
+
+            unique_id = decrypted_data['unique_id']
+            cn_api_id = decrypted_data['cn_api_id']
+            tx_hash = decrypted_data['tx_hash']
+            context = decrypted_data['context']
+            retry_count = decrypted_data['retry_count']
+
+            print(f"✅ [ENDPOINT_4] Retry token decoded successfully")
+            print(f"🆔 [ENDPOINT_4] Unique ID: {unique_id}")
+            print(f"🆔 [ENDPOINT_4] CN API ID: {cn_api_id}")
+            print(f"🔁 [ENDPOINT_4] Retry attempt: {retry_count}/3")
+
+        except Exception as e:
+            print(f"❌ [ENDPOINT_4] Token validation error: {e}")
+            abort(400, f"Token error: {e}")
+
+        # Query ChangeNow API again
+        actual_usdt_received = None
+        if not changenow_client:
+            print(f"❌ [ENDPOINT_4] ChangeNow client not available")
+            abort(500, "ChangeNow client unavailable")
+
+        try:
+            print(f"🔍 [ENDPOINT_4] Re-querying ChangeNow for actual USDT received...")
+            cn_status = changenow_client.get_transaction_status(cn_api_id)
+
+            if cn_status:
+                status = cn_status.get('status')
+                amount_to_decimal = cn_status.get('amountTo')
+
+                print(f"📊 [ENDPOINT_4] ChangeNow status: {status}")
+
+                if status == 'finished' and amount_to_decimal and float(amount_to_decimal) > 0:
+                    # ✅ Swap finally complete!
+                    actual_usdt_received = float(amount_to_decimal)
+                    print(f"✅ [ENDPOINT_4] Actual USDT received: ${actual_usdt_received}")
+                    print(f"🎉 [ENDPOINT_4] ChangeNow swap completed after retry!")
+
+                elif status in ['waiting', 'confirming', 'exchanging', 'sending']:
+                    # ⏳ Still in progress - retry again if under limit
+                    print(f"⏳ [ENDPOINT_4] ChangeNow swap still in progress: {status}")
+
+                    if retry_count < 3:
+                        print(f"🔄 [ENDPOINT_4] Enqueueing another retry (attempt {retry_count + 1})")
+                        _enqueue_delayed_callback_check(
+                            unique_id=unique_id,
+                            cn_api_id=cn_api_id,
+                            tx_hash=tx_hash,
+                            context=context,
+                            retry_count=retry_count,
+                            retry_after_seconds=300  # 5 minutes
+                        )
+
+                        return jsonify({
+                            "status": "retry_scheduled",
+                            "message": f"Swap still in progress, retry #{retry_count + 1} scheduled",
+                            "unique_id": unique_id,
+                            "cn_api_id": cn_api_id,
+                            "changenow_status": status
+                        }), 200
+                    else:
+                        print(f"❌ [ENDPOINT_4] Max retries exceeded - swap still not finished")
+                        print(f"⚠️ [ENDPOINT_4] Manual intervention required")
+
+                        return jsonify({
+                            "status": "max_retries_exceeded",
+                            "message": "ChangeNow swap not finished after 3 retries",
+                            "unique_id": unique_id,
+                            "cn_api_id": cn_api_id,
+                            "changenow_status": status
+                        }), 500
+
+                else:
+                    # ❌ Failed or unexpected status
+                    print(f"❌ [ENDPOINT_4] ChangeNow transaction in unexpected state: {status}")
+
+                    return jsonify({
+                        "status": "failed",
+                        "message": f"ChangeNow transaction failed: {status}",
+                        "unique_id": unique_id,
+                        "cn_api_id": cn_api_id,
+                        "changenow_status": status
+                    }), 500
+
+        except Exception as e:
+            print(f"❌ [ENDPOINT_4] ChangeNow query error: {e}")
+            import traceback
+            print(f"❌ [ENDPOINT_4] Traceback: {traceback.format_exc()}")
+            abort(500, f"ChangeNow query failed: {e}")
+
+        # If we have actual_usdt_received, send callback
+        if actual_usdt_received is not None and actual_usdt_received > 0:
+            if context == 'batch':
+                # Extract batch_conversion_id from unique_id
+                batch_conversion_id = unique_id.replace('batch_', '')
+                print(f"🎯 [ENDPOINT_4] Routing batch callback to GCMicroBatchProcessor")
+
+                callback_success = _route_batch_callback(
+                    batch_conversion_id=batch_conversion_id,
+                    cn_api_id=cn_api_id,
+                    tx_hash=tx_hash,
+                    actual_usdt_received=actual_usdt_received
+                )
+
+                if callback_success:
+                    print(f"✅ [ENDPOINT_4] Batch callback sent successfully")
+                    return jsonify({
+                        "status": "success",
+                        "message": "Callback sent to MicroBatchProcessor",
+                        "unique_id": unique_id,
+                        "actual_usdt_received": actual_usdt_received
+                    }), 200
+                else:
+                    print(f"❌ [ENDPOINT_4] Failed to send batch callback")
+                    return jsonify({
+                        "status": "callback_failed",
+                        "message": "Could not send callback to MicroBatchProcessor"
+                    }), 500
+
+            elif context == 'threshold':
+                print(f"🎯 [ENDPOINT_4] Routing threshold callback to GCAccumulator")
+                # TODO: Implement threshold callback
+                print(f"⚠️ [ENDPOINT_4] Threshold callback not yet implemented")
+                return jsonify({
+                    "status": "not_implemented",
+                    "message": "Threshold callback not yet implemented"
+                }), 501
+        else:
+            print(f"⚠️ [ENDPOINT_4] No callback sent - actual_usdt_received unavailable")
+            return jsonify({
+                "status": "no_callback",
+                "message": "Actual USDT received not available"
+            }), 200
+
+    except Exception as e:
+        print(f"❌ [ENDPOINT_4] Unexpected error: {e}")
+        import traceback
+        print(f"❌ [ENDPOINT_4] Traceback: {traceback.format_exc()}")
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"

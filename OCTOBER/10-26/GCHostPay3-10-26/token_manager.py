@@ -746,7 +746,7 @@ class TokenManager:
         Encrypt response token for GCHostPay3 → GCHostPay1 (payment execution response).
 
         Token Structure:
-        - 16 bytes: unique_id (fixed)
+        - 1 byte: unique_id length + variable bytes (length-prefixed string)
         - 1 byte: cn_api_id length + variable bytes
         - 1 byte: tx_hash length + variable bytes
         - 1 byte: tx_status length + variable bytes
@@ -761,10 +761,8 @@ class TokenManager:
         try:
             print(f"🔐 [TOKEN_ENC] GCHostPay3→GCHostPay1: Encrypting payment response")
 
-            unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
-
             packed_data = bytearray()
-            packed_data.extend(unique_id_bytes)
+            packed_data.extend(self._pack_string(unique_id))  # ✅ FIXED: Variable-length instead of 16-byte truncation
             packed_data.extend(self._pack_string(cn_api_id))
             packed_data.extend(self._pack_string(tx_hash))
             packed_data.extend(self._pack_string(tx_status))

@@ -883,14 +883,17 @@ class TokenManager:
         except Exception:
             raise ValueError("Invalid token: cannot decode base64")
 
-        if len(raw) < 52:
+        # Minimum token size check (variable-length unique_id)
+        # Min: 1 (unique_id len) + 1 (min str) + 1 (cn_api_id len) + 1 (min str) +
+        #      1 (tx_hash len) + 1 (min str) + 1 (tx_status len) + 1 (min str) +
+        #      8 (gas_used) + 8 (block_number) + 4 (timestamp) + 16 (signature) = 43
+        if len(raw) < 43:
             raise ValueError(f"Invalid token: too small")
 
         offset = 0
 
-        # Parse unique_id
-        unique_id = raw[offset:offset+16].rstrip(b'\x00').decode('utf-8')
-        offset += 16
+        # Parse unique_id (variable-length string)
+        unique_id, offset = self._unpack_string(raw, offset)  # ✅ FIXED: Variable-length instead of fixed 16 bytes
 
         # Parse cn_api_id
         cn_api_id, offset = self._unpack_string(raw, offset)
@@ -1127,4 +1130,147 @@ class TokenManager:
 
         except Exception as e:
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
+            return None
+
+    # ========================================================================
+    # TOKEN 9: GCHostPay1 Retry Token (Internal delayed callback check)
+    # ========================================================================
+
+    def encrypt_gchostpay1_retry_token(
+        self,
+        unique_id: str,
+        cn_api_id: str,
+        tx_hash: str,
+        context: str,
+        retry_count: int
+    ) -> Optional[str]:
+        """
+        Encrypt retry token for delayed ChangeNow query.
+
+        Token Structure:
+        - 16 bytes: unique_id (UUID format, padded)
+        - 1 byte: cn_api_id length + variable bytes
+        - 1 byte: tx_hash length + variable bytes
+        - 1 byte: context length + variable bytes
+        - 4 bytes: retry_count (uint32)
+        - 4 bytes: timestamp (uint32)
+        - 16 bytes: HMAC signature
+
+        Args:
+            unique_id: Unique transaction ID (e.g., batch_xxx)
+            cn_api_id: ChangeNow API transaction ID
+            tx_hash: Ethereum transaction hash
+            context: 'batch' or 'threshold'
+            retry_count: Current retry attempt number
+
+        Returns:
+            Base64-encoded encrypted token, or None if encryption fails
+        """
+        try:
+            print(f"🔐 [TOKEN_ENC] GCHostPay1 Retry: Encrypting retry token")
+
+            packed_data = bytearray()
+
+            # Pack unique_id (16 bytes, padded)
+            unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
+            packed_data.extend(unique_id_bytes)
+
+            # Pack strings
+            packed_data.extend(self._pack_string(cn_api_id))
+            packed_data.extend(self._pack_string(tx_hash))
+            packed_data.extend(self._pack_string(context))
+
+            # Pack retry_count (4 bytes)
+            packed_data.extend(struct.pack(">I", retry_count))
+
+            # Pack timestamp (4 bytes)
+            current_timestamp = int(time.time())
+            packed_data.extend(struct.pack(">I", current_timestamp))
+
+            # Generate HMAC signature using internal key
+            signature = hmac.new(
+                self.internal_key.encode(),
+                packed_data,
+                hashlib.sha256
+            ).digest()[:16]
+
+            packed_data.extend(signature)
+
+            # Base64 encode
+            token = base64.urlsafe_b64encode(bytes(packed_data)).decode('utf-8').rstrip('=')
+
+            print(f"✅ [TOKEN_ENC] Retry token encrypted successfully")
+            return token
+
+        except Exception as e:
+            print(f"❌ [TOKEN_ENC] Retry token encryption failed: {e}")
+            return None
+
+    def decrypt_gchostpay1_retry_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Decrypt retry token from delayed ChangeNow query.
+
+        Token is valid for 24 hours (retry tasks shouldn't take longer than that).
+
+        Args:
+            token: Base64 URL-safe encoded retry token
+
+        Returns:
+            Dictionary with decrypted data or None if invalid
+        """
+        try:
+            print(f"🔓 [TOKEN_DEC] GCHostPay1 Retry: Decrypting retry token")
+
+            # Decode
+            padding = '=' * (-len(token) % 4)
+            decrypted = base64.urlsafe_b64decode(token + padding)
+
+            payload = decrypted
+            offset = 0
+
+            # Extract unique_id (16 bytes)
+            unique_id = payload[offset:offset + 16].rstrip(b'\x00').decode('utf-8')
+            offset += 16
+
+            # Extract strings
+            cn_api_id, offset = self._unpack_string(payload, offset)
+            tx_hash, offset = self._unpack_string(payload, offset)
+            context, offset = self._unpack_string(payload, offset)
+
+            # Extract retry_count (4 bytes)
+            retry_count = struct.unpack(">I", payload[offset:offset + 4])[0]
+            offset += 4
+
+            # Extract timestamp (4 bytes)
+            timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
+            offset += 4
+
+            # Verify signature
+            signature = payload[offset:offset + 16]
+            expected_signature = hmac.new(
+                self.internal_key.encode(),
+                payload[:offset],
+                hashlib.sha256
+            ).digest()[:16]
+
+            if not hmac.compare_digest(signature, expected_signature):
+                raise ValueError("Invalid signature")
+
+            # Validate timestamp (retry tokens valid for 24 hours)
+            now = int(time.time())
+            if not (now - 86400 <= timestamp <= now + 300):
+                raise ValueError("Token expired")
+
+            print(f"✅ [TOKEN_DEC] Retry token decrypted successfully")
+
+            return {
+                'unique_id': unique_id,
+                'cn_api_id': cn_api_id,
+                'tx_hash': tx_hash,
+                'context': context,
+                'retry_count': retry_count
+            }
+
+        except Exception as e:
+            print(f"❌ [TOKEN_DEC] Retry token decryption failed: {e}")
             return None

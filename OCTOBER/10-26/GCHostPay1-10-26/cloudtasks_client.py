@@ -10,7 +10,9 @@ Supports:
 - GCHostPay3 → GCHostPay1 (payment execution response)
 """
 import json
+import datetime
 from google.cloud import tasks_v2
+from google.protobuf import timestamp_pb2
 from typing import Optional
 
 
@@ -68,14 +70,14 @@ class CloudTasksClient:
 
             # Add schedule time if delay is specified
             if schedule_delay_seconds > 0:
-                import datetime
-                schedule_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=schedule_delay_seconds)
-                task["schedule_time"] = schedule_time
+                d = datetime.datetime.utcnow() + datetime.timedelta(seconds=schedule_delay_seconds)
+                timestamp = timestamp_pb2.Timestamp()
+                timestamp.FromDatetime(d)
+                task["schedule_time"] = timestamp
+                print(f"⏰ [CLOUDTASKS] Task scheduled for {schedule_delay_seconds}s from now")
 
             print(f"📤 [CLOUDTASKS] Creating task to {target_url}")
             print(f"📦 [CLOUDTASKS] Queue: {queue_name}")
-            if schedule_delay_seconds > 0:
-                print(f"⏰ [CLOUDTASKS] Scheduled delay: {schedule_delay_seconds}s")
 
             # Create the task
             response = self.client.create_task(request={"parent": parent, "task": task})
@@ -211,4 +213,42 @@ class CloudTasksClient:
             queue_name=queue_name,
             target_url=target_url,
             payload=payload
+        )
+
+    # ========================================================================
+    # GCHostPay1 Retry (Delayed ChangeNow Query)
+    # ========================================================================
+
+    def enqueue_gchostpay1_retry_callback(
+        self,
+        queue_name: str,
+        target_url: str,
+        encrypted_token: str,
+        delay_seconds: int = 300
+    ) -> Optional[str]:
+        """
+        Enqueue delayed retry callback check to GCHostPay1.
+
+        This handles the timing issue where ETH payment completes before ChangeNow
+        swap finishes. We retry after a delay to check if amountTo is available.
+
+        Args:
+            queue_name: GCHostPay1 response queue name
+            target_url: GCHostPay1 /retry-callback-check endpoint URL
+            encrypted_token: Encrypted retry token with unique_id, cn_api_id, etc.
+            delay_seconds: Delay before retry (default: 300 = 5 minutes)
+
+        Returns:
+            Task name if successful, None if failed
+        """
+        print(f"🔄 [CLOUDTASKS] Enqueueing delayed retry callback to GCHostPay1")
+        print(f"⏱️ [CLOUDTASKS] Retry will execute in {delay_seconds}s")
+
+        payload = {"token": encrypted_token}
+
+        return self.create_task(
+            queue_name=queue_name,
+            target_url=target_url,
+            payload=payload,
+            schedule_delay_seconds=delay_seconds
         )

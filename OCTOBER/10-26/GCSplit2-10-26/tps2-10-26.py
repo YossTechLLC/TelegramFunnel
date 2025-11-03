@@ -124,13 +124,13 @@ def process_usdt_eth_estimate():
             print(f"❌ [ENDPOINT] ChangeNow client not available")
             abort(500, "ChangeNow client unavailable")
 
-        print(f"🌐 [ENDPOINT] Calling ChangeNow API for USDT→ETH estimate (with retry)")
+        print(f"🌐 [ENDPOINT] Calling ChangeNow API for USDT→{payout_currency.upper()} estimate (with retry)")
 
         estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
             from_currency="usdt",
-            to_currency="eth",
+            to_currency=payout_currency,
             from_network="eth",
-            to_network="eth",
+            to_network=payout_network,
             from_amount=str(adjusted_amount_usdt),
             flow="standard",
             type_="direct"
@@ -151,7 +151,7 @@ def process_usdt_eth_estimate():
 
         print(f"✅ [ENDPOINT] ChangeNow estimate received")
         print(f"💰 [ENDPOINT] From: {from_amount} USDT")
-        print(f"💰 [ENDPOINT] To: {to_amount} ETH (post-fee)")
+        print(f"💰 [ENDPOINT] To: {to_amount} {payout_currency.upper()} (post-fee)")
         print(f"📊 [ENDPOINT] Deposit fee: {deposit_fee}")
         print(f"📊 [ENDPOINT] Withdrawal fee: {withdrawal_fee}")
 

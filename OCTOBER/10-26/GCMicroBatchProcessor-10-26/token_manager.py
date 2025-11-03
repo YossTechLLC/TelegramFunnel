@@ -151,10 +151,18 @@ class TokenManager:
             timestamp = struct.unpack(">Q", payload[offset:offset + 8])[0]
             offset += 8
 
-            # Validate timestamp (5 minutes = 300 seconds)
+            # Validate timestamp (30 minutes = 1800 seconds)
+            # Extended window to accommodate:
+            # - ChangeNow retry delays (up to 15 minutes for 3 retries)
+            # - Cloud Tasks queue delays (2-5 minutes)
+            # - Safety margin (10 minutes)
             current_time = int(time.time())
-            if not (current_time - 300 <= timestamp <= current_time + 5):
+            token_age_seconds = current_time - timestamp
+            if not (current_time - 1800 <= timestamp <= current_time + 5):
+                print(f"❌ [TOKEN_DEC] Token expired: age={token_age_seconds}s ({token_age_seconds/60:.1f}m), max=1800s (30m)")
                 raise ValueError("Token expired")
+
+            print(f"✅ [TOKEN_DEC] Token age: {token_age_seconds}s ({token_age_seconds/60:.1f}m) - within 30-minute window")
 
             return {
                 "batch_conversion_id": batch_conversion_id,

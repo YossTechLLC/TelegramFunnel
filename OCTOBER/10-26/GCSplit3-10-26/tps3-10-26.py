@@ -109,13 +109,13 @@ def process_eth_client_swap():
         wallet_address = decrypted_data['wallet_address']
         payout_currency = decrypted_data['payout_currency']
         payout_network = decrypted_data['payout_network']
-        eth_amount = decrypted_data['eth_amount']  # Estimated
+        usdt_amount = decrypted_data['eth_amount']  # ✅ RENAMED: Actually contains USDT amount
         actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: ACTUAL ETH
 
         print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
         print(f"👤 [ENDPOINT] User ID: {user_id}")
         print(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
-        print(f"💰 [ENDPOINT] Estimated ETH: {eth_amount}")
+        print(f"💰 [ENDPOINT] USDT Amount: {usdt_amount}")
         print(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")  # ✅ ADDED
         print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
@@ -124,12 +124,12 @@ def process_eth_client_swap():
             print(f"❌ [ENDPOINT] ChangeNow client not available")
             abort(500, "ChangeNow client unavailable")
 
-        print(f"🌐 [ENDPOINT] Creating ChangeNow transaction ETH→{payout_currency.upper()} (with retry)")
+        print(f"🌐 [ENDPOINT] Creating ChangeNow transaction USDT→{payout_currency.upper()} (with retry)")
 
         transaction = changenow_client.create_fixed_rate_transaction_with_retry(
-            from_currency="eth",
+            from_currency="usdt",
             to_currency=payout_currency,
-            from_amount=eth_amount,
+            from_amount=usdt_amount,
             address=wallet_address,
             from_network="eth",
             to_network=payout_network,
@@ -159,7 +159,7 @@ def process_eth_client_swap():
         print(f"✅ [ENDPOINT] ChangeNow transaction created")
         print(f"🆔 [ENDPOINT] ChangeNow API ID: {cn_api_id}")
         print(f"🏦 [ENDPOINT] Payin address: {api_payin_address}")
-        print(f"💰 [ENDPOINT] From: {api_from_amount} {api_from_currency.upper()}")
+        print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
         print(f"💰 [ENDPOINT] To: {api_to_amount} {api_to_currency.upper()}")
 
         # Encrypt response token for GCSplit1
