@@ -392,10 +392,8 @@ class TokenManager:
         try:
             print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay2: Encrypting status check request")
 
-            unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
-
             packed_data = bytearray()
-            packed_data.extend(unique_id_bytes)
+            packed_data.extend(self._pack_string(unique_id))
             packed_data.extend(self._pack_string(cn_api_id))
             packed_data.extend(self._pack_string(from_currency.lower()))
             packed_data.extend(self._pack_string(from_network.lower()))
@@ -443,8 +441,7 @@ class TokenManager:
         offset = 0
 
         # Parse unique_id
-        unique_id = raw[offset:offset+16].rstrip(b'\x00').decode('utf-8')
-        offset += 16
+        unique_id, offset = self._unpack_string(raw, offset)
 
         # Parse cn_api_id
         cn_api_id, offset = self._unpack_string(raw, offset)
@@ -546,10 +543,8 @@ class TokenManager:
         try:
             print(f"🔐 [TOKEN_ENC] GCHostPay2→GCHostPay1: Encrypting status response")
 
-            unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
-
             packed_data = bytearray()
-            packed_data.extend(unique_id_bytes)
+            packed_data.extend(self._pack_string(unique_id))
             packed_data.extend(self._pack_string(cn_api_id))
             packed_data.extend(self._pack_string(status))
             packed_data.extend(self._pack_string(from_currency.lower()))
@@ -598,8 +593,7 @@ class TokenManager:
         offset = 0
 
         # Parse unique_id
-        unique_id = raw[offset:offset+16].rstrip(b'\x00').decode('utf-8')
-        offset += 16
+        unique_id, offset = self._unpack_string(raw, offset)
 
         # Parse cn_api_id
         cn_api_id, offset = self._unpack_string(raw, offset)
@@ -697,10 +691,8 @@ class TokenManager:
             print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay3: Encrypting payment request")
             print(f"📋 [TOKEN_ENC] Context: {context}")
 
-            unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
-
             packed_data = bytearray()
-            packed_data.extend(unique_id_bytes)
+            packed_data.extend(self._pack_string(unique_id))
             packed_data.extend(self._pack_string(cn_api_id))
             packed_data.extend(self._pack_string(from_currency.lower()))
             packed_data.extend(self._pack_string(from_network.lower()))
@@ -749,8 +741,7 @@ class TokenManager:
         offset = 0
 
         # Parse unique_id
-        unique_id = raw[offset:offset+16].rstrip(b'\x00').decode('utf-8')
-        offset += 16
+        unique_id, offset = self._unpack_string(raw, offset)
 
         # Parse cn_api_id
         cn_api_id, offset = self._unpack_string(raw, offset)
@@ -838,10 +829,8 @@ class TokenManager:
         try:
             print(f"🔐 [TOKEN_ENC] GCHostPay3→GCHostPay1: Encrypting payment response")
 
-            unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
-
             packed_data = bytearray()
-            packed_data.extend(unique_id_bytes)
+            packed_data.extend(self._pack_string(unique_id))
             packed_data.extend(self._pack_string(cn_api_id))
             packed_data.extend(self._pack_string(tx_hash))
             packed_data.extend(self._pack_string(tx_status))
@@ -1171,9 +1160,8 @@ class TokenManager:
 
             packed_data = bytearray()
 
-            # Pack unique_id (16 bytes, padded)
-            unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
-            packed_data.extend(unique_id_bytes)
+            # Pack unique_id (variable length)
+            packed_data.extend(self._pack_string(unique_id))
 
             # Pack strings
             packed_data.extend(self._pack_string(cn_api_id))
@@ -1228,9 +1216,8 @@ class TokenManager:
             payload = decrypted
             offset = 0
 
-            # Extract unique_id (16 bytes)
-            unique_id = payload[offset:offset + 16].rstrip(b'\x00').decode('utf-8')
-            offset += 16
+            # Extract unique_id (variable length)
+            unique_id, offset = self._unpack_string(payload, offset)
 
             # Extract strings
             cn_api_id, offset = self._unpack_string(payload, offset)
