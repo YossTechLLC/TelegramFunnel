@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 60
+**Last Updated:** 2025-11-04 Session 61
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,141 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-04 Session 61: Remove Channel Message Auto-Deletion - Prioritize Payment Transparency ✅
+
+**Decision:** Remove 60-second auto-deletion of payment prompt messages from open channels to preserve payment transparency and user trust.
+
+**Status:** ✅ **CODE COMPLETE** - Pending deployment
+
+**Context:**
+- Original design: Auto-delete channel messages after 60 seconds to keep channels "clean"
+- Implementation: `asyncio.get_event_loop().call_later(60, delete_message)` in broadcast and message utilities
+- User experience problem: Payment prompts disappear mid-transaction
+- Impact: User panic, distrust, support burden, poor UX
+
+**Problem:**
+```
+User Flow (WITH AUTO-DELETE):
+T=0s   → User sees subscription tier buttons in channel
+T=5s   → User clicks tier, receives payment prompt
+T=15s  → User sends crypto payment
+T=60s  → ⚠️ MESSAGE DISAPPEARS FROM CHANNEL
+T=120s → User panics: "Was this a scam?"
+
+Result: Lost trust, confused users, support burden
+```
+
+**Architecture Decision:**
+
+**1. Remove Auto-Deletion Entirely**
+- Delete `call_later(60, delete_message)` from `broadcast_manager.py`
+- Delete `call_later(60, delete_message)` from `message_utils.py`
+- Allow messages to persist permanently in channels
+- Prioritize user trust over channel aesthetics
+
+**2. Rationale: Trust > Cleanliness**
+```
+Professional Payment System Standards:
+✅ Payment evidence must be preserved
+✅ Users need reference to payment request
+✅ Transparency builds trust
+❌ Deleting payment records = red flag
+```
+
+**3. Trade-off Analysis**
+```
+Benefits:
+✅ Payment transparency maintained
+✅ User trust improved
+✅ Reduced support burden
+✅ Aligns with payment industry standards
+✅ No breaking changes
+
+Trade-offs:
+⚠️ Channels may accumulate old prompts
+⚠️ Less "clean" aesthetic
+
+Mitigation (Future):
+→ Edit-in-place status updates ("✅ Payment Received")
+→ Periodic admin cleanup tools
+→ Extended timers (24h instead of 60s)
+```
+
+**4. Files Modified**
+```python
+# TelePay10-26/broadcast_manager.py
+# REMOVED lines 101-110:
+# - msg_id extraction
+# - del_url construction
+# - asyncio.call_later(60, delete)
+
+# TelePay10-26/message_utils.py
+# REMOVED lines 23-32:
+# - msg_id extraction
+# - del_url construction
+# - asyncio.call_later(60, delete)
+# UPDATED docstring: removed "with auto-deletion after 60 seconds"
+```
+
+**5. User Experience Improvement**
+```
+User Flow (WITHOUT AUTO-DELETE):
+T=0s   → User sees subscription tier buttons in channel
+T=5s   → User clicks tier, receives payment prompt
+T=15s  → User sends crypto payment
+T=60s  → ✅ MESSAGE STILL VISIBLE (user confident)
+T=120s → User receives invite, payment evidence intact
+
+Result: Trust maintained, professional UX, reduced support burden
+```
+
+**Alternative Solutions Considered:**
+
+1. **Edit-in-place updates (DEFERRED)**
+   - Update message to show "✅ Payment Received" when complete
+   - Requires message_id tracking in database
+   - More complex implementation
+   - Future enhancement candidate
+
+2. **Extended timer (REJECTED)**
+   - Increase from 60s to 10+ minutes
+   - Band-aid solution, doesn't solve core problem
+   - Messages still disappear eventually
+
+3. **Remove deletion (IMPLEMENTED)**
+   - Simplest solution
+   - Highest trust impact
+   - Easiest to deploy
+
+**Impact:**
+- ✅ Payment transparency restored
+- ✅ User trust and confidence improved
+- ✅ Support burden reduced
+- ✅ Aligns with professional payment system standards
+- ✅ Fully backward compatible
+- ✅ No changes to private messages (already permanent)
+- ✅ No changes to webhook contracts or database
+
+**Documentation:**
+- Created `CHANNEL_MESSAGE_AUTO_DELETE_UX_BUG_FIX.md`
+- Comprehensive root cause analysis
+- User experience comparison (before/after)
+- Alternative solutions analysis
+- Future enhancement roadmap
+
+**Deployment:**
+- Code changes: COMPLETE ✅
+- Build TelePay10-26: PENDING ⏳
+- Deploy to Cloud Run: PENDING ⏳
+- Test verification: PENDING ⏳
+
+**Future Enhancements:**
+- Phase 2: Edit-in-place payment status updates
+- Phase 3: Admin cleanup tools for old messages
+- Phase 4: Conditional deletion (only after payment confirmed)
+
+---
 
 ### 2025-11-04 Session 60: Multi-Currency Payment Support - ERC-20 Token Architecture ✅ DEPLOYED
 

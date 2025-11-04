@@ -1,8 +1,83 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 60 - **ERC-20 TOKEN SUPPORT DEPLOYED** 🪙
+**Last Updated:** 2025-11-04 Session 61 - **CHANNEL MESSAGE AUTO-DELETE UX BUG FIXED** 📨
 
 ## Recent Updates
+
+## 2025-11-04 Session 61: Channel Message Auto-Delete UX Bug Fixed ✅
+
+**CRITICAL UX BUG FIX**: Removed 60-second auto-deletion of payment prompt messages from open channels to preserve payment transparency and user trust
+
+**Problem:**
+- Payment prompt messages automatically deleted after 60 seconds from open channels
+- Users sending crypto payments saw evidence disappear mid-transaction
+- Created panic, confusion, and distrust: "Where did the payment request go? Was this a scam?"
+- Support burden increased from users questioning legitimacy
+- Professional payment systems never delete payment records
+- Design intent (keep channels clean) created unintended negative UX consequences
+
+**Solution:**
+- Removed auto-deletion timers from broadcast and message utility functions
+- Payment prompts now remain visible permanently in channels
+- Users maintain payment evidence throughout transaction lifecycle
+- Updated docstrings to reflect new behavior
+
+**Files Modified:**
+1. **`TelePay10-26/broadcast_manager.py`**:
+   - Removed lines 101-110 (auto-deletion code)
+   - Removed `msg_id` extraction and `asyncio.call_later(60, delete_message)` timer
+   - Function: `broadcast_hash_links()` - subscription tier button broadcasts
+   - Messages now persist permanently in open channels
+
+2. **`TelePay10-26/message_utils.py`**:
+   - Removed lines 23-32 (auto-deletion code)
+   - Updated docstring: "Send a message to a Telegram chat" (removed "with auto-deletion after 60 seconds")
+   - Function: `send_message()` - general channel message sending
+   - Messages now persist permanently
+
+**Technical Details:**
+- Original code: `asyncio.get_event_loop().call_later(60, lambda: requests.post(del_url, ...))`
+- Scheduled deletion 60 seconds after message sent
+- Deleted ALL channel broadcast messages (subscription tiers, prompts)
+- No changes to private messages (already permanent)
+
+**User Experience Improvement:**
+- **Before**: Payment prompt visible for 60s → disappears → user panic
+- **After**: Payment prompt visible permanently → user confident → trust maintained
+- Payment evidence preserved throughout transaction
+- Users can reference original payment request anytime
+- Reduced support burden from confused/panicked users
+
+**Documentation:**
+- Created `CHANNEL_MESSAGE_AUTO_DELETE_UX_BUG_FIX.md` - comprehensive analysis including:
+  - Root cause investigation
+  - Design intent vs reality comparison
+  - User experience flow before/after
+  - Alternative solutions considered
+  - Future enhancement options (edit-in-place status updates)
+
+**Impact:**
+- ✅ Payment transparency restored
+- ✅ User trust improved
+- ✅ Aligns with professional payment system standards
+- ✅ Reduced support burden
+- ✅ No breaking changes - fully backward compatible
+
+**Trade-offs:**
+- Channels may accumulate old subscription prompts over time
+- Mitigable with future enhancements (edit-in-place updates, periodic cleanup)
+- **Decision**: Prioritize user trust over channel aesthetics
+
+**Deployment Status:**
+- ✅ Code changes complete
+- ⏳ Pending: Build TelePay10-26 Docker image
+- ⏳ Pending: Deploy to Cloud Run
+
+**Next Steps:**
+- Build and deploy TelePay10-26 with fix
+- Test subscription flow: verify messages remain visible after 60+ seconds
+- Monitor user feedback on improved transparency
+- Consider Phase 2: Edit-in-place payment status updates
 
 ## 2025-11-04 Session 60: ERC-20 Token Support - Multi-Currency Payment Execution ✅
 

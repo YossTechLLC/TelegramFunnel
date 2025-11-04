@@ -98,15 +98,5 @@ class BroadcastManager:
                     timeout=10,
                 )
                 resp.raise_for_status()
-                msg_id = resp.json()["result"]["message_id"]
-                del_url = f"https://api.telegram.org/bot{self.bot_token}/deleteMessage"
-                asyncio.get_event_loop().call_later(
-                    60,
-                    lambda: requests.post(
-                        del_url,
-                        json={"chat_id": chat_id, "message_id": msg_id},
-                        timeout=5,
-                    ),
-                )
             except Exception as e:
                 logging.error("send error to %s: %s", chat_id, e)
