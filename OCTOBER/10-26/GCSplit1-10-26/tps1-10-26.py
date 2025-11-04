@@ -504,7 +504,7 @@ def receive_usdt_eth_estimate():
             wallet_address=wallet_address,
             payout_currency=payout_currency,
             payout_network=payout_network,
-            eth_amount=pure_market_eth_value,
+            eth_amount=from_amount_usdt,  # ✅ FIXED: Pass USDT amount, not token quantity
             actual_eth_amount=actual_eth_amount  # ✅ ADDED: Pass ACTUAL ETH to GCSplit3
         )
 

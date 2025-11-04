@@ -1,8 +1,151 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-03 Session 56 - **TOKEN EXPIRATION FIX** ⏰
+**Last Updated:** 2025-11-04 Session 58 - **GCSPLIT3 USDT AMOUNT MULTIPLICATION BUG FIX** 🔧
 
 ## Recent Updates
+
+## 2025-11-04 Session 58: GCSplit3 USDT Amount Multiplication Bug - ChangeNOW Receiving Wrong Amounts 🔧
+
+**CRITICAL DATA FLOW FIX**: GCSplit1 passing token quantity to GCSplit3 instead of USDT amount, causing 100,000x multiplier error in ChangeNOW API
+
+**Root Cause:**
+- GCSplit1 calculates `pure_market_eth_value` (596,726 SHIB) for database storage
+- **BUG**: GCSplit1 passes `pure_market_eth_value` to GCSplit3 instead of `from_amount_usdt`
+- GCSplit3 uses this as USDT input amount for ChangeNOW API
+- ChangeNOW receives: **596,726 USDT → SHIB** instead of **5.48 USDT → SHIB**
+- Result: 108,703x multiplier error ❌
+
+**Production Error:**
+```
+ChangeNOW API Response:
+{
+    "expectedAmountFrom": 596726.70043,  // ❌ WRONG - Should be 5.48949167
+    "expectedAmountTo": 61942343929.62906,  // ❌ Wrong calculation from wrong input
+}
+
+Expected:
+{
+    "expectedAmountFrom": 5.48949167,  // ✅ CORRECT USDT amount
+    "expectedAmountTo": ~596726,  // ✅ Correct SHIB output
+}
+```
+
+**Impact:**
+- All USDT→ClientCurrency swaps failing (SHIB, DOGE, PEPE, etc.)
+- ChangeNOW expecting platform to deposit 596,726 USDT (we only have 5.48 USDT)
+- Transactions fail, clients never receive tokens
+- Complete payment workflow broken for all token payouts
+
+**Fix Applied:**
+- **File**: `GCSplit1-10-26/tps1-10-26.py`
+- **Line**: 507
+- **Change**: `eth_amount=pure_market_eth_value` → `eth_amount=from_amount_usdt`
+- **Result**: GCSplit3 now receives correct USDT amount (5.48) instead of token quantity (596,726)
+
+**Code Change:**
+```python
+# BEFORE (WRONG):
+encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
+    ...
+    eth_amount=pure_market_eth_value,  # ❌ Token quantity (596,726 SHIB)
+    ...
+)
+
+# AFTER (CORRECT):
+encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
+    ...
+    eth_amount=from_amount_usdt,  # ✅ USDT amount (5.48949167)
+    ...
+)
+```
+
+**Deployment:**
+- ✅ Code fixed in GCSplit1-10-26/tps1-10-26.py
+- ✅ Docker image built: gcr.io/telepay-459221/gcsplit1-10-26:latest
+- ✅ Deployed to Cloud Run: gcsplit1-10-26 (revision 00017-vcq)
+- ✅ Service URL: https://gcsplit1-10-26-291176869049.us-central1.run.app
+- ✅ Health check: All components healthy
+
+**Verification:**
+- Service health: ✅ healthy
+- Database: ✅ connected
+- Token manager: ✅ initialized
+- Cloud Tasks: ✅ configured
+
+**Prevention:**
+- Variable naming convention established (usdt_amount vs token_quantity)
+- Documentation created: `GCSPLIT3_USDT_AMOUNT_MULTIPLICATION_BUG_ANALYSIS.md`
+- Monitoring alert recommended: ChangeNOW `expectedAmountFrom` > $10,000
+
+**Related Files:**
+- `/GCSPLIT3_USDT_AMOUNT_MULTIPLICATION_BUG_ANALYSIS.md` (comprehensive analysis)
+- `GCSplit1-10-26/tps1-10-26.py` (single line fix)
+
+---
+
+## 2025-11-04 Session 57: Numeric Precision Overflow - GCSplit1 Cannot Store Large Token Quantities 🔢
+
+**CRITICAL DATABASE FIX**: GCSplit1-10-26 failing to insert SHIB/DOGE transactions due to NUMERIC precision overflow
+
+**Root Cause:**
+- Database column `split_payout_request.to_amount` defined as `NUMERIC(12,8)`
+- Maximum value: **9,999.99999999** (4 digits before decimal)
+- Attempted to insert: **596,726.7004304786 SHIB** (6 digits before decimal)
+- Result: `numeric field overflow` error ❌
+- **Low-value tokens (SHIB, DOGE, PEPE) have extremely large quantities**
+
+**Production Error:**
+```
+❌ [DB_INSERT] Error: {'S': 'ERROR', 'V': 'ERROR', 'C': '22003',
+    'M': 'numeric field overflow',
+    'D': 'A field with precision 12, scale 8 must round to an absolute value less than 10^4.'}
+❌ [ENDPOINT_2] Failed to insert into database
+```
+
+**Impact:**
+- ✅ GCWebhook1 → NowPayments payment received
+- ✅ GCSplit2 → ChangeNow USDT→ETH estimate generated
+- ❌ GCSplit1 → Cannot store split_payout_request (OVERFLOW)
+- ❌ Entire payment workflow blocked
+- ❌ Client never receives payout
+
+**Tables Affected:**
+1. `split_payout_request.to_amount`: NUMERIC(12,8) → NUMERIC(30,8) ✅
+2. `split_payout_request.from_amount`: NUMERIC(10,2) → NUMERIC(20,8) ✅
+3. `split_payout_que.from_amount`: NUMERIC(12,8) → NUMERIC(20,8) ✅
+4. `split_payout_que.to_amount`: NUMERIC(24,12) → NUMERIC(30,8) ✅
+5. `split_payout_hostpay.from_amount`: NUMERIC(12,8) → NUMERIC(20,8) ✅
+
+**New Precision Limits:**
+- **USDT/ETH amounts**: NUMERIC(20,8) → max **999,999,999,999.99999999**
+- **Token quantities**: NUMERIC(30,8) → max **9,999,999,999,999,999,999,999.99999999**
+
+**Migration Applied:**
+- ✅ Database: `client_table`
+- ✅ Migration file: `/scripts/fix_numeric_precision_overflow_v2.sql`
+- ✅ All 5 column types updated successfully
+- ✅ Test insert: 596,726 SHIB → **SUCCESS** 🎉
+
+**Verification:**
+```sql
+split_payout_request.to_amount:      NUMERIC(30,8) ✅ LARGE
+split_payout_request.from_amount:    NUMERIC(20,8) ✅ GOOD
+split_payout_que.from_amount:        NUMERIC(20,8) ✅ GOOD
+split_payout_que.to_amount:          NUMERIC(30,8) ✅ LARGE
+split_payout_hostpay.from_amount:    NUMERIC(20,8) ✅ GOOD
+```
+
+**Additional Findings:**
+- Found 12 other columns with NUMERIC < 20 (low priority - mostly USD prices)
+- `payout_batches.payout_amount_crypto`: NUMERIC(18,8) ⚠️ (may need future fix)
+- `failed_transactions.from_amount`: NUMERIC(18,8) ⚠️ (may need future fix)
+- USD price columns (sub_prices, thresholds): NUMERIC(10,2) → unlikely to overflow
+
+**Deployment:**
+- ✅ Migration executed on production database
+- ✅ Schema verified with test inserts
+- ✅ GCSplit1 ready to handle large token quantities
+- ℹ️ No service rebuild required (database-only change)
 
 ## 2025-11-03 Session 56: Token Expiration - GCMicroBatchProcessor Rejecting Valid Callbacks ⏰
 

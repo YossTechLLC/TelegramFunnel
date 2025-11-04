@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-03 Session 56
+**Last Updated:** 2025-11-04 Session 58
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,145 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-04 Session 58: Data Flow Separation - Calculate vs Pass Through Values ✅
+
+**Decision:** Always pass **original input amounts** to downstream services, keep **calculated values** separate for database storage only.
+
+**Context:**
+- GCSplit1 was passing `pure_market_eth_value` (596,726 SHIB) to GCSplit3
+- `pure_market_eth_value` is a **calculated token quantity** for database storage
+- GCSplit3 needs the **original USDT amount** (5.48) for ChangeNOW API
+- Bug resulted in 108,703x multiplier error in ChangeNOW requests
+
+**Problem Pattern:**
+- Reusing calculated values (token quantities) as input amounts (USDT)
+- Confusion between semantic data types (USDT vs tokens)
+- Generic variable names (`eth_amount`) hiding actual data type
+
+**Solution:**
+1. **Separation of Concerns**:
+   - `pure_market_eth_value` = Database storage ONLY (token quantity for accounting)
+   - `from_amount_usdt` = Pass to downstream services (original USDT for swaps)
+
+2. **Variable Naming Convention**:
+   - Use semantic names: `usdt_amount`, `token_quantity`, not generic `eth_amount`
+   - Add type hints in comments when variable names are ambiguous
+   - Log both values in same statement: `print(f"Creating swap: {usdt_in} USDT → {token_out} {currency}")`
+
+3. **Architectural Pattern**:
+   - Each service performs its own calculations
+   - Don't reuse intermediate calculations across services
+   - Always pass original amounts, not derived/calculated values
+
+**Implementation:**
+```python
+# GCSplit1-10-26/tps1-10-26.py:507
+
+# BEFORE (WRONG):
+encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
+    eth_amount=pure_market_eth_value,  # ❌ Calculated token quantity
+)
+
+# AFTER (CORRECT):
+encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
+    eth_amount=from_amount_usdt,  # ✅ Original USDT amount
+)
+```
+
+**Benefits:**
+- Each service receives expected input types
+- Clear separation between accounting data and transaction data
+- Prevents confusion between different currency types
+- Reduces risk of magnitude errors (100,000x multipliers)
+
+**Related to:**
+- Session 57: NUMERIC Precision Strategy (also caused by SHIB token quantities)
+- Pattern: Both issues involved confusion between USDT amounts and token quantities
+
+---
+
+### 2025-11-04 Session 57: NUMERIC Precision Strategy for Cryptocurrency Amounts ✅
+
+**Decision:** Use differentiated NUMERIC precision based on data type:
+- **NUMERIC(20,8)** for USDT/ETH amounts (fiat-equivalent values)
+- **NUMERIC(30,8)** for token quantities (low-value tokens like SHIB, DOGE)
+
+**Context:**
+- GCSplit1 failing to insert transactions with large SHIB quantities (596,726 tokens)
+- Original schema: `NUMERIC(12,8)` max value = **9,999.99999999**
+- Low-value tokens can have quantities in **millions or billions**
+- Different crypto assets need different precision ranges
+
+**Problem Analysis:**
+```
+Token Examples & Quantities:
+- BTC:  0.00123456    ← small quantity, high value (NUMERIC(20,8) ✅)
+- ETH:  1.23456789    ← medium quantity, high value (NUMERIC(20,8) ✅)
+- DOGE: 10,000.123    ← large quantity, low value (NUMERIC(30,8) ✅)
+- SHIB: 596,726.7004  ← HUGE quantity, micro value (NUMERIC(30,8) ✅)
+- PEPE: 1,000,000+    ← extreme quantity (NUMERIC(30,8) ✅)
+```
+
+**Options Considered:**
+
+**Option 1: Single Large Precision for All (e.g., NUMERIC(30,18))**
+- ✅ One-size-fits-all solution
+- ❌ Wastes storage space for USDT amounts (typically < $10,000)
+- ❌ Excessive decimal precision (18 places) unnecessary for most tokens
+- ❌ Potential performance impact on aggregations
+
+**Option 2: Differentiated Precision by Data Type (CHOSEN)**
+- ✅ Optimal storage efficiency
+- ✅ Precision matched to data semantics
+- ✅ `NUMERIC(20,8)` for USDT/ETH: max 999,999,999,999.99999999
+- ✅ `NUMERIC(30,8)` for token quantities: max 9,999,999,999,999,999,999,999.99999999
+- ✅ 8 decimal places sufficient for crypto (satoshi-level precision)
+- ⚠️ Requires understanding column semantics
+
+**Option 3: Dynamic Scaling Based on Token Type**
+- ❌ Too complex - would require token registry
+- ❌ Cannot be enforced at database level
+- ❌ Prone to errors when new tokens added
+
+**Implementation:**
+
+**Column Categories:**
+1. **USDT/Fiat Amounts** → `NUMERIC(20,8)`
+   - `split_payout_request.from_amount` (USDT after fees)
+   - `split_payout_que.from_amount` (ETH amounts)
+   - `split_payout_hostpay.from_amount` (ETH amounts)
+
+2. **Token Quantities** → `NUMERIC(30,8)`
+   - `split_payout_request.to_amount` (target token quantity)
+   - `split_payout_que.to_amount` (client token quantity)
+
+3. **High-Precision Rates** → `NUMERIC(20,18)` (unchanged)
+   - `actual_eth_amount` (NowPayments outcome)
+
+**Migration Strategy:**
+```sql
+ALTER TABLE split_payout_request ALTER COLUMN from_amount TYPE NUMERIC(20,8);
+ALTER TABLE split_payout_request ALTER COLUMN to_amount TYPE NUMERIC(30,8);
+-- (repeated for all affected columns)
+```
+
+**Testing:**
+- ✅ Test insert: 596,726 SHIB → Success
+- ✅ Existing data migrated without loss
+- ✅ All amount ranges supported
+
+**Tradeoffs:**
+- **Pro:** Optimal storage and performance
+- **Pro:** Semantic clarity (column type indicates data semantics)
+- **Pro:** Supports all known crypto asset types
+- **Con:** Developers must understand precision requirements
+- **Con:** Future tokens with extreme properties may need schema update
+
+**Future Considerations:**
+- Monitor for tokens with quantities > 10^22 (extremely unlikely)
+- Consider adding database comments documenting precision rationale
+- May need to increase precision for experimental tokens (e.g., fractionalized NFTs)
 
 ### 2025-11-03 Session 56: 30-Minute Token Expiration for Async Batch Callbacks ✅
 
