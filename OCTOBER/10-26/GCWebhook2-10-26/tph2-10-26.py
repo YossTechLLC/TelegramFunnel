@@ -46,7 +46,9 @@ try:
         instance_connection_name=config.get('instance_connection_name'),
         db_name=config.get('db_name'),
         db_user=config.get('db_user'),
-        db_password=config.get('db_password')
+        db_password=config.get('db_password'),
+        payment_min_tolerance=config.get('payment_min_tolerance', 0.50),
+        payment_fallback_tolerance=config.get('payment_fallback_tolerance', 0.75)
     )
     print(f"✅ [APP] Database manager initialized for payment validation")
 except Exception as e:

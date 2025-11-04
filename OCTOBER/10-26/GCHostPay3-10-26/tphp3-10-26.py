@@ -16,7 +16,7 @@ from config_manager import ConfigManager
 from token_manager import TokenManager
 from database_manager import DatabaseManager
 from cloudtasks_client import CloudTasksClient
-from wallet_manager import WalletManager
+from wallet_manager import WalletManager, TOKEN_CONFIGS
 from error_classifier import ErrorClassifier
 from alerting import AlertingService
 
@@ -189,9 +189,10 @@ def execute_eth_payment():
             print(f"📋 [ENDPOINT] Context: {context}")
             print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
             print(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
-            print(f"💎 [ENDPOINT] ACTUAL ETH: {actual_eth_amount} (from NowPayments)")  # ✅ ADDED
-            print(f"📊 [ENDPOINT] ESTIMATED ETH: {estimated_eth_amount} (from ChangeNow)")  # ✅ ADDED
-            print(f"💰 [ENDPOINT] PAYMENT AMOUNT: {payment_amount} ETH")  # ✅ THIS IS WHAT WE'LL SEND
+            print(f"💰 [ENDPOINT] Currency: {from_currency.upper()}")  # ✅ SHOW CURRENCY TYPE
+            print(f"💎 [ENDPOINT] ACTUAL: {actual_eth_amount} {from_currency.upper()} (from NowPayments)")
+            print(f"📊 [ENDPOINT] ESTIMATED: {estimated_eth_amount} {from_currency.upper()} (from ChangeNow)")
+            print(f"💰 [ENDPOINT] PAYMENT AMOUNT: {payment_amount} {from_currency.upper()}")  # ✅ DYNAMIC CURRENCY
             print(f"🏦 [ENDPOINT] Payin Address: {payin_address}")
             if last_error_code:
                 print(f"⚠️ [ENDPOINT] Previous error: {last_error_code}")
@@ -209,32 +210,89 @@ def execute_eth_payment():
                 "unique_id": unique_id
             }), 200
 
-        # Execute ETH payment (SINGLE ATTEMPT - NO INFINITE RETRY)
+        # Execute payment (SINGLE ATTEMPT - NO INFINITE RETRY)
         if not wallet_manager:
             print(f"❌ [ENDPOINT] Wallet manager not available")
             abort(500, "Wallet manager unavailable")
 
-        # ✅ ADDED: Check wallet balance BEFORE payment
-        print(f"🔍 [ENDPOINT] Checking wallet balance before payment...")
-        wallet_balance = wallet_manager.get_wallet_balance()
+        # ============================================================================
+        # CURRENCY TYPE DETECTION & BALANCE CHECKING
+        # ============================================================================
 
+        print(f"🔍 [ENDPOINT] Detecting currency type: {from_currency}")
+
+        # Determine if this is native ETH or ERC-20 token
+        if from_currency.lower() == 'eth':
+            # Native ETH transfer
+            currency_type = 'native'
+            print(f"💎 [ENDPOINT] Currency type: NATIVE ETH")
+
+            # Check ETH balance
+            print(f"🔍 [ENDPOINT] Checking ETH balance...")
+            wallet_balance = wallet_manager.get_wallet_balance()
+            balance_label = "ETH"
+
+        elif from_currency.lower() in TOKEN_CONFIGS:
+            # ERC-20 token transfer
+            currency_type = 'erc20'
+            token_config = TOKEN_CONFIGS[from_currency.lower()]
+            print(f"💎 [ENDPOINT] Currency type: ERC-20 TOKEN ({token_config['name']})")
+            print(f"📝 [ENDPOINT] Contract: {token_config['address']}")
+            print(f"🔢 [ENDPOINT] Decimals: {token_config['decimals']}")
+
+            # Check ERC-20 token balance
+            print(f"🔍 [ENDPOINT] Checking {from_currency.upper()} balance...")
+            wallet_balance = wallet_manager.get_erc20_balance(
+                token_contract_address=token_config['address'],
+                token_decimals=token_config['decimals']
+            )
+            balance_label = from_currency.upper()
+
+        else:
+            # Unsupported currency
+            error_msg = f"Unsupported currency: {from_currency}"
+            print(f"❌ [ENDPOINT] {error_msg}")
+            abort(400, error_msg)
+
+        # Validate sufficient balance
         if wallet_balance < payment_amount:
-            error_msg = f"Insufficient funds: need {payment_amount} ETH, have {wallet_balance} ETH"
+            error_msg = f"Insufficient funds: need {payment_amount} {balance_label}, have {wallet_balance} {balance_label}"
             print(f"❌ [ENDPOINT] {error_msg}")
             abort(400, error_msg)
         else:
-            print(f"✅ [ENDPOINT] Sufficient balance: {wallet_balance} ETH >= {payment_amount} ETH")
+            print(f"✅ [ENDPOINT] Sufficient balance: {wallet_balance} {balance_label} >= {payment_amount} {balance_label}")
 
-        print(f"💰 [ENDPOINT] Executing ETH payment (attempt {attempt_count}/3)")
-        print(f"💎 [ENDPOINT] Amount to send: {payment_amount} ETH (ACTUAL from NowPayments)")
+        # ============================================================================
+        # PAYMENT EXECUTION - Route based on currency type
+        # ============================================================================
+
+        print(f"💰 [ENDPOINT] Executing {balance_label} payment (attempt {attempt_count}/3)")
+        print(f"💎 [ENDPOINT] Amount to send: {payment_amount} {balance_label}")
 
         # NEW: Wrap payment execution in try/except to catch failures
         try:
-            tx_result = wallet_manager.send_eth_payment_with_infinite_retry(
-                to_address=payin_address,
-                amount=payment_amount,  # ✅ UPDATED: Use ACTUAL amount instead of wrong estimate
-                unique_id=unique_id
-            )
+            if currency_type == 'native':
+                # Native ETH transfer
+                print(f"🔀 [ENDPOINT] Routing to native ETH transfer method")
+                tx_result = wallet_manager.send_eth_payment_with_infinite_retry(
+                    to_address=payin_address,
+                    amount=payment_amount,
+                    unique_id=unique_id
+                )
+
+            elif currency_type == 'erc20':
+                # ERC-20 token transfer
+                print(f"🔀 [ENDPOINT] Routing to ERC-20 token transfer method")
+                tx_result = wallet_manager.send_erc20_token(
+                    token_contract_address=token_config['address'],
+                    to_address=payin_address,
+                    amount=payment_amount,
+                    token_decimals=token_config['decimals'],
+                    unique_id=unique_id
+                )
+
+            else:
+                raise Exception(f"Unknown currency type: {currency_type}")
 
             # Validate result
             if not tx_result or tx_result.get('status') != 'success':

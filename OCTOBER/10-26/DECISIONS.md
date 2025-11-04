@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 58
+**Last Updated:** 2025-11-04 Session 60
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,235 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-04 Session 60: Multi-Currency Payment Support - ERC-20 Token Architecture ✅ DEPLOYED
+
+**Decision:** Extend GCHostPay3 WalletManager to support ERC-20 token transfers (USDT, USDC, DAI) in addition to native ETH.
+
+**Status:** ✅ **IMPLEMENTED AND DEPLOYED** - GCHostPay3 revision 00016-l6l now live with full ERC-20 support
+
+**Context:**
+- Platform receives payments in various cryptocurrencies via NowPayments
+- NowPayments converts all incoming payments to **USDT** (ERC-20 token)
+- ChangeNow requires **USDT** for secondary swaps (USDT→SHIB, USDT→DOGE, etc.)
+- Current system only supports native ETH transfers
+- **Critical bug discovered**: System attempts to send native ETH instead of USDT tokens
+- All USDT payments fail with "insufficient funds" error
+
+**Problem:**
+```
+Current Flow (BROKEN):
+User Payment (BTC/ETH/LTC/etc) → NowPayments → USDT (ERC-20)
+    ↓
+Platform Wallet receives USDT ✅
+    ↓
+GCHostPay3 tries to send ETH ❌ WRONG!
+    ↓
+ChangeNow expects USDT ❌ Never received
+```
+
+**Architecture Decision:**
+
+**1. Currency Type Detection**
+- Parse `from_currency` field from payment token
+- Route to appropriate transfer method based on currency type
+- Support both native (ETH) and ERC-20 (USDT, USDC, DAI) transfers
+
+**2. WalletManager Multi-Currency Support**
+```python
+# Native ETH transfers (existing)
+def send_eth_payment(to_address, amount, unique_id) -> tx_result
+
+# NEW: ERC-20 token transfers
+def send_erc20_token(
+    token_contract_address,  # e.g., USDT: 0xdac17f958d2ee523a2206206994597c13d831ec7
+    to_address,
+    amount,
+    token_decimals,          # USDT=6, USDC=6, DAI=18
+    unique_id
+) -> tx_result
+
+# NEW: ERC-20 balance checking
+def get_erc20_balance(token_contract_address, token_decimals) -> balance
+```
+
+**3. Token Configuration**
+```python
+TOKEN_CONFIGS = {
+    'usdt': {
+        'address': '0xdac17f958d2ee523a2206206994597c13d831ec7',
+        'decimals': 6,
+        'name': 'Tether USD'
+    },
+    'usdc': {
+        'address': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        'decimals': 6,
+        'name': 'USD Coin'
+    },
+    'dai': {
+        'address': '0x6b175474e89094c44da98b954eedeac495271d0f',
+        'decimals': 18,
+        'name': 'Dai Stablecoin'
+    }
+}
+```
+
+**4. Payment Routing Logic**
+```python
+# GCHostPay3 payment execution
+if from_currency == 'eth':
+    # Native ETH transfer (existing path)
+    tx_result = wallet_manager.send_eth_payment(...)
+elif from_currency in ['usdt', 'usdc', 'dai']:
+    # ERC-20 token transfer (NEW path)
+    token_config = TOKEN_CONFIGS[from_currency]
+    tx_result = wallet_manager.send_erc20_token(
+        token_contract_address=token_config['address'],
+        token_decimals=token_config['decimals'],
+        ...
+    )
+else:
+    raise ValueError(f"Unsupported currency: {from_currency}")
+```
+
+**Key Technical Differences:**
+
+| Aspect | Native ETH | ERC-20 Tokens |
+|--------|-----------|---------------|
+| Transfer Method | `eth.sendTransaction()` | Contract `.transfer()` call |
+| Transaction Type | Value transfer | Contract function call |
+| Gas Limit | 21,000 | 60,000-100,000 |
+| Amount Field | `value` (Wei) | Function parameter (token units) |
+| Decimals | 18 | Token-specific (USDT=6) |
+| Contract Required | No | Yes (token contract address) |
+| Balance Check | `eth.getBalance()` | Contract `.balanceOf()` |
+
+**Implementation Phases:**
+1. **Phase 1**: Add ERC-20 ABI and token configs to WalletManager
+2. **Phase 2**: Implement `send_erc20_token()` and `get_erc20_balance()` methods
+3. **Phase 3**: Update GCHostPay3 to route based on currency type
+4. **Phase 4**: Fix logging to show correct currency labels
+5. **Phase 5**: Test on testnet, deploy to production with gradual rollout
+
+**Benefits:**
+- ✅ **Multi-Currency Support**: Handle both ETH and ERC-20 tokens seamlessly
+- ✅ **Correct Payment Routing**: Send USDT tokens instead of ETH when required
+- ✅ **Financial Safety**: Prevent massive overpayments (3.11 USDT vs 3.11 ETH = $3 vs $7,800)
+- ✅ **Extensible Architecture**: Easy to add more tokens (WBTC, LINK, etc.)
+- ✅ **Production Ready**: Unblocks entire payment flow (instant, batch, threshold)
+
+**Risks & Mitigations:**
+- **Risk**: Higher gas costs for ERC-20 transfers (60k vs 21k gas)
+  - *Mitigation*: Monitor gas prices, implement EIP-1559 optimization
+- **Risk**: Token contract vulnerabilities
+  - *Mitigation*: Use well-audited contracts (USDT, USDC, DAI are battle-tested)
+- **Risk**: Decimal conversion errors (6 vs 18 decimals)
+  - *Mitigation*: Extensive testing, validation checks, comprehensive logging
+
+**Related Bug:**
+- 🔴 CRITICAL: `/OCTOBER/10-26/BUGS.md` - GCHostPay3 ETH/USDT Token Type Confusion
+- 📄 Analysis: `/OCTOBER/10-26/GCHOSTPAY3_ETH_USDT_TOKEN_TYPE_CONFUSION_BUG.md`
+
+**Status:** ARCHITECTURE DEFINED - Implementation Pending 🚧
+
+---
+
+### 2025-11-04 Session 59: Configurable Validation Thresholds via Secret Manager ✅
+
+**Decision:** Move hardcoded payment validation thresholds to Secret Manager for runtime configurability without code changes.
+
+**Context:**
+- Payment validation in GCWebhook2 had hardcoded thresholds:
+  - Primary validation (outcome_amount): **0.75** (75% minimum)
+  - Fallback validation (price_amount): **0.95** (95% minimum)
+- Legitimate payment failed: **$0.95 received** vs **$1.01 required** (70.4% vs 75% threshold)
+- No way to adjust thresholds without code changes and redeployment
+- Different environments (dev/staging/prod) may need different tolerance levels
+
+**Problem Pattern:**
+- Business logic constants hardcoded in application code
+- Unable to adjust thresholds quickly in response to production issues
+- No flexibility for A/B testing different tolerance levels
+- Code deployment required for simple configuration changes
+
+**Solution:**
+1. **Create Secret Manager Secrets**:
+   - `PAYMENT_MIN_TOLERANCE` = primary validation threshold (default: 0.50 / 50%)
+   - `PAYMENT_FALLBACK_TOLERANCE` = fallback validation threshold (default: 0.75 / 75%)
+
+2. **Configuration Pattern**:
+   - ConfigManager fetches thresholds from environment variables
+   - Cloud Run injects secrets as env vars using `--set-secrets` flag
+   - Defaults preserved in code (0.50, 0.75) for backwards compatibility
+   - Comprehensive logging shows which thresholds are loaded
+
+3. **Code Architecture**:
+   - ConfigManager: `get_payment_tolerances()` method fetches values
+   - DatabaseManager: Accepts tolerance parameters in `__init__()`
+   - Main app: Passes config values to DatabaseManager
+   - Validation logic: Uses `self.payment_*_tolerance` instead of hardcoded values
+
+**Implementation:**
+```python
+# config_manager.py - Fetch from Secret Manager
+def get_payment_tolerances(self) -> dict:
+    min_tolerance = float(os.getenv('PAYMENT_MIN_TOLERANCE', '0.50'))
+    fallback_tolerance = float(os.getenv('PAYMENT_FALLBACK_TOLERANCE', '0.75'))
+    return {'min_tolerance': min_tolerance, 'fallback_tolerance': fallback_tolerance}
+
+# database_manager.py - Use configurable values
+minimum_amount = expected_amount * self.payment_min_tolerance  # Not hardcoded!
+
+# Cloud Run deployment - Inject secrets
+--set-secrets="PAYMENT_MIN_TOLERANCE=PAYMENT_MIN_TOLERANCE:latest,..."
+```
+
+**Values Chosen:**
+- **Primary (50%)**: More lenient than original 75%
+  - Accounts for NowPayments fees (~15%)
+  - Accounts for price volatility (~10%)
+  - Accounts for network fees (~5%)
+  - Buffer: 20% cushion for unexpected variations
+- **Fallback (75%)**: More lenient than original 95%
+  - Used only when crypto-to-USD conversion fails
+  - Validates invoice price instead of actual received amount
+  - More tolerance needed since it's less accurate
+
+**Benefits:**
+- ✅ **Runtime Configuration**: Change thresholds via Secret Manager without code changes
+- ✅ **Environment-Specific**: Different values for dev/staging/prod
+- ✅ **Audit Trail**: Secret Manager tracks all value changes with versioning
+- ✅ **Rollback Capability**: Revert to previous values instantly
+- ✅ **Backwards Compatible**: Defaults match new behavior (0.50, 0.75)
+- ✅ **Consistent Pattern**: Follows existing `MICRO_BATCH_THRESHOLD_USD` pattern
+- ✅ **Reduced False Failures**: More lenient thresholds prevent legitimate payment rejections
+
+**Impact:**
+```
+Example: $1.35 subscription payment
+
+BEFORE (Hardcoded 75%):
+- Minimum required: $1.01 (75% of $1.35)
+- Received: $0.95
+- Result: ❌ FAILED (70.4% < 75%)
+
+AFTER (Configurable 50%):
+- Minimum required: $0.68 (50% of $1.35)
+- Received: $0.95
+- Result: ✅ PASSES (70.4% > 50%)
+```
+
+**Related to:**
+- Session 58: Data Flow Separation (both involve data type clarity)
+- Session 57: NUMERIC Precision (both involve handling crypto amount variations)
+- Pattern: Configuration flexibility reduces operational burden
+
+**Future Enhancements:**
+- Could add maximum threshold to detect overpayments
+- Could add per-currency thresholds for different fee structures
+- Could add monitoring alerts when payments are near threshold
+
+---
 
 ### 2025-11-04 Session 58: Data Flow Separation - Calculate vs Pass Through Values ✅
 

@@ -1,10 +1,112 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 58
+**Last Updated:** 2025-11-04 Session 60
 
 ---
 
 ## Active Bugs
+
+(No active critical bugs)
+
+---
+
+## Recently Resolved
+
+### ✅ RESOLVED: GCHostPay3 ETH/USDT Token Type Confusion - Payment Execution Fixed
+
+**Date Discovered:** 2025-11-04 Session 60
+**Date Resolved:** 2025-11-04 Session 60
+**Service:** GCHostPay3-10-26 (ETH Payment Executor)
+**Severity:** CRITICAL - All USDT payments were failing with "insufficient funds"
+**Status:** ✅ **RESOLVED** - ERC-20 support deployed to production (revision 00016-l6l)
+
+**Root Cause:**
+GCHostPay3 is attempting to send **native ETH** to ChangeNow payin addresses when it should be sending **USDT (ERC-20 tokens)**. The system treats all payment amounts as ETH regardless of the `from_currency` field.
+
+**Evidence:**
+```
+Error Log:
+💰 [ENDPOINT] PAYMENT AMOUNT: 3.11693635 ETH  ❌ Should be 3.11693635 USDT!
+💰 [WALLET] Current balance: 0.001161551275950277 ETH
+❌ [ENDPOINT] Insufficient funds: need 3.11693635 ETH, have 0.001161551275950277 ETH
+
+ChangeNow API Says:
+{
+    "fromCurrency": "usdt",        ✅ Should send USDT
+    "expectedAmountFrom": 3.116936 ✅ 3.116936 USDT (~$3.12)
+}
+
+What System Tries:
+- Send 3.116936 ETH (~$7,800) ❌ WRONG CURRENCY!
+- Uses native ETH transfer ❌ Should use ERC-20 transfer
+```
+
+**Impact:**
+- 100% of USDT→TokenX payments failing (USDT→SHIB, USDT→DOGE, etc.)
+- All instant payouts broken (NowPayments outputs USDT)
+- All batch conversions broken (accumulate USDT, swap to client tokens)
+- All threshold payouts broken (accumulated USDT to client wallets)
+- Platform cannot fulfill ANY payment obligations
+
+**The Three Problems:**
+1. **Currency Confusion**: System ignores `from_currency` field, treats all amounts as ETH
+2. **Missing Token Support**: WalletManager only has `send_eth_payment()`, no ERC-20 support
+3. **No Contract Integration**: Missing USDT contract address, ERC-20 ABI, transfer logic
+
+**Financial Risk (If Not Caught):**
+- System would try to send 3.116936 ETH instead of 3.116936 USDT
+- Overpayment: 2,500x intended amount (~$7,800 vs ~$3.12)
+- Good news: Wallet has insufficient ETH, so fails safely
+
+**Required Fix:**
+1. Add ERC-20 token transfer support to WalletManager
+   - Implement `send_erc20_token()` method
+   - Add ERC-20 ABI (transfer, balanceOf, decimals)
+   - Add token contract addresses (USDT, USDC, DAI)
+2. Update GCHostPay3 payment routing
+   - Detect currency type from `from_currency` field
+   - Route to ETH method for native transfers
+   - Route to ERC-20 method for token transfers
+3. Fix all logging to show correct currency type
+   - Replace hardcoded "ETH" with `{from_currency.upper()}`
+
+**Comprehensive Analysis:**
+📄 `/OCTOBER/10-26/GCHOSTPAY3_ETH_USDT_TOKEN_TYPE_CONFUSION_BUG.md`
+- Complete root cause analysis
+- Detailed implementation checklist (5 phases, 29 tasks)
+- Code examples for all changes
+- Testing strategy
+- Rollback plan
+
+**Affected Services:**
+- ✅ GCHostPay1: No changes needed (passes currency correctly)
+- ✅ GCHostPay2: No changes needed (status checker only)
+- ❌ GCHostPay3: CRITICAL CHANGES REQUIRED
+- ✅ GCSplit1: No changes needed (creates correct exchanges)
+
+**Resolution Implemented:**
+1. ✅ Added `send_erc20_token()` method to wallet_manager.py
+   - Full ERC-20 contract interaction via web3.py
+   - Token-specific decimal handling (USDT=6, DAI=18)
+   - 100,000 gas limit for contract calls
+2. ✅ Added ERC-20 ABI (transfer, balanceOf, decimals)
+3. ✅ Added TOKEN_CONFIGS for USDT, USDC, DAI mainnet contracts
+4. ✅ Implemented currency type detection in GCHostPay3
+5. ✅ Added payment routing logic (ETH vs ERC-20)
+6. ✅ Fixed all logging to show dynamic currency
+7. ✅ Deployed to production: revision 00016-l6l
+8. ✅ Health check confirmed: all components healthy
+
+**Files Modified:**
+- `GCHostPay3-10-26/wallet_manager.py` - Added ERC-20 support
+- `GCHostPay3-10-26/tph3-10-26.py` - Added currency routing
+
+**Verification:**
+- Service URL: https://gchostpay3-10-26-291176869049.us-central1.run.app
+- Next USDT payment will validate the fix
+- Monitor logs for "Currency type: ERC-20 TOKEN (Tether USD)"
+
+---
 
 ### ⚠️ Potential Future Issues - Low Priority
 

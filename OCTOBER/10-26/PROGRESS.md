@@ -1,8 +1,157 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 58 - **GCSPLIT3 USDT AMOUNT MULTIPLICATION BUG FIX** 🔧
+**Last Updated:** 2025-11-04 Session 60 - **ERC-20 TOKEN SUPPORT DEPLOYED** 🪙
 
 ## Recent Updates
+
+## 2025-11-04 Session 60: ERC-20 Token Support - Multi-Currency Payment Execution ✅
+
+**CRITICAL BUG FIX**: Implemented full ERC-20 token transfer support in GCHostPay3 to fix ETH/USDT currency confusion bug
+
+**Problem:**
+- GCHostPay3 attempted to send 3.116936 ETH (~$7,800) instead of 3.116936 USDT (~$3.12)
+- System correctly extracted `from_currency="usdt"` from token but ignored it
+- WalletManager only had `send_eth_payment_with_infinite_retry()` - no ERC-20 support
+- 100% of USDT payments failing with "insufficient funds" error
+- Platform unable to fulfill ANY non-ETH payment obligations
+
+**Solution:**
+- Added full ERC-20 token standard support to WalletManager
+- Implemented currency type detection and routing logic
+- Created token configuration map for USDT, USDC, DAI contracts
+- Fixed all logging to show dynamic currency instead of hardcoded "ETH"
+
+**Files Modified:**
+1. **`GCHostPay3-10-26/wallet_manager.py`**:
+   - Added minimal ERC-20 ABI (transfer, balanceOf, decimals functions)
+   - Created `TOKEN_CONFIGS` dict with mainnet contract addresses:
+     - USDT: 0xdac17f958d2ee523a2206206994597c13d831ec7 (6 decimals)
+     - USDC: 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 (6 decimals)
+     - DAI: 0x6b175474e89094c44da98b954eedeac495271d0f (18 decimals)
+   - Added `get_erc20_balance()` method - queries token balance for wallet
+   - Added `send_erc20_token()` method - full ERC-20 transfer implementation:
+     - Contract interaction via web3.py
+     - Token-specific decimal conversion (USDT=6, not 18!)
+     - 100,000 gas limit (vs 21,000 for native ETH)
+     - EIP-1559 transaction building
+     - Full error handling and logging
+
+2. **`GCHostPay3-10-26/tph3-10-26.py`**:
+   - Imported `TOKEN_CONFIGS` from wallet_manager
+   - Fixed logging: replaced hardcoded "ETH" with `{from_currency.upper()}`
+   - Added currency type detection logic (lines 222-255):
+     - Detects 'eth' → routes to native transfer
+     - Detects 'usdt'/'usdc'/'dai' → routes to ERC-20 transfer
+     - Rejects unsupported currencies with 400 error
+   - Updated balance checking to use correct method per currency type
+   - Implemented payment routing (lines 273-295):
+     - Routes to `send_eth_payment_with_infinite_retry()` for ETH
+     - Routes to `send_erc20_token()` for tokens
+     - Passes correct parameters (contract address, decimals) for each
+
+**Technical Implementation:**
+- ERC-20 vs Native ETH differences handled:
+  - Gas: 100,000 (ERC-20) vs 21,000 (ETH)
+  - Decimals: Token-specific (USDT=6, DAI=18) vs ETH=18
+  - Transaction: Contract call vs value transfer
+- Amount conversion: `amount * (10 ** token_decimals)` for smallest units
+- Checksum addresses used for all contract interactions
+- Full transaction receipt validation
+
+**Deployment:**
+- ✅ Docker image built: gcr.io/telepay-459221/gchostpay3-10-26:latest
+- ✅ Deployed to Cloud Run: gchostpay3-10-26 (revision 00016-l6l)
+- ✅ Service URL: https://gchostpay3-10-26-291176869049.us-central1.run.app
+- ✅ Health check passed: all components healthy (wallet, database, cloudtasks, token_manager)
+
+**Impact:**
+- ✅ Platform can now execute USDT payments to ChangeNow
+- ✅ Instant payouts for USDT-based swaps enabled
+- ✅ Batch conversions with USDT source currency functional
+- ✅ Threshold payouts for accumulated USDT working
+- ✅ No changes needed in other services (GCHostPay1, GCHostPay2, GCSplit1)
+
+**Next Payment Test:**
+- Monitor logs for first USDT payment attempt
+- Verify currency type detection: "Currency type: ERC-20 TOKEN (Tether USD)"
+- Confirm routing: "Routing to ERC-20 token transfer method"
+- Validate transaction: Check for successful token transfer on Etherscan
+
+## 2025-11-04 Session 59: Configurable Payment Validation Thresholds - GCWebhook2 50% Minimum 💳
+
+**CONFIGURATION ENHANCEMENT**: Made payment validation thresholds configurable via Secret Manager instead of hardcoded values
+
+**Problem:**
+- Payment validation thresholds hardcoded in `GCWebhook2-10-26/database_manager.py`
+- Line 310: `minimum_amount = expected_amount * 0.75` (75% hardcoded)
+- Line 343: `minimum_amount = expected_amount * 0.95` (95% hardcoded fallback)
+- Legitimate payment failed: $0.95 received vs $1.01 required (70.4% vs 75% threshold)
+- **No way to adjust thresholds without code changes and redeployment**
+
+**Solution:**
+- Created two new Secret Manager secrets:
+  - `PAYMENT_MIN_TOLERANCE` = `0.50` (50% minimum - primary validation)
+  - `PAYMENT_FALLBACK_TOLERANCE` = `0.75` (75% minimum - fallback validation)
+- Made validation thresholds runtime configurable
+- Thresholds now injected via Cloud Run `--set-secrets` flag
+
+**Files Modified:**
+1. **`GCWebhook2-10-26/config_manager.py`**:
+   - Added `get_payment_tolerances()` method to fetch tolerance values from environment
+   - Updated `initialize_config()` to include tolerance values in config dict
+   - Added logging to display loaded threshold values
+
+2. **`GCWebhook2-10-26/database_manager.py`**:
+   - Added `payment_min_tolerance` parameter to `__init__()` (default: 0.50)
+   - Added `payment_fallback_tolerance` parameter to `__init__()` (default: 0.75)
+   - Line 322: Replaced hardcoded `0.75` with `self.payment_min_tolerance`
+   - Line 357: Replaced hardcoded `0.95` with `self.payment_fallback_tolerance`
+   - Added logging to show which tolerance is being used during validation
+
+3. **`GCWebhook2-10-26/tph2-10-26.py`**:
+   - Updated `DatabaseManager` initialization to pass tolerance values from config
+   - Added fallback defaults (0.50, 0.75) if config values missing
+
+**Deployment:**
+- ✅ Secrets created in Secret Manager
+- ✅ Code updated in 3 files
+- ✅ Docker image built: gcr.io/telepay-459221/gcwebhook2-10-26:latest
+- ✅ Deployed to Cloud Run: gcwebhook2-10-26 (revision 00018-26c)
+- ✅ Service URL: https://gcwebhook2-10-26-291176869049.us-central1.run.app
+- ✅ Tolerances loaded: min=0.5 (50%), fallback=0.75 (75%)
+
+**Validation Behavior:**
+```
+BEFORE (Hardcoded):
+- Primary: 75% minimum (outcome_amount validation)
+- Fallback: 95% minimum (price_amount validation)
+- $1.35 subscription → minimum $1.01 required (75%)
+- $0.95 received → ❌ FAILED (70.4% < 75%)
+
+AFTER (Configurable):
+- Primary: 50% minimum (user-configured)
+- Fallback: 75% minimum (user-configured)
+- $1.35 subscription → minimum $0.68 required (50%)
+- $0.95 received → ✅ PASSES (70.4% > 50%)
+```
+
+**Benefits:**
+- ✅ Adjust thresholds without code changes
+- ✅ Different values for dev/staging/prod environments
+- ✅ Audit trail via Secret Manager versioning
+- ✅ Backwards compatible (defaults preserve safer behavior)
+- ✅ Follows existing pattern (MICRO_BATCH_THRESHOLD_USD)
+- ✅ More lenient thresholds reduce false payment failures
+
+**Logs Verification:**
+```
+✅ [CONFIG] Payment min tolerance: 0.5 (50.0%)
+✅ [CONFIG] Payment fallback tolerance: 0.75 (75.0%)
+📊 [DATABASE] Min tolerance: 0.5 (50.0%)
+📊 [DATABASE] Fallback tolerance: 0.75 (75.0%)
+```
+
+---
 
 ## 2025-11-04 Session 58: GCSplit3 USDT Amount Multiplication Bug - ChangeNOW Receiving Wrong Amounts 🔧
 

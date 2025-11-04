@@ -14,7 +14,15 @@ class DatabaseManager:
     Manages database connections and payment validation for GCWebhook2-10-26.
     """
 
-    def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str):
+    def __init__(
+        self,
+        instance_connection_name: str,
+        db_name: str,
+        db_user: str,
+        db_password: str,
+        payment_min_tolerance: float = 0.50,
+        payment_fallback_tolerance: float = 0.75
+    ):
         """
         Initialize the DatabaseManager.
 
@@ -23,16 +31,22 @@ class DatabaseManager:
             db_name: Database name
             db_user: Database user
             db_password: Database password
+            payment_min_tolerance: Minimum tolerance for outcome_amount validation (default: 0.50)
+            payment_fallback_tolerance: Minimum tolerance for price_amount fallback (default: 0.75)
         """
         self.instance_connection_name = instance_connection_name
         self.db_name = db_name
         self.db_user = db_user
         self.db_password = db_password
+        self.payment_min_tolerance = payment_min_tolerance
+        self.payment_fallback_tolerance = payment_fallback_tolerance
         self.connector = Connector()
 
         print(f"🗄️ [DATABASE] DatabaseManager initialized for payment validation")
         print(f"📊 [DATABASE] Instance: {instance_connection_name}")
         print(f"📊 [DATABASE] Database: {db_name}")
+        print(f"📊 [DATABASE] Min tolerance: {payment_min_tolerance} ({payment_min_tolerance*100}%)")
+        print(f"📊 [DATABASE] Fallback tolerance: {payment_fallback_tolerance} ({payment_fallback_tolerance*100}%)")
 
     def get_connection(self):
         """
@@ -304,10 +318,10 @@ class DatabaseManager:
                 if outcome_usd is not None:
                     print(f"💰 [VALIDATION] Outcome in USD: ${outcome_usd:.2f}")
 
-                    # Calculate minimum acceptable amount
-                    # Account for NowPayments fees (~15%) + tolerance (5%)
-                    # Merchant should receive at least 75% of subscription price
-                    minimum_amount = expected_amount * 0.75
+                    # Calculate minimum acceptable amount using configurable tolerance
+                    minimum_amount = expected_amount * self.payment_min_tolerance
+                    print(f"📊 [VALIDATION] Using min tolerance: {self.payment_min_tolerance} ({self.payment_min_tolerance*100}%)")
+                    print(f"📊 [VALIDATION] Minimum acceptable: ${minimum_amount:.2f} USD")
 
                     if outcome_usd < minimum_amount:
                         error_msg = (
@@ -340,7 +354,9 @@ class DatabaseManager:
                 print(f"⚠️ [VALIDATION] WARNING: Validating invoice price, not actual received amount")
 
                 actual_usd = float(price_amount)
-                minimum_amount = expected_amount * 0.95  # 5% tolerance
+                minimum_amount = expected_amount * self.payment_fallback_tolerance
+                print(f"📊 [VALIDATION] Using fallback tolerance: {self.payment_fallback_tolerance} ({self.payment_fallback_tolerance*100}%)")
+                print(f"📊 [VALIDATION] Minimum acceptable: ${minimum_amount:.2f} USD")
 
                 if actual_usd < minimum_amount:
                     error_msg = f"Insufficient invoice amount: ${actual_usd:.2f}, expected at least ${minimum_amount:.2f}"

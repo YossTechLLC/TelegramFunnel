@@ -44,6 +44,37 @@ class ConfigManager:
             print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
             return None
 
+    def get_payment_tolerances(self) -> dict:
+        """
+        Fetch payment validation tolerance thresholds.
+
+        Returns:
+            Dict with 'min_tolerance' and 'fallback_tolerance' as floats
+        """
+        try:
+            # Fetch from environment variables (Cloud Run injects from Secret Manager)
+            min_tolerance_str = os.getenv('PAYMENT_MIN_TOLERANCE', '0.50')
+            fallback_tolerance_str = os.getenv('PAYMENT_FALLBACK_TOLERANCE', '0.75')
+
+            min_tolerance = float(min_tolerance_str)
+            fallback_tolerance = float(fallback_tolerance_str)
+
+            print(f"✅ [CONFIG] Payment min tolerance: {min_tolerance} ({min_tolerance*100}%)")
+            print(f"✅ [CONFIG] Payment fallback tolerance: {fallback_tolerance} ({fallback_tolerance*100}%)")
+
+            return {
+                'min_tolerance': min_tolerance,
+                'fallback_tolerance': fallback_tolerance
+            }
+
+        except Exception as e:
+            print(f"❌ [CONFIG] Error loading payment tolerances: {e}")
+            print(f"⚠️ [CONFIG] Using defaults: min=0.50, fallback=0.75")
+            return {
+                'min_tolerance': 0.50,
+                'fallback_tolerance': 0.75
+            }
+
     def initialize_config(self) -> dict:
         """
         Initialize and return all configuration values for GCWebhook2.
@@ -99,6 +130,9 @@ class ConfigManager:
         if not db_password:
             print(f"⚠️ [CONFIG] Warning: DATABASE_PASSWORD_SECRET not available")
 
+        # Fetch payment validation tolerances
+        payment_tolerances = self.get_payment_tolerances()
+
         config = {
             # Secrets
             'success_url_signing_key': success_url_signing_key,
@@ -107,7 +141,10 @@ class ConfigManager:
             'instance_connection_name': instance_connection_name,
             'db_name': db_name,
             'db_user': db_user,
-            'db_password': db_password
+            'db_password': db_password,
+            # Payment validation tolerances
+            'payment_min_tolerance': payment_tolerances['min_tolerance'],
+            'payment_fallback_tolerance': payment_tolerances['fallback_tolerance']
         }
 
         # Log configuration status
@@ -115,5 +152,7 @@ class ConfigManager:
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
         print(f"   TELEGRAM_BOT_TOKEN: {'✅' if config['telegram_bot_token'] else '❌'}")
         print(f"   DATABASE_CREDENTIALS: {'✅' if all([db_name, db_user, db_password, instance_connection_name]) else '❌'}")
+        print(f"   PAYMENT_MIN_TOLERANCE: {config['payment_min_tolerance']} ({config['payment_min_tolerance']*100}%)")
+        print(f"   PAYMENT_FALLBACK_TOLERANCE: {config['payment_fallback_tolerance']} ({config['payment_fallback_tolerance']*100}%)")
 
         return config
