@@ -1,8 +1,38 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 70 - **Split_Payout Tables Phase 1 DEPLOYED** ✅
+**Last Updated:** 2025-11-07 Session 71 - **Instant Payout TP Fee Fix DEPLOYED** ✅
 
 ## Recent Updates
+
+## 2025-11-07 Session 71: Instant Payout TP Fee Retention Fix DEPLOYED ✅
+
+**CRITICAL REVENUE FIX DEPLOYED**: Fixed from_amount assignment in GCHostPay1 token decryption to use estimated_eth_amount
+
+**Issue Identified:**
+- ChangeNOW receiving 0.00149302 ETH (unadjusted) instead of expected 0.001269067 ETH (fee-adjusted)
+- Platform losing 15% TP fee on every instant payout transaction
+- TP fee was being sent to ChangeNOW instead of retained by platform
+
+**Root Cause:**
+- GCHostPay1-10-26/token_manager.py:238 assigned from_amount = first_amount (actual_eth_amount)
+- Should have been from_amount = estimated_eth_amount (fee-adjusted amount)
+
+**Changes Implemented:**
+- ✅ GCHostPay1 token_manager.py:238: Changed from_amount assignment from first_amount to estimated_eth_amount
+- ✅ Updated comments to clarify: actual_eth_amount for auditing, estimated_eth_amount for payment execution
+- ✅ Maintained backward compatibility: Threshold payouts unaffected (both amounts equal in old format)
+
+**Deployments:**
+- ✅ gchostpay1-10-26: Revision `gchostpay1-10-26-00022-h54`, 100% traffic
+
+**Impact:**
+- ✅ Platform now retains 15% TP fee on instant payouts
+- ✅ ChangeNOW receives correct fee-adjusted amount matching swap creation
+- ✅ No impact on threshold payout flow (backward compatible)
+- ✅ Financial integrity restored
+
+**Documentation:**
+- ✅ Created INSTANT_PAYOUT_ISSUE_ANALYSIS_1.md with complete flow analysis and fix details
 
 ## 2025-11-07 Session 70: Split_Payout Tables Phase 1 - actual_eth_amount Fix DEPLOYED ✅
 

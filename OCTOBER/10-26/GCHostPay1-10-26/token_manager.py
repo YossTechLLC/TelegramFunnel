@@ -235,9 +235,9 @@ class TokenManager:
             "cn_api_id": cn_api_id,
             "from_currency": from_currency,
             "from_network": from_network,
-            "from_amount": first_amount,  # Keep for backward compat
-            "actual_eth_amount": actual_eth_amount,      # ✅ ADD THIS
-            "estimated_eth_amount": estimated_eth_amount, # ✅ ADD THIS
+            "from_amount": estimated_eth_amount,  # ✅ FIX: Use fee-adjusted amount (instant) or single amount (threshold)
+            "actual_eth_amount": actual_eth_amount,      # For auditing: Full amount from NowPayments
+            "estimated_eth_amount": estimated_eth_amount, # Fee-adjusted amount matching ChangeNOW swap
             "payin_address": payin_address,
             "timestamp": timestamp
         }

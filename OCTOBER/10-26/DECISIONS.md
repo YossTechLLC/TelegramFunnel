@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 70 - **Phase 1 actual_eth_amount Implementation**
+**Last Updated:** 2025-11-07 Session 71 - **Instant Payout TP Fee Retention Fix**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,56 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-07 Session 71: Fix from_amount Assignment in Token Decryption
+
+**Decision:** Use estimated_eth_amount (fee-adjusted) instead of first_amount (unadjusted) for from_amount in GCHostPay1 token decryption
+
+**Context:**
+- Instant payouts were sending unadjusted ETH amount (0.00149302) to ChangeNOW instead of fee-adjusted amount (0.001269067)
+- Platform losing 15% TP fee revenue on every instant payout (sent to ChangeNOW instead of retained)
+- GCHostPay1 token_manager.py:238 incorrectly assigned from_amount = first_amount (actual_eth_amount)
+- from_amount flows through GCHostPay1→GCHostPay3 and determines payment amount
+
+**Options Considered:**
+1. **Fix in GCHostPay1 token_manager.py line 238** ✅ SELECTED
+   - Change: from_amount = first_amount → from_amount = estimated_eth_amount
+   - Pros: Single-line fix, maintains backward compatibility, fixes root cause
+   - Cons: None identified
+
+2. **Fix in GCSplit1 token packing (swap order)**
+   - Swap: actual_eth_amount and estimated_eth_amount positions
+   - Pros: Would work for instant payouts
+   - Cons: Breaks backward compatibility with threshold payouts, requires multiple service changes
+
+3. **Fix in GCHostPay3 payment logic**
+   - Change: Prioritize estimated_eth_amount over actual_eth_amount
+   - Pros: None (infeasible)
+   - Cons: GCHostPay3 doesn't receive these fields in token (only from_amount)
+
+**Rationale:**
+- Option 1 is the cleanest fix with minimal risk
+- For instant payouts: estimated_eth_amount contains the fee-adjusted amount (0.001269067)
+- For threshold payouts: both amounts are equal (backward compatibility maintained)
+- Single-line change with clear intent and proper comments
+
+**Implementation:**
+- File: GCHostPay1-10-26/token_manager.py
+- Line 238: from_amount = estimated_eth_amount
+- Comment: "Use fee-adjusted amount (instant) or single amount (threshold)"
+- Deployment: gchostpay1-10-26 revision 00022-h54
+
+**Consequences:**
+- ✅ Platform retains 15% TP fee on instant payouts
+- ✅ ChangeNOW receives amount matching swap creation request
+- ✅ Financial integrity restored
+- ✅ Threshold payouts unaffected
+- ✅ No database changes required
+- ✅ No changes to other services required
+
+**Validation:**
+- Created INSTANT_PAYOUT_ISSUE_ANALYSIS_1.md documenting full flow
+- Next instant payout will validate fix with ChangeNOW API response
 
 ### 2025-11-07 Session 70: actual_eth_amount Storage in split_payout_que
 
