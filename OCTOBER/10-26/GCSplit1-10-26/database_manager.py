@@ -232,7 +232,8 @@ class DatabaseManager:
         payout_address: str,
         refund_address: str = "",
         flow: str = "standard",
-        type_: str = "direct"
+        type_: str = "direct",
+        actual_eth_amount: float = 0.0  # ✅ NEW: ACTUAL ETH from NowPayments
     ) -> bool:
         """
         Insert a new record into the split_payout_que table.
@@ -256,6 +257,7 @@ class DatabaseManager:
             refund_address: Refund address (optional)
             flow: Exchange flow type
             type_: Exchange type
+            actual_eth_amount: ACTUAL ETH from NowPayments (default 0 for backward compat)
 
         Returns:
             True if successful, False otherwise
@@ -271,6 +273,7 @@ class DatabaseManager:
             print(f"🏦 [DB_INSERT_QUE] Payout: {payout_address}")
             print(f"💰 [DB_INSERT_QUE] From: {from_amount} {from_currency.upper()}")
             print(f"💰 [DB_INSERT_QUE] To: {to_amount} {to_currency.upper()}")
+            print(f"💎 [DB_INSERT_QUE] ACTUAL ETH: {actual_eth_amount}")  # ✅ NEW LOG
 
             # SQL INSERT statement
             insert_query = """
@@ -278,12 +281,12 @@ class DatabaseManager:
                     unique_id, cn_api_id, user_id, closed_channel_id,
                     from_currency, to_currency, from_network, to_network,
                     from_amount, to_amount, payin_address, payout_address, refund_address,
-                    flow, type
+                    flow, type, actual_eth_amount
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
-                    %s, %s
+                    %s, %s, %s
                 )
             """
 
@@ -293,7 +296,8 @@ class DatabaseManager:
                 from_network.upper(), to_network.upper(),
                 from_amount, to_amount,
                 payin_address, payout_address, refund_address,
-                flow, type_
+                flow, type_,
+                actual_eth_amount  # ✅ NEW VALUE
             )
 
             # Execute insertion

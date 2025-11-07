@@ -1,8 +1,48 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 69 - **Split_Payout Tables Implementation Review** 📊
+**Last Updated:** 2025-11-07 Session 70 - **Split_Payout Tables Phase 1 DEPLOYED** ✅
 
 ## Recent Updates
+
+## 2025-11-07 Session 70: Split_Payout Tables Phase 1 - actual_eth_amount Fix DEPLOYED ✅
+
+**CRITICAL DATA QUALITY FIX DEPLOYED**: Added actual_eth_amount to split_payout_que and fixed population in split_payout_hostpay
+
+**Changes Implemented:**
+- ✅ Database migration: Added actual_eth_amount NUMERIC(20,18) column to split_payout_que with DEFAULT 0
+- ✅ GCSplit1 database_manager: Updated insert_split_payout_que() method signature to accept actual_eth_amount
+- ✅ GCSplit1 tps1-10-26: Updated endpoint_3 to pass actual_eth_amount from token
+- ✅ GCHostPay1 database_manager: Updated insert_hostpay_transaction() method signature to accept actual_eth_amount
+- ✅ GCHostPay3 tphp3-10-26: Updated caller to pass actual_eth_amount from token
+
+**Deployments:**
+- ✅ gcsplit1-10-26: Image `actual-eth-que-fix`, Revision `gcsplit1-10-26-00022-2nf`, 100% traffic
+- ✅ gchostpay1-10-26: Image `actual-eth-hostpay-fix`, Revision `gchostpay1-10-26-00021-hk2`, 100% traffic
+- ✅ gchostpay3-10-26: Image `actual-eth-hostpay-fix`, Revision `gchostpay3-10-26-00018-rpr`, 100% traffic
+
+**Verification Results:**
+- ✅ All services healthy: True;True;True status
+- ✅ Column actual_eth_amount exists in split_payout_que: NUMERIC(20,18), DEFAULT 0
+- ✅ Database migration successful: 61 total records in split_payout_que
+- ✅ Database migration successful: 38 total records in split_payout_hostpay
+- ⚠️ Existing records show 0E-18 (expected - default value for pre-deployment records)
+- ⏳ Next instant payout will populate actual_eth_amount with real NowPayments value
+
+**Impact:**
+- ✅ Complete audit trail: actual_eth_amount now stored in all 3 tables (split_payout_request, split_payout_que, split_payout_hostpay)
+- ✅ Can verify ChangeNow estimates vs NowPayments actual amounts
+- ✅ Can reconcile discrepancies between estimates and actuals
+- ✅ Data quality improved for financial auditing and analysis
+- ✅ No breaking changes (DEFAULT 0 ensures backward compatibility)
+
+**Status:** ✅ **PHASE 1 COMPLETE - READY FOR PHASE 2**
+
+**Next Steps:**
+- Phase 2: Change PRIMARY KEY from unique_id to cn_api_id in split_payout_que
+- Phase 2: Add INDEX on unique_id for efficient 1-to-many lookups
+- Phase 2: Add UNIQUE constraint on cn_api_id
+
+---
 
 ## 2025-11-07 Session 69: Split_Payout Tables Implementation Review 📊
 

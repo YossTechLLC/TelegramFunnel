@@ -163,7 +163,8 @@
       "Bash(/tmp/progress_arch_new.txt)",
       "Bash(/tmp/bugs_truncated.txt)",
       "Bash(/tmp/decisions_truncated.txt)",
-      "Bash(/tmp/progress_truncated.txt)"
+      "Bash(/tmp/progress_truncated.txt)",
+      "Bash(.venv/bin/pip3 install:*)"
     ],
     "deny": [],
     "ask": []

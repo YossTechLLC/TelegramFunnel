@@ -323,7 +323,8 @@ def execute_eth_payment():
                         tx_hash=tx_result['tx_hash'],
                         tx_status=tx_result['status'],
                         gas_used=tx_result['gas_used'],
-                        block_number=tx_result['block_number']
+                        block_number=tx_result['block_number'],
+                        actual_eth_amount=actual_eth_amount  # ✅ NEW: Pass ACTUAL ETH from NowPayments
                     )
 
                     if db_success:

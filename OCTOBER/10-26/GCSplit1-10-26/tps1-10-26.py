@@ -744,7 +744,8 @@ def receive_eth_client_swap():
             payout_address=payout_address,
             refund_address=refund_address,
             flow=flow,
-            type_=type_
+            type_=type_,
+            actual_eth_amount=actual_eth_amount  # ✅ NEW: Pass ACTUAL ETH from NowPayments
         )
 
         if not que_success:

@@ -81,7 +81,8 @@ class DatabaseManager:
     def insert_hostpay_transaction(self, unique_id: str, cn_api_id: str, from_currency: str,
                                    from_network: str, from_amount: float, payin_address: str,
                                    is_complete: bool = True, tx_hash: str = None, tx_status: str = None,
-                                   gas_used: int = None, block_number: int = None) -> bool:
+                                   gas_used: int = None, block_number: int = None,
+                                   actual_eth_amount: float = 0.0) -> bool:  # ✅ NEW
         """
         Insert a completed host payment transaction into split_payout_hostpay table.
 
@@ -90,13 +91,14 @@ class DatabaseManager:
             cn_api_id: ChangeNow transaction ID
             from_currency: Source currency (e.g., "eth")
             from_network: Source network (e.g., "eth")
-            from_amount: Amount sent
+            from_amount: Amount sent (from ChangeNow estimate or actual payment)
             payin_address: ChangeNow deposit address
             is_complete: Payment completion status (default: True)
             tx_hash: Ethereum transaction hash (optional)
             tx_status: Transaction status ("success" or "failed") (optional)
             gas_used: Gas used by the transaction (optional)
             block_number: Block number where transaction was mined (optional)
+            actual_eth_amount: ACTUAL ETH from NowPayments (default 0 for backward compat)
 
         Returns:
             True if successful, False otherwise
@@ -131,10 +133,10 @@ class DatabaseManager:
 
             insert_query = """
                 INSERT INTO split_payout_hostpay
-                (unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, is_complete, tx_hash, tx_status, gas_used, block_number)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, is_complete, tx_hash, tx_status, gas_used, block_number, actual_eth_amount)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
-            insert_params = (unique_id, cn_api_id, from_currency.upper(), from_network.upper(), from_amount_rounded, payin_address, is_complete, tx_hash, tx_status, gas_used, block_number)
+            insert_params = (unique_id, cn_api_id, from_currency.upper(), from_network.upper(), from_amount_rounded, payin_address, is_complete, tx_hash, tx_status, gas_used, block_number, actual_eth_amount)
 
             # Log exact values being inserted for debugging
             print(f"📋 [HOSTPAY_DB] Insert parameters:")
@@ -143,6 +145,7 @@ class DatabaseManager:
             print(f"   from_currency: {from_currency.upper()}")
             print(f"   from_network: {from_network.upper()}")
             print(f"   from_amount: {from_amount_rounded} (original: {from_amount})")
+            print(f"   actual_eth_amount: {actual_eth_amount}")  # ✅ NEW LOG
             print(f"   payin_address: {payin_address} (len: {len(payin_address)})")
             print(f"   is_complete: {is_complete}")
             print(f"   tx_hash: {tx_hash}")

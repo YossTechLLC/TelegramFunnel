@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 67
+**Last Updated:** 2025-11-07 Session 70 - **Phase 1 actual_eth_amount Implementation**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,53 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-07 Session 70: actual_eth_amount Storage in split_payout_que
+
+**Decision:** Add actual_eth_amount column to split_payout_que table and populate from NowPayments outcome_amount
+
+**Context:**
+- split_payout_request and split_payout_hostpay had actual_eth_amount column (from NowPayments), but split_payout_que did not
+- Incomplete audit trail: Missing the actual ETH amount from NowPayments in the middle of the payment flow
+- Cannot reconcile ChangeNow estimates vs NowPayments actual amounts
+- Data quality issue: Each table had different source for actual_eth_amount, making cross-table analysis difficult
+
+**Implementation:**
+- Added NUMERIC(20,18) column with DEFAULT 0 to split_payout_que (backward compatible)
+- Updated all database insertion methods to accept actual_eth_amount parameter
+- Updated all callers to pass actual_eth_amount value from encrypted token
+- Deployed to 3 services: GCSplit1-10-26, GCHostPay1-10-26, GCHostPay3-10-26
+
+**Rationale:**
+- **Complete audit trail**: All 3 payment tracking tables now have actual_eth_amount from same source (NowPayments)
+- **Financial reconciliation**: Can compare ChangeNow estimate (from_amount) vs NowPayments actual (actual_eth_amount)
+- **Data quality**: Single source of truth for actual ETH received from payment processor
+- **Backward compatible**: DEFAULT 0 ensures existing code continues to work
+- **Future analysis**: Can identify patterns in estimate vs actual discrepancies
+
+**Trade-offs:**
+- Schema change requires migration (low risk - column is nullable with default)
+- Existing records will show 0 for actual_eth_amount (acceptable - historical data not affected)
+- No rollback needed (column is backward compatible with DEFAULT 0)
+
+**Impact:**
+- ✅ Complete financial audit trail across all 3 tables
+- ✅ Can verify payment processor accuracy
+- ✅ Can identify and reconcile estimate vs actual discrepancies
+- ✅ Data quality improved for financial auditing
+- ✅ Foundation for Phase 2 (schema correction)
+
+**Related Issues:**
+- Resolves Issue 4 from SPLIT_PAYOUT_TABLES_INC_ANALYSIS_REVIEW.md
+- Resolves Issue 6 (split_payout_hostpay.actual_eth_amount not populated)
+- Prepares foundation for Issue 3 (PRIMARY KEY correction in Phase 2)
+
+**Next Phase:**
+- Phase 2: Change PRIMARY KEY from unique_id to cn_api_id
+- Phase 2: Add UNIQUE constraint on cn_api_id
+- Phase 2: Add INDEX on unique_id for 1-to-many lookups
+
+---
 
 ### 2025-11-07 Session 68: Defense-in-Depth Status Validation + Idempotency
 
