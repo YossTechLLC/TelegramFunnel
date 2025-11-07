@@ -330,3 +330,69 @@ class DatabaseManager:
                     conn.close()
                 except Exception:
                     pass
+
+    def check_split_payout_que_by_cn_api_id(self, cn_api_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if a ChangeNow transaction already exists in split_payout_que.
+        Used for idempotency protection during Cloud Tasks retries.
+
+        Args:
+            cn_api_id: ChangeNow transaction ID to check
+
+        Returns:
+            Dictionary with record data if exists, None otherwise
+        """
+        conn = None
+        cur = None
+        try:
+            print(f"🔍 [DB_CHECK] Checking for existing ChangeNow transaction: {cn_api_id}")
+
+            conn = self.get_database_connection()
+            cur = conn.cursor()
+
+            # Query for existing record
+            check_query = """
+                SELECT unique_id, cn_api_id, from_currency, to_currency,
+                       from_amount, to_amount, created_at
+                FROM split_payout_que
+                WHERE cn_api_id = %s
+            """
+
+            cur.execute(check_query, (cn_api_id,))
+            row = cur.fetchone()
+
+            if row:
+                print(f"✅ [DB_CHECK] ChangeNow transaction EXISTS in split_payout_que")
+                print(f"🆔 [DB_CHECK] Unique ID: {row[0]}")
+                print(f"🆔 [DB_CHECK] CN API ID: {row[1]}")
+                print(f"💰 [DB_CHECK] {row[2]}→{row[3]}: {row[4]}→{row[5]}")
+                print(f"🕒 [DB_CHECK] Created: {row[6]}")
+                print(f"🛡️ [DB_CHECK] IDEMPOTENCY: Duplicate insertion prevented")
+
+                return {
+                    'unique_id': row[0],
+                    'cn_api_id': row[1],
+                    'from_currency': row[2],
+                    'to_currency': row[3],
+                    'from_amount': float(row[4]) if row[4] else 0.0,
+                    'to_amount': float(row[5]) if row[5] else 0.0,
+                    'created_at': row[6]
+                }
+            else:
+                print(f"✅ [DB_CHECK] ChangeNow transaction NOT FOUND - safe to insert")
+                return None
+
+        except Exception as e:
+            print(f"❌ [DB_CHECK] Error checking ChangeNow transaction: {e}")
+            return None
+        finally:
+            if cur:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass

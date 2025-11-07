@@ -630,6 +630,45 @@ def handle_ipn():
         print(f"=" * 80)
         abort(400, "Invalid JSON payload")
 
+    # ============================================================================
+    # CRITICAL: Validate payment_status before processing
+    # ============================================================================
+    payment_status = ipn_data.get('payment_status', '').lower()
+
+    # Define allowed statuses (only process finished payments)
+    ALLOWED_PAYMENT_STATUSES = ['finished']
+
+    print(f"🔍 [IPN] Payment status received: '{payment_status}'")
+    print(f"✅ [IPN] Allowed statuses: {ALLOWED_PAYMENT_STATUSES}")
+
+    if payment_status not in ALLOWED_PAYMENT_STATUSES:
+        print(f"=" * 80)
+        print(f"⏸️ [IPN] PAYMENT STATUS NOT READY FOR PROCESSING")
+        print(f"=" * 80)
+        print(f"📊 [IPN] Current status: '{payment_status}'")
+        print(f"⏳ [IPN] Waiting for status: 'finished'")
+        print(f"💳 [IPN] Payment ID: {ipn_data.get('payment_id')}")
+        print(f"💰 [IPN] Amount: {ipn_data.get('price_amount')} {ipn_data.get('price_currency')}")
+        print(f"📝 [IPN] Action: Acknowledged but not processed")
+        print(f"🔄 [IPN] NowPayments will send another IPN when status becomes 'finished'")
+        print(f"=" * 80)
+
+        # Return 200 OK to acknowledge receipt to NowPayments
+        # But DO NOT trigger GCWebhook1 or any downstream processing
+        return jsonify({
+            "status": "acknowledged",
+            "message": f"IPN received but not processed. Waiting for status 'finished' (current: {payment_status})",
+            "payment_id": ipn_data.get('payment_id'),
+            "current_status": payment_status,
+            "required_status": "finished"
+        }), 200
+
+    # If we reach here, payment_status is 'finished' - proceed with processing
+    print(f"=" * 80)
+    print(f"✅ [IPN] PAYMENT STATUS VALIDATED: '{payment_status}'")
+    print(f"✅ [IPN] Proceeding with payment processing")
+    print(f"=" * 80)
+
     # Extract required fields
     order_id = ipn_data.get('order_id')
     if not order_id:
@@ -883,7 +922,8 @@ def handle_ipn():
                                         outcome_amount_usd=outcome_amount_usd,  # CRITICAL: Real amount
                                         nowpayments_payment_id=payment_data['payment_id'],
                                         nowpayments_pay_address=ipn_data.get('pay_address'),
-                                        nowpayments_outcome_amount=outcome_amount
+                                        nowpayments_outcome_amount=outcome_amount,
+                                        payment_status=payment_status  # ✅ NEW: Pass validated status to GCWebhook1
                                     )
 
                                     if task_name:

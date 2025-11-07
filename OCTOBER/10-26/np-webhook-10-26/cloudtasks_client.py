@@ -37,7 +37,8 @@ class CloudTasksClient:
         outcome_amount_usd: float,
         nowpayments_payment_id: str,
         nowpayments_pay_address: str,
-        nowpayments_outcome_amount: float
+        nowpayments_outcome_amount: float,
+        payment_status: str = 'finished'  # ✅ NEW: Default to 'finished' for safety
     ) -> Optional[str]:
         """
         Enqueue validated payment to GCWebhook1 for orchestration.
@@ -59,6 +60,7 @@ class CloudTasksClient:
             nowpayments_payment_id: NowPayments payment ID
             nowpayments_pay_address: NowPayments payment address
             nowpayments_outcome_amount: Outcome amount in crypto
+            payment_status: NowPayments payment status (default: 'finished')
 
         Returns:
             Task name if successful, None otherwise
@@ -71,6 +73,7 @@ class CloudTasksClient:
             print(f"   User ID: {user_id}")
             print(f"   Channel ID: {closed_channel_id}")
             print(f"   💰 Outcome USD: ${outcome_amount_usd:.2f}")
+            print(f"   ✅ Payment Status: {payment_status}")
 
             # Build payload with ALL required data
             payload = {
@@ -84,7 +87,8 @@ class CloudTasksClient:
                 "outcome_amount_usd": outcome_amount_usd,  # CRITICAL FIELD
                 "nowpayments_payment_id": nowpayments_payment_id,
                 "nowpayments_pay_address": nowpayments_pay_address,
-                "nowpayments_outcome_amount": nowpayments_outcome_amount
+                "nowpayments_outcome_amount": nowpayments_outcome_amount,
+                "payment_status": payment_status  # ✅ NEW: Include status in payload
             }
 
             # Get queue path

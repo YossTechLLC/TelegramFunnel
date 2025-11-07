@@ -228,6 +228,43 @@ def process_validated_payment():
             print(f"❌ [VALIDATED] No JSON payload received")
             abort(400, "Missing payment data")
 
+        # ============================================================================
+        # CRITICAL: Defense-in-depth - Validate payment_status again
+        # ============================================================================
+        payment_status = payment_data.get('payment_status', '').lower()
+
+        ALLOWED_PAYMENT_STATUSES = ['finished']
+
+        print(f"🔍 [GCWEBHOOK1] Payment status received: '{payment_status}'")
+        print(f"✅ [GCWEBHOOK1] Allowed statuses: {ALLOWED_PAYMENT_STATUSES}")
+
+        if payment_status not in ALLOWED_PAYMENT_STATUSES:
+            print(f"=" * 80)
+            print(f"⏸️ [GCWEBHOOK1] PAYMENT STATUS VALIDATION FAILED (Second Layer)")
+            print(f"=" * 80)
+            print(f"📊 [GCWEBHOOK1] Current status: '{payment_status}'")
+            print(f"⏳ [GCWEBHOOK1] Required status: 'finished'")
+            print(f"👤 [GCWEBHOOK1] User ID: {payment_data.get('user_id')}")
+            print(f"💰 [GCWEBHOOK1] Amount: {payment_data.get('subscription_price')}")
+            print(f"🛡️ [GCWEBHOOK1] Defense-in-depth check prevented processing")
+            print(f"=" * 80)
+
+            # Return 200 OK to prevent Cloud Tasks retry
+            # This should never happen if np-webhook is working correctly
+            return jsonify({
+                "status": "rejected",
+                "message": f"Payment status not ready for processing (current: {payment_status})",
+                "payment_status": payment_status,
+                "required_status": "finished",
+                "defense_layer": "gcwebhook1_second_layer"
+            }), 200
+
+        # If we reach here, payment_status is 'finished' - proceed with routing
+        print(f"=" * 80)
+        print(f"✅ [GCWEBHOOK1] PAYMENT STATUS VALIDATED (Second Layer): '{payment_status}'")
+        print(f"✅ [GCWEBHOOK1] Proceeding with instant/threshold routing")
+        print(f"=" * 80)
+
         # Extract all required fields
         user_id = payment_data.get('user_id')
         closed_channel_id = payment_data.get('closed_channel_id')

@@ -19,6 +19,31 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-07 Session 68: Defense-in-Depth Status Validation + Idempotency
+
+**Decision:** Two-layer NowPayments status validation + idempotency protection
+
+**Context:**
+- System processed ALL NowPayments IPNs regardless of payment_status → risk of premature payouts
+- Cloud Tasks retries caused duplicate key errors in split_payout_que
+
+**Implementation:**
+1. Layer 1 (np-webhook): Validate status='finished' before GCWebhook1 trigger
+2. Layer 2 (GCWebhook1): Re-validate status='finished' before routing (defense-in-depth)
+3. GCSplit1: Check cn_api_id exists before insertion, return 200 OK if duplicate (idempotent)
+
+**Rationale:**
+- Defense-in-depth prevents bypass attempts and config errors
+- Idempotent operations (by cn_api_id) prevent Cloud Tasks retry loops
+- 200 OK response for duplicates tells Cloud Tasks "job done"
+
+**Impact:**
+- ✅ No premature payouts before funds confirmed
+- ✅ No duplicate key errors
+- ✅ System resilience improved
+
+---
+
 ### 2025-11-07 Session 67: Currency-Agnostic Naming Convention in GCSplit1
 
 **Decision:** Standardized on generic/currency-agnostic variable and dictionary key naming throughout GCSplit1 endpoint code to support dual-currency architecture.

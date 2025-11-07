@@ -1,8 +1,104 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 67 - **GCSplit1 Endpoint_2 KeyError Fix** ✅
+**Last Updated:** 2025-11-07 Session 69 - **Split_Payout Tables Implementation Review** 📊
 
 ## Recent Updates
+
+## 2025-11-07 Session 69: Split_Payout Tables Implementation Review 📊
+
+**ANALYSIS COMPLETE**: Comprehensive review of SPLIT_PAYOUT_TABLES_INCONGRUENCY_ANALYSIS.md implementation status
+
+**Summary:**
+- ✅ 2/7 issues fully implemented (Idempotency + Data Type Consistency)
+- ⚠️ 2/7 issues partially implemented (Primary Key Violation workaround + actual_eth_amount flow)
+- ❌ 3/7 issues not implemented (Schema design + Missing columns + Constraints)
+
+**Key Findings:**
+- ✅ Idempotency check successfully prevents duplicate key errors (production-stable)
+- ✅ actual_eth_amount flows correctly to payment execution (no financial risk)
+- ❌ actual_eth_amount NOT stored in split_payout_que (audit trail incomplete)
+- ❌ actual_eth_amount NOT stored in split_payout_hostpay (shows 0E-18)
+- ❌ Primary key schema design flaw remains (workaround masks issue)
+- ❌ Lost audit trail of ChangeNow retry attempts
+
+**Document Created:**
+- `/10-26/SPLIT_PAYOUT_TABLES_INC_ANALYSIS_REVIEW.md` (comprehensive 500+ line review)
+
+**Implementation Status Breakdown:**
+1. Issue 2 (Idempotency): ✅ FULLY FIXED (deployed Session 68)
+2. Issue 5 (Data Types): ✅ FULLY FIXED (VARCHAR(64) extended)
+3. Issue 1 (PK Violation): ⚠️ WORKAROUND APPLIED (errors prevented, root cause remains)
+4. Issue 6 (hostpay actual_eth): ⚠️ PARTIALLY FIXED (column exists, not populated)
+5. Issue 3 (Wrong PK): ❌ NOT FIXED (cn_api_id should be PRIMARY KEY)
+6. Issue 4 (Missing actual_eth in que): ❌ NOT FIXED (column doesn't exist)
+7. Issue 7 (No UNIQUE constraint): ❌ NOT FIXED (race condition possible)
+
+**Recommended Phased Implementation:**
+- Phase 1 (50 min): Add actual_eth_amount to split_payout_que + fix hostpay population
+- Phase 2 (1 hour): Change PRIMARY KEY from unique_id to cn_api_id
+- Phase 3 (covered in P2): Add UNIQUE constraint on cn_api_id
+
+**Risk Assessment:**
+- Financial Risk: ✅ NONE (correct amounts used for payments)
+- Data Quality Risk: ⚠️ MEDIUM (incomplete audit trail)
+- Technical Debt Risk: ⚠️ MEDIUM (schema flaw masked by workaround)
+
+**Status:** 📊 **REVIEW COMPLETE - AWAITING USER APPROVAL FOR PHASE 1 IMPLEMENTATION**
+
+**Checklist Created:**
+- `/10-26/SPLIT_PAYOUT_TABLES_INC_ANALYSIS_REVIEW_CHECKLIST.md` (comprehensive 1000+ line implementation guide)
+
+**Checklist Contents:**
+- Phase 1 (80 min): Add actual_eth_amount to split_payout_que + fix hostpay population
+  - Task 1.1: Database migration (add column)
+  - Task 1.2: GCSplit1 database_manager.py updates
+  - Task 1.3: GCSplit1 tps1-10-26.py updates
+  - Task 1.4: GCHostPay1 database_manager.py updates
+  - Task 1.5: Find and update caller
+  - Testing & deployment procedures
+- Phase 2 (60 min): Change PRIMARY KEY from unique_id to cn_api_id
+  - Task 2.1: Database migration (change PK)
+  - Task 2.2: Update code documentation
+  - Task 2.3: Testing procedures
+- Complete rollback plans for both phases
+- Success metrics and verification queries
+- Documentation update templates
+
+**Total Implementation Time:** ~2.5 hours (detailed breakdown provided)
+
+---
+
+## 2025-11-07 Session 68: IPN Callback Status Validation + Idempotency Fix ✅
+
+**CRITICAL FIXES DEPLOYED**: Defense-in-depth status validation + idempotency protection
+
+**Changes Implemented:**
+- ✅ NowPayments status='finished' validation in np-webhook (first layer)
+- ✅ NowPayments status='finished' validation in GCWebhook1 (second layer - defense-in-depth)
+- ✅ Idempotency protection in GCSplit1 endpoint_3 (prevents duplicate key errors)
+- ✅ payment_status field added to Cloud Tasks payload
+
+**Files Modified:**
+1. `np-webhook-10-26/app.py` - Added status validation after line 631, added payment_status to enqueue call
+2. `np-webhook-10-26/cloudtasks_client.py` - Updated method signature and payload
+3. `GCWebhook1-10-26/tph1-10-26.py` - Added second layer status validation after line 229
+4. `GCSplit1-10-26/database_manager.py` - Added check_split_payout_que_by_cn_api_id() method
+5. `GCSplit1-10-26/tps1-10-26.py` - Added idempotency check before insertion, race condition handling
+
+**Deployments:**
+- ✅ np-webhook-10-26: Build 979a033a, Image ipn-status-validation, Revision 00011-qh6
+- ✅ gcwebhook1-10-26: Image defense-in-depth-validation, Revision 00023-596
+- ✅ gcsplit1-10-26: Build 579f9496, Image idempotency-protection, Revision 00021-7zd
+
+**Impact:**
+- ✅ Prevents premature payouts before NowPayments confirms funds
+- ✅ Eliminates duplicate key errors during Cloud Tasks retries
+- ✅ Defense-in-depth security against bypass attempts
+- ✅ Proper audit trail of payment status progression
+
+**Status:** ✅ **ALL SERVICES DEPLOYED - READY FOR TESTING**
+
+---
 
 ## 2025-11-07 Session 67: GCSplit1 Endpoint_2 KeyError Fix ✅
 

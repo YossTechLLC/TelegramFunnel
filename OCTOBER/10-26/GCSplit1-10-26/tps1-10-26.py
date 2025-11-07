@@ -692,11 +692,41 @@ def receive_eth_client_swap():
             estimated_amount_eth = from_amount
             print(f"✅ [ENDPOINT_3] Using USDT amount for swap: {payment_amount_eth} USDT")
 
-        # Insert into split_payout_que table
+        # ============================================================================
+        # CRITICAL: Idempotency Check - Prevent Duplicate Insertions
+        # ============================================================================
         if not database_manager:
             print(f"❌ [ENDPOINT_3] Database manager not available")
             abort(500, "Database unavailable")
 
+        # Check if this ChangeNow transaction already exists
+        print(f"🔍 [ENDPOINT_3] Checking for existing ChangeNow transaction")
+        existing_record = database_manager.check_split_payout_que_by_cn_api_id(cn_api_id)
+
+        if existing_record:
+            print(f"=" * 80)
+            print(f"🛡️ [ENDPOINT_3] IDEMPOTENT REQUEST DETECTED")
+            print(f"=" * 80)
+            print(f"✅ [ENDPOINT_3] ChangeNow transaction already processed: {cn_api_id}")
+            print(f"🆔 [ENDPOINT_3] Linked unique_id: {existing_record['unique_id']}")
+            print(f"🕒 [ENDPOINT_3] Original insertion: {existing_record['created_at']}")
+            print(f"🔄 [ENDPOINT_3] This is likely a Cloud Tasks retry")
+            print(f"✅ [ENDPOINT_3] Returning success to prevent retry loop")
+            print(f"=" * 80)
+
+            # Return 200 OK to prevent Cloud Tasks from retrying
+            return jsonify({
+                "status": "success",
+                "message": "ChangeNow transaction already processed (idempotent)",
+                "unique_id": existing_record['unique_id'],
+                "cn_api_id": cn_api_id,
+                "from_currency": existing_record['from_currency'],
+                "to_currency": existing_record['to_currency'],
+                "idempotent": True,
+                "original_processing_time": str(existing_record['created_at'])
+            }), 200
+
+        # If we reach here, this is a NEW transaction - proceed with insertion
         print(f"💾 [ENDPOINT_3] Inserting into split_payout_que")
 
         que_success = database_manager.insert_split_payout_que(
@@ -719,7 +749,26 @@ def receive_eth_client_swap():
 
         if not que_success:
             print(f"❌ [ENDPOINT_3] Failed to insert into split_payout_que")
-            abort(500, "Database insertion failed")
+
+            # Double-check if failure is due to race condition (concurrent insertion)
+            print(f"🔍 [ENDPOINT_3] Checking for concurrent insertion (race condition)")
+            existing_record = database_manager.check_split_payout_que_by_cn_api_id(cn_api_id)
+
+            if existing_record:
+                print(f"✅ [ENDPOINT_3] Record inserted by concurrent request")
+                print(f"✅ [ENDPOINT_3] Treating as idempotent success")
+
+                return jsonify({
+                    "status": "success",
+                    "message": "Concurrent insertion handled (idempotent)",
+                    "unique_id": existing_record['unique_id'],
+                    "cn_api_id": cn_api_id,
+                    "idempotent": True,
+                    "race_condition_handled": True
+                }), 200
+            else:
+                # Genuine insertion failure (not duplicate)
+                abort(500, "Database insertion failed")
 
         print(f"✅ [ENDPOINT_3] Database insertion successful")
         print(f"🔗 [ENDPOINT_3] Linked to split_payout_request via unique_id: {unique_id}")
