@@ -145,7 +145,8 @@ class CloudTasksClient:
         payout_currency: str,
         payout_network: str,
         subscription_price: str,
-        actual_eth_amount: float = 0.0  # ✅ ADD THIS
+        actual_eth_amount: float = 0.0,
+        payout_mode: str = 'instant'  # ✅ NEW: 'instant' or 'threshold'
     ) -> Optional[str]:
         """
         Enqueue a payment split request to GCSplit1.
@@ -160,6 +161,7 @@ class CloudTasksClient:
             payout_network: Client's payout network
             subscription_price: Subscription price as string
             actual_eth_amount: ACTUAL ETH from NowPayments outcome (default 0 for backward compat)
+            payout_mode: 'instant' or 'threshold' - determines swap currency routing
 
         Returns:
             Task name if successful, None if failed
@@ -168,7 +170,8 @@ class CloudTasksClient:
             print(f"💰 [CLOUD_TASKS] Enqueueing payment split to GCSplit1")
             print(f"👤 [CLOUD_TASKS] User: {user_id}, Channel: {closed_channel_id}")
             print(f"💵 [CLOUD_TASKS] Amount: ${subscription_price} → {payout_currency}")
-            print(f"💰 [CLOUD_TASKS] ACTUAL ETH: {actual_eth_amount}")  # ✅ ADD LOG
+            print(f"💰 [CLOUD_TASKS] ACTUAL ETH: {actual_eth_amount}")
+            print(f"🎯 [CLOUD_TASKS] Payout Mode: {payout_mode}")  # ✅ NEW LOG
 
             # Prepare webhook payload (same format as old trigger_payment_split_webhook)
             webhook_data = {
@@ -178,7 +181,8 @@ class CloudTasksClient:
                 "payout_currency": payout_currency,
                 "payout_network": payout_network,
                 "sub_price": subscription_price,
-                "actual_eth_amount": actual_eth_amount,  # ✅ ADD THIS
+                "actual_eth_amount": actual_eth_amount,
+                "payout_mode": payout_mode,  # ✅ NEW: Pass payout_mode to GCSplit1
                 "timestamp": int(time.time())
             }
 

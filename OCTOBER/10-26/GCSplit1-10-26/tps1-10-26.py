@@ -307,11 +307,19 @@ def initial_webhook():
         payout_network = (webhook_data.get('payout_network') or '').strip().lower()
         subscription_price = webhook_data.get('subscription_price') or webhook_data.get('sub_price') or '0'
         actual_eth_amount = float(webhook_data.get('actual_eth_amount', 0.0))  # ✅ ADDED: Extract ACTUAL ETH from NowPayments
+        payout_mode = webhook_data.get('payout_mode', 'instant').strip().lower()  # ✅ NEW: Extract payout_mode (default: instant)
+
+        # ✅ NEW: Determine swap_currency based on payout_mode
+        # Instant: ETH→ClientCurrency (use actual ETH from NowPayments)
+        # Threshold: USDT→ClientCurrency (use accumulated USDT)
+        swap_currency = 'eth' if payout_mode == 'instant' else 'usdt'
 
         print(f"👤 [ENDPOINT_1] User ID: {user_id}")
         print(f"🏢 [ENDPOINT_1] Channel ID: {closed_channel_id}")
         print(f"💰 [ENDPOINT_1] Subscription Price: ${subscription_price}")
-        print(f"💎 [ENDPOINT_1] ACTUAL ETH Amount (NowPayments): {actual_eth_amount}")  # ✅ ADDED: Log actual amount
+        print(f"💎 [ENDPOINT_1] ACTUAL ETH Amount (NowPayments): {actual_eth_amount}")
+        print(f"🎯 [ENDPOINT_1] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+        print(f"💱 [ENDPOINT_1] Swap Currency: {swap_currency}")  # ✅ NEW LOG
         print(f"🏦 [ENDPOINT_1] Target: {wallet_address} ({payout_currency.upper()} on {payout_network.upper()})")
 
         # ✅ ADDED: Validation warning if actual_eth_amount is missing/zero
@@ -334,9 +342,23 @@ def initial_webhook():
                 }
             }), 400
 
-        # Calculate adjusted amount (remove TP fee)
+        # ✅ UPDATED: Calculate adjusted amount based on swap_currency
+        # Instant (ETH): Use actual_eth_amount from NowPayments (already net of network fees)
+        # Threshold (USDT): Calculate adjusted_amount_usdt by removing TP fee from subscription_price
         tp_flat_fee = config.get('tp_flat_fee')
-        original_amount, adjusted_amount_usdt = calculate_adjusted_amount(subscription_price, tp_flat_fee)
+
+        if swap_currency == 'eth':
+            # Instant payout: Use ACTUAL ETH received from NowPayments MINUS TP fee
+            tp_fee_decimal = float(tp_flat_fee if tp_flat_fee else "3") / 100
+            adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)
+            print(f"⚡ [ENDPOINT_1] Instant payout mode detected")
+            print(f"   💎 ACTUAL ETH from NowPayments: {actual_eth_amount}")
+            print(f"   📊 TP Fee: {tp_flat_fee}%")
+            print(f"   ✅ Adjusted amount (post-TP-fee): {adjusted_amount} ETH")
+        else:
+            # Threshold payout: Calculate USDT amount (USD - TP fee)
+            original_amount, adjusted_amount = calculate_adjusted_amount(subscription_price, tp_flat_fee)
+            print(f"🎯 [ENDPOINT_1] Threshold payout - calculated adjusted USDT: ${adjusted_amount}")
 
         # Encrypt token for GCSplit2
         if not token_manager:
@@ -349,8 +371,10 @@ def initial_webhook():
             wallet_address=wallet_address,
             payout_currency=payout_currency,
             payout_network=payout_network,
-            adjusted_amount_usdt=adjusted_amount_usdt,
-            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Pass ACTUAL ETH to GCSplit2
+            adjusted_amount=adjusted_amount,  # ✅ UPDATED: Now handles both ETH and USDT
+            swap_currency=swap_currency,  # ✅ NEW: Pass swap_currency
+            payout_mode=payout_mode,  # ✅ NEW: Pass payout_mode
+            actual_eth_amount=actual_eth_amount  # ✅ PASS: Pass ACTUAL ETH to GCSplit2
         )
 
         if not encrypted_token:
@@ -448,20 +472,24 @@ def receive_usdt_eth_estimate():
         wallet_address = decrypted_data['wallet_address']
         payout_currency = decrypted_data['payout_currency']
         payout_network = decrypted_data['payout_network']
-        from_amount_usdt = decrypted_data['from_amount_usdt']
+        from_amount = decrypted_data['from_amount']  # ✅ UPDATED: Generic name (ETH or USDT)
         to_amount_eth_post_fee = decrypted_data['to_amount_eth_post_fee']
         deposit_fee = decrypted_data['deposit_fee']
         withdrawal_fee = decrypted_data['withdrawal_fee']
-        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: Extract ACTUAL ETH
+        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)
+        swap_currency = decrypted_data.get('swap_currency', 'usdt')  # ✅ NEW: Extract swap_currency
+        payout_mode = decrypted_data.get('payout_mode', 'instant')  # ✅ NEW: Extract payout_mode
 
         print(f"👤 [ENDPOINT_2] User ID: {user_id}")
-        print(f"💰 [ENDPOINT_2] From: {from_amount_usdt} USDT")
-        print(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_eth_post_fee} ETH")
-        print(f"💎 [ENDPOINT_2] ACTUAL ETH (from NowPayments): {actual_eth_amount}")  # ✅ ADDED
+        print(f"💱 [ENDPOINT_2] Swap Currency: {swap_currency}")  # ✅ NEW LOG
+        print(f"🎯 [ENDPOINT_2] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+        print(f"💰 [ENDPOINT_2] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
+        print(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_eth_post_fee} {payout_currency.upper()}")
+        print(f"💎 [ENDPOINT_2] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
 
         # Calculate pure market conversion
-        pure_market_eth_value = calculate_pure_market_conversion(
-            from_amount_usdt, to_amount_eth_post_fee, deposit_fee, withdrawal_fee
+        pure_market_value = calculate_pure_market_conversion(
+            from_amount, to_amount_eth_post_fee, deposit_fee, withdrawal_fee
         )
 
         # Insert into split_payout_request table
@@ -470,23 +498,23 @@ def receive_usdt_eth_estimate():
             abort(500, "Database unavailable")
 
         print(f"💾 [ENDPOINT_2] Inserting into split_payout_request")
-        print(f"   NOTE: to_amount = PURE MARKET VALUE ({pure_market_eth_value} ETH)")
-        print(f"   💎 ACTUAL ETH: {actual_eth_amount}")  # ✅ ADDED
+        print(f"   NOTE: to_amount = PURE MARKET VALUE ({pure_market_value} {payout_currency.upper()})")
+        print(f"   💎 ACTUAL ETH: {actual_eth_amount}")
 
         unique_id = database_manager.insert_split_payout_request(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
-            from_currency="usdt",
+            from_currency=swap_currency,  # ✅ UPDATED: Dynamic (eth or usdt)
             to_currency=payout_currency,
-            from_network="eth",
+            from_network="eth",  # Both ETH and USDT use ETH network
             to_network=payout_network,
-            from_amount=from_amount_usdt,
-            to_amount=pure_market_eth_value,  # Pure market value
+            from_amount=from_amount,  # ✅ UPDATED: Dynamic amount
+            to_amount=pure_market_value,  # Pure market value
             client_wallet_address=wallet_address,
             refund_address="",
             flow="standard",
             type_="direct",
-            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Store ACTUAL ETH in database
+            actual_eth_amount=actual_eth_amount
         )
 
         if not unique_id:
@@ -504,8 +532,10 @@ def receive_usdt_eth_estimate():
             wallet_address=wallet_address,
             payout_currency=payout_currency,
             payout_network=payout_network,
-            eth_amount=from_amount_usdt,  # ✅ FIXED: Pass USDT amount, not token quantity
-            actual_eth_amount=actual_eth_amount  # ✅ ADDED: Pass ACTUAL ETH to GCSplit3
+            eth_amount=from_amount,  # ✅ UPDATED: Pass swap currency amount (ETH or USDT)
+            swap_currency=swap_currency,  # ✅ NEW: Pass swap_currency
+            payout_mode=payout_mode,  # ✅ NEW: Pass payout_mode
+            actual_eth_amount=actual_eth_amount
         )
 
         if not encrypted_token_for_split3:
@@ -618,36 +648,49 @@ def receive_eth_client_swap():
         print(f"🆔 [ENDPOINT_3] Unique ID: {unique_id}")
         print(f"🆔 [ENDPOINT_3] ChangeNow API ID: {cn_api_id}")
         print(f"👤 [ENDPOINT_3] User ID: {user_id}")
-        print(f"💰 [ENDPOINT_3] ChangeNow estimate: {from_amount} {from_currency.upper()}")
-        print(f"💎 [ENDPOINT_3] ACTUAL ETH (from NowPayments): {actual_eth_amount} ETH")  # ✅ ADDED
+        print(f"💰 [ENDPOINT_3] ChangeNow from_amount: {from_amount} {from_currency.upper()}")
         print(f"💰 [ENDPOINT_3] To: {to_amount} {to_currency.upper()}")
 
-        # ✅ ADDED: Validation - Compare actual vs estimate
-        if actual_eth_amount > 0 and from_amount > 0:
-            discrepancy = abs(from_amount - actual_eth_amount)
-            discrepancy_pct = (discrepancy / actual_eth_amount) * 100
+        # ✅ UPDATED: Currency-aware payment amount logic
+        # For instant (ETH): Compare ChangeNow estimate vs ACTUAL ETH from NowPayments
+        # For threshold (USDT): Use from_amount directly (no comparison needed)
+        if from_currency.lower() == 'eth':
+            print(f"⚡ [ENDPOINT_3] Instant payout mode - ETH swap")
+            print(f"💎 [ENDPOINT_3] ACTUAL ETH (from NowPayments): {actual_eth_amount} ETH")
 
-            print(f"📊 [ENDPOINT_3] Amount comparison:")
-            print(f"   ChangeNow estimate: {from_amount} ETH")
-            print(f"   ACTUAL from NowPayments: {actual_eth_amount} ETH")
-            print(f"   Discrepancy: {discrepancy} ETH ({discrepancy_pct:.2f}%)")
+            # Validation - Compare actual vs estimate
+            if actual_eth_amount > 0 and from_amount > 0:
+                discrepancy = abs(from_amount - actual_eth_amount)
+                discrepancy_pct = (discrepancy / actual_eth_amount) * 100
 
-            if discrepancy_pct > 10:
-                print(f"⚠️ [ENDPOINT_3] WARNING: Large discrepancy (>10%)!")
-            elif discrepancy_pct > 5:
-                print(f"⚠️ [ENDPOINT_3] Moderate discrepancy (>5%)")
+                print(f"📊 [ENDPOINT_3] Amount comparison:")
+                print(f"   ChangeNow estimate: {from_amount} ETH")
+                print(f"   ACTUAL from NowPayments: {actual_eth_amount} ETH")
+                print(f"   Discrepancy: {discrepancy} ETH ({discrepancy_pct:.2f}%)")
+
+                if discrepancy_pct > 10:
+                    print(f"⚠️ [ENDPOINT_3] WARNING: Large discrepancy (>10%)!")
+                elif discrepancy_pct > 5:
+                    print(f"⚠️ [ENDPOINT_3] Moderate discrepancy (>5%)")
+                else:
+                    print(f"✅ [ENDPOINT_3] Amounts match within tolerance (<5%)")
+
+            # Use ACTUAL ETH for payment
+            if actual_eth_amount > 0:
+                payment_amount_eth = actual_eth_amount
+                estimated_amount_eth = from_amount
+                print(f"✅ [ENDPOINT_3] Using ACTUAL ETH for payment: {payment_amount_eth}")
             else:
-                print(f"✅ [ENDPOINT_3] Amounts match within tolerance (<5%)")
+                payment_amount_eth = from_amount
+                estimated_amount_eth = from_amount
+                print(f"⚠️ [ENDPOINT_3] ACTUAL ETH not available, using ChangeNow estimate: {payment_amount_eth}")
 
-        # ✅ ADDED: Decide which amount to use for payment
-        if actual_eth_amount > 0:
-            payment_amount_eth = actual_eth_amount
+        else:  # from_currency == 'usdt'
+            print(f"🎯 [ENDPOINT_3] Threshold payout mode - USDT swap")
+            # For USDT swaps, use the from_amount directly (this is accumulated USDT)
+            payment_amount_eth = from_amount  # Actually USDT, but variable name maintained for compatibility
             estimated_amount_eth = from_amount
-            print(f"✅ [ENDPOINT_3] Using ACTUAL ETH for payment: {payment_amount_eth}")
-        else:
-            payment_amount_eth = from_amount
-            estimated_amount_eth = from_amount
-            print(f"⚠️ [ENDPOINT_3] ACTUAL ETH not available, using ChangeNow estimate: {payment_amount_eth}")
+            print(f"✅ [ENDPOINT_3] Using USDT amount for swap: {payment_amount_eth} USDT")
 
         # Insert into split_payout_que table
         if not database_manager:

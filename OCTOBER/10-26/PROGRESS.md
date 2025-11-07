@@ -1,8 +1,112 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 63 - **NowPayments IPN UPSERT Fix + Manual Payment Recovery** ✅
+**Last Updated:** 2025-11-07 Session 65 - **GCSplit2 Dual-Currency Token Manager Deployment** ✅
 
 ## Recent Updates
+
+## 2025-11-07 Session 65: GCSplit2 Dual-Currency Token Manager Deployment ✅
+
+**CRITICAL DEPLOYMENT**: Deployed GCSplit2 with dual-currency token support
+
+**Context:**
+- Code verification revealed GCSplit2 token manager already had all dual-currency fixes
+- All 3 token methods updated with swap_currency, payout_mode, actual_eth_amount fields
+- Backward compatibility implemented for old tokens
+- Variable names changed from `*_usdt` to generic names
+
+**Deployment Actions:**
+- ✅ Created backup: `/OCTOBER/ARCHIVES/GCSplit2-10-26-BACKUP-DUAL-CURRENCY-FIX/`
+- ✅ Built Docker image: `gcr.io/telepay-459221/gcsplit2-10-26:dual-currency-fixed`
+- ✅ Deployed to Cloud Run: Revision `gcsplit2-10-26-00014-4qn` (100% traffic)
+- ✅ Health check passed: All components healthy
+
+**Token Manager Updates:**
+- `decrypt_gcsplit1_to_gcsplit2_token()`: Extracts swap_currency, payout_mode, actual_eth_amount
+- `encrypt_gcsplit2_to_gcsplit1_token()`: Packs swap_currency, payout_mode, actual_eth_amount
+- `decrypt_gcsplit2_to_gcsplit1_token()`: Extracts swap_currency, payout_mode, actual_eth_amount
+- All methods: Use generic variable names (adjusted_amount, from_amount)
+
+**Verification:**
+- ✅ No syntax errors
+- ✅ No old variable names (`adjusted_amount_usdt`, `from_amount_usdt`)
+- ✅ Main service (tps2-10-26.py) fully compatible
+- ✅ Service deployed and healthy
+
+**Files Modified:**
+- `GCSplit2-10-26/token_manager.py` - All 3 token methods (already updated)
+- `GCSplit2-10-26/tps2-10-26.py` - Main service (already compatible)
+
+**Status:** ✅ **DEPLOYED TO PRODUCTION**
+
+**Next Steps:**
+- Monitor logs for 24 hours
+- Test with real instant payout transaction
+- Verify end-to-end flow
+
+---
+
+## 2025-11-07 Session 64: Dual-Mode Currency Routing TP_FEE Bug Fix ✅
+
+**CRITICAL BUG FIX**: Fixed missing TP_FEE deduction in instant payout ETH calculations
+
+**Bug Identified:**
+- GCSplit1 was NOT deducting TP_FEE from `actual_eth_amount` for instant payouts
+- Line 352: `adjusted_amount = actual_eth_amount` ❌ (missing TP fee calculation)
+- Result: TelePay not collecting platform fee on instant ETH→ClientCurrency swaps
+- Impact: Revenue loss on all instant payouts
+
+**Root Cause:**
+- Architectural implementation mismatch in Phase 3.1 (GCSplit1 endpoint 1)
+- Architecture doc specified: `swap_amount = actual_eth_amount * (1 - TP_FEE)`
+- Implemented code skipped TP_FEE calculation entirely
+
+**Solution Implemented:**
+```python
+# Before (WRONG):
+adjusted_amount = actual_eth_amount  # ❌ No TP fee!
+
+# After (CORRECT):
+tp_fee_decimal = float(tp_flat_fee if tp_flat_fee else "3") / 100
+adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)  # ✅ TP fee applied
+```
+
+**Example Calculation:**
+- `actual_eth_amount = 0.0005668 ETH` (from NowPayments)
+- `TP_FEE = 15%`
+- `adjusted_amount = 0.0005668 * 0.85 = 0.00048178 ETH` ✅
+
+**Verification:**
+- ✅ GCSplit1: TP_FEE deduction added with detailed logging
+- ✅ GCSplit2: Correctly uses dynamic `swap_currency` parameter
+- ✅ GCSplit3: Correctly creates transactions with dynamic `from_currency`
+- ✅ All services match architecture specification
+
+**Files Modified:**
+- `GCSplit1-10-26/tps1-10-26.py` - Lines 350-357 (TP_FEE calculation fix)
+
+**Status:** ✅ **DEPLOYED TO PRODUCTION**
+
+**Deployment Summary:**
+- ✅ GCWebhook1-10-26: Deployed from source (revision: gcwebhook1-10-26-00022-sqx) - 100% traffic
+- ✅ GCSplit1-10-26: Deployed from container (revision: gcsplit1-10-26-00018-qjj) - 100% traffic
+- ✅ GCSplit2-10-26: Deployed from container (revision: gcsplit2-10-26-00013-dqj) - 100% traffic
+- ✅ GCSplit3-10-26: Deployed from container (revision: gcsplit3-10-26-00010-tjs) - 100% traffic
+
+**Deployment Method:**
+- GCWebhook1: Source deployment (`gcloud run deploy --source`)
+- GCSplit1/2/3: Container deployment (`gcloud run deploy --image`)
+
+**Container Images:**
+- `gcr.io/telepay-459221/gcsplit1-10-26:dual-currency-v2`
+- `gcr.io/telepay-459221/gcsplit2-10-26:dual-currency-v2`
+- `gcr.io/telepay-459221/gcsplit3-10-26:dual-currency-v2`
+
+**Deployment Time:** 2025-11-07 14:50 UTC
+
+**Next Steps:**
+- Monitor instant payout logs for TP_FEE deduction
+- Verify ETH→ClientCurrency swaps working correctly
+- Monitor for any errors in Cloud Logging
 
 ## 2025-11-07 Session 63: NowPayments IPN UPSERT Fix + Manual Payment Recovery ✅
 

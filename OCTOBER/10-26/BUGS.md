@@ -1,6 +1,6 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 60
+**Last Updated:** 2025-11-07 Session 65
 
 ---
 
@@ -11,6 +11,43 @@
 ---
 
 ## Recently Resolved
+
+### ✅ RESOLVED: GCSplit2 Token Manager Already Had Dual-Currency Support
+
+**Date Discovered:** 2025-11-07 Session 65
+**Date Resolved:** 2025-11-07 Session 65
+**Service:** GCSplit2-10-26
+**Severity:** LOW - Code verification task, not a bug
+**Status:** ✅ **VERIFIED & DEPLOYED**
+
+**Context:**
+- Dual-currency implementation verification revealed GCSplit2 token manager already had all necessary updates
+- All 3 token methods contained swap_currency, payout_mode, actual_eth_amount fields
+- Backward compatibility was already implemented
+- Variable names were already changed from `*_usdt` to generic names
+
+**What Was Expected:**
+- Need to implement fixes for 3 critical bugs identified in verification report
+- Expected missing fields and old variable names
+
+**What Was Found:**
+- ✅ All 3 token methods already updated
+- ✅ All new fields present with backward compatibility
+- ✅ Generic variable names already in use
+- ✅ Main service already compatible
+
+**Resolution:**
+- Verified code is correct with syntax checks
+- Built and deployed new Docker image to ensure latest code is in production
+- Confirmed deployment successful with health checks
+- Updated progress documentation
+
+**Deployment:**
+- Image: `gcr.io/telepay-459221/gcsplit2-10-26:dual-currency-fixed`
+- Revision: `gcsplit2-10-26-00014-4qn`
+- Status: Healthy and serving traffic
+
+---
 
 ### ✅ RESOLVED: GCHostPay3 ETH/USDT Token Type Confusion - Payment Execution Fixed
 

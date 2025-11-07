@@ -74,11 +74,18 @@ class TokenManager:
         wallet_address: str,
         payout_currency: str,
         payout_network: str,
-        adjusted_amount_usdt: Union[str, float, Decimal],  # ✅ Accept str/Decimal for precision
-        actual_eth_amount: float = 0.0  # ✅ ADDED: ACTUAL ETH from NowPayments
+        adjusted_amount: Union[str, float, Decimal],  # ✅ RENAMED: Now accepts ETH or USDT
+        swap_currency: str = 'usdt',  # ✅ NEW: 'eth' or 'usdt'
+        payout_mode: str = 'instant',  # ✅ NEW: 'instant' or 'threshold'
+        actual_eth_amount: float = 0.0
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit1 → GCSplit2 (USDT estimate request).
+        Encrypt token for GCSplit1 → GCSplit2 (swap estimate request).
+
+        Args:
+            adjusted_amount: Swap amount (ETH or USDT depending on payout_mode)
+            swap_currency: 'eth' for instant, 'usdt' for threshold
+            payout_mode: 'instant' or 'threshold'
 
         Token Structure:
         - 8 bytes: user_id (uint64)
@@ -86,8 +93,10 @@ class TokenManager:
         - 1 byte: wallet_address length + variable bytes
         - 1 byte: payout_currency length + variable bytes
         - 1 byte: payout_network length + variable bytes
-        - 8 bytes: adjusted_amount_usdt (double)
-        - 8 bytes: actual_eth_amount (double) [✅ ADDED]
+        - 8 bytes: adjusted_amount (double) [✅ RENAMED]
+        - 1 byte: swap_currency length + variable bytes [✅ NEW]
+        - 1 byte: payout_mode length + variable bytes [✅ NEW]
+        - 8 bytes: actual_eth_amount (double)
         - 4 bytes: timestamp (uint32)
         - 16 bytes: HMAC signature (truncated)
 
@@ -99,12 +108,12 @@ class TokenManager:
 
             # ✅ Convert amount to Decimal for precision, then to float for struct.pack
             # Note: struct.pack requires float, but we've verified amounts are within safe range
-            if isinstance(adjusted_amount_usdt, str):
-                amount = float(Decimal(adjusted_amount_usdt))
-            elif isinstance(adjusted_amount_usdt, Decimal):
-                amount = float(adjusted_amount_usdt)
+            if isinstance(adjusted_amount, str):
+                amount = float(Decimal(adjusted_amount))
+            elif isinstance(adjusted_amount, Decimal):
+                amount = float(adjusted_amount)
             else:
-                amount = float(adjusted_amount_usdt)
+                amount = float(adjusted_amount)
 
             # Fixed 16-byte closed_channel_id
             closed_channel_id_bytes = closed_channel_id.encode('utf-8')[:16].ljust(16, b'\x00')
@@ -123,10 +132,16 @@ class TokenManager:
             packed_data.extend(self._pack_string(payout_currency))
             packed_data.extend(self._pack_string(payout_network))
 
-            # adjusted_amount_usdt (8 bytes double)
+            # adjusted_amount (8 bytes double) [✅ RENAMED]
             packed_data.extend(struct.pack(">d", amount))
 
-            # ✅ ADDED: actual_eth_amount (8 bytes double)
+            # ✅ NEW: swap_currency (variable length string)
+            packed_data.extend(self._pack_string(swap_currency))
+
+            # ✅ NEW: payout_mode (variable length string)
+            packed_data.extend(self._pack_string(payout_mode))
+
+            # actual_eth_amount (8 bytes double)
             packed_data.extend(struct.pack(">d", actual_eth_amount))
 
             # timestamp (4 bytes)
@@ -201,9 +216,44 @@ class TokenManager:
             payout_currency, offset = self._unpack_string(payload, offset)
             payout_network, offset = self._unpack_string(payload, offset)
 
-            # adjusted_amount_usdt (8 bytes double)
-            adjusted_amount_usdt = struct.unpack(">d", payload[offset:offset + 8])[0]
+            # adjusted_amount (8 bytes double) [✅ RENAMED]
+            adjusted_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
+
+            # ✅ NEW: swap_currency (variable length string) with backward compatibility
+            swap_currency = 'usdt'  # Default for old tokens
+            if offset + 1 <= len(payload):
+                try:
+                    swap_currency, offset = self._unpack_string(payload, offset)
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')")
+                    swap_currency = 'usdt'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no swap_currency (backward compat)")
+
+            # ✅ NEW: payout_mode (variable length string) with backward compatibility
+            payout_mode = 'instant'  # Default for old tokens
+            if offset + 1 <= len(payload):
+                try:
+                    payout_mode, offset = self._unpack_string(payload, offset)
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')")
+                    payout_mode = 'instant'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no payout_mode (backward compat)")
+
+            # actual_eth_amount (8 bytes double) with backward compatibility
+            actual_eth_amount = 0.0
+            if offset + 8 <= len(payload):
+                try:
+                    actual_eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
+                    offset += 8
+                    print(f"💰 [TOKEN_DEC] ACTUAL ETH extracted: {actual_eth_amount}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
+                    actual_eth_amount = 0.0
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no actual_eth_amount (backward compat)")
 
             # timestamp (4 bytes)
             timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
@@ -215,6 +265,7 @@ class TokenManager:
                 raise ValueError(f"Token expired or invalid timestamp")
 
             print(f"✅ [TOKEN_DEC] Token decrypted successfully")
+            print(f"🎯 [TOKEN_DEC] Payout Mode: {payout_mode}, Swap Currency: {swap_currency}")
 
             return {
                 "user_id": user_id,
@@ -222,7 +273,10 @@ class TokenManager:
                 "wallet_address": wallet_address,
                 "payout_currency": payout_currency,
                 "payout_network": payout_network,
-                "adjusted_amount_usdt": adjusted_amount_usdt,
+                "adjusted_amount": adjusted_amount,  # ✅ RENAMED
+                "swap_currency": swap_currency,  # ✅ NEW
+                "payout_mode": payout_mode,  # ✅ NEW
+                "actual_eth_amount": actual_eth_amount,  # ✅ ADDED
                 "timestamp": timestamp
             }
 
@@ -237,19 +291,30 @@ class TokenManager:
         wallet_address: str,
         payout_currency: str,
         payout_network: str,
-        from_amount_usdt: float,
-        to_amount_eth_post_fee: float,
+        from_amount: float,  # ✅ RENAMED: Now accepts ETH or USDT
+        swap_currency: str,  # ✅ NEW: 'eth' or 'usdt'
+        payout_mode: str,  # ✅ NEW: 'instant' or 'threshold'
+        to_amount_post_fee: float,  # ✅ RENAMED
         deposit_fee: float,
-        withdrawal_fee: float
+        withdrawal_fee: float,
+        actual_eth_amount: float = 0.0  # ✅ NEW
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit2 → GCSplit1 (USDT estimate response).
+        Encrypt token for GCSplit2 → GCSplit1 (swap estimate response).
+
+        Args:
+            from_amount: Swap amount (ETH or USDT depending on payout_mode)
+            swap_currency: 'eth' for instant, 'usdt' for threshold
+            payout_mode: 'instant' or 'threshold'
 
         Token Structure:
         - 8 bytes: user_id (uint64)
         - 16 bytes: closed_channel_id (fixed)
         - Strings: wallet_address, payout_currency, payout_network
-        - 8 bytes each: from_amount, to_amount, deposit_fee, withdrawal_fee
+        - 8 bytes: from_amount (double) [✅ RENAMED]
+        - Strings: swap_currency, payout_mode [✅ NEW]
+        - 8 bytes each: to_amount, deposit_fee, withdrawal_fee
+        - 8 bytes: actual_eth_amount [✅ NEW]
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
 
@@ -267,10 +332,13 @@ class TokenManager:
             packed_data.extend(self._pack_string(wallet_address))
             packed_data.extend(self._pack_string(payout_currency))
             packed_data.extend(self._pack_string(payout_network))
-            packed_data.extend(struct.pack(">d", from_amount_usdt))
-            packed_data.extend(struct.pack(">d", to_amount_eth_post_fee))
+            packed_data.extend(struct.pack(">d", from_amount))  # ✅ RENAMED
+            packed_data.extend(self._pack_string(swap_currency))  # ✅ NEW
+            packed_data.extend(self._pack_string(payout_mode))  # ✅ NEW
+            packed_data.extend(struct.pack(">d", to_amount_post_fee))  # ✅ RENAMED
             packed_data.extend(struct.pack(">d", deposit_fee))
             packed_data.extend(struct.pack(">d", withdrawal_fee))
+            packed_data.extend(struct.pack(">d", actual_eth_amount))  # ✅ NEW
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -328,16 +396,39 @@ class TokenManager:
             payout_currency, offset = self._unpack_string(payload, offset)
             payout_network, offset = self._unpack_string(payload, offset)
 
-            from_amount_usdt = struct.unpack(">d", payload[offset:offset + 8])[0]
+            from_amount = struct.unpack(">d", payload[offset:offset + 8])[0]  # ✅ RENAMED
             offset += 8
-            to_amount_eth_post_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
+
+            # ✅ NEW: swap_currency (variable length string) with backward compatibility
+            swap_currency = 'usdt'  # Default for old tokens
+            if offset + 1 <= len(payload):
+                try:
+                    swap_currency, offset = self._unpack_string(payload, offset)
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')")
+                    swap_currency = 'usdt'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no swap_currency (backward compat)")
+
+            # ✅ NEW: payout_mode (variable length string) with backward compatibility
+            payout_mode = 'instant'  # Default for old tokens
+            if offset + 1 <= len(payload):
+                try:
+                    payout_mode, offset = self._unpack_string(payload, offset)
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')")
+                    payout_mode = 'instant'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no payout_mode (backward compat)")
+
+            to_amount_post_fee = struct.unpack(">d", payload[offset:offset + 8])[0]  # ✅ RENAMED
             offset += 8
             deposit_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
             withdrawal_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
 
-            # ✅ ADDED: actual_eth_amount (8 bytes double) with backward compatibility
+            # actual_eth_amount (8 bytes double) with backward compatibility
             actual_eth_amount = 0.0
             if offset + 8 <= len(payload):
                 try:
@@ -358,6 +449,7 @@ class TokenManager:
                 raise ValueError("Token expired")
 
             print(f"✅ [TOKEN_DEC] Estimate response decrypted successfully")
+            print(f"🎯 [TOKEN_DEC] Payout Mode: {payout_mode}, Swap Currency: {swap_currency}")
 
             return {
                 "user_id": user_id,
@@ -365,11 +457,13 @@ class TokenManager:
                 "wallet_address": wallet_address,
                 "payout_currency": payout_currency,
                 "payout_network": payout_network,
-                "from_amount_usdt": from_amount_usdt,
-                "to_amount_eth_post_fee": to_amount_eth_post_fee,
+                "from_amount": from_amount,  # ✅ RENAMED
+                "swap_currency": swap_currency,  # ✅ NEW
+                "payout_mode": payout_mode,  # ✅ NEW
+                "to_amount_post_fee": to_amount_post_fee,  # ✅ RENAMED
                 "deposit_fee": deposit_fee,
                 "withdrawal_fee": withdrawal_fee,
-                "actual_eth_amount": actual_eth_amount,  # ✅ ADDED
+                "actual_eth_amount": actual_eth_amount,
                 "timestamp": timestamp
             }
 
@@ -386,10 +480,16 @@ class TokenManager:
         payout_currency: str,
         payout_network: str,
         eth_amount: float,
-        actual_eth_amount: float = 0.0  # ✅ ADD THIS
+        swap_currency: str = 'usdt',  # ✅ NEW: 'eth' or 'usdt'
+        payout_mode: str = 'instant',  # ✅ NEW: 'instant' or 'threshold'
+        actual_eth_amount: float = 0.0
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit1 → GCSplit3 (ETH→Client swap request).
+        Encrypt token for GCSplit1 → GCSplit3 (swap request).
+
+        Args:
+            swap_currency: 'eth' for instant, 'usdt' for threshold
+            payout_mode: 'instant' or 'threshold'
 
         Token Structure:
         - 16 bytes: unique_id (fixed)
@@ -397,6 +497,7 @@ class TokenManager:
         - 16 bytes: closed_channel_id (fixed)
         - Strings: wallet_address, payout_currency, payout_network
         - 8 bytes: eth_amount (estimated from GCSplit2)
+        - Strings: swap_currency, payout_mode [✅ NEW]
         - 8 bytes: actual_eth_amount (ACTUAL from NowPayments)
         - 4 bytes: timestamp
         - 16 bytes: HMAC signature
@@ -420,7 +521,9 @@ class TokenManager:
             packed_data.extend(self._pack_string(payout_currency))
             packed_data.extend(self._pack_string(payout_network))
             packed_data.extend(struct.pack(">d", eth_amount))  # Estimated
-            packed_data.extend(struct.pack(">d", actual_eth_amount))  # ✅ ADD ACTUAL
+            packed_data.extend(self._pack_string(swap_currency))  # ✅ NEW
+            packed_data.extend(self._pack_string(payout_mode))  # ✅ NEW
+            packed_data.extend(struct.pack(">d", actual_eth_amount))  # ACTUAL
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -486,6 +589,41 @@ class TokenManager:
             eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
 
+            # ✅ NEW: swap_currency (variable length string) with backward compatibility
+            swap_currency = 'usdt'  # Default for old tokens
+            if offset + 1 <= len(payload):
+                try:
+                    swap_currency, offset = self._unpack_string(payload, offset)
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')")
+                    swap_currency = 'usdt'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no swap_currency (backward compat)")
+
+            # ✅ NEW: payout_mode (variable length string) with backward compatibility
+            payout_mode = 'instant'  # Default for old tokens
+            if offset + 1 <= len(payload):
+                try:
+                    payout_mode, offset = self._unpack_string(payload, offset)
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')")
+                    payout_mode = 'instant'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no payout_mode (backward compat)")
+
+            # actual_eth_amount (8 bytes double) with backward compatibility
+            actual_eth_amount = 0.0
+            if offset + 8 <= len(payload):
+                try:
+                    actual_eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
+                    offset += 8
+                    print(f"💰 [TOKEN_DEC] ACTUAL ETH extracted: {actual_eth_amount}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
+                    actual_eth_amount = 0.0
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no actual_eth_amount (backward compat)")
+
             timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
             offset += 4
 
@@ -494,6 +632,7 @@ class TokenManager:
                 raise ValueError("Token expired")
 
             print(f"✅ [TOKEN_DEC] Swap request decrypted successfully")
+            print(f"🎯 [TOKEN_DEC] Payout Mode: {payout_mode}, Swap Currency: {swap_currency}")
 
             return {
                 "unique_id": unique_id,
@@ -503,6 +642,9 @@ class TokenManager:
                 "payout_currency": payout_currency,
                 "payout_network": payout_network,
                 "eth_amount": eth_amount,
+                "swap_currency": swap_currency,  # ✅ NEW
+                "payout_mode": payout_mode,  # ✅ NEW
+                "actual_eth_amount": actual_eth_amount,  # ✅ NEW
                 "timestamp": timestamp
             }
 

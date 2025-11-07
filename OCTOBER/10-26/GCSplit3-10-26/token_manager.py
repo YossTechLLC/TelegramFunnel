@@ -448,6 +448,30 @@ class TokenManager:
             eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
 
+            # ✅ NEW: swap_currency with backward compatibility
+            swap_currency = 'usdt'  # Default for old tokens (this won't be used in GCSplit3)
+            if offset + 1 <= len(payload) - 4:  # Check if there's room before timestamp
+                try:
+                    swap_currency, offset = self._unpack_string(payload, offset)
+                    print(f"💱 [TOKEN_DEC] Swap currency extracted: {swap_currency}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')")
+                    swap_currency = 'usdt'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no swap_currency (backward compat)")
+
+            # ✅ NEW: payout_mode with backward compatibility
+            payout_mode = 'instant'  # Default for old tokens
+            if offset + 1 <= len(payload) - 4:  # Check if there's room before timestamp
+                try:
+                    payout_mode, offset = self._unpack_string(payload, offset)
+                    print(f"🎯 [TOKEN_DEC] Payout mode extracted: {payout_mode}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')")
+                    payout_mode = 'instant'
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no payout_mode (backward compat)")
+
             # ✅ Extract actual_eth_amount if available (backward compatibility)
             actual_eth_amount = 0.0
             if offset + 8 <= len(payload) - 4:  # Check if there's room for double + timestamp
@@ -458,6 +482,8 @@ class TokenManager:
                 except Exception:
                     print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
                     actual_eth_amount = 0.0
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no actual_eth_amount (backward compat)")
 
             timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
             offset += 4
@@ -468,7 +494,8 @@ class TokenManager:
 
             print(f"✅ [TOKEN_DEC] Swap request decrypted successfully")
             print(f"💰 [TOKEN_DEC] Estimated ETH: {eth_amount}")
-            print(f"💰 [TOKEN_DEC] ACTUAL ETH: {actual_eth_amount}")  # ✅ ADD LOG
+            print(f"💰 [TOKEN_DEC] ACTUAL ETH: {actual_eth_amount}")
+            print(f"💱 [TOKEN_DEC] Swap Currency: {swap_currency}, Payout Mode: {payout_mode}")
 
             return {
                 "unique_id": unique_id,
@@ -478,7 +505,9 @@ class TokenManager:
                 "payout_currency": payout_currency,
                 "payout_network": payout_network,
                 "eth_amount": eth_amount,
-                "actual_eth_amount": actual_eth_amount,  # ✅ ADD FIELD
+                "swap_currency": swap_currency,  # ✅ NEW
+                "payout_mode": payout_mode,  # ✅ NEW
+                "actual_eth_amount": actual_eth_amount,
                 "timestamp": timestamp
             }
 
@@ -620,6 +649,19 @@ class TokenManager:
             flow, offset = self._unpack_string(payload, offset)
             type_, offset = self._unpack_string(payload, offset)
 
+            # ✅ ADDED: actual_eth_amount with backward compatibility
+            actual_eth_amount = 0.0
+            if offset + 8 <= len(payload) - 4:  # Check if there's room for double + timestamp
+                try:
+                    actual_eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
+                    offset += 8
+                    print(f"💰 [TOKEN_DEC] ACTUAL ETH extracted: {actual_eth_amount}")
+                except Exception:
+                    print(f"⚠️ [TOKEN_DEC] No actual_eth_amount in token (backward compat)")
+                    actual_eth_amount = 0.0
+            else:
+                print(f"⚠️ [TOKEN_DEC] Old token format - no actual_eth_amount (backward compat)")
+
             timestamp = struct.unpack(">I", payload[offset:offset + 4])[0]
             offset += 4
 
@@ -645,6 +687,7 @@ class TokenManager:
                 "refund_address": refund_address,
                 "flow": flow,
                 "type": type_,
+                "actual_eth_amount": actual_eth_amount,  # ✅ NEW
                 "timestamp": timestamp
             }
 

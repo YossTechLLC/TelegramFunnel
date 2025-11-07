@@ -359,7 +359,8 @@ def process_validated_payment():
                 payout_currency=payout_currency,
                 payout_network=payout_network,
                 subscription_price=outcome_amount_usd,  # ✅ ACTUAL USD amount
-                actual_eth_amount=float(nowpayments_outcome_amount) if nowpayments_outcome_amount else 0.0  # ✅ ADD ACTUAL ETH
+                actual_eth_amount=float(nowpayments_outcome_amount) if nowpayments_outcome_amount else 0.0,  # ✅ ADD ACTUAL ETH
+                payout_mode='instant'  # ✅ NEW: Pass instant mode to GCSplit1
             )
 
             if task_name:

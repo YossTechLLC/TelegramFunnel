@@ -109,14 +109,18 @@ def process_eth_client_swap():
         wallet_address = decrypted_data['wallet_address']
         payout_currency = decrypted_data['payout_currency']
         payout_network = decrypted_data['payout_network']
-        usdt_amount = decrypted_data['eth_amount']  # ✅ RENAMED: Actually contains USDT amount
-        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: ACTUAL ETH
+        swap_amount = decrypted_data['eth_amount']  # ✅ UPDATED: Generic (ETH or USDT)
+        actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)
+        swap_currency = decrypted_data.get('swap_currency', 'usdt')  # ✅ NEW: Extract swap_currency
+        payout_mode = decrypted_data.get('payout_mode', 'instant')  # ✅ NEW: Extract payout_mode
 
         print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
         print(f"👤 [ENDPOINT] User ID: {user_id}")
         print(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
-        print(f"💰 [ENDPOINT] USDT Amount: {usdt_amount}")
-        print(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")  # ✅ ADDED
+        print(f"💱 [ENDPOINT] Swap Currency: {swap_currency}")  # ✅ NEW LOG
+        print(f"🎯 [ENDPOINT] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+        print(f"💰 [ENDPOINT] Swap Amount: {swap_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic
+        print(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
         print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
         # Create ChangeNow fixed-rate transaction with infinite retry
@@ -124,14 +128,14 @@ def process_eth_client_swap():
             print(f"❌ [ENDPOINT] ChangeNow client not available")
             abort(500, "ChangeNow client unavailable")
 
-        print(f"🌐 [ENDPOINT] Creating ChangeNow transaction USDT→{payout_currency.upper()} (with retry)")
+        print(f"🌐 [ENDPOINT] Creating ChangeNow transaction {swap_currency.upper()}→{payout_currency.upper()} (with retry)")
 
         transaction = changenow_client.create_fixed_rate_transaction_with_retry(
-            from_currency="usdt",
+            from_currency=swap_currency,  # ✅ UPDATED: Dynamic (eth or usdt)
             to_currency=payout_currency,
-            from_amount=usdt_amount,
+            from_amount=swap_amount,  # ✅ UPDATED: Generic variable name
             address=wallet_address,
-            from_network="eth",
+            from_network="eth",  # Both ETH and USDT use ETH network
             to_network=payout_network,
             user_id=str(user_id)
         )
@@ -159,7 +163,7 @@ def process_eth_client_swap():
         print(f"✅ [ENDPOINT] ChangeNow transaction created")
         print(f"🆔 [ENDPOINT] ChangeNow API ID: {cn_api_id}")
         print(f"🏦 [ENDPOINT] Payin address: {api_payin_address}")
-        print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
+        print(f"💰 [ENDPOINT] From: {api_from_amount} {api_from_currency.upper()}")  # ✅ UPDATED: Dynamic currency
         print(f"💰 [ENDPOINT] To: {api_to_amount} {api_to_currency.upper()}")
 
         # Encrypt response token for GCSplit1

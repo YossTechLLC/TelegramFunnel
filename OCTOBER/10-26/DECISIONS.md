@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 63
+**Last Updated:** 2025-11-07 Session 65
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,85 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-07 Session 65: GCSplit2 Token Manager Dual-Currency Support
+
+**Decision:** Deploy GCSplit2 with full dual-currency token support, enabling both ETH and USDT swap operations with backward compatibility.
+
+**Status:** ✅ **DEPLOYED**
+
+**Context:**
+- Instant payouts use ETH→ClientCurrency swaps
+- Threshold payouts use USDT→ClientCurrency swaps
+- GCSplit2 token manager needed to support both currencies dynamically
+- Must maintain backward compatibility with existing threshold payout tokens
+
+**Implementation:**
+- Updated all 3 token methods in `token_manager.py`
+- Added `swap_currency`, `payout_mode`, `actual_eth_amount` fields to all tokens
+- Implemented backward compatibility with try/except and offset validation
+- Changed variable names from currency-specific to generic (adjusted_amount, from_amount)
+- Updated main service to extract and use new fields dynamically
+
+**Benefits:**
+- GCSplit2 can now handle both ETH and USDT swaps seamlessly
+- Old threshold payout tokens still work (backward compatible)
+- New instant payout tokens work with ETH routing
+- Clear logging for debugging currency type
+
+**Trade-offs:**
+- Slightly larger token size due to additional fields
+- More complex decryption logic with backward compatibility checks
+- Accepted: Benefits of flexibility outweigh minor performance cost
+
+**Deployment:**
+- Build: `c47c15cf-d154-445e-b207-4afa6c9c0150`
+- Revision: `gcsplit2-10-26-00014-4qn`
+- Traffic: 100%
+- Health: All components healthy
+
+---
+
+### 2025-11-07 Session 64: Dual-Mode Currency Routing - TP_FEE Application
+
+**Decision:** Always apply TP_FEE deduction to actual_eth_amount for instant payouts before initiating ETH→ClientCurrency swaps.
+
+**Status:** ✅ **IMPLEMENTED** - Bug fix ready for deployment
+
+**Context:**
+- Implementing dual-mode currency routing (ETH for instant, USDT for threshold)
+- Architecture specified TP_FEE must be deducted from actual_eth_amount
+- Initial implementation missed this critical calculation
+
+**Problem:**
+- GCSplit1 was passing full `actual_eth_amount` to ChangeNow without deducting platform fee
+- Result: TelePay not collecting revenue on instant payouts
+- Example: User pays $1.35 → receives 0.0005668 ETH → Full amount sent to client (0% platform fee) ❌
+
+**Solution:**
+```python
+tp_fee_decimal = float(tp_flat_fee if tp_flat_fee else "3") / 100
+adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)
+```
+
+**Rationale:**
+- Platform fee must be collected on ALL payouts (instant and threshold)
+- Instant: Deduct from ETH before swap → Client gets (ETH - TP_FEE) in their currency
+- Threshold: Deduct from USD before accumulation → Client gets (USDT - TP_FEE) in their currency
+- Maintains revenue consistency across both payout modes
+
+**Impact:**
+- ✅ Revenue protection: Platform fee now collected on instant payouts
+- ✅ Parity: Both payout modes now apply TP_FEE consistently
+- ✅ Transparency: Enhanced logging shows TP_FEE calculation explicitly
+
+**Example:**
+- NowPayments sends: 0.0005668 ETH
+- TP_FEE (15%): 0.00008502 ETH (platform revenue)
+- Client swap amount: 0.00048178 ETH → SHIB
+
+**Files Modified:**
+- `GCSplit1-10-26/tps1-10-26.py:350-357`
 
 ### 2025-11-07 Session 63: UPSERT Strategy for NowPayments IPN Processing
 
