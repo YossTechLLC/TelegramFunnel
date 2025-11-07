@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 62
+**Last Updated:** 2025-11-07 Session 63
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,106 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-07 Session 63: UPSERT Strategy for NowPayments IPN Processing
+
+**Decision:** Replace UPDATE-only approach with conditional UPSERT (INSERT or UPDATE) in `np-webhook-10-26` IPN handler.
+
+**Status:** ✅ **IMPLEMENTED & DEPLOYED** - Production issue resolved
+
+**Context:**
+- System assumed all payments would originate from Telegram bot, which pre-creates database records
+- Direct payment links (bookmarked, shared, or replayed) bypass bot initialization
+- Race conditions could result in payment completing before record creation
+- Original UPDATE-only query failed silently when no pre-existing record found
+- Result: Payment confirmed at NowPayments but stuck "pending" internally
+
+**Problem Statement:**
+```
+Payment Flow Assumption (ORIGINAL):
+1. User → Telegram Bot → /subscribe
+2. Bot creates record in private_channel_users_database (payment_status='pending')
+3. Bot generates NowPayments invoice
+4. User pays
+5. IPN arrives → UPDATE existing record → Success ✅
+
+Broken Flow (WHAT ACTUALLY HAPPENED):
+1. User → Direct payment link (no bot interaction)
+2. No record created ❌
+3. User pays
+4. IPN arrives → UPDATE attempts to find record → 0 rows affected ❌
+5. Returns HTTP 500 → NowPayments retries infinitely ❌
+6. User stuck on "Processing..." page ❌
+```
+
+**Solution Architecture:**
+```python
+# OLD (UPDATE-only):
+UPDATE private_channel_users_database
+SET payment_id = %s, payment_status = 'confirmed', ...
+WHERE user_id = %s AND private_channel_id = %s
+-- Fails if no record exists
+
+# NEW (UPSERT with conditional logic):
+1. Check if record exists (SELECT id WHERE user_id = %s AND private_channel_id = %s)
+2a. IF EXISTS → UPDATE payment fields only
+2b. IF NOT EXISTS → INSERT new record with:
+    - Default 30-day subscription
+    - Client config from main_clients_database
+    - All NowPayments metadata
+    - payment_status = 'confirmed'
+```
+
+**Alternatives Considered:**
+
+1. **PostgreSQL UPSERT (ON CONFLICT DO UPDATE):**
+   - Requires UNIQUE constraint on `(user_id, private_channel_id)`
+   - Cleaner single-query approach
+   - **Rejected:** Requires database migration, higher risk
+   - **Future consideration:** Add unique constraint in next schema update
+
+2. **Enforce Bot-First Flow:**
+   - Make all payment links single-use with expiration
+   - Reject direct/replayed links
+   - **Rejected:** Reduces user convenience, doesn't solve race conditions
+
+3. **Two-Pass Strategy (CHECK then INSERT/UPDATE):**
+   - **Accepted:** Clear logic, handles both scenarios explicitly
+   - Minimal code changes, lower risk
+   - Easy to debug and maintain
+
+**Rationale:**
+- **Resilience:** Handles edge cases (direct links, race conditions, link sharing)
+- **Backward Compatibility:** Existing bot flow unchanged, UPDATE path preserved
+- **Idempotency:** Safe to retry, no duplicate records created
+- **Zero Downtime:** No schema changes required
+- **User Experience:** Payment links work in all scenarios
+
+**Implementation Details:**
+- File: `np-webhook-10-26/app.py`
+- Function: `update_payment_data()` (lines 290-535)
+- Query client config from `main_clients_database` to populate INSERT
+- Default subscription: 30 days (configurable in future)
+- Calculate expiration dates automatically
+- Full NowPayments metadata preserved in both paths
+
+**Monitoring & Alerts (Recommended):**
+- Track INSERT vs UPDATE ratio (high INSERT = many direct links)
+- Alert on repeated INSERT for same user (potential bot bypass)
+- Dashboard showing payment source: bot vs direct link
+
+**Long-Term Improvements:**
+1. Add `UNIQUE (user_id, private_channel_id)` constraint
+2. Migrate to true PostgreSQL UPSERT syntax
+3. Add payment source tracking field (`payment_source`: 'bot' | 'direct_link')
+4. Implement payment link expiration (24-hour validity)
+5. Add reconciliation job to auto-fix stuck payments
+
+**Lessons Learned:**
+- Never assume single entry point for critical operations
+- UPSERT patterns essential for external webhook integrations
+- Direct payment link support improves user experience but requires defensive coding
+- Production issues often reveal assumptions in system design
 
 ### 2025-11-04 Session 62 (Continued - Part 2): System-Wide UUID Truncation Fix - GCHostPay3 ✅
 

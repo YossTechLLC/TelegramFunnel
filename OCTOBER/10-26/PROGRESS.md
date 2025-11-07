@@ -1,8 +1,71 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-04 Session 62 (Continued) - **GCHostPay1, GCHostPay2 & GCHostPay3 UUID TRUNCATION FIXED** ✅
+**Last Updated:** 2025-11-07 Session 63 - **NowPayments IPN UPSERT Fix + Manual Payment Recovery** ✅
 
 ## Recent Updates
+
+## 2025-11-07 Session 63: NowPayments IPN UPSERT Fix + Manual Payment Recovery ✅
+
+**CRITICAL PRODUCTION FIX**: Resolved IPN processing failure causing payment confirmations to hang indefinitely
+
+**Root Cause Identified:**
+- Payment `4479119533` completed at NowPayments (status: "finished") but stuck processing
+- IPN callback failing with "No records found to update" error
+- `np-webhook-10-26/app.py` used UPDATE-only approach, requiring pre-existing DB record
+- Direct payment link usage (no Telegram bot interaction first) = no initial record created
+- Result: HTTP 500 loop, infinite NowPayments retries, user stuck on "Processing..." page
+
+**Investigation:**
+- ✅ IPN callback received and signature verified (HMAC-SHA512)
+- ✅ Order ID parsed correctly: `PGP-6271402111|-1003253338212`
+- ✅ Channel mapping found: open `-1003253338212` → closed `-1003016667267`
+- ❌ Database UPDATE failed: 0 rows affected (no pre-existing record)
+- ❌ Payment status API returned "pending" indefinitely
+
+**Solution Implemented:**
+
+1. **UPSERT Strategy in np-webhook-10-26/app.py (lines 290-535):**
+   - Changed from UPDATE-only to conditional INSERT or UPDATE
+   - Checks if record exists before operation
+   - **UPDATE**: If record exists (normal bot flow) - update payment fields
+   - **INSERT**: If no record (direct link, race condition) - create full record with:
+     - Default 30-day subscription
+     - Client configuration from `main_clients_database`
+     - All NowPayments payment metadata
+     - Status set to 'confirmed'
+   - Eliminates dependency on Telegram bot pre-creating records
+
+2. **Manual Payment Recovery (payment_id: 4479119533):**
+   - Created tool: `/tools/manual_insert_payment_4479119533.py`
+   - Inserted missing record for user `6271402111` / channel `-1003016667267`
+   - Record ID: `17`
+   - Status: `confirmed` ✅
+   - Subscription: 30 days (expires 2025-12-07)
+
+**Files Modified:**
+- `np-webhook-10-26/app.py` - UPSERT implementation (lines 290-535)
+- `tools/manual_insert_payment_4479119533.py` - Payment recovery script (new)
+- `NOWPAYMENTS_IPN_NO_PAYMENT_RECORD_ISSUE_ANALYSIS.md` - Investigation report (new)
+
+**Deployment:**
+- Build: ✅ Complete (Build ID: `7f9c9fd9-c6e8-43db-a98b-33edefa945d7`)
+- Deploy: ✅ Complete (Revision: `np-webhook-10-26-00010-pds`)
+- Health: ✅ All components healthy (connector, database, ipn_secret)
+- Target: `np-webhook-10-26` Cloud Run service (us-central1)
+
+**Expected Results:**
+- ✅ Future direct payment links will work without bot interaction
+- ✅ IPN callbacks will create missing records automatically
+- ✅ No more "No payment record found" errors
+- ✅ Payment status API will return "confirmed" for valid payments
+- ✅ Users receive Telegram invites even for direct link payments
+- ✅ Payment orchestration (GCWebhook1 → GCSplit1 → GCHostPay) proceeds normally
+
+**Impact on Current Payment:**
+- Manual insert completed successfully ✅
+- Next IPN retry will find existing record and succeed ✅
+- Payment orchestration will begin automatically ✅
+- User will receive Telegram invitation ✅
 
 ## 2025-11-04 Session 62 (Continued - Part 2): GCHostPay3 UUID Truncation Fixed ✅
 
