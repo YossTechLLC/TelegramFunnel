@@ -144,6 +144,9 @@ class ConfigManager:
             "Database password"
         )
 
+        # Fetch micro-batch threshold (logs threshold value immediately)
+        threshold = self.get_micro_batch_threshold()
+
         # Validate critical configurations
         if not success_url_signing_key:
             print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
@@ -153,6 +156,9 @@ class ConfigManager:
         config = {
             # Secrets
             'success_url_signing_key': success_url_signing_key,
+
+            # Threshold configuration
+            'micro_batch_threshold': threshold,
 
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
@@ -176,6 +182,7 @@ class ConfigManager:
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
+        print(f"   Micro-Batch Threshold: {'✅' if config['micro_batch_threshold'] else '❌'} (${config['micro_batch_threshold']})")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
         print(f"   GCHostPay1 Batch Queue: {'✅' if config['gchostpay1_batch_queue'] else '❌'}")

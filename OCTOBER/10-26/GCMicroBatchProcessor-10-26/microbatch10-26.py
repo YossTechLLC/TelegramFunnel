@@ -4,6 +4,7 @@ GCMicroBatchProcessor-10-26: Micro-Batch Conversion Service
 Triggered by Cloud Scheduler every 15 minutes.
 Checks if total pending USD >= threshold, then creates batch ETH→USDT swap.
 """
+import sys
 import time
 import uuid
 from decimal import Decimal
@@ -90,16 +91,27 @@ def check_threshold():
     try:
         print(f"🎯 [ENDPOINT] Threshold check triggered")
         print(f"⏰ [ENDPOINT] Timestamp: {int(time.time())}")
+        sys.stdout.flush()  # Force immediate log output
 
         # Validate managers
         if not db_manager or not token_manager or not cloudtasks_client or not changenow_client:
             print(f"❌ [ENDPOINT] Required managers not available")
-            abort(500, "Service not properly initialized")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Service not properly initialized"
+            }), 500
 
-        # Fetch threshold from Secret Manager
-        print(f"🔐 [ENDPOINT] Fetching micro-batch threshold from Secret Manager")
-        threshold = config_manager.get_micro_batch_threshold()
-        print(f"💰 [ENDPOINT] Current threshold: ${threshold}")
+        # Get threshold from config (already fetched at startup)
+        threshold = config.get('micro_batch_threshold')
+        if not threshold:
+            print(f"❌ [ENDPOINT] Threshold not available in config")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Threshold configuration missing"
+            }), 500
+        print(f"💰 [ENDPOINT] Using threshold: ${threshold}")
 
         # Query total pending USD and ACTUAL ETH
         print(f"🔍 [ENDPOINT] Querying total pending USD")
@@ -146,7 +158,11 @@ def check_threshold():
         host_wallet_usdt = config.get('host_wallet_usdt_address')
         if not host_wallet_usdt:
             print(f"❌ [ENDPOINT] Host USDT wallet address not configured")
-            abort(500, "Host wallet configuration missing")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Host wallet configuration missing"
+            }), 500
 
         print(f"🏦 [ENDPOINT] Host USDT wallet: {host_wallet_usdt}")
 
@@ -175,7 +191,11 @@ def check_threshold():
 
             if not estimate_response or 'toAmount' not in estimate_response:
                 print(f"❌ [ENDPOINT] Failed to get ETH estimate from ChangeNow")
-                abort(500, "Failed to calculate ETH equivalent")
+                sys.stdout.flush()
+                return jsonify({
+                    "status": "error",
+                    "message": "Failed to calculate ETH equivalent"
+                }), 500
 
             eth_for_swap = estimate_response['toAmount']
             print(f"✅ [ENDPOINT] USD→ETH conversion estimate received")
@@ -196,7 +216,11 @@ def check_threshold():
 
         if not swap_result or 'id' not in swap_result:
             print(f"❌ [ENDPOINT] Failed to create ChangeNow swap")
-            abort(500, "ChangeNow swap creation failed")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "ChangeNow swap creation failed"
+            }), 500
 
         cn_api_id = swap_result['id']
         payin_address = swap_result.get('payinAddress')
@@ -217,7 +241,11 @@ def check_threshold():
 
         if not batch_created:
             print(f"❌ [ENDPOINT] Failed to create batch_conversions record")
-            abort(500, "Database insertion failed")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Database insertion failed"
+            }), 500
 
         # Update all pending records to 'swapping'
         print(f"💾 [ENDPOINT] Updating all pending records to 'swapping' status")
@@ -225,7 +253,11 @@ def check_threshold():
 
         if not records_updated:
             print(f"❌ [ENDPOINT] Failed to update records to swapping")
-            abort(500, "Failed to update records")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Failed to update records"
+            }), 500
 
         print(f"✅ [ENDPOINT] Updated {len(pending_records)} record(s) to 'swapping' status")
 
@@ -237,7 +269,11 @@ def check_threshold():
 
         if not gchostpay1_batch_queue or not gchostpay1_url:
             print(f"❌ [ENDPOINT] GCHostPay1 batch configuration missing")
-            abort(500, "Service configuration error")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Service configuration error"
+            }), 500
 
         # Encrypt token for GCHostPay1
         print(f"🔐 [ENDPOINT] Encrypting token for GCHostPay1")
@@ -254,7 +290,11 @@ def check_threshold():
 
         if not encrypted_token:
             print(f"❌ [ENDPOINT] Failed to encrypt token")
-            abort(500, "Token encryption failed")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Token encryption failed"
+            }), 500
 
         task_name = cloudtasks_client.enqueue_gchostpay1_batch_execution(
             queue_name=gchostpay1_batch_queue,
@@ -264,7 +304,11 @@ def check_threshold():
 
         if not task_name:
             print(f"❌ [ENDPOINT] Failed to create Cloud Task")
-            abort(500, "Failed to enqueue execution task")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Failed to enqueue execution task"
+            }), 500
 
         print(f"✅ [ENDPOINT] Batch execution task enqueued successfully")
         print(f"🆔 [ENDPOINT] Task: {task_name}")
@@ -286,7 +330,11 @@ def check_threshold():
         print(f"❌ [ENDPOINT] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
-        abort(500, f"Internal server error: {str(e)}")
+        sys.stdout.flush()
+        return jsonify({
+            "status": "error",
+            "message": f"Internal server error: {str(e)}"
+        }), 500
 
 
 @app.route("/swap-executed", methods=["POST"])
@@ -311,28 +359,48 @@ def swap_executed():
         # Validate managers
         if not db_manager or not token_manager:
             print(f"❌ [ENDPOINT] Required managers not available")
-            abort(500, "Service not properly initialized")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Service not properly initialized"
+            }), 500
 
         # Parse request data
         try:
             request_data = request.get_json()
             if not request_data:
-                abort(400, "Invalid JSON payload")
+                sys.stdout.flush()
+                return jsonify({
+                    "status": "error",
+                    "message": "Invalid JSON payload"
+                }), 400
         except Exception as e:
             print(f"❌ [ENDPOINT] JSON parsing error: {e}")
-            abort(400, "Malformed JSON payload")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Malformed JSON payload"
+            }), 400
 
         encrypted_token = request_data.get('token')
         if not encrypted_token:
             print(f"❌ [ENDPOINT] Missing encrypted token")
-            abort(400, "Missing token")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Missing token"
+            }), 400
 
         print(f"🔐 [ENDPOINT] Decrypting token from GCHostPay1")
         decrypted_data = token_manager.decrypt_gchostpay1_to_microbatch_token(encrypted_token)
 
         if not decrypted_data:
             print(f"❌ [ENDPOINT] Token decryption failed")
-            abort(401, "Invalid token")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Invalid token"
+            }), 401
 
         batch_conversion_id = decrypted_data.get('batch_conversion_id')
         cn_api_id = decrypted_data.get('cn_api_id')
@@ -351,7 +419,11 @@ def swap_executed():
 
         if not batch_records:
             print(f"❌ [ENDPOINT] No records found for batch {batch_conversion_id}")
-            abort(404, "Batch records not found")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Batch records not found"
+            }), 404
 
         print(f"📊 [ENDPOINT] Found {len(batch_records)} record(s) in batch")
 
@@ -364,7 +436,11 @@ def swap_executed():
 
         if not distributions:
             print(f"❌ [ENDPOINT] Failed to calculate distributions")
-            abort(500, "Distribution calculation failed")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Distribution calculation failed"
+            }), 500
 
         # Update each record with usdt_share
         print(f"💾 [ENDPOINT] Updating records with USDT shares")
@@ -393,7 +469,11 @@ def swap_executed():
 
         if not batch_finalized:
             print(f"❌ [ENDPOINT] Failed to finalize batch conversion")
-            abort(500, "Failed to finalize batch")
+            sys.stdout.flush()
+            return jsonify({
+                "status": "error",
+                "message": "Failed to finalize batch"
+            }), 500
 
         print(f"✅ [ENDPOINT] Batch conversion finalized successfully")
         print(f"🎉 [ENDPOINT] Proportional distribution completed")
@@ -411,7 +491,11 @@ def swap_executed():
         print(f"❌ [ENDPOINT] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
-        abort(500, f"Internal server error: {str(e)}")
+        sys.stdout.flush()
+        return jsonify({
+            "status": "error",
+            "message": f"Internal server error: {str(e)}"
+        }), 500
 
 
 @app.route("/health", methods=["GET"])

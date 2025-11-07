@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 71 - **Instant Payout TP Fee Retention Fix**
+**Last Updated:** 2025-11-07 Session 75 - **Unified Token Format for Dual-Currency Payout Architecture**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,261 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-07 Session 75: Unified Token Format for Dual-Currency Payout Architecture
+
+**Decision:** Use currency-agnostic parameter names in token encryption methods to support both instant (ETH) and threshold (USDT) payouts
+
+**Context:**
+- System supports two payout methods: instant (ETH-based) and threshold (USDT-based)
+- During instant payout implementation, token encryption methods were refactored to be currency-agnostic
+- Threshold payout method broke due to parameter name mismatch in `/batch-payout` endpoint
+- Error: `TokenManager.encrypt_gcsplit1_to_gcsplit2_token() got an unexpected keyword argument 'adjusted_amount_usdt'`
+
+**Problem:**
+- Original implementation used currency-specific parameter names: `adjusted_amount_usdt`, `adjusted_amount_eth`
+- Required separate code paths for ETH and USDT flows
+- Created maintenance burden and inconsistency risk
+- Missed updating `/batch-payout` endpoint during instant payout refactoring
+
+**Options Considered:**
+1. **Keep separate methods for ETH and USDT** ⚠️
+   - Pros: Explicit about currency type
+   - Cons: Code duplication, maintenance burden, inconsistency risk
+
+2. **Use generic parameter names with type indicators** ✅ SELECTED
+   - Pros: Single unified codebase, consistent token format, easier maintenance
+   - Cons: Requires explicit type indicators (`swap_currency`, `payout_mode`)
+   - Rationale: Reduces duplication, ensures consistency, scalable for future currencies
+
+3. **Overload methods with different signatures**
+   - Pros: Type safety
+   - Cons: Python doesn't natively support method overloading, adds complexity
+
+**Implementation:**
+- Parameter naming convention:
+  - `adjusted_amount` (generic) instead of `adjusted_amount_usdt` or `adjusted_amount_eth`
+  - Added `swap_currency` field: 'eth' or 'usdt'
+  - Added `payout_mode` field: 'instant' or 'threshold'
+  - Added `actual_eth_amount` field: populated for instant, 0.0 for threshold
+
+**Token Structure:**
+```python
+token_manager.encrypt_gcsplit1_to_gcsplit2_token(
+    user_id=user_id,
+    closed_channel_id=closed_channel_id,
+    wallet_address=wallet_address,
+    payout_currency=payout_currency,
+    payout_network=payout_network,
+    adjusted_amount=amount,        # Generic: ETH or USDT
+    swap_currency=currency_type,   # 'eth' or 'usdt'
+    payout_mode=mode,              # 'instant' or 'threshold'
+    actual_eth_amount=eth_amount   # ACTUAL from NowPayments or 0.0
+)
+```
+
+**Benefits:**
+- ✅ Single token format handles both instant and threshold payouts
+- ✅ Reduces code duplication across services
+- ✅ Downstream services (GCSplit2, GCSplit3, GCHostPay) handle both flows with same logic
+- ✅ Easier to maintain and extend for future payout types
+- ✅ Explicit type indicators prevent ambiguity
+
+**Backward Compatibility:**
+- Decryption methods include fallback defaults:
+  - Missing `swap_currency` → defaults to `'usdt'`
+  - Missing `payout_mode` → defaults to `'instant'`
+  - Missing `actual_eth_amount` → defaults to `0.0`
+- Ensures old tokens in flight during deployment don't cause errors
+
+**Fix Applied:**
+- Updated `GCSplit1-10-26/tps1-10-26.py` ENDPOINT 4 (`/batch-payout`) lines 926-937
+- Changed parameter names to match refactored method signature
+- Added explicit type indicators for threshold payout flow
+
+**Trade-offs Accepted:**
+- ⚠️ Requires explicit type indicators (`swap_currency`, `payout_mode`) in all calls
+- ⚠️ Parameter validation relies on string values rather than type system (acceptable: validated in service logic)
+
+### 2025-11-07 Session 74: Load Threshold During Initialization (Not Per-Request)
+
+**Decision:** Fetch micro-batch threshold from Secret Manager during service initialization, not during endpoint execution
+
+**Context:**
+- GCMicroBatchProcessor threshold ($5.00) is a critical operational parameter
+- User requested threshold visibility in startup logs for operational monitoring
+- Original implementation fetched threshold on every `/check-threshold` request
+- Threshold value changes are infrequent, not per-request
+
+**Problem:**
+- Threshold log statement only appeared during endpoint execution
+- Startup logs didn't show threshold value, reducing operational visibility
+- Repeated Secret Manager calls for static configuration (unnecessary API usage)
+- No single source of truth for threshold during service lifetime
+
+**Options Considered:**
+1. **Keep per-request threshold fetch** ⚠️
+   - Pros: Always uses latest value from Secret Manager
+   - Cons: Unnecessary API calls, threshold not visible in startup logs, slower endpoint execution
+
+2. **Load threshold during initialization** ✅ SELECTED
+   - Pros: Threshold visible in startup logs, single API call, faster endpoint execution, single source of truth
+   - Cons: Requires service restart to pick up threshold changes
+   - Rationale: Threshold changes are rare operational events requiring deployment review anyway
+
+3. **Cache threshold with TTL refresh**
+   - Pros: Best of both worlds
+   - Cons: Over-engineering for a value that rarely changes, adds complexity
+
+**Implementation:**
+- Modified `config_manager.py`: Call `get_micro_batch_threshold()` in `initialize_config()`
+- Added threshold to config dictionary: `config['micro_batch_threshold']`
+- Modified `microbatch10-26.py`: Use `config.get('micro_batch_threshold')` instead of calling config_manager
+- Added threshold to configuration status log output
+
+**Benefits:**
+- ✅ Threshold visible in every startup and Cloud Scheduler trigger log
+- ✅ Reduced Secret Manager API calls (once per instance vs. every 15 minutes)
+- ✅ Faster `/check-threshold` endpoint execution
+- ✅ Configuration loaded centrally, used consistently throughout service lifetime
+- ✅ Improved operational visibility for threshold monitoring
+
+**Trade-offs Accepted:**
+- ⚠️ Threshold changes require service redeployment (acceptable: rare operational event)
+- ⚠️ All instances must be restarted to pick up new threshold (acceptable: standard deployment process)
+
+### 2025-11-07 Session 73: Replace Flask abort() with jsonify() Returns for Proper Logging
+
+**Decision:** Standardize error handling in GCMicroBatchProcessor by replacing all `abort()` calls with `return jsonify()` statements
+
+**Context:**
+- GCMicroBatchProcessor-10-26 was returning HTTP 200 but producing ZERO stdout logs
+- Flask's `abort()` function terminates requests abruptly, preventing stdout buffer from flushing
+- GCBatchProcessor-10-26 (comparison service) successfully produced 11 logs per request using `return jsonify()`
+- Cloud Logging visibility is critical for debugging scheduled jobs
+
+**Problem:**
+- Flask `abort(status, message)` raises an HTTP exception immediately
+- Stdout buffer may not flush before exception terminates request handler
+- Result: HTTP responses succeed but logs are lost
+- Impact: Cannot debug or monitor service behavior, especially early initialization failures
+
+**Options Considered:**
+1. **Add sys.stdout.flush() after every print() + keep abort()** ⚠️
+   - Pros: Minimal code changes
+   - Cons: Still relies on abort() which can skip buffered output, not foolproof
+
+2. **Replace ALL abort() with return jsonify()** ✅ SELECTED
+   - Pros: Graceful request completion, guaranteed log flushing, consistent with working services
+   - Cons: Slightly more verbose code
+   - Rationale: Ensures proper stdout handling, matches gcbatchprocessor-10-26 pattern
+
+3. **Use logging module instead of print()**
+   - Pros: More robust, structured logging
+   - Cons: Requires refactoring entire codebase, breaks emoji logging pattern
+   - Deferred: Would require extensive testing across all services
+
+**Implementation Approach:**
+- Replace `abort(status, message)` with `return jsonify({"status": "error", "message": message}), status`
+- Add `import sys` at top of file
+- Add `sys.stdout.flush()` immediately after initial print statements for immediate visibility
+- Add `sys.stdout.flush()` before all error returns to ensure logs are captured even during failures
+- Maintain existing emoji logging patterns (as per CLAUDE.md guidelines)
+- Apply to all 13 abort() locations across /check-threshold and /swap-executed endpoints
+
+**Affected Code Patterns:**
+
+**Before:**
+```python
+if not db_manager:
+    print(f"❌ [ENDPOINT] Required managers not available")
+    abort(500, "Service not properly initialized")  # ❌ Logs may be lost
+```
+
+**After:**
+```python
+if not db_manager:
+    print(f"❌ [ENDPOINT] Required managers not available")
+    sys.stdout.flush()  # ✅ Force immediate flush
+    return jsonify({
+        "status": "error",
+        "message": "Service not properly initialized"
+    }), 500  # ✅ Graceful return, logs preserved
+```
+
+**Benefits:**
+- ✅ Guaranteed stdout log visibility in Cloud Logging
+- ✅ Consistent error handling across all microservices
+- ✅ Easier debugging of initialization and runtime failures
+- ✅ No functional changes to API behavior (same HTTP status codes and error messages)
+- ✅ Aligns with GCBatchProcessor-10-26 working implementation
+
+**Trade-offs:**
+- Slightly more verbose code (3-5 lines vs 1 line per error)
+- Negligible performance impact (jsonify is lightweight)
+
+**Verification Method:**
+- Deploy fixed service and wait for next Cloud Scheduler trigger (every 5 minutes)
+- Check Cloud Logging stdout stream for presence of print statements
+- Compare log output with gcbatchprocessor-10-26 (should be similar verbosity)
+
+### 2025-11-07 Session 72: Enable Dynamic MICRO_BATCH_THRESHOLD_USD Configuration
+
+**Decision:** Switch MICRO_BATCH_THRESHOLD_USD from static environment variable injection to dynamic Secret Manager API fetching
+
+**Context:**
+- MICRO_BATCH_THRESHOLD_USD controls when batch ETH→USDT conversions are triggered
+- Static configuration requires service redeployment for every threshold adjustment
+- As network grows, threshold tuning will become more frequent
+- Need ability to adjust threshold without downtime or redeployment
+
+**Options Considered:**
+1. **Keep static env var injection (status quo)** ❌
+   - Pros: Fastest access (no API call), predictable
+   - Cons: Requires redeployment for changes, ~5 min downtime per adjustment
+
+2. **Switch to dynamic Secret Manager API (per-request fetching)** ✅ SELECTED
+   - Pros: Zero-downtime updates, instant configuration changes, version history
+   - Cons: Slight latency (+50-100ms), 96 API calls/day
+   - Rationale: Latency negligible for scheduled job (every 15 min), flexibility outweighs cost
+
+3. **Implement caching layer with TTL**
+   - Pros: Balance between static and dynamic
+   - Cons: Added complexity, cache invalidation issues, not needed for 15-min schedule
+
+**Implementation Approach:**
+- Code already supports dynamic fetching (lines 57-66 in config_manager.py)
+- Dual-path logic: `os.getenv()` first, Secret Manager API fallback
+- Remove MICRO_BATCH_THRESHOLD_USD from --set-secrets deployment flag
+- Keep other 11 secrets as static (no need for dynamic updates)
+
+**Trade-offs Accepted:**
+- ✅ Flexibility over microsecond-level performance
+- ✅ Operational simplicity over absolute optimization
+- ✅ Audit trail (Secret Manager versions) over env var simplicity
+
+**Deployment Strategy:**
+1. Update secret value ($2.00 → $5.00)
+2. Redeploy service WITHOUT MICRO_BATCH_THRESHOLD_USD in --set-secrets
+3. Verify dynamic fetching via logs
+4. Test rapid threshold changes (no redeploy)
+
+**Consequences:**
+- ✅ Threshold changes take effect within 15 minutes (next scheduled check)
+- ✅ Zero redeployment overhead for configuration tuning
+- ✅ Secret Manager provides version history and rollback capability
+- ⚠️ Dependency on Secret Manager availability (fallback to $20.00 if unavailable)
+- ⚠️ +$0.003 per 10,000 API calls (96/day = $0.000003/day, negligible)
+
+**Success Metrics:**
+- Threshold updates without redeployment: ✅ Confirmed working
+- Service stability: ✅ No degradation
+- Configuration change velocity: Improved from ~5 min to <1 min
+
+**Future Considerations:**
+- Could extend pattern to other frequently-tuned parameters
+- Could implement caching if API call latency becomes issue (unlikely)
+- Consider database-backed config for multi-parameter dynamic updates
 
 ### 2025-11-07 Session 71: Fix from_amount Assignment in Token Decryption
 

@@ -930,7 +930,10 @@ def batch_payout():
             wallet_address=wallet_address,
             payout_currency=payout_currency,
             payout_network=payout_network,
-            adjusted_amount_usdt=amount_usdt
+            adjusted_amount=amount_usdt,       # ✅ FIXED: Use new parameter name
+            swap_currency='usdt',              # ✅ NEW: Threshold always uses USDT
+            payout_mode='threshold',           # ✅ NEW: Mark as threshold payout
+            actual_eth_amount=0.0              # ✅ NEW: No ETH in threshold flow
         )
 
         if not encrypted_token_for_split2:

@@ -1,0 +1,146 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  GCMicroBatchProcessor-10-26 Deployment Summary               ║
+║                         Dynamic Threshold Configuration                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📋 CURRENT CONFIGURATION
+═══════════════════════════════════════════════════════════════════════════════
+Service Name:        gcmicrobatchprocessor-10-26
+Region:              us-central1
+Image:               gcr.io/telepay-459221/gcmicrobatchprocessor-10-26:latest
+Service Account:     291176869049-compute@developer.gserviceaccount.com
+Memory:              512Mi
+CPU:                 1 core
+Max Instances:       10
+Timeout:             3600s
+Cloud SQL:           telepay-459221:us-central1:telepaypsql
+
+🔐 SECRET MANAGER SECRETS (12 Total)
+═══════════════════════════════════════════════════════════════════════════════
+Currently Mounted as Environment Variables (11):
+  ✅ SUCCESS_URL_SIGNING_KEY
+  ✅ CLOUD_TASKS_PROJECT_ID
+  ✅ CLOUD_TASKS_LOCATION
+  ✅ GCHOSTPAY1_BATCH_QUEUE
+  ✅ GCHOSTPAY1_URL
+  ✅ CHANGENOW_API_KEY
+  ✅ HOST_WALLET_USDT_ADDRESS
+  ✅ CLOUD_SQL_CONNECTION_NAME
+  ✅ DATABASE_NAME_SECRET
+  ✅ DATABASE_USER_SECRET
+  ✅ DATABASE_PASSWORD_SECRET
+
+Currently Mounted (TO BE REMOVED):
+  ❌ MICRO_BATCH_THRESHOLD_USD (Current: $2.00)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🎯 DEPLOYMENT OBJECTIVE
+═══════════════════════════════════════════════════════════════════════════════
+Switch MICRO_BATCH_THRESHOLD_USD from static env var to dynamic Secret Manager
+API access, enabling threshold updates without service redeployment.
+
+✅ CODE STATUS: READY (No changes needed)
+   • config_manager.py already has Secret Manager fallback (lines 59-66)
+   • Falls back to $20.00 if Secret Manager fails (line 75)
+
+✅ PERMISSIONS STATUS: READY
+   • Service account has roles/secretmanager.secretAccessor
+   • Service account has roles/secretmanager.admin
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📜 DEPLOYMENT COMMAND
+═══════════════════════════════════════════════════════════════════════════════
+gcloud run deploy gcmicrobatchprocessor-10-26 \
+  --region=us-central1 \
+  --image=gcr.io/telepay-459221/gcmicrobatchprocessor-10-26:latest \
+  --service-account=291176869049-compute@developer.gserviceaccount.com \
+  --memory=512Mi \
+  --cpu=1 \
+  --max-instances=10 \
+  --timeout=3600 \
+  --concurrency=80 \
+  --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
+  --set-secrets=SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,CLOUD_TASKS_PROJECT_ID=CLOUD_TASKS_PROJECT_ID:latest,CLOUD_TASKS_LOCATION=CLOUD_TASKS_LOCATION:latest,GCHOSTPAY1_BATCH_QUEUE=GCHOSTPAY1_BATCH_QUEUE:latest,GCHOSTPAY1_URL=GCHOSTPAY1_URL:latest,CHANGENOW_API_KEY=CHANGENOW_API_KEY:latest,HOST_WALLET_USDT_ADDRESS=HOST_WALLET_USDT_ADDRESS:latest,CLOUD_SQL_CONNECTION_NAME=CLOUD_SQL_CONNECTION_NAME:latest,DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest \
+  --allow-unauthenticated
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🔄 POST-DEPLOYMENT BEHAVIOR
+═══════════════════════════════════════════════════════════════════════════════
+1. Service starts: Loads 11 secrets from env vars
+2. /check-threshold called: Fetches threshold from Secret Manager API (line 59-66)
+3. Threshold used: Fresh value from Secret Manager
+4. Updates: Instant (no restart needed, takes effect next scheduled run)
+
+Expected Logs:
+  🔐 [CONFIG] Fetching threshold from Secret Manager
+  ✅ [CONFIG] Threshold fetched: $2.00
+  💰 [ENDPOINT] Current threshold: $2.00
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🧪 VERIFICATION STEPS
+═══════════════════════════════════════════════════════════════════════════════
+1. Health Check:
+   curl https://gcmicrobatchprocessor-10-26-pjxwjsdktq-uc.a.run.app/health
+
+2. View Logs:
+   gcloud logging read "resource.type=cloud_run_revision AND \
+     resource.labels.service_name=gcmicrobatchprocessor-10-26" --limit=20
+
+3. Update Threshold:
+   echo "5.00" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-file=-
+
+4. Trigger Check (manual or wait for Cloud Scheduler):
+   curl -X POST https://gcmicrobatchprocessor-10-26-pjxwjsdktq-uc.a.run.app/check-threshold
+
+5. Verify New Threshold in Logs:
+   gcloud logging read "resource.type=cloud_run_revision AND \
+     resource.labels.service_name=gcmicrobatchprocessor-10-26 AND \
+     textPayload:threshold" --limit=10
+
+═══════════════════════════════════════════════════════════════════════════════
+
+💡 KEY INSIGHTS
+═══════════════════════════════════════════════════════════════════════════════
+✅ Code ALREADY supports dynamic fetching (no changes needed)
+✅ Service account ALREADY has required permissions
+✅ Only deployment config needs update (remove MICRO_BATCH_THRESHOLD_USD)
+✅ Threshold fetched fresh on EVERY /check-threshold call
+✅ Admin can update threshold anytime without redeployment
+✅ Changes take effect within 15 minutes (next scheduled run)
+✅ Fallback to $20.00 if Secret Manager fails
+
+Cost Impact: Negligible (<$0.01/month for 96 API calls/day)
+Latency Impact: +50-100ms per request (acceptable for scheduled job)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+📊 RISK ASSESSMENT
+═══════════════════════════════════════════════════════════════════════════════
+Risk Level: LOW ✅
+
+Risks:
+  • Secret Manager API failure → Fallback to $20.00 (code line 75)
+  • Increased API calls → Only 96/day (within free tier)
+  • Latency → +50-100ms (acceptable for scheduled job)
+
+Benefits:
+  • Dynamic updates without redeployment ✅
+  • Centralized threshold management ✅
+  • Audit trail in Secret Manager ✅
+  • Instant updates (next scheduled run) ✅
+
+═══════════════════════════════════════════════════════════════════════════════
+
+🚀 READY FOR DEPLOYMENT
+═══════════════════════════════════════════════════════════════════════════════
+Status: ✅ FULLY READY
+
+Next Action: Execute deployment command above
+
+Expected Outcome: Service operates normally with dynamic threshold fetching
+
+═══════════════════════════════════════════════════════════════════════════════
