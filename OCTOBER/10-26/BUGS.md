@@ -1,12 +1,175 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 65
+**Last Updated:** 2025-11-07 Session 67
 
 ---
 
 ## Active Bugs
 
-(No active critical bugs)
+*No active critical bugs*
+
+---
+
+## Recently Resolved
+
+### ✅ RESOLVED: GCSplit1 Endpoint_2 Dictionary Key Naming Mismatch
+
+**Date Discovered:** 2025-11-07 Session 67
+**Date Resolved:** 2025-11-07 Session 67 (same day)
+**Service:** GCSplit1-10-26 (endpoint_2 code)
+**Severity:** CRITICAL - BLOCKING PRODUCTION (instant AND threshold payouts)
+**Status:** ✅ **FIXED - DEPLOYED TO PRODUCTION**
+
+**Context:**
+After fixing token decryption field ordering (Session 66), discovered that endpoint_2 code was trying to access wrong dictionary key, causing KeyError that blocked both instant and threshold payment flows.
+
+**Error Evidence:**
+```
+2025-11-07 11:18:36.849 EST
+✅ [TOKEN_DEC] Estimate response decrypted successfully  ← Token decryption WORKS
+🎯 [TOKEN_DEC] Payout Mode: instant, Swap Currency: eth  ← Fields extracted correctly
+💰 [TOKEN_DEC] ACTUAL ETH extracted: 0.0010582  ← All data present
+❌ [ENDPOINT_2] Unexpected error: 'to_amount_eth_post_fee'  ← KeyError
+```
+
+**Root Cause:**
+**Dictionary key naming inconsistency**:
+- GCSplit1 decrypt method returns: `"to_amount_post_fee"` (generic dual-currency name) ✅
+- GCSplit1 endpoint_2 code expected: `"to_amount_eth_post_fee"` (legacy ETH-only name) ❌
+- Result: KeyError on line 476 when accessing non-existent dictionary key
+
+**Why It Happened:**
+- Token decrypt method was updated for dual-currency support (generic naming)
+- Endpoint code still used legacy ETH-specific naming from single-currency era
+- No cross-reference check between decrypt method and endpoint code
+
+**Fix Applied:**
+- Updated `calculate_pure_market_conversion()` function signature (lines 199-204)
+- Updated all internal variable names (lines 226-255)
+- **CRITICAL:** Fixed dictionary key access on line 476: `to_amount_post_fee = decrypted_data['to_amount_post_fee']`
+- Updated print statement (line 487)
+- Updated function call (line 492)
+
+**Total Changes:** 10 lines modified in `/GCSplit1-10-26/tps1-10-26.py`
+
+**Deployment:**
+- Build: 3de64cbd-98ad-41de-a515-08854d30039e (44s)
+- Image: gcr.io/telepay-459221/gcsplit1-10-26:endpoint2-keyerror-fix
+- Revision: gcsplit1-10-26-00020-rnq
+- Time: 2025-11-07 16:33 UTC
+- Health: All systems operational
+
+**Impact:**
+- ✅ Both instant (ETH) and threshold (USDT) payouts now unblocked
+- ✅ No changes needed to GCSplit2 or GCSplit3
+- ✅ Maintains dual-currency architecture naming consistency
+- ✅ System ready for end-to-end testing
+
+**Lesson Learned:**
+When updating data structures (token fields), verify ALL code paths that access those structures, not just the serialization/deserialization methods.
+
+**Documentation:**
+- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST.md` (original issue analysis)
+- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST_PROGRESS.md` (fix implementation tracker)
+
+---
+
+### ✅ RESOLVED: GCSplit1 Token Decryption Field Ordering Mismatch
+
+**Date Discovered:** 2025-11-07 Session 66
+**Date Resolved:** 2025-11-07 Session 66 (same day)
+**Service:** GCSplit1-10-26 (affects GCSplit2 token decryption)
+**Severity:** CRITICAL - BLOCKING PRODUCTION (instant AND threshold payouts)
+**Status:** ✅ **FIXED - DEPLOYED TO PRODUCTION**
+
+**Context:**
+Dual-currency implementation (instant payouts via ETH, threshold payouts via USDT) is completely blocked due to token field ordering mismatch between GCSplit2's encryption and GCSplit1's decryption.
+
+**Error Log Evidence:**
+```
+2025-11-07 10:40:46.084 EST
+🔓 [TOKEN_DEC] GCSplit2→GCSplit1: Decrypting estimate response
+⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')
+⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')
+💰 [TOKEN_DEC] ACTUAL ETH extracted: 2.6874284797920923e-292  ❌ CORRUPTED
+❌ [TOKEN_DEC] Decryption error: Token expired
+❌ [ENDPOINT_2] Failed to decrypt token
+❌ [ENDPOINT_2] Unexpected error: 401 Unauthorized: Invalid token
+```
+
+**Root Cause:**
+**Binary struct unpacking order mismatch** between GCSplit2's packing and GCSplit1's unpacking:
+
+- **GCSplit2 packs (CORRECT):**
+  `[user_id][closed_channel_id][strings...][from_amount][to_amount][deposit_fee][withdrawal_fee][swap_currency][payout_mode][actual_eth_amount][timestamp]`
+
+- **GCSplit1 unpacks (WRONG):**
+  `[user_id][closed_channel_id][strings...][from_amount][swap_currency][payout_mode][to_amount][deposit_fee][withdrawal_fee][actual_eth_amount][timestamp]`
+
+**The Problem:**
+GCSplit1 tries to read `swap_currency` and `payout_mode` IMMEDIATELY after `from_amount`, but GCSplit2 packs them AFTER `withdrawal_fee`. This causes:
+1. GCSplit1 reads `to_amount` bytes as `swap_currency` string → fails to parse
+2. GCSplit1 reads `deposit_fee` bytes as `payout_mode` string → fails to parse
+3. All subsequent fields offset by ~20+ bytes → complete data corruption
+4. `actual_eth_amount` reads random bytes → produces `2.687e-292` instead of `0.0009853`
+5. Timestamp validation fails → "Token expired" error
+
+**Impact:**
+- ✅ **Instant payout mode:** BLOCKED - Cannot process payments
+- ✅ **Threshold payout mode:** BLOCKED - Same token flow affected
+- ❌ **Data corruption:** Critical - Wrong amounts could cause financial loss
+- ❌ **Production DOWN:** No payouts can be processed
+
+**Files Affected:**
+- `GCSplit1-10-26/token_manager.py` (decrypt_gcsplit2_to_gcsplit1_token, lines 399-445)
+- `GCSplit2-10-26/token_manager.py` (encrypt_gcsplit2_to_gcsplit1_token, lines 266-338) ✅ CORRECT
+
+**Fix Required:**
+Reorder GCSplit1's unpacking to match GCSplit2's packing:
+```python
+# BEFORE (WRONG):
+from_amount → swap_currency → payout_mode → to_amount → deposit_fee → withdrawal_fee
+
+# AFTER (CORRECT):
+from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency → payout_mode
+```
+
+**Resolution Applied:**
+1. ✅ Applied ordering fix to GCSplit1 token_manager.py (lines 399-432)
+2. ✅ Built Docker image: Build ID 35f8cdc1-16ec-47ba-a764-5dfa94ae7129
+3. ✅ Deployed to Cloud Run: Revision gcsplit1-10-26-00019-dw4
+4. ✅ Health check passed: All components healthy
+5. ⏳ Awaiting test transaction for end-to-end validation
+
+**Fix Details:**
+- Reordered unpacking: `from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency → payout_mode`
+- Now matches GCSplit2 packing order exactly
+- Backward compatibility preserved with try/except blocks
+- Deployment time: 2025-11-07 15:57:58 UTC
+- Total fix time: ~8 minutes from code change to production
+
+**Documentation:**
+- `/10-26/RESOLVING_GCSPLIT_TOKEN_ISSUE_CHECKLIST.md` (comprehensive fix guide)
+- `/10-26/RESOLVING_GCSPLIT_TOKEN_ISSUE_CHECKLIST_PROGRESS.md` (progress tracker)
+
+**Why This Bug Occurred:**
+1. New fields (`swap_currency`, `payout_mode`, `actual_eth_amount`) added in Session 65
+2. GCSplit2 placed new fields AFTER fee fields (correct position)
+3. GCSplit1 placed new fields IMMEDIATELY after from_amount (wrong position)
+4. No end-to-end token serialization test caught the mismatch
+5. Separate file updates without cross-service validation
+
+**Prevention for Future:**
+1. Add unit tests for encrypt/decrypt roundtrip
+2. Test full token flow GCSplit1→GCSplit2→GCSplit1 locally before deployment
+3. Use token versioning to detect format changes
+4. Document exact byte structure in both encrypt and decrypt methods
+
+**Related Issues:**
+- Session 65: Dual-currency implementation (added the new fields)
+- Session 50-51: Previous similar token ordering bugs with GCSplit3
+
+---
 
 ---
 

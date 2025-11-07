@@ -197,8 +197,8 @@ def build_hostpay_token(
 
 
 def calculate_pure_market_conversion(
-    from_amount_usdt: float,
-    to_amount_eth_post_fee: float,
+    from_amount: float,  # ✅ Generic name (ETH or USDT)
+    to_amount_post_fee: float,  # ✅ Generic name (ClientCurrency)
     deposit_fee: float,
     withdrawal_fee: float
 ) -> float:
@@ -223,36 +223,36 @@ def calculate_pure_market_conversion(
     """
     try:
         print(f"🧮 [MARKET_CALC] Calculating pure market conversion")
-        print(f"   From Amount: {from_amount_usdt} USDT")
-        print(f"   To Amount (post-fee): {to_amount_eth_post_fee} ETH")
-        print(f"   Deposit Fee: {deposit_fee} USDT")
-        print(f"   Withdrawal Fee: {withdrawal_fee} ETH")
+        print(f"   From Amount: {from_amount}")
+        print(f"   To Amount (post-fee): {to_amount_post_fee}")
+        print(f"   Deposit Fee: {deposit_fee}")
+        print(f"   Withdrawal Fee: {withdrawal_fee}")
 
-        usdt_swapped = from_amount_usdt - deposit_fee
-        eth_before_withdrawal = to_amount_eth_post_fee + withdrawal_fee
+        amount_swapped = from_amount - deposit_fee
+        amount_before_withdrawal = to_amount_post_fee + withdrawal_fee
 
-        print(f"   USDT swapped: {usdt_swapped}")
-        print(f"   ETH before withdrawal: {eth_before_withdrawal}")
+        print(f"   Amount swapped: {amount_swapped}")
+        print(f"   Amount before withdrawal: {amount_before_withdrawal}")
 
-        if usdt_swapped <= 0:
-            print(f"❌ [MARKET_CALC] Invalid usdt_swapped: {usdt_swapped}")
-            return to_amount_eth_post_fee  # Fallback
+        if amount_swapped <= 0:
+            print(f"❌ [MARKET_CALC] Invalid amount_swapped: {amount_swapped}")
+            return to_amount_post_fee  # Fallback
 
-        market_rate = eth_before_withdrawal / usdt_swapped
-        print(f"   Market Rate: {market_rate} ETH per USDT")
+        market_rate = amount_before_withdrawal / amount_swapped
+        print(f"   Market Rate: {market_rate}")
 
-        pure_market_value = from_amount_usdt * market_rate
+        pure_market_value = from_amount * market_rate
 
-        print(f"✅ [MARKET_CALC] Pure market value: {pure_market_value} ETH")
-        print(f"   (True market value of {from_amount_usdt} USDT)")
-        print(f"   Difference from post-fee: +{pure_market_value - to_amount_eth_post_fee} ETH")
+        print(f"✅ [MARKET_CALC] Pure market value: {pure_market_value}")
+        print(f"   (True market value of {from_amount})")
+        print(f"   Difference from post-fee: +{pure_market_value - to_amount_post_fee}")
 
         return pure_market_value
 
     except Exception as e:
         print(f"❌ [MARKET_CALC] Error: {e}")
         print(f"⚠️ [MARKET_CALC] Falling back to post-fee amount")
-        return to_amount_eth_post_fee
+        return to_amount_post_fee
 
 
 # ============================================================================
@@ -473,7 +473,7 @@ def receive_usdt_eth_estimate():
         payout_currency = decrypted_data['payout_currency']
         payout_network = decrypted_data['payout_network']
         from_amount = decrypted_data['from_amount']  # ✅ UPDATED: Generic name (ETH or USDT)
-        to_amount_eth_post_fee = decrypted_data['to_amount_eth_post_fee']
+        to_amount_post_fee = decrypted_data['to_amount_post_fee']  # ✅ FIXED: Correct key name
         deposit_fee = decrypted_data['deposit_fee']
         withdrawal_fee = decrypted_data['withdrawal_fee']
         actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)
@@ -484,12 +484,12 @@ def receive_usdt_eth_estimate():
         print(f"💱 [ENDPOINT_2] Swap Currency: {swap_currency}")  # ✅ NEW LOG
         print(f"🎯 [ENDPOINT_2] Payout Mode: {payout_mode}")  # ✅ NEW LOG
         print(f"💰 [ENDPOINT_2] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
-        print(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_eth_post_fee} {payout_currency.upper()}")
+        print(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_post_fee} {payout_currency.upper()}")  # ✅ FIXED
         print(f"💎 [ENDPOINT_2] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
 
         # Calculate pure market conversion
         pure_market_value = calculate_pure_market_conversion(
-            from_amount, to_amount_eth_post_fee, deposit_fee, withdrawal_fee
+            from_amount, to_amount_post_fee, deposit_fee, withdrawal_fee  # ✅ FIXED
         )
 
         # Insert into split_payout_request table

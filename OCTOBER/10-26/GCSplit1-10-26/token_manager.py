@@ -399,7 +399,16 @@ class TokenManager:
             from_amount = struct.unpack(">d", payload[offset:offset + 8])[0]  # ✅ RENAMED
             offset += 8
 
+            # ✅ CORRECT ORDER: Read all amount fields FIRST (to match GCSplit2 packing order)
+            to_amount_post_fee = struct.unpack(">d", payload[offset:offset + 8])[0]  # ✅ RENAMED
+            offset += 8
+            deposit_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
+            offset += 8
+            withdrawal_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
+            offset += 8
+
             # ✅ NEW: swap_currency (variable length string) with backward compatibility
+            # ✅ CORRECT POSITION: AFTER fee fields (matches GCSplit2 packing order)
             swap_currency = 'usdt'  # Default for old tokens
             if offset + 1 <= len(payload):
                 try:
@@ -411,6 +420,7 @@ class TokenManager:
                 print(f"⚠️ [TOKEN_DEC] Old token format - no swap_currency (backward compat)")
 
             # ✅ NEW: payout_mode (variable length string) with backward compatibility
+            # ✅ CORRECT POSITION: AFTER swap_currency (matches GCSplit2 packing order)
             payout_mode = 'instant'  # Default for old tokens
             if offset + 1 <= len(payload):
                 try:
@@ -420,13 +430,6 @@ class TokenManager:
                     payout_mode = 'instant'
             else:
                 print(f"⚠️ [TOKEN_DEC] Old token format - no payout_mode (backward compat)")
-
-            to_amount_post_fee = struct.unpack(">d", payload[offset:offset + 8])[0]  # ✅ RENAMED
-            offset += 8
-            deposit_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
-            offset += 8
-            withdrawal_fee = struct.unpack(">d", payload[offset:offset + 8])[0]
-            offset += 8
 
             # actual_eth_amount (8 bytes double) with backward compatibility
             actual_eth_amount = 0.0

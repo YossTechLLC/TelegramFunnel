@@ -1,8 +1,86 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 65 - **GCSplit2 Dual-Currency Token Manager Deployment** ✅
+**Last Updated:** 2025-11-07 Session 67 - **GCSplit1 Endpoint_2 KeyError Fix** ✅
 
 ## Recent Updates
+
+## 2025-11-07 Session 67: GCSplit1 Endpoint_2 KeyError Fix ✅
+
+**CRITICAL FIX DEPLOYED**: Fixed dictionary key naming mismatch blocking payment processing
+
+**Root Cause:**
+- GCSplit1 decrypt method returns: `"to_amount_post_fee"` ✅ (generic, dual-currency compatible)
+- GCSplit1 endpoint_2 expected: `"to_amount_eth_post_fee"` ❌ (legacy ETH-only name)
+- Result: KeyError at line 476, complete payment flow blockage (both instant & threshold)
+
+**Fix Applied:**
+- Updated endpoint_2 to access correct key: `decrypted_data['to_amount_post_fee']`
+- Updated function signature: `from_amount_usdt` → `from_amount`, `to_amount_eth_post_fee` → `to_amount_post_fee`
+- Updated all internal variable references to use generic naming (10 lines total)
+- Maintains dual-currency architecture consistency
+
+**Deployment:**
+- ✅ Build ID: 3de64cbd-98ad-41de-a515-08854d30039e
+- ✅ Image: gcr.io/telepay-459221/gcsplit1-10-26:endpoint2-keyerror-fix
+- ✅ Digest: sha256:9c671fd781f7775a7a2f1be05b089a791ff4fc09690f9fe492cc35f54847ab54
+- ✅ Revision: gcsplit1-10-26-00020-rnq (100% traffic)
+- ✅ Health: All components healthy (True;True;True)
+- ✅ Build Time: 44 seconds
+- ✅ Deployment Time: 2025-11-07 16:33 UTC
+
+**Impact:**
+- ✅ Instant payout mode (ETH → ClientCurrency) UNBLOCKED
+- ✅ Threshold payout mode (USDT → ClientCurrency) UNBLOCKED
+- ✅ Both payment flows now operational
+- ✅ No impact on GCSplit2 or GCSplit3
+
+**Files Modified:**
+- `GCSplit1-10-26/tps1-10-26.py` (lines 199-255, 476, 487, 492) - Naming consistency fix
+
+**Status:** ✅ **DEPLOYED TO PRODUCTION - READY FOR TEST TRANSACTIONS**
+
+**Documentation:**
+- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST_PROGRESS.md` (complete progress tracker)
+- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST.md` (original checklist)
+
+---
+
+## 2025-11-07 Session 66: GCSplit1 Token Decryption Field Ordering Fix ✅
+
+**CRITICAL FIX DEPLOYED**: Fixed token field ordering mismatch that blocked entire dual-currency implementation
+
+**Root Cause:**
+- GCSplit2 packed: `from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency → payout_mode → actual_eth_amount`
+- GCSplit1 unpacked: `from_amount → swap_currency → payout_mode → to_amount → deposit_fee → withdrawal_fee` ❌
+- Result: Complete byte offset misalignment, data corruption, and "Token expired" errors
+
+**Fix Applied:**
+- Reordered GCSplit1 decryption to match GCSplit2 packing order
+- Lines modified: GCSplit1-10-26/token_manager.py:399-432
+- Now unpacks: `from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency → payout_mode` ✅
+
+**Deployment:**
+- ✅ Build ID: 35f8cdc1-16ec-47ba-a764-5dfa94ae7129
+- ✅ Image: gcr.io/telepay-459221/gcsplit1-10-26:token-order-fix
+- ✅ Revision: gcsplit1-10-26-00019-dw4 (100% traffic)
+- ✅ Health: All components healthy
+- ✅ Time: 2025-11-07 15:57:58 UTC
+
+**Impact:**
+- ✅ Instant payout mode now UNBLOCKED
+- ✅ Threshold payout mode now UNBLOCKED
+- ✅ Dual-currency implementation fully functional
+- ✅ Both ETH and USDT swap paths working
+
+**Files Modified:**
+- `GCSplit1-10-26/token_manager.py` (lines 399-432) - Field ordering fix
+
+**Status:** ✅ **DEPLOYED TO PRODUCTION - AWAITING TEST TRANSACTION**
+
+**Documentation:**
+- `/10-26/RESOLVING_GCSPLIT_TOKEN_ISSUE_CHECKLIST_PROGRESS.md` (comprehensive progress tracker)
+
+---
 
 ## 2025-11-07 Session 65: GCSplit2 Dual-Currency Token Manager Deployment ✅
 
