@@ -155,7 +155,15 @@
       "Bash(gcloud sql backups:*)",
       "Bash(gsutil cat:*)",
       "Bash(/mnt/c/Users/YossTech/Desktop/2025/.venv/bin/pip3 install:*)",
-      "Bash(gcloud builds list:*)"
+      "Bash(gcloud builds list:*)",
+      "Bash(/tmp/decisions_to_archive.txt)",
+      "Bash(/tmp/progress_to_archive.txt)",
+      "Bash(/tmp/bugs_arch_new.txt)",
+      "Bash(/tmp/decisions_arch_new.txt)",
+      "Bash(/tmp/progress_arch_new.txt)",
+      "Bash(/tmp/bugs_truncated.txt)",
+      "Bash(/tmp/decisions_truncated.txt)",
+      "Bash(/tmp/progress_truncated.txt)"
     ],
     "deny": [],
     "ask": []
