@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 81 - **Independent Network/Currency Dropdowns**
+**Last Updated:** 2025-11-08 Session 84 - **Paste Event Handler with preventDefault**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,54 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-08 Session 84: Paste Event Handler Must Prevent Default Behavior
+
+**Decision:** Add `e.preventDefault()` to custom `onPaste` handlers to prevent browser default paste behavior
+
+**Context:**
+- Wallet address validation system (Session 82-83) implemented custom onPaste handlers
+- Handlers call `setClientWalletAddress()` and trigger validation
+- User reported paste duplication bug: pasted values appeared twice
+- Root cause: browser's default paste behavior ALSO inserted text after our custom handler
+
+**Problem:**
+When using both custom paste handler AND browser's default paste:
+1. Custom `onPaste` handler sets state with pasted text
+2. Browser default also pastes text into input field
+3. `onChange` handler fires from browser paste
+4. Value appears duplicated
+
+**Solution:**
+```typescript
+onPaste={(e) => {
+  e.preventDefault();  // Prevent browser's default paste
+  const pastedText = e.clipboardData.getData('text');
+  setClientWalletAddress(pastedText);
+  debouncedDetection(pastedText);
+}}
+```
+
+**Rationale:**
+- When using custom paste logic, must prevent browser default to avoid duplication
+- `e.preventDefault()` gives us full control over paste behavior
+- State management through React handles the actual value update
+- No side effects to validation or detection logic
+
+**Impact:**
+- ✅ Paste now works correctly (single paste, no duplication)
+- ✅ Validation still triggers on paste
+- ✅ Network detection still works
+- ✅ No breaking changes to other functionality
+
+**Alternative Considered:**
+- Remove custom paste handler, rely on onChange only
+- **Rejected:** Would lose ability to immediately trigger validation on paste
+
+**Pattern for Future:**
+Always use `e.preventDefault()` when implementing custom paste handlers in controlled inputs
+
+---
 
 ### 2025-11-08 Session 81: Independent Network/Currency Dropdowns
 

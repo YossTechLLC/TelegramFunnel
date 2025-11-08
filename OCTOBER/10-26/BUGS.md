@@ -1,16 +1,107 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 67
+**Last Updated:** 2025-11-08 Session 84
 
 ---
 
 ## Active Bugs
 
-*No active critical bugs*
+### 🐛 Documentation: Invalid Example EVM Address (Low Priority)
+
+**Date Discovered:** 2025-11-08 Session 83
+**File:** WALLET_ADDRESS_VALIDATION_ANALYSIS.md
+**Severity:** LOW - Documentation only, no production impact
+**Status:** 🔍 **DOCUMENTED - NOT URGENT**
+
+**Issue:**
+Example EVM address used throughout documentation has only 39 hex characters instead of required 40.
+
+**Invalid Address:**
+```
+0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb  ← Only 39 hex chars (should be 40)
+```
+
+**Locations:**
+- Line 43: Input placeholder example
+- Line 56: Address format explanation
+- Line 788: Test addresses object
+- Line 847: User scenario example
+
+**Expected Format:**
+- EVM addresses: `0x` + exactly 40 hexadecimal characters
+- Total length: 42 characters
+- Example of valid address: `0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0` (added one char)
+
+**Impact:**
+- ✅ Production code unaffected - validation working correctly
+- ✅ Rejects invalid addresses as expected
+- ⚠️ Documentation examples misleading (shows invalid address as example)
+- ⚠️ Could confuse developers reading the docs
+
+**Fix Required:**
+Replace all instances with valid 40-hex-char EVM address like:
+`0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0`
+
+**Priority:** Low - Can be fixed during next documentation update
 
 ---
 
 ## Recently Resolved
+
+### ✅ RESOLVED: Wallet Address Paste Duplication
+
+**Date Discovered:** 2025-11-08 Session 84
+**Date Resolved:** 2025-11-08 Session 84 (same session)
+**Component:** GCRegisterWeb-10-26 (RegisterChannelPage & EditChannelPage)
+**Severity:** MEDIUM - UX Issue (affects all users pasting wallet addresses)
+**Status:** ✅ **FIXED - DEPLOYED TO PRODUCTION**
+
+**Issue:**
+When users copy/pasted a wallet address into the "Your Wallet Address" field, the value appeared twice (duplicated).
+
+**Example:**
+- User copies: `EQD2NmD_lH5f5u1Kj3KfGyTvhZSX0Eg6qp2a5IQUKXxrJcvP`
+- After paste: `EQD2NmD_lH5f5u1Kj3KfGyTvhZSX0Eg6qp2a5IQUKXxrJcvPEQD2NmD_lH5f5u1Kj3KfGyTvhZSX0Eg6qp2a5IQUKXxrJcvP`
+
+**Root Cause:**
+The `onPaste` event handler was calling `setClientWalletAddress(pastedText)` but NOT preventing the browser's default paste behavior. This resulted in:
+1. Custom handler setting the state with pasted text
+2. Browser's default paste also inserting the text
+3. Value appearing twice in the input field
+
+**Code Location:**
+- `RegisterChannelPage.tsx` lines 668-672
+- `EditChannelPage.tsx` lines 734-738
+
+**Fix:**
+Added `e.preventDefault()` at the start of both onPaste handlers:
+
+```typescript
+onPaste={(e) => {
+  e.preventDefault();  // ← ADDED THIS LINE
+  const pastedText = e.clipboardData.getData('text');
+  setClientWalletAddress(pastedText);
+  debouncedDetection(pastedText);
+}}
+```
+
+**Testing:**
+- ✅ Tested on production with TON address
+- ✅ Single paste (no duplication)
+- ✅ Validation still working correctly
+- ✅ Network auto-detection functional
+
+**Deployment:**
+- Build: `index-BFZtVN_a.js` (311.87 kB)
+- Deployed: 2025-11-08 Session 84
+- Production URL: https://www.paygateprime.com/register
+
+**Impact:**
+- All users pasting wallet addresses now get correct behavior
+- No breaking changes
+- Validation system unaffected
+
+---
 
 ### ✅ RESOLVED: GCSplit1 Endpoint_2 Dictionary Key Naming Mismatch
 

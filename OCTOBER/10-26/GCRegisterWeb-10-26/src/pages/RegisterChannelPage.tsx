@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import debounce from 'lodash/debounce';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
 import api from '../services/api';
+import { detectNetworkFromAddress, detectPrivateKey, validateWalletAddress } from '../utils/walletAddressValidator';
 
 interface CurrencyNetworkMappings {
   network_to_currencies: Record<string, Array<{ currency: string; currency_name: string }>>;
@@ -40,6 +42,10 @@ export default function RegisterChannelPage() {
   const [payoutStrategy, setPayoutStrategy] = useState('instant');
   const [payoutThresholdUsd, setPayoutThresholdUsd] = useState('');
 
+  // Wallet validation state
+  const [validationWarning, setValidationWarning] = useState('');
+  const [validationSuccess, setValidationSuccess] = useState('');
+
   // Load currency/network mappings
   useEffect(() => {
     const loadMappings = async () => {
@@ -56,6 +62,84 @@ export default function RegisterChannelPage() {
     loadMappings();
   }, []);
 
+  // Auto-populate currency based on detected network
+  const autoPopulateCurrency = (detectedNetwork: string) => {
+    if (!mappings) return;
+
+    const availableCurrencies = mappings.network_to_currencies[detectedNetwork] || [];
+
+    if (availableCurrencies.length === 1) {
+      // Only one currency available - safe to auto-populate
+      setClientPayoutCurrency(availableCurrencies[0].currency);
+      setValidationSuccess(
+        `✅ Auto-selected ${availableCurrencies[0].currency_name} (only currency on ${detectedNetwork})`
+      );
+    } else if (availableCurrencies.length > 1) {
+      // Multiple currencies available - just show info
+      setValidationSuccess(
+        `✅ Detected ${detectedNetwork} network. Please select your payout currency from ${availableCurrencies.length} options.`
+      );
+    }
+  };
+
+  // Debounced wallet address validation
+  const debouncedDetection = useCallback(
+    debounce((address: string) => {
+      // Clear previous messages
+      setValidationWarning('');
+      setValidationSuccess('');
+
+      // Too short to validate
+      if (address.trim().length < 26) {
+        return;
+      }
+
+      // Check for private key first (security)
+      if (detectPrivateKey(address)) {
+        setValidationWarning('⛔ NEVER share your private key! This appears to be a private key, not a public address.');
+        return;
+      }
+
+      // Detect network from address format
+      const detection = detectNetworkFromAddress(address);
+
+      // Handle detection results
+      if (detection.networks.length === 0) {
+        setValidationWarning('⚠️ Address format not recognized. Please verify your wallet address.');
+      } else if (detection.networks.length === 1 && detection.confidence === 'high') {
+        // Single network detected with high confidence - auto-populate
+        const detectedNetwork = detection.networks[0];
+
+        // Check if user already selected a different network
+        if (clientPayoutNetwork && clientPayoutNetwork !== detectedNetwork) {
+          // Conflict detected
+          setValidationWarning(
+            `⚠️ Address appears to be for ${detectedNetwork} network, but you selected ${clientPayoutNetwork}. Please verify.`
+          );
+        } else {
+          // Auto-populate network
+          setClientPayoutNetwork(detectedNetwork);
+
+          // Try to auto-populate currency as well
+          autoPopulateCurrency(detectedNetwork);
+        }
+      } else if (detection.ambiguous) {
+        if (detection.networks.includes('ETH')) {
+          // EVM case - don't auto-populate
+          setValidationWarning(
+            `ℹ️ EVM address detected. Compatible with: ${detection.networks.join(', ')}. Please select your network.`
+          );
+        } else {
+          // Other ambiguous cases
+          setValidationWarning(
+            `ℹ️ Address could be for: ${detection.networks.join(', ')}. Please select the correct network.`
+          );
+        }
+      }
+    }, 300),
+    [clientPayoutNetwork, mappings]
+  );
+
   const handleLogout = () => {
     authService.logout();
     navigate('/login');
@@ -63,7 +147,24 @@ export default function RegisterChannelPage() {
 
   const handleNetworkChange = (network: string) => {
     setClientPayoutNetwork(network);
-    // Dropdowns are independent - no auto-population of currency
+
+    // Check if manually selected network conflicts with detected network
+    if (clientWalletAddress.trim().length >= 26) {
+      const detection = detectNetworkFromAddress(clientWalletAddress);
+
+      if (detection.networks.length === 1 && detection.confidence === 'high') {
+        const detectedNetwork = detection.networks[0];
+        if (network !== detectedNetwork) {
+          setValidationWarning(
+            `⚠️ Manually selected ${network}, but address format appears to be ${detectedNetwork}. Please verify.`
+          );
+        } else {
+          // Network matches - clear warning and try to auto-populate currency
+          setValidationWarning('');
+          autoPopulateCurrency(network);
+        }
+      }
+    }
   };
 
   const handleCurrencyChange = (currency: string) => {
@@ -87,6 +188,12 @@ export default function RegisterChannelPage() {
     setIsSubmitting(true);
 
     try {
+      // Validate wallet address format and checksum
+      const walletValidation = validateWalletAddress(clientWalletAddress, clientPayoutNetwork);
+      if (!walletValidation.valid) {
+        throw new Error(walletValidation.error || 'Invalid wallet address');
+      }
+
       // Validate required fields
       if (!openChannelId || !openChannelTitle || !closedChannelId || !closedChannelTitle) {
         throw new Error('Please fill in all required channel fields');
@@ -552,12 +659,49 @@ export default function RegisterChannelPage() {
               <label>Your Wallet Address *</label>
               <input
                 type="text"
-                placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+                placeholder="Paste your wallet address here"
                 value={clientWalletAddress}
-                onChange={(e) => setClientWalletAddress(e.target.value)}
+                onChange={(e) => {
+                  setClientWalletAddress(e.target.value);
+                  debouncedDetection(e.target.value);
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pastedText = e.clipboardData.getData('text');
+                  setClientWalletAddress(pastedText);
+                  debouncedDetection(pastedText);
+                }}
                 required
               />
               <small style={{ color: '#666', fontSize: '12px' }}>Address where you'll receive payments (max 110 characters)</small>
+
+              {/* Validation messages */}
+              {validationWarning && (
+                <div style={{
+                  color: '#f59e0b',
+                  fontSize: '13px',
+                  marginTop: '8px',
+                  padding: '8px',
+                  background: '#fef3c7',
+                  borderRadius: '4px',
+                  borderLeft: '3px solid #f59e0b'
+                }}>
+                  {validationWarning}
+                </div>
+              )}
+              {validationSuccess && (
+                <div style={{
+                  color: '#10b981',
+                  fontSize: '13px',
+                  marginTop: '8px',
+                  padding: '8px',
+                  background: '#d1fae5',
+                  borderRadius: '4px',
+                  borderLeft: '3px solid #10b981'
+                }}>
+                  {validationSuccess}
+                </div>
+              )}
             </div>
           </div>
 
