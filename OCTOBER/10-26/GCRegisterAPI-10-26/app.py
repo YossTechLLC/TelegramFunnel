@@ -59,6 +59,23 @@ CORS(app,
      supports_credentials=True,
      max_age=3600)
 
+# Handle OPTIONS requests before rate limiting (CRITICAL for CORS)
+@app.before_request
+def handle_preflight():
+    """Handle CORS preflight OPTIONS requests before rate limiting"""
+    if request.method == 'OPTIONS':
+        origin = request.headers.get('Origin')
+        if origin in cors_origins:
+            response = app.make_default_options_response()
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Max-Age'] = '3600'
+            print(f"✅ Preflight handled for origin: {origin}")
+            return response
+
 # Explicit CORS headers for all responses (backup method)
 @app.after_request
 def after_request(response):
@@ -79,7 +96,7 @@ def after_request(response):
     print(f"🔍 Response headers: {dict(response.headers)}")
     return response
 
-# Rate limiting
+# Rate limiting (OPTIONS requests are handled in before_request, so won't be rate limited)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,

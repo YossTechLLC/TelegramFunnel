@@ -166,7 +166,10 @@
       "Bash(/tmp/progress_truncated.txt)",
       "Bash(.venv/bin/pip3 install:*)",
       "Bash(/tmp/bugs_to_archive.txt)",
-      "Bash(gsutil stat:*)"
+      "Bash(gsutil stat:*)",
+      "mcp__playwright__browser_network_requests",
+      "Bash(gcloud compute url-maps invalidate-cdn-cache:*)",
+      "mcp__playwright__browser_fill_form"
     ],
     "deny": [],
     "ask": []

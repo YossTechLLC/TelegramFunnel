@@ -1,8 +1,61 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 77 - **Token Encryption/Decryption Architecture Map Complete** ✅
+**Last Updated:** 2025-11-08 Session 78 - **Dashboard UX Improvements Deployed** ✅
 
 ## Recent Updates
+
+## 2025-11-08 Session 78: Dashboard UX Improvements - Consistent Button Positioning & Wallet Address Privacy ✅
+
+**COSMETIC ENHANCEMENTS DEPLOYED**: Fixed button positioning consistency and added wallet address privacy feature
+
+**Changes Implemented:**
+- ✅ Fixed tier section minimum height (132px) to ensure consistent Edit/Delete button positioning
+- ✅ Added "Your Wallet Address" section below Payout information on dashboard
+- ✅ Implemented blur/reveal functionality with eye icon toggle (👁️ → 🙈)
+- ✅ Wallet addresses blurred by default for privacy
+- ✅ Click eye icon to reveal full address (smooth transition animation)
+- ✅ Fixed spacing: Removed `marginTop: '12px'` from Payout section (line 167) for consistent visual spacing between Tier → Payout → Wallet sections
+- ✅ Fixed long address overflow: Added `minHeight: '60px'` and `lineHeight: '1.5'` to wallet address container to handle extended addresses (XMR: 95+ chars) without offsetting buttons
+
+**Files Modified:**
+- ✅ `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx`:
+  - Added `visibleWallets` state management (line 12)
+  - Added `toggleWalletVisibility()` function (lines 24-29)
+  - Updated tier-list div with `minHeight: '132px'` (line 146)
+  - Added wallet address section with blur effect and toggle (lines 197-225)
+  - Fixed spacing: Changed Payout container from `marginTop: '12px'` to no margin (consistent with borderTop spacing)
+
+**Deployment:**
+- ✅ Frontend built: Final bundle `index-BEyJUYYD.js`
+- ✅ Deployed to Cloud Storage: `gs://www-paygateprime-com/`
+- ✅ CDN cache invalidated: `www-paygateprime-urlmap`
+- ✅ URL: https://www.paygateprime.com/dashboard
+
+**Visual Features:**
+- ✅ Edit/Delete buttons always render at same vertical position (consistent card height)
+- ✅ Wallet addresses displayed in monospace font for readability
+- ✅ Blur effect: `filter: blur(5px)` when hidden
+- ✅ Eye icon: 👁️ (hidden) → 🙈 (revealed)
+- ✅ Smooth 0.2s transition animation
+- ✅ User-select disabled when blurred (prevents copy/paste of hidden value)
+
+**Impact:**
+- ✅ Improved UX: Buttons always in predictable location regardless of tier configuration
+- ✅ Privacy protection: Wallet addresses hidden by default
+- ✅ One-click reveal: Easy to show address when needed
+- ✅ Per-channel state: Each channel's visibility tracked independently
+- ✅ Consistent card layout: All channel cards same height for uniform appearance
+
+**Testing Verified:**
+- ✅ Dashboard loads with 3 channels
+- ✅ All wallet addresses blurred by default
+- ✅ Eye icon click reveals address correctly
+- ✅ Eye icon changes to 🙈 when revealed
+- ✅ Smooth blur animation on toggle
+- ✅ Edit/Delete buttons aligned perfectly across all cards
+- ✅ Long addresses (XMR: 95 chars) properly contained without offsetting buttons
+- ✅ Short addresses (ETH: 42 chars) display correctly with same spacing
+- ✅ All channel cards maintain consistent height regardless of address length
 
 ## 2025-11-08 Session 77: Token Encryption/Decryption Architecture Map ✅
 

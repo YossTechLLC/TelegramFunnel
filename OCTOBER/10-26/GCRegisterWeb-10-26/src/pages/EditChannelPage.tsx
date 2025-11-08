@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
 import api from '../services/api';
@@ -13,6 +14,7 @@ interface CurrencyNetworkMappings {
 
 export default function EditChannelPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { channelId } = useParams<{ channelId: string }>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -212,6 +214,9 @@ export default function EditChannelPage() {
       }
 
       await channelService.updateChannel(channelId, payload);
+
+      // Invalidate channels cache to trigger refetch on dashboard
+      await queryClient.invalidateQueries({ queryKey: ['channels'] });
 
       // Success - navigate to dashboard
       navigate('/dashboard');

@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
+  const [visibleWallets, setVisibleWallets] = useState<{[key: string]: boolean}>({});
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['channels'],
@@ -18,6 +19,13 @@ export default function DashboardPage() {
   const handleLogout = () => {
     authService.logout();
     navigate('/login');
+  };
+
+  const toggleWalletVisibility = (channelId: string) => {
+    setVisibleWallets(prev => ({
+      ...prev,
+      [channelId]: !prev[channelId]
+    }));
   };
 
   const handleDeleteChannel = async (channelId: string, channelTitle: string) => {
@@ -127,15 +135,15 @@ export default function DashboardPage() {
           <div className="channel-grid">
             {channels.map((channel) => (
               <div key={channel.open_channel_id} className="channel-card">
+                <span className="badge badge-success badge-absolute">Active</span>
                 <div className="channel-header">
                   <div>
                     <div className="channel-title">{channel.open_channel_title}</div>
                     <div className="channel-id">{channel.open_channel_id}</div>
                   </div>
-                  <span className="badge badge-success">Active</span>
                 </div>
 
-                <div className="tier-list">
+                <div className="tier-list" style={{ minHeight: '132px', display: 'flex', flexDirection: 'column' }}>
                   {channel.sub_1_price && (
                     <div className="tier-item">
                       <span className="tier-label">Gold Tier</span>
@@ -156,7 +164,7 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: '12px', marginTop: '12px' }}>
+                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: '12px' }}>
                   <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Payout</div>
                   <div style={{ fontSize: '14px', fontWeight: '500' }}>
                     {channel.payout_strategy === 'instant' ? 'Instant' : `Threshold ($${channel.payout_threshold_usd})`}
@@ -185,6 +193,38 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 )}
+
+                <div style={{ marginTop: '12px', borderTop: '1px solid #f0f0f0', paddingTop: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '12px', color: '#666' }}>Your Wallet Address</div>
+                    <button
+                      onClick={() => toggleWalletVisibility(channel.open_channel_id)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        padding: '4px'
+                      }}
+                      title={visibleWallets[channel.open_channel_id] ? 'Hide address' : 'Show address'}
+                    >
+                      {visibleWallets[channel.open_channel_id] ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                  <div style={{
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    color: '#333',
+                    wordBreak: 'break-all',
+                    filter: visibleWallets[channel.open_channel_id] ? 'none' : 'blur(5px)',
+                    transition: 'filter 0.2s',
+                    userSelect: visibleWallets[channel.open_channel_id] ? 'text' : 'none',
+                    minHeight: '60px',
+                    lineHeight: '1.5'
+                  }}>
+                    {channel.client_wallet_address}
+                  </div>
+                </div>
 
                 <div className="btn-group">
                   <button

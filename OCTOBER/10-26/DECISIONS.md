@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 75 - **Unified Token Format for Dual-Currency Payout Architecture**
+**Last Updated:** 2025-11-08 Session 78 - **Dashboard Wallet Address Privacy Pattern**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,75 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-08 Session 78: Dashboard Wallet Address Privacy Pattern
+
+**Decision:** Use CSS blur filter with client-side state toggle for wallet address privacy instead of server-side masking or clipboard-only approach
+
+**Context:**
+- Dashboard displays cryptocurrency wallet addresses for each channel
+- Wallet addresses are sensitive information (irreversible if compromised)
+- Users need occasional access but not constant visibility
+- User requested blur effect with reveal toggle
+
+**Options Considered:**
+
+1. **Server-side masking (0x249A...69D8)** ⚠️
+   - Pros: Simple implementation, no client state needed
+   - Cons: Requires API call to reveal, can't copy from masked version, poor UX
+
+2. **Clipboard-only (no display, copy button only)** ⚠️
+   - Pros: Maximum security, no visual exposure
+   - Cons: Can't verify address before copying, confusing UX, accessibility issues
+
+3. **CSS blur filter with client-side toggle** ✅ SELECTED
+   - Pros: Instant toggle, smooth UX, full address always accessible, no API calls
+   - Cons: Technically visible in DOM (but requires deliberate inspection)
+   - Rationale: Balances privacy and usability, follows modern UX patterns (password fields)
+
+**Implementation Details:**
+- React state manages visibility per channel: `visibleWallets: {[channelId: string]: boolean}`
+- CSS blur filter: `filter: blur(5px)` when hidden, `filter: none` when revealed
+- User-select disabled when blurred (prevents accidental copying)
+- Toggle button with emoji icons: 👁️ (show) / 🙈 (hide)
+- Smooth 0.2s transition animation between states
+
+**Security Considerations:**
+- **Threat model**: Protecting against shoulder surfing and screenshot leaks, NOT against deliberate inspection
+- **DOM exposure**: Full address always in DOM (accepted trade-off for instant UX)
+- **Accessibility**: Screen readers can access value regardless of blur state
+- **Default state**: Always blurred on page load (privacy-first)
+
+**Consistent Button Positioning:**
+- **Problem**: Edit/Delete buttons rendered at different heights depending on tier count (1-3 tiers)
+- **Solution**: Fixed minimum height (132px) on tier-list container
+  - 1 tier: 44px content + 88px padding = 132px total
+  - 2 tiers: 88px content + 44px padding = 132px total
+  - 3 tiers: 132px content + 0px padding = 132px total
+- **Result**: Buttons always render at same vertical position for predictable UX
+
+**Alternative Considered (Rejected):**
+- Dynamic spacer div: More complex, harder to maintain, same visual result
+
+**Long Wallet Address Handling:**
+- **Problem**: Extended wallet addresses (XMR: 95 chars) caused wallet section to expand, pushing Edit/Delete buttons down and breaking button alignment
+- **Solution**: Fixed minimum height (60px) with lineHeight (1.5) on wallet address container
+  - Short addresses (ETH: 42 chars): Single line with extra padding = 60px
+  - Long addresses (XMR: 95 chars): 3-4 lines wrapped with word-break = 60px minimum
+  - Text wraps naturally with `wordBreak: 'break-all'`
+- **Result**: All channel cards maintain consistent height regardless of wallet address length
+
+**Alternatives Considered (Rejected):**
+1. **Text truncation with ellipsis**: Would hide important address characters, poor UX
+2. **Horizontal scrolling**: Difficult on mobile, poor accessibility
+3. **Fixed character limit in DB**: Too restrictive, doesn't support all crypto address formats
+
+**Impact:**
+- Enhanced privacy: Wallet addresses hidden by default
+- Improved UX: One-click reveal, smooth animation, consistent button positioning
+- No backend changes: Pure frontend implementation
+- No performance impact: CSS blur is GPU-accelerated
+- Scalable: Pattern can be applied to other sensitive fields (API keys, secrets)
 
 ### 2025-11-07 Session 75: Unified Token Format for Dual-Currency Payout Architecture
 

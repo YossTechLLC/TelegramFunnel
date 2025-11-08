@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = (import.meta as any).env?.VITE_API_URL || 'https://gcregisterapi-10-26-291176869049.us-central1.run.app';
+const API_URL = (import.meta as any).env?.VITE_API_URL || 'https://gcregisterapi-10-26-pjxwjsdktq-uc.a.run.app';
 
 export const api = axios.create({
   baseURL: API_URL,
