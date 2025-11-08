@@ -208,14 +208,14 @@ export default function RegisterChannelPage() {
     <div>
       <div className="header">
         <div className="header-content">
-          <div className="logo">PayGate Prime</div>
-          <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+          <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
+          <button onClick={handleLogout} className="btn btn-logout">Logout</button>
         </div>
       </div>
 
       <div className="container" style={{ maxWidth: '800px' }}>
         <div style={{ marginBottom: '24px' }}>
-          <button onClick={() => navigate('/dashboard')} className="btn btn-secondary" style={{ marginBottom: '16px' }}>
+          <button onClick={() => navigate('/dashboard')} className="btn btn-green" style={{ marginBottom: '16px' }}>
             ← Back to Dashboard
           </button>
           <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '8px' }}>Register New Channel</h1>
@@ -627,7 +627,7 @@ export default function RegisterChannelPage() {
             </button>
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-green"
               style={{ flex: 2 }}
               disabled={isSubmitting}
             >

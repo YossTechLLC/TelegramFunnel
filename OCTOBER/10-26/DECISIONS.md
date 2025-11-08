@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 78 - **Dashboard Wallet Address Privacy Pattern**
+**Last Updated:** 2025-11-08 Session 80 - **Separated Landing Page and Dashboard Color Themes**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,112 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-08 Session 80: Separated Landing Page and Dashboard Color Themes
+
+**Decision:** Apply green theme to landing page only, keep dashboard with clean gray background and green header
+
+**Context:**
+- Previous session applied green background globally (Session 79)
+- User requested to keep original dashboard background color (#f5f5f5 gray)
+- Green color should be prominent on landing page for marketing appeal
+- Dashboard should be clean and professional for daily use
+- User also requested UI improvements: move channel counter, reposition Back button
+
+**Options Considered:**
+
+1. **Keep green background everywhere** ⚠️
+   - Pros: Consistent color theme across all pages
+   - Cons: Dashboard too bright for daily use, reduces readability, cluttered feel
+
+2. **Revert all green changes** ⚠️
+   - Pros: Simple rollback
+   - Cons: Loses modern aesthetic, purple gradient on landing page felt dated
+
+3. **Separate themes: Green landing, gray dashboard** ✅ SELECTED
+   - Pros: Best of both worlds - eye-catching marketing page, clean workspace
+   - Cons: Slight inconsistency (mitigated by green header on all pages)
+   - Rationale: Landing page is marketing/first impression, dashboard is functional workspace
+
+**Implementation Details:**
+
+**Color Scheme:**
+- **Landing Page**: Full green gradient background (#A8E870 → #5AB060), dark green buttons (#1E3A20)
+- **Dashboard/Edit/Register Pages**: Gray background (#f5f5f5), green header (#A8E870), white logo text
+- **All Pages**: Green header provides visual continuity
+
+**Layout Changes:**
+- Channel counter moved from header to right side, grouped with "+ Add Channel" button
+  - Rationale: Better information grouping, counter relates to channel management, not navigation
+- "Back to Dashboard" button repositioned inline with "Edit Channel" heading (right side)
+  - Rationale: Standard web pattern, saves vertical space, cleaner header
+
+**CSS Strategy:**
+- Used `.dashboard-logo` class to override logo color on dashboard pages only
+- Body background remains gray by default
+- Landing page uses inline styles for full-page green gradient
+
+**Impact:**
+- Landing page: Bold, modern, attention-grabbing for new users
+- Dashboard: Clean, professional, easy on eyes for extended use
+- Unified brand: Green header ties all pages together
+- Better UX: Logical grouping of information (channel count with management actions)
+
+---
+
+### 2025-11-08 Session 79: Wise-Inspired Color Scheme Adoption
+
+**Decision:** Adopt Wise.com's color palette (lime green background, dark green accents) for PayGatePrime website
+
+**Context:**
+- User requested analysis of Wise.com color scheme
+- Wise is a trusted financial/payment brand with modern, clean aesthetic
+- Previous color scheme used generic greens and purple gradients
+- Need to establish recognizable brand identity
+- User also requested logo text change: "PayGate Prime" → "PayGatePrime"
+
+**Options Considered:**
+
+1. **Keep existing color scheme** ⚠️
+   - Pros: No changes needed, familiar to existing users
+   - Cons: Generic appearance, no strong brand identity, purple gradient felt dated
+
+2. **Create custom color palette from scratch** ⚠️
+   - Pros: Unique brand identity, full control
+   - Cons: Requires extensive design expertise, color theory knowledge, may not inspire trust
+
+3. **Adopt Wise.com color palette** ✅ SELECTED
+   - Pros: Proven design from trusted payment brand, modern aesthetic, strong green associations (money, growth, trust)
+   - Cons: Similar appearance to another brand (but different industry/product)
+   - Rationale: Wise is respected, green theme appropriate for financial services, immediate professional appearance
+
+**Color Mapping:**
+- Background: #f5f5f5 → #A8E870 (Wise lime green)
+- Primary buttons: #4CAF50 → #1E3A20 (dark green)
+- Button hover: #45a049 → #2D4A32 (medium green)
+- Auth gradient: Purple (#667eea to #764ba2) → Green (#A8E870 to #5AB060)
+- Logo color: #4CAF50 → #1E3A20
+- Focus borders: #4CAF50 → #1E3A20
+
+**Additional Decisions:**
+- **Logo clickability**: Made logo clickable on all pages (navigate to '/dashboard')
+  - Rationale: Standard web UX pattern, improves navigation, no dedicated "Home" button needed
+- **Logo text**: Changed "PayGate Prime" (two words) → "PayGatePrime" (one word)
+  - Rationale: Cleaner brand name, easier to remember, more modern feel
+
+**Implementation Notes:**
+- Applied colors tastefully: Background is prominent green, buttons dark green, white cards provide contrast
+- Maintained accessibility: High contrast between green background and dark text/buttons
+- Preserved existing layout and functionality (color-only change)
+- Added hover effects to logo for better UX feedback
+
+**Impact:**
+- Professional, trustworthy appearance matching established payment brand
+- Strong visual identity with memorable color palette
+- Improved navigation with clickable logo
+- Consistent brand name across all pages
+
+---
 
 ### 2025-11-08 Session 78: Dashboard Wallet Address Privacy Pattern
 

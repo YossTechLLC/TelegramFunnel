@@ -57,8 +57,8 @@ body {
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #4CAF50;
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+  border-color: #1E3A20;
+  box-shadow: 0 0 0 2px rgba(30, 58, 32, 0.1);
 }
 
 .error-text {
@@ -78,12 +78,12 @@ body {
 }
 
 .btn-primary {
-  background-color: #4CAF50;
+  background-color: #1E3A20;
   color: white;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: #45a049;
+  background-color: #2D4A32;
 }
 
 .btn-secondary {
@@ -226,8 +226,8 @@ body {
 }
 
 .header {
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+  border-bottom: 1px solid #e5e5e5;
   padding: 16px 0;
   margin-bottom: 24px;
 }
@@ -244,7 +244,17 @@ body {
 .logo {
   font-size: 24px;
   font-weight: 700;
-  color: #4CAF50;
+  color: #1E3A20;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.logo:hover {
+  opacity: 0.8;
+}
+
+.logo.dashboard-logo {
+  color: #1E3A20;
 }
 
 .nav {
@@ -258,7 +268,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #A8E870 0%, #5AB060 100%);
 }
 
 .auth-card {
@@ -286,11 +296,35 @@ body {
 }
 
 .auth-link a {
-  color: #667eea;
+  color: #1E3A20;
   text-decoration: none;
   font-weight: 500;
 }
 
 .auth-link a:hover {
   text-decoration: underline;
+}
+
+.btn-green {
+  background-color: #A8E870;
+  color: #1E3A20;
+  font-weight: 600;
+  border: 1px solid #A8E870;
+}
+
+.btn-green:hover:not(:disabled) {
+  background-color: #9DD765;
+  border-color: #9DD765;
+}
+
+.btn-logout {
+  background-color: #f5f5f5;
+  color: #DC2626;
+  border: 1px solid #DC2626;
+}
+
+.btn-logout:hover:not(:disabled) {
+  background-color: #fee2e2;
+  border-color: #DC2626;
+  color: #DC2626;
 }

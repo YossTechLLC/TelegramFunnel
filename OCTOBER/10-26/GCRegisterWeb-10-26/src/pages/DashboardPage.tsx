@@ -64,8 +64,8 @@ export default function DashboardPage() {
       <div>
         <div className="header">
           <div className="header-content">
-            <div className="logo">PayGate Prime</div>
-            <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+            <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
+            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
           </div>
         </div>
         <div className="container">
@@ -80,8 +80,8 @@ export default function DashboardPage() {
       <div>
         <div className="header">
           <div className="header-content">
-            <div className="logo">PayGate Prime</div>
-            <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+            <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
+            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
           </div>
         </div>
         <div className="container">
@@ -99,12 +99,9 @@ export default function DashboardPage() {
     <div>
       <div className="header">
         <div className="header-content">
-          <div className="logo">PayGate Prime</div>
+          <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
           <div className="nav">
-            <span style={{ color: '#666', fontSize: '14px' }}>
-              {channelCount} / {maxChannels} channels
-            </span>
-            <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
           </div>
         </div>
       </div>
@@ -118,9 +115,14 @@ export default function DashboardPage() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700' }}>Your Channels</h1>
-          {channelCount < maxChannels && (
-            <button className="btn btn-primary" onClick={() => navigate('/register')}>+ Add Channel</button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span style={{ color: '#666', fontSize: '14px' }}>
+              {channelCount} / {maxChannels} channels
+            </span>
+            {channelCount < maxChannels && (
+              <button className="btn btn-green" onClick={() => navigate('/register')}>+ Add Channel</button>
+            )}
+          </div>
         </div>
 
         {channelCount === 0 ? (
@@ -129,7 +131,7 @@ export default function DashboardPage() {
             <p style={{ color: '#999', marginBottom: '24px' }}>
               Register your first Telegram channel to start accepting payments
             </p>
-            <button className="btn btn-primary" onClick={() => navigate('/register')}>Register Channel</button>
+            <button className="btn btn-green" onClick={() => navigate('/register')}>Register Channel</button>
           </div>
         ) : (
           <div className="channel-grid">
@@ -186,7 +188,7 @@ export default function DashboardPage() {
                     }}>
                       <div style={{
                         height: '100%',
-                        background: '#4CAF50',
+                        background: '#1E3A20',
                         width: `${Math.min((channel.accumulated_amount / (channel.payout_threshold_usd || 1)) * 100, 100)}%`,
                         transition: 'width 0.3s'
                       }} />
@@ -239,18 +241,20 @@ export default function DashboardPage() {
                     className="btn"
                     style={{
                       flex: 1,
-                      background: '#DC2626',
-                      color: 'white',
+                      background: '#f5f5f5',
+                      color: '#DC2626',
                       border: '1px solid #DC2626',
                       transition: 'all 0.2s'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#B91C1C';
-                      e.currentTarget.style.borderColor = '#B91C1C';
+                      e.currentTarget.style.background = '#fee2e2';
+                      e.currentTarget.style.borderColor = '#DC2626';
+                      e.currentTarget.style.color = '#DC2626';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#DC2626';
+                      e.currentTarget.style.background = '#f5f5f5';
                       e.currentTarget.style.borderColor = '#DC2626';
+                      e.currentTarget.style.color = '#DC2626';
                     }}
                     onClick={() => handleDeleteChannel(channel.open_channel_id, channel.open_channel_title)}
                     disabled={deletingChannelId === channel.open_channel_id}

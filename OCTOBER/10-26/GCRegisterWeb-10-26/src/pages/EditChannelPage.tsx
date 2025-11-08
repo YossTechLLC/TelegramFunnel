@@ -253,8 +253,8 @@ export default function EditChannelPage() {
       <div>
         <div className="header">
           <div className="header-content">
-            <div className="logo">PayGate Prime</div>
-            <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+            <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
+            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
           </div>
         </div>
         <div className="container" style={{ textAlign: 'center', padding: '48px 0' }}>
@@ -268,17 +268,19 @@ export default function EditChannelPage() {
     <div>
       <div className="header">
         <div className="header-content">
-          <div className="logo">PayGate Prime</div>
-          <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+          <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
+          <button onClick={handleLogout} className="btn btn-logout">Logout</button>
         </div>
       </div>
 
       <div className="container" style={{ maxWidth: '800px' }}>
         <div style={{ marginBottom: '24px' }}>
-          <button onClick={() => navigate('/dashboard')} className="btn btn-secondary" style={{ marginBottom: '16px' }}>
-            ← Back to Dashboard
-          </button>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '8px' }}>Edit Channel</h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: '700' }}>Edit Channel</h1>
+            <button onClick={() => navigate('/dashboard')} className="btn btn-green">
+              ← Back to Dashboard
+            </button>
+          </div>
           <p style={{ color: '#666' }}>Update your Telegram channel configuration</p>
         </div>
 
@@ -685,7 +687,7 @@ export default function EditChannelPage() {
             </button>
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-green"
               style={{ flex: 2 }}
               disabled={isSubmitting}
             >

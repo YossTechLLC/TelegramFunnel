@@ -15,7 +15,7 @@ export default function LandingPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'linear-gradient(135deg, #A8E870 0%, #5AB060 100%)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -35,12 +35,12 @@ export default function LandingPage() {
           <h1 style={{
             fontSize: '48px',
             fontWeight: 'bold',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            background: 'linear-gradient(135deg, #1E3A20 0%, #5AB060 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             marginBottom: '16px'
           }}>
-            PayGate Prime
+            PayGatePrime
           </h1>
           <p style={{
             fontSize: '20px',
@@ -139,20 +139,22 @@ export default function LandingPage() {
               fontSize: '18px',
               fontWeight: '600',
               color: 'white',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: '#1E3A20',
               border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              boxShadow: '0 4px 14px rgba(102, 126, 234, 0.4)'
+              transition: 'transform 0.2s, box-shadow 0.2s, background 0.2s',
+              boxShadow: '0 4px 14px rgba(30, 58, 32, 0.4)'
             }}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.6)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(30, 58, 32, 0.6)';
+              e.currentTarget.style.background = '#2D4A32';
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 14px rgba(102, 126, 234, 0.4)';
+              e.currentTarget.style.boxShadow = '0 4px 14px rgba(30, 58, 32, 0.4)';
+              e.currentTarget.style.background = '#1E3A20';
             }}
           >
             Get Started Free
@@ -164,9 +166,9 @@ export default function LandingPage() {
               padding: '16px 40px',
               fontSize: '18px',
               fontWeight: '600',
-              color: '#667eea',
+              color: '#1E3A20',
               background: 'white',
-              border: '2px solid #667eea',
+              border: '2px solid #1E3A20',
               borderRadius: '8px',
               cursor: 'pointer',
               transition: 'all 0.2s'

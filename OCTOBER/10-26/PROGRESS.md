@@ -1,8 +1,139 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 78 - **Dashboard UX Improvements Deployed** ✅
+**Last Updated:** 2025-11-08 Session 80 - **Refined Color Layout: Green Landing Page, Clean Dashboard** ✅
 
 ## Recent Updates
+
+## 2025-11-08 Session 80: Layout Refinement - Separated Landing Page Theme from Dashboard ✅
+
+**LAYOUT IMPROVEMENTS DEPLOYED**: Green theme on landing page, clean dashboard with green header
+
+**Changes Implemented:**
+- ✅ Reverted dashboard body background to original gray (#f5f5f5)
+- ✅ Applied green header (#A8E870) on dashboard pages
+- ✅ Changed PayGatePrime text to white (#f5f5f5) in dashboard header with `.dashboard-logo` class
+- ✅ Moved "X / 10 channels" counter next to "+ Add Channel" button (right side)
+- ✅ Removed channel counter from header (next to Logout button)
+- ✅ Updated landing page background to green gradient (#A8E870 → #5AB060)
+- ✅ Updated "Get Started Free" button to dark green (#1E3A20, hover: #2D4A32)
+- ✅ Updated "Login to Dashboard" button border/text to dark green (#1E3A20)
+- ✅ Repositioned "Back to Dashboard" button to right side, inline with "Edit Channel" heading
+
+**Files Modified:**
+- ✅ `GCRegisterWeb-10-26/src/index.css`:
+  - Reverted body background-color to #f5f5f5
+  - Changed header background to #A8E870
+  - Added `.dashboard-logo` class for white text color
+- ✅ `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx`:
+  - Added `dashboard-logo` class to all logo instances
+  - Removed channel counter from header nav section
+  - Added channel counter next to "+ Add Channel" button (lines 118-125)
+- ✅ `GCRegisterWeb-10-26/src/pages/LandingPage.tsx`:
+  - Updated background gradient to green
+  - Changed "Get Started Free" button to dark green solid color
+  - Changed "Login to Dashboard" button border/text to dark green
+- ✅ `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`:
+  - Repositioned "Back to Dashboard" button inline with heading (lines 278-283)
+
+**Deployment:**
+- ✅ Frontend built: Final bundle `index-BTydwDPc.js` & `index-FIXStAD_.css`
+- ✅ Deployed to Cloud Storage: `gs://www-paygateprime-com/`
+- ✅ Cache headers set: immutable for assets, no-cache for HTML
+- ✅ CDN cache invalidated: `www-paygateprime-urlmap`
+- ✅ URL: https://www.paygateprime.com
+
+**Design Rationale:**
+- Landing page: Bold green theme to attract attention, match Wise aesthetic
+- Dashboard: Clean gray background with green header for professional workspace feel
+- Separation of concerns: Landing page is marketing, dashboard is functional
+
+**Impact:**
+- ✅ Landing page stands out with vibrant green theme
+- ✅ Dashboard remains clean and uncluttered for daily use
+- ✅ Green header provides brand consistency across all pages
+- ✅ Better information hierarchy: channel count logically grouped with add button
+- ✅ Edit page header cleaner with inline "Back to Dashboard" button
+
+**Testing Verified:**
+- ✅ Dashboard displays with gray background and green header
+- ✅ Channel counter shows "3 / 10 channels" next to "+ Add Channel"
+- ✅ PayGatePrime text is white in green header
+- ✅ Edit page shows "Back to Dashboard" on right side of "Edit Channel"
+- ✅ Landing page has green gradient background
+- ✅ All buttons use correct green colors
+
+---
+
+## 2025-11-08 Session 79: Website Redesign - Wise-Inspired Color Palette & Clickable Logo ✅
+
+**VISUAL REDESIGN DEPLOYED**: Applied Wise.com color scheme and improved navigation
+
+**Changes Implemented:**
+- ✅ Analyzed Wise.com color palette (light green: #A8E870, dark green: #1E3A20)
+- ✅ Updated body background: #f5f5f5 → #A8E870 (Wise lime green)
+- ✅ Updated primary buttons: #4CAF50 → #1E3A20 (dark green on hover: #2D4A32)
+- ✅ Updated logo color: #4CAF50 → #1E3A20 (dark green)
+- ✅ Updated focus borders: #4CAF50 → #1E3A20 with matching shadow
+- ✅ Updated auth page gradient: Purple gradient → Green gradient (#A8E870 to #5AB060)
+- ✅ Updated auth links: #667eea → #1E3A20
+- ✅ Updated progress bar: #4CAF50 → #1E3A20
+- ✅ Updated landing page title gradient: Purple → Green (#1E3A20 to #5AB060)
+- ✅ Changed logo text: "PayGate Prime" → "PayGatePrime" (no space)
+- ✅ Made logo clickable with navigate to '/dashboard'
+- ✅ Added logo hover effect (opacity: 0.8)
+- ✅ Added cursor pointer and transition styles to .logo class
+
+**Files Modified:**
+- ✅ `GCRegisterWeb-10-26/src/index.css`:
+  - Updated body background-color and text color
+  - Updated .btn-primary colors
+  - Updated .logo with clickable styles
+  - Updated focus states for form inputs
+  - Updated .auth-container gradient
+  - Updated .auth-link color
+- ✅ `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx`:
+  - Changed all 3 instances of "PayGate Prime" to "PayGatePrime"
+  - Added onClick={() => navigate('/dashboard')} to all logo divs
+  - Updated progress bar color
+- ✅ `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`:
+  - Changed 2 instances of "PayGate Prime" to "PayGatePrime"
+  - Added onClick={() => navigate('/dashboard')} to both logo divs
+- ✅ `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`:
+  - Changed "PayGate Prime" to "PayGatePrime"
+  - Added onClick={() => navigate('/dashboard')} to logo div
+- ✅ `GCRegisterWeb-10-26/src/pages/LandingPage.tsx`:
+  - Changed "PayGate Prime" to "PayGatePrime"
+  - Updated title gradient colors
+
+**Deployment:**
+- ✅ Frontend built: Final bundle `index-B1V2QGsF.js` & `index-CqHrH0la.css`
+- ✅ Deployed to Cloud Storage: `gs://www-paygateprime-com/`
+- ✅ Cache headers set: immutable for assets, no-cache for HTML
+- ✅ CDN cache invalidated: `www-paygateprime-urlmap`
+- ✅ URL: https://www.paygateprime.com
+
+**Color Palette (Wise-Inspired):**
+- Background: #A8E870 (light lime green)
+- Primary buttons: #1E3A20 (dark green)
+- Button hover: #2D4A32 (medium green)
+- Gradient start: #A8E870 (light green)
+- Gradient end: #5AB060 (mid green)
+- Text: #1E1E1E (dark gray/black)
+
+**Impact:**
+- ✅ Modern, clean aesthetic matching Wise.com's trusted brand
+- ✅ Improved navigation: Logo clickable from all pages
+- ✅ Brand consistency: Single-word logo "PayGatePrime"
+- ✅ Professional appearance with high contrast
+- ✅ Smooth hover interactions on logo
+
+**Testing Verified:**
+- ✅ Dashboard displays with new green color scheme
+- ✅ Logo is clickable and navigates to /dashboard
+- ✅ All channels render correctly with new colors
+- ✅ Buttons display in dark green (#1E3A20)
+
+---
 
 ## 2025-11-08 Session 78: Dashboard UX Improvements - Consistent Button Positioning & Wallet Address Privacy ✅
 

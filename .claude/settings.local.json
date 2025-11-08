@@ -169,7 +169,9 @@
       "Bash(gsutil stat:*)",
       "mcp__playwright__browser_network_requests",
       "Bash(gcloud compute url-maps invalidate-cdn-cache:*)",
-      "mcp__playwright__browser_fill_form"
+      "mcp__playwright__browser_fill_form",
+      "Bash(gcloud compute url-maps:*)",
+      "mcp__playwright__browser_evaluate"
     ],
     "deny": [],
     "ask": []
