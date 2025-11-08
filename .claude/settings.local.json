@@ -164,7 +164,9 @@
       "Bash(/tmp/bugs_truncated.txt)",
       "Bash(/tmp/decisions_truncated.txt)",
       "Bash(/tmp/progress_truncated.txt)",
-      "Bash(.venv/bin/pip3 install:*)"
+      "Bash(.venv/bin/pip3 install:*)",
+      "Bash(/tmp/bugs_to_archive.txt)",
+      "Bash(gsutil stat:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,10 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['channels'],
@@ -14,6 +18,37 @@ export default function DashboardPage() {
   const handleLogout = () => {
     authService.logout();
     navigate('/login');
+  };
+
+  const handleDeleteChannel = async (channelId: string, channelTitle: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${channelTitle}"?\n\nThis action cannot be undone and will remove:\n- All channel configuration\n- All subscriber data\n- All payment history\n\nType DELETE to confirm.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingChannelId(channelId);
+    setDeleteError(null);
+
+    try {
+      await channelService.deleteChannel(channelId);
+
+      // Invalidate and refetch channels
+      await queryClient.invalidateQueries({ queryKey: ['channels'] });
+
+      // Optional: Show success message (you could add a success state if needed)
+      console.log('✅ Channel deleted successfully');
+    } catch (err: any) {
+      console.error('❌ Failed to delete channel:', err);
+      setDeleteError(err.response?.data?.error || err.message || 'Failed to delete channel');
+
+      // Clear error after 5 seconds
+      setTimeout(() => setDeleteError(null), 5000);
+    } finally {
+      setDeletingChannelId(null);
+    }
   };
 
   if (isLoading) {
@@ -67,6 +102,12 @@ export default function DashboardPage() {
       </div>
 
       <div className="container">
+        {deleteError && (
+          <div className="alert alert-error" style={{ marginBottom: '24px' }}>
+            {deleteError}
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700' }}>Your Channels</h1>
           {channelCount < maxChannels && (
@@ -150,10 +191,32 @@ export default function DashboardPage() {
                     className="btn btn-secondary"
                     style={{ flex: 1 }}
                     onClick={() => navigate(`/edit/${channel.open_channel_id}`)}
+                    disabled={deletingChannelId === channel.open_channel_id}
                   >
                     Edit
                   </button>
-                  <button className="btn btn-secondary">Analytics</button>
+                  <button
+                    className="btn"
+                    style={{
+                      flex: 1,
+                      background: '#DC2626',
+                      color: 'white',
+                      border: '1px solid #DC2626',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#B91C1C';
+                      e.currentTarget.style.borderColor = '#B91C1C';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#DC2626';
+                      e.currentTarget.style.borderColor = '#DC2626';
+                    }}
+                    onClick={() => handleDeleteChannel(channel.open_channel_id, channel.open_channel_title)}
+                    disabled={deletingChannelId === channel.open_channel_id}
+                  >
+                    {deletingChannelId === channel.open_channel_id ? 'Deleting...' : '🗑️ Delete'}
+                  </button>
                 </div>
               </div>
             ))}

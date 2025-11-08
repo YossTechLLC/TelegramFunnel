@@ -46,21 +46,10 @@ export default function RegisterChannelPage() {
       try {
         const response = await api.get('/api/mappings/currency-network');
         setMappings(response.data);
-
-        // Set default values
-        const networks = Object.keys(response.data.networks_with_names);
-        if (networks.length > 0) {
-          setClientPayoutNetwork(networks[0]);
-          const currencies = response.data.network_to_currencies[networks[0]];
-          if (currencies && currencies.length > 0) {
-            setClientPayoutCurrency(currencies[0].currency);
-          }
-        }
+        // Removed auto-default logic - will use empty strings from state initialization
       } catch (err) {
         console.error('Failed to load mappings:', err);
-        // Set default fallback
-        setClientPayoutNetwork('ETH');
-        setClientPayoutCurrency('USDT');
+        // Do not set defaults on error - let user select manually
       }
     };
 
@@ -125,20 +114,32 @@ export default function RegisterChannelPage() {
         throw new Error('Tier 1 price and duration are required');
       }
 
+      if (parseFloat(sub1Price) < 4.99) {
+        throw new Error('Tier 1 price must be at least $4.99');
+      }
+
       if (tierCount >= 2 && (!sub2Price || !sub2Time)) {
         throw new Error('Tier 2 price and duration are required when tier count is 2 or 3');
+      }
+
+      if (tierCount >= 2 && parseFloat(sub2Price) < 4.99) {
+        throw new Error('Tier 2 price must be at least $4.99');
       }
 
       if (tierCount === 3 && (!sub3Price || !sub3Time)) {
         throw new Error('Tier 3 price and duration are required when tier count is 3');
       }
 
+      if (tierCount === 3 && parseFloat(sub3Price) < 4.99) {
+        throw new Error('Tier 3 price must be at least $4.99');
+      }
+
       if (!clientWalletAddress || !clientPayoutCurrency || !clientPayoutNetwork) {
         throw new Error('Please fill in all payment configuration fields');
       }
 
-      if (payoutStrategy === 'threshold' && (!payoutThresholdUsd || parseFloat(payoutThresholdUsd) <= 0)) {
-        throw new Error('Threshold amount is required and must be positive when using threshold strategy');
+      if (payoutStrategy === 'threshold' && (!payoutThresholdUsd || parseFloat(payoutThresholdUsd) < 20.00)) {
+        throw new Error('Threshold amount must be at least $20.00');
       }
 
       // Validate channel ID format
@@ -388,11 +389,13 @@ export default function RegisterChannelPage() {
                   <input
                     type="number"
                     step="0.01"
+                    min="4.99"
                     placeholder="50.00"
                     value={sub1Price}
                     onChange={(e) => setSub1Price(e.target.value)}
                     required
                   />
+                  <small style={{ color: '#666', fontSize: '11px' }}>Min: $4.99</small>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Duration (Days) *</label>
@@ -419,11 +422,13 @@ export default function RegisterChannelPage() {
                     <input
                       type="number"
                       step="0.01"
+                      min="4.99"
                       placeholder="30.00"
                       value={sub2Price}
                       onChange={(e) => setSub2Price(e.target.value)}
                       required
                     />
+                    <small style={{ color: '#666', fontSize: '11px' }}>Min: $4.99</small>
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label>Duration (Days) *</label>
@@ -451,11 +456,13 @@ export default function RegisterChannelPage() {
                     <input
                       type="number"
                       step="0.01"
+                      min="4.99"
                       placeholder="15.00"
                       value={sub3Price}
                       onChange={(e) => setSub3Price(e.target.value)}
                       required
                     />
+                    <small style={{ color: '#666', fontSize: '11px' }}>Min: $4.99</small>
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label>Duration (Days) *</label>
@@ -588,13 +595,14 @@ export default function RegisterChannelPage() {
                 <input
                   type="number"
                   step="0.01"
+                  min="20.00"
                   placeholder="100.00"
                   value={payoutThresholdUsd}
                   onChange={(e) => setPayoutThresholdUsd(e.target.value)}
                   required
                 />
                 <small style={{ color: '#666', fontSize: '12px' }}>
-                  Payments will accumulate until reaching this amount, then batch process automatically
+                  Minimum threshold is $20.00. Payments will accumulate until reaching this amount, then batch process automatically.
                 </small>
               </div>
             )}
