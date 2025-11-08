@@ -1,8 +1,102 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-07 Session 75 - **Threshold Payout Method RESTORED** ✅
+**Last Updated:** 2025-11-08 Session 77 - **Token Encryption/Decryption Architecture Map Complete** ✅
 
 ## Recent Updates
+
+## 2025-11-08 Session 77: Token Encryption/Decryption Architecture Map ✅
+
+**COMPREHENSIVE TOKEN ARCHITECTURE MAP CREATED**: Detailed 762-line documentation of encryption/decryption token usage across all 13 services
+
+**Deliverable:** `/TOKEN_ENCRYPTION_MAP.md` (762 lines)
+
+**Complete Service Analysis:**
+- ✅ GCWebhook1-10-26: DECRYPT (NOWPayments) + ENCRYPT (GCWebhook2, GCSplit1)
+- ✅ GCWebhook2-10-26: DECRYPT (GCWebhook1) only
+- ✅ GCSplit1-10-26: ENCRYPT (GCSplit2, GCSplit3, GCHostPay1) - No decrypt (receives plain JSON)
+- ✅ GCSplit2-10-26: DECRYPT (GCSplit1) + ENCRYPT (GCSplit1) - USDT→ETH estimator
+- ✅ GCSplit3-10-26: DECRYPT (GCSplit1) + ENCRYPT (GCSplit1) - ETH→Client swapper
+- ✅ GCHostPay1-10-26: DECRYPT (GCSplit1) + ENCRYPT (GCHostPay2, GCHostPay3, GCMicroBatch)
+- ✅ GCHostPay2-10-26: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Status checker
+- ✅ GCHostPay3-10-26: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Payment executor
+- ✅ GCAccumulator-10-26: Has token_manager.py but UNUSED (plain JSON, no encryption)
+- ✅ GCBatchProcessor-10-26: ENCRYPT (GCSplit1) only - Batch detector
+- ✅ GCMicroBatchProcessor-10-26: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Micro-batch handler
+- ✅ np-webhook-10-26: No tokens (HMAC signature verification only, not encryption)
+- ✅ TelePay10-26: No tokens (Telegram bot, direct API)
+
+**Token Encryption Statistics:**
+- Services with token_manager.py: 11
+- Services that DECRYPT: 8
+- Services that ENCRYPT: 9
+- Services with BOTH: 6
+- Services with NEITHER: 3
+- Signing keys in use: 3
+
+**Two-Key Security Architecture:**
+```
+External Boundary (TPS_HOSTPAY_SIGNING_KEY)
+    GCSplit1 ←→ GCHostPay1
+Internal Boundary (SUCCESS_URL_SIGNING_KEY)
+    All internal service communication
+```
+
+**Token Flow Paths Documented:**
+1. **Instant Payout**: GCWebhook1 → GCSplit1 → GCSplit2 (estimate) → GCSplit3 (swap) → GCHostPay1 (validate) → GCHostPay2 (status) → GCHostPay3 (execute)
+2. **Threshold Payout**: GCWebhook1 → GCAccumulator (no encryption) → GCSplit2 (async conversion)
+3. **Batch Payout**: Cloud Scheduler → GCBatchProcessor → GCSplit1 (USDT→Client swap)
+4. **Micro-Batch**: Cloud Scheduler → GCMicroBatchProcessor → GCHostPay1 → GCHostPay2/3 → callback
+
+**Token Payload Formats:**
+- Payment data token: 38+ bytes (binary packed with HMAC-SHA256 truncated to 16 bytes)
+- Payment split token: Variable length (includes swap_currency, payout_mode, actual_eth_amount)
+- HostPay token: Variable length (includes actual + estimated ETH amounts for validation)
+
+**Key Security Findings:**
+1. GCAccumulator has unused token_manager (architectural remnant)
+2. Token expiration windows vary by use case: 2hr (payment), 24hr (invite), 60sec (hostpay)
+3. All HMAC signatures truncated to 16 bytes for efficiency
+4. Base64 URL-safe encoding without padding
+5. Timestamp validation in all tokens prevents replay attacks
+6. 48-bit Telegram ID handling supports negative IDs
+
+**Document Sections:**
+- Service Summary Table (quick reference)
+- 13 detailed service analyses with endpoints
+- Complete token flow diagrams
+- Binary token format specifications
+- Service dependency graph
+- Key distribution matrix
+- Testing examples
+- Maintenance checklist
+
+**Remaining Context:** ~125k tokens remaining
+
+- **Phase 3 (Cleanup)**: Remove eth_to_usdt_rate and conversion_timestamp
+- **Phase 4 (Backlog)**: Implement email verification, password reset, fee tracking
+
+**Documentation Created:**
+- ✅ `/10-26/DATABASE_UNPOPULATED_FIELDS_ANALYSIS.md` - Comprehensive 745-line analysis including:
+  - Executive summary with categorization
+  - Detailed analysis of all 23 fields
+  - Root cause explanations
+  - Impact assessments
+  - Actionable recommendations
+  - SQL migration scripts
+  - Code investigation guides
+  - Priority action matrix
+
+**Key Insights:**
+- Most fields are **intentionally unpopulated** (future features, optional data)
+- Only **5 fields are genuine bugs** requiring fixes
+- **2 fields can be safely removed** (technical debt cleanup)
+- System is functioning correctly for core payment flows
+
+**Next Steps:**
+- Review analysis document with stakeholders
+- Prioritize Phase 1 critical bug fixes
+- Create implementation tickets for each phase
+- Update API documentation for optional fields
 
 ## 2025-11-07 Session 75: GCSplit1-10-26 Threshold Payout Fix DEPLOYED ✅
 

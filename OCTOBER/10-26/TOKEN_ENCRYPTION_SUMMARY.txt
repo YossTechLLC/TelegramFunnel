@@ -1,0 +1,425 @@
+================================================================================
+                  TOKEN ENCRYPTION/DECRYPTION ARCHITECTURE
+                    Comprehensive System Documentation
+================================================================================
+
+PROJECT: TelegramFunnel Payout System
+DATE: 2025-11-08
+SCOPE: All 13 services in /OCTOBER/10-26 directory
+STATUS: Complete Analysis and Documentation
+
+================================================================================
+                            QUICK STATISTICS
+================================================================================
+
+Total Services:                                      13
+Services with token_manager.py:                     11
+Services using encryption/decryption:               9
+Services using tokens:                              9
+Services with NEITHER tokens:                       3
+
+ENCRYPT STATISTICS:
+  - Services that encrypt:                          9
+  - Services that decrypt:                          8
+  - Services that do BOTH:                          6
+  - Services that ENCRYPT ONLY:                     2 (GCSplit1, GCBatchProcessor)
+  - Services that DECRYPT ONLY:                     2 (GCWebhook2, GCBatchProcessor)
+
+DUAL-KEY SERVICES:
+  - GCSplit1: Uses SUCCESS_URL_SIGNING_KEY + TPS_HOSTPAY_SIGNING_KEY
+  - GCHostPay1: Uses TPS_HOSTPAY_SIGNING_KEY + SUCCESS_URL_SIGNING_KEY
+
+SIGNING KEYS:
+  - SUCCESS_URL_SIGNING_KEY: Internal service communication (10 services)
+  - TPS_HOSTPAY_SIGNING_KEY: External boundary (2 services + GCBatchProcessor)
+  - NOWPAYMENTS_IPN_SECRET: Signature verification only (1 service)
+
+================================================================================
+                        SERVICES WITH TOKENS (9)
+================================================================================
+
+1. GCWEBHOOK1-10-26 (Payment Processor)
+   File: tph1-10-26.py
+   Decrypt: ✅ FROM NOWPayments (success_url)
+   Encrypt: ✅ TO GCWebhook2 (telegram invite), GCSplit1 (payment routing)
+   Key: SUCCESS_URL_SIGNING_KEY
+   Endpoints:
+     - GET / (legacy, deprecated)
+     - POST /process-validated-payment (current)
+     - GET /health
+
+2. GCWEBHOOK2-10-26 (Telegram Invite Sender)
+   File: tph2-10-26.py
+   Decrypt: ✅ FROM GCWebhook1
+   Encrypt: ❌
+   Key: SUCCESS_URL_SIGNING_KEY
+   Endpoints:
+     - POST / (receive encrypted token, send Telegram invite)
+     - GET /health
+
+3. GCSPLIT1-10-26 (Payment Orchestrator)
+   File: tps1-10-26.py
+   Decrypt: ❌ (receives plain JSON from GCWebhook1)
+   Encrypt: ✅ TO GCSplit2, GCSplit3, GCHostPay1
+   Keys: SUCCESS_URL_SIGNING_KEY + TPS_HOSTPAY_SIGNING_KEY (DUAL)
+   Endpoints:
+     - POST / (main webhook)
+     - POST /estimate-response (from GCSplit2)
+     - POST /swap-response (from GCSplit3)
+     - GET /health
+
+4. GCSPLIT2-10-26 (USDT→ETH Estimator)
+   File: tps2-10-26.py
+   Decrypt: ✅ FROM GCSplit1
+   Encrypt: ✅ TO GCSplit1
+   Key: SUCCESS_URL_SIGNING_KEY
+   Endpoints:
+     - POST / (receive token, call ChangeNow, return estimate)
+     - GET /health
+
+5. GCSPLIT3-10-26 (ETH→Client Swapper)
+   File: tps3-10-26.py
+   Decrypt: ✅ FROM GCSplit1
+   Encrypt: ✅ TO GCSplit1
+   Key: SUCCESS_URL_SIGNING_KEY
+   Endpoints:
+     - POST / (receive token, create fixed-rate swap, return details)
+     - GET /health
+
+6. GCHOSTPAY1-10-26 (Validator & Orchestrator)
+   File: tphp1-10-26.py
+   Decrypt: ✅ FROM GCSplit1
+   Encrypt: ✅ TO GCHostPay2, GCHostPay3, GCMicroBatchProcessor
+   Keys: TPS_HOSTPAY_SIGNING_KEY + SUCCESS_URL_SIGNING_KEY (DUAL)
+   Endpoints:
+     - POST / (main webhook - decrypt GCSplit1 token)
+     - POST /status-verified (response from GCHostPay2)
+     - POST /payment-completed (response from GCHostPay3)
+     - GET /health
+
+7. GCHOSTPAY2-10-26 (Status Checker)
+   File: tphp2-10-26.py
+   Decrypt: ✅ FROM GCHostPay1
+   Encrypt: ✅ TO GCHostPay1
+   Key: SUCCESS_URL_SIGNING_KEY
+   Endpoints:
+     - POST / (receive token, check ChangeNow status, return response)
+     - GET /health
+
+8. GCHOSTPAY3-10-26 (Payment Executor)
+   File: tphp3-10-26.py
+   Decrypt: ✅ FROM GCHostPay1
+   Encrypt: ✅ TO GCHostPay1
+   Key: SUCCESS_URL_SIGNING_KEY
+   Endpoints:
+     - POST / (receive token, execute ETH transfer, return tx_hash)
+     - GET /health
+
+9. GCBATCHPROCESSOR-10-26 (Batch Payout Detector)
+   File: batch10-26.py
+   Decrypt: ❌
+   Encrypt: ✅ TO GCSplit1 (batch USDT→Client swap)
+   Key: TPS_HOSTPAY_SIGNING_KEY
+   Endpoints:
+     - POST /process (triggered by Cloud Scheduler every 5 min)
+
+================================================================================
+                    SERVICES WITHOUT TOKENS (4)
+================================================================================
+
+1. GCACCUMULATOR-10-26
+   File: acc10-26.py
+   Has token_manager.py: ✅ YES (but UNUSED)
+   Tokens: ❌ NO
+   Communication: Plain JSON from GCWebhook1
+   Reason: Direct accumulation without token overhead
+   Endpoints:
+     - POST / (receive plain JSON, store in accumulation table)
+     - GET /health
+
+2. GCMICROBATCHPROCESSOR-10-26
+   File: microbatch10-26.py
+   Has token_manager.py: ✅ YES
+   Decrypt: ✅ FROM GCHostPay1 (callback token)
+   Encrypt: ✅ TO GCHostPay1 (callback response)
+   Key: SUCCESS_URL_SIGNING_KEY
+   Endpoints:
+     - POST /check-threshold (Cloud Scheduler triggered)
+     - POST /callback (callback from GCHostPay1)
+
+3. NP-WEBHOOK-10-26
+   File: app.py
+   Has token_manager.py: ❌ NO
+   Tokens: ❌ NO
+   Communication: HMAC-SHA256 signature verification (not encryption)
+   Uses Key: NOWPAYMENTS_IPN_SECRET (signature verification only)
+   Endpoints:
+     - POST / (receive IPN callback, verify signature, update DB)
+     - GET /payment-processing (serve landing page)
+
+4. TELEPAY10-26
+   File: telepay10-26.py
+   Has token_manager.py: ❌ NO
+   Tokens: ❌ NO
+   Communication: Direct Telegram Bot API
+   Endpoints: Various Telegram command handlers
+
+================================================================================
+                          TOKEN FORMATS (4 types)
+================================================================================
+
+FORMAT 1: PAYMENT DATA TOKEN (NOWPayments → GCWebhook1)
+  Size: 38+ bytes (variable length)
+  Fields:
+    - user_id (6 bytes, 48-bit)
+    - closed_channel_id (6 bytes, 48-bit)
+    - timestamp_minutes (2 bytes, 16-bit)
+    - subscription_time_days (2 bytes, 16-bit)
+    - subscription_price (variable, length-prefixed)
+    - wallet_address (variable, length-prefixed)
+    - payout_currency (variable, length-prefixed)
+    - payout_network (variable, length-prefixed)
+    - HMAC-SHA256 signature (16 bytes, truncated)
+  Encoding: Base64 URL-safe without padding
+  Signature: Verified for authenticity and expiration
+
+FORMAT 2: PAYMENT SPLIT TOKEN (GCSplit1 → GCSplit2/GCSplit3)
+  Size: Variable length
+  Fields:
+    - user_id (8 bytes, 64-bit)
+    - closed_channel_id (16 bytes, fixed padded)
+    - wallet_address (variable, length-prefixed)
+    - payout_currency (variable, length-prefixed)
+    - payout_network (variable, length-prefixed)
+    - adjusted_amount (8 bytes, double precision float)
+    - swap_currency (variable, length-prefixed) ['eth' or 'usdt']
+    - payout_mode (variable, length-prefixed) ['instant' or 'threshold']
+    - actual_eth_amount (8 bytes, double precision float)
+    - timestamp (4 bytes, uint32)
+    - HMAC-SHA256 signature (16 bytes, truncated)
+  Encoding: Base64 URL-safe without padding
+
+FORMAT 3: HOSTPAY TOKEN (GCSplit1 → GCHostPay1)
+  Size: Variable length
+  Fields:
+    - unique_id (16 bytes, fixed padded)
+    - cn_api_id (variable, length-prefixed)
+    - from_currency (variable, length-prefixed)
+    - from_network (variable, length-prefixed)
+    - actual_eth_amount (8 bytes, double) [actual from NowPayments]
+    - estimated_eth_amount (8 bytes, double) [ChangeNow estimate]
+    - payin_address (variable, length-prefixed)
+    - timestamp (4 bytes, uint32)
+    - HMAC-SHA256 signature (16 bytes, truncated)
+  Encoding: Base64 URL-safe without padding
+  Security: External boundary key (TPS_HOSTPAY_SIGNING_KEY)
+
+FORMAT 4: RESPONSE TOKENS (Various services)
+  Size: Variable length
+  Common Fields:
+    - Source data (user_id, channel_id, etc.)
+    - Response-specific data (amounts, fees, hashes, etc.)
+    - timestamp (4 bytes, uint32)
+    - HMAC-SHA256 signature (16 bytes, truncated)
+
+================================================================================
+                        TOKEN EXPIRATION WINDOWS
+================================================================================
+
+Payment Token (GCWebhook1 → GCWebhook2):       2 hours
+Telegram Invite Token (GCWebhook2):            24 hours
+HostPay Token (GCSplit1 → GCHostPay1):         60 seconds
+Estimate Token (GCSplit1 → GCSplit2):          Variable (no explicit window)
+Swap Token (GCSplit1 → GCSplit3):              Variable (no explicit window)
+
+Timestamp Validation:
+  - All tokens include timestamp
+  - Unix timestamp in token vs current time compared
+  - Prevents replay attacks
+  - Different windows for different use cases
+
+================================================================================
+                        TOKEN FLOW PATHS
+================================================================================
+
+INSTANT PAYOUT PATH:
+  1. NowPayments → np-webhook (IPN, signature verification)
+  2. np-webhook → GCWebhook1 (plain JSON with outcome_amount_usd)
+  3. GCWebhook1 DECRYPT: Extract payment details
+  4. GCWebhook1 ENCRYPT: Token for GCWebhook2 (telegram invite)
+  5. GCWebhook1 → GCSplit1 (plain JSON, immediate routing)
+  6. GCSplit1 ENCRYPT: Token for GCSplit2 (USDT→ETH estimate)
+  7. GCSplit1 → GCSplit2 (encrypted token)
+  8. GCSplit2 DECRYPT: Extract swap amount
+  9. GCSplit2 → ChangeNow API (estimate)
+  10. GCSplit2 ENCRYPT: Response token
+  11. GCSplit2 → GCSplit1 (/estimate-response)
+  12. GCSplit1 DECRYPT: Extract estimate
+  13. GCSplit1 ENCRYPT: Token for GCSplit3 (ETH→Client swap)
+  14. GCSplit1 → GCSplit3 (encrypted token)
+  15. GCSplit3 DECRYPT: Extract swap details
+  16. GCSplit3 → ChangeNow API (create fixed-rate transaction)
+  17. GCSplit3 ENCRYPT: Response token with tx details
+  18. GCSplit3 → GCSplit1 (/swap-response)
+  19. GCSplit1 DECRYPT: Extract transaction details
+  20. GCSplit1 ENCRYPT: HostPay token (using TPS_HOSTPAY_SIGNING_KEY)
+  21. GCSplit1 → GCHostPay1 (encrypted token)
+  22. GCHostPay1 DECRYPT: Extract CN API ID + payin address
+  23. GCHostPay1 ENCRYPT: Token for GCHostPay2 (status check)
+  24. GCHostPay1 → GCHostPay2 (encrypted token)
+  25. GCHostPay2 DECRYPT: Extract CN API ID
+  26. GCHostPay2 → ChangeNow API (get status)
+  27. GCHostPay2 ENCRYPT: Response token
+  28. GCHostPay2 → GCHostPay1 (/status-verified)
+  29. GCHostPay1 DECRYPT: Check status
+  30. GCHostPay1 ENCRYPT: Token for GCHostPay3 (execute payment)
+  31. GCHostPay1 → GCHostPay3 (encrypted token)
+  32. GCHostPay3 DECRYPT: Extract payment amount + address
+  33. GCHostPay3 → Wallet API (execute ETH transfer)
+  34. GCHostPay3 ENCRYPT: Response token with tx_hash
+  35. GCHostPay3 → GCHostPay1 (/payment-completed)
+  36. GCHostPay1 DECRYPT: Extract tx_hash
+  37. GCHostPay1 → Update DB with payment status
+
+THRESHOLD PAYOUT PATH:
+  1. Same as above (steps 1-5)
+  2. GCWebhook1 → GCAccumulator (plain JSON, no encryption)
+  3. GCAccumulator → Store in payout_accumulation table
+  4. GCAccumulator → Queue task to GCSplit2 (async conversion)
+  5. Repeat steps 8-17 from Instant Path
+  6. Continue with payment execution when threshold reached
+
+BATCH PAYOUT PATH:
+  1. Cloud Scheduler (every 5 minutes)
+  2. GCBatchProcessor → Query for clients over threshold
+  3. GCBatchProcessor ENCRYPT: Token for GCSplit1 (batch swap)
+  4. GCBatchProcessor → GCSplit1 (encrypted token with TPS_HOSTPAY_SIGNING_KEY)
+  5. GCSplit1 DECRYPT: Extract batch details
+  6. Continue with swap and payment execution
+
+MICRO-BATCH PATH:
+  1. Cloud Scheduler (every 15 minutes)
+  2. GCMicroBatchProcessor → Check threshold
+  3. GCMicroBatchProcessor → Create ChangeNow ETH→USDT swap
+  4. GCMicroBatchProcessor → Queue task to GCHostPay1
+  5. GCHostPay1 processes like instant path (steps 23-37)
+  6. GCHostPay1 ENCRYPT: Callback token
+  7. GCHostPay1 → GCMicroBatchProcessor (/callback)
+  8. GCMicroBatchProcessor DECRYPT: Extract results
+  9. Update batch_conversions table with actual USDT received
+
+================================================================================
+                      CRITICAL SECURITY NOTES
+================================================================================
+
+1. TWO-KEY BOUNDARY ARCHITECTURE
+   - Internal services share SUCCESS_URL_SIGNING_KEY
+   - GCSplit1 ↔ GCHostPay1 boundary uses TPS_HOSTPAY_SIGNING_KEY
+   - This is the only external service communication point
+   - All other communication is internal
+
+2. TOKEN VALIDATION
+   - All tokens validated on receipt (signature check)
+   - Timestamp validated against expiration window
+   - Invalid tokens result in error responses
+   - No partial acceptance of invalid data
+
+3. ID HANDLING
+   - Telegram IDs can be negative
+   - 48-bit signed integer handling in token format
+   - Negative IDs converted to 48-bit representation
+   - Handled on both encode and decode
+
+4. SIGNATURE TRUNCATION
+   - HMAC-SHA256 full digest is 32 bytes
+   - Tokens only include 16-byte truncated signature
+   - Sufficient for this architecture (no cryptographic weakening)
+   - Standard practice for token efficiency
+
+5. BASE64 ENCODING
+   - URL-safe variant (- and _ instead of + and /)
+   - No padding (rstrip(b'='))
+   - Decoded with padding handling in services
+
+6. REPLAY ATTACK PREVENTION
+   - Timestamp in every token
+   - Expiration windows enforce time-based validity
+   - Cannot reuse old tokens beyond window
+   - Different windows for different purposes
+
+7. IDEMPOTENCY MARKERS
+   - GCWebhook2: Checks payment_id in processed_payments
+   - GCHostPay3: Checks tx_hash in database
+   - Prevents duplicate payments on retry
+   - Database marks when processing complete
+
+================================================================================
+                        UNUSED TOKEN MANAGERS
+================================================================================
+
+GCAccumulator-10-26:
+  - Has token_manager.py: ✅ YES
+  - Actually uses it: ❌ NO
+  - Reason: Architectural change to plain JSON
+  - Status: Safe to remove (or keep for future use)
+  - Impact: None (code path never executed)
+
+================================================================================
+                          DOCUMENTATION FILES
+================================================================================
+
+Generated Documentation:
+  1. TOKEN_ENCRYPTION_MAP.md (762 lines)
+     - Complete detailed analysis of all 13 services
+     - Endpoint specifications
+     - Token payload formats
+     - Service flows and dependencies
+     - Signing key matrix
+     - Maintenance checklist
+
+  2. TOKEN_ENCRYPTION_QUICK_REFERENCE.md (216 lines)
+     - Service status matrix
+     - Summary statistics
+     - Endpoint listing
+     - Signing key distribution
+     - Format comparison
+
+  3. TOKEN_ENCRYPTION_SUMMARY.txt (this file)
+     - High-level overview
+     - Statistics and counts
+     - Service descriptions
+     - Token formats
+     - Flow paths
+     - Security notes
+
+================================================================================
+                              RECOMMENDATIONS
+================================================================================
+
+1. IMMEDIATE ACTIONS
+   - ✅ Documentation complete and reviewed
+   - Review GCAccumulator unused token_manager
+   - Verify all signing keys are properly rotated
+   - Check token expiration handling in logs
+
+2. SHORT TERM
+   - Monitor token encryption/decryption failures
+   - Validate idempotency markers working correctly
+   - Test key rotation procedure
+   - Verify timestamp validation is working
+
+3. MEDIUM TERM
+   - Consider consolidating token_manager implementations
+   - Add logging for all decrypt failures
+   - Implement token usage metrics
+   - Create monitoring dashboard for token operations
+
+4. LONG TERM
+   - Document any token format changes
+   - Plan for key rotation strategy
+   - Archive historical signing keys
+   - Review security of external boundary (TPS_HOSTPAY_SIGNING_KEY)
+
+================================================================================
+                            END OF DOCUMENT
+================================================================================
