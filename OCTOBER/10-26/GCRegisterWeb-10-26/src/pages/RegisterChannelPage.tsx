@@ -63,30 +63,12 @@ export default function RegisterChannelPage() {
 
   const handleNetworkChange = (network: string) => {
     setClientPayoutNetwork(network);
-
-    // Filter currencies based on selected network
-    if (mappings && network && mappings.network_to_currencies[network]) {
-      const currencies = mappings.network_to_currencies[network];
-      // Keep current currency if it's still valid for this network
-      const currencyStillValid = currencies.some(c => c.currency === clientPayoutCurrency);
-      if (!currencyStillValid && currencies.length > 0) {
-        setClientPayoutCurrency(currencies[0].currency);
-      }
-    }
+    // Dropdowns are independent - no auto-population of currency
   };
 
   const handleCurrencyChange = (currency: string) => {
     setClientPayoutCurrency(currency);
-
-    // Filter networks based on selected currency
-    if (mappings && currency && mappings.currency_to_networks[currency]) {
-      const networks = mappings.currency_to_networks[currency];
-      // Keep current network if it's still valid for this currency
-      const networkStillValid = networks.some(n => n.network === clientPayoutNetwork);
-      if (!networkStillValid && networks.length > 0) {
-        setClientPayoutNetwork(networks[0].network);
-      }
-    }
+    // Dropdowns are independent - no auto-population of network
   };
 
   const handleResetNetwork = () => {
@@ -215,10 +197,12 @@ export default function RegisterChannelPage() {
 
       <div className="container" style={{ maxWidth: '800px' }}>
         <div style={{ marginBottom: '24px' }}>
-          <button onClick={() => navigate('/dashboard')} className="btn btn-green" style={{ marginBottom: '16px' }}>
-            ← Back to Dashboard
-          </button>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', marginBottom: '8px' }}>Register New Channel</h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: '700' }}>Register New Channel</h1>
+            <button onClick={() => navigate('/dashboard')} className="btn btn-green">
+              ← Back to Dashboard
+            </button>
+          </div>
           <p style={{ color: '#666' }}>Set up a new Telegram channel to accept crypto payments</p>
         </div>
 

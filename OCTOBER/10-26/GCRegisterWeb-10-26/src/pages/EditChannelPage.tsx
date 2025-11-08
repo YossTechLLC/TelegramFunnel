@@ -110,30 +110,12 @@ export default function EditChannelPage() {
 
   const handleNetworkChange = (network: string) => {
     setClientPayoutNetwork(network);
-
-    // Filter currencies based on selected network
-    if (mappings && network && mappings.network_to_currencies[network]) {
-      const currencies = mappings.network_to_currencies[network];
-      // Keep current currency if it's still valid for this network
-      const currencyStillValid = currencies.some(c => c.currency === clientPayoutCurrency);
-      if (!currencyStillValid && currencies.length > 0) {
-        setClientPayoutCurrency(currencies[0].currency);
-      }
-    }
+    // Dropdowns are independent - no auto-population of currency
   };
 
   const handleCurrencyChange = (currency: string) => {
     setClientPayoutCurrency(currency);
-
-    // Filter networks based on selected currency
-    if (mappings && currency && mappings.currency_to_networks[currency]) {
-      const networks = mappings.currency_to_networks[currency];
-      // Keep current network if it's still valid for this currency
-      const networkStillValid = networks.some(n => n.network === clientPayoutNetwork);
-      if (!networkStillValid && networks.length > 0) {
-        setClientPayoutNetwork(networks[0].network);
-      }
-    }
+    // Dropdowns are independent - no auto-population of network
   };
 
   const handleResetNetwork = () => {

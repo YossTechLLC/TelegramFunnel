@@ -1,8 +1,81 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 80 - **Refined Color Layout: Green Landing Page, Clean Dashboard** ✅
+**Last Updated:** 2025-11-08 Session 81 - **Fixed Independent Network/Currency Dropdowns + Button Alignment** ✅
 
 ## Recent Updates
+
+## 2025-11-08 Session 81b: Aligned "Back to Dashboard" Button Position on Register Page ✅
+
+**BUTTON ALIGNMENT FIX DEPLOYED**: Register page now matches Edit page layout
+
+**Changes Implemented:**
+- ✅ Moved "Back to Dashboard" button from above heading to inline with heading on Register page
+- ✅ Applied flexbox layout with `justify-content: space-between` to match Edit page
+- ✅ Both Register and Edit pages now have identical button positioning
+
+**Files Modified:**
+- ✅ `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`:
+  - Changed button from standalone element (lines 200-202) to flex layout (lines 200-205)
+  - Heading and button now inline, button on right side
+
+**Deployment:**
+- ✅ Frontend built: Final bundle `index-BSSK7Ut7.js` & `index-C52nOYfo.css`
+- ✅ Deployed to Cloud Storage: `gs://www-paygateprime-com/`
+- ✅ Cache headers set: immutable for assets, no-cache for HTML
+- ✅ CDN cache invalidated: `www-paygateprime-urlmap`
+- ✅ URL: https://www.paygateprime.com
+
+**Testing:**
+- ✅ Verified Register page has button on right, inline with heading
+- ✅ Verified Edit page maintains same layout (unchanged)
+- ✅ Layout consistency confirmed across both pages
+
+**Impact:**
+- Visual consistency: Both pages now have identical header layout
+- Better UX: Consistent navigation across form pages
+
+---
+
+## 2025-11-08 Session 81a: Fixed Independent Network/Currency Dropdowns ✅
+
+**DROPDOWN INDEPENDENCE FIX DEPLOYED**: Network and Currency selections are now independent
+
+**Changes Implemented:**
+- ✅ Removed auto-population logic from `handleNetworkChange` in RegisterChannelPage.tsx
+- ✅ Removed auto-population logic from `handleCurrencyChange` in RegisterChannelPage.tsx
+- ✅ Removed auto-population logic from `handleNetworkChange` in EditChannelPage.tsx
+- ✅ Removed auto-population logic from `handleCurrencyChange` in EditChannelPage.tsx
+- ✅ Dropdowns now operate independently - selecting Network does NOT auto-populate Currency
+- ✅ Dropdowns now operate independently - selecting Currency does NOT auto-populate Network
+- ✅ Filtering still works: selecting one dropdown filters available options in the other
+
+**Files Modified:**
+- ✅ `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`:
+  - Simplified `handleNetworkChange` (lines 64-67): Only sets network, no auto-population
+  - Simplified `handleCurrencyChange` (lines 69-72): Only sets currency, no auto-population
+- ✅ `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`:
+  - Simplified `handleNetworkChange` (lines 111-114): Only sets network, no auto-population
+  - Simplified `handleCurrencyChange` (lines 116-119): Only sets currency, no auto-population
+
+**Deployment:**
+- ✅ Frontend built: Final bundle `index-C6WIe04F.js` & `index-C52nOYfo.css`
+- ✅ Deployed to Cloud Storage: `gs://www-paygateprime-com/`
+- ✅ Cache headers set: immutable for assets, no-cache for HTML
+- ✅ CDN cache invalidated: `www-paygateprime-urlmap`
+- ✅ URL: https://www.paygateprime.com
+
+**Testing:**
+- ✅ Verified network selection does not auto-populate currency (ETH → Currency still blank)
+- ✅ Verified currency selection does not auto-populate network (USDT → Network still blank)
+- ✅ Verified filtering still works (USDT selected → Network shows only compatible networks)
+- ✅ Verified reset buttons clear selections properly
+
+**Impact:**
+- Better UX: Users have full control over both selections
+- Removes confusion: No unexpected auto-population behavior
+- Filtering preserved: Available options still intelligently filtered based on compatibility
+
+---
 
 ## 2025-11-08 Session 80: Layout Refinement - Separated Landing Page Theme from Dashboard ✅
 

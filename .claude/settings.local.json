@@ -171,7 +171,10 @@
       "Bash(gcloud compute url-maps invalidate-cdn-cache:*)",
       "mcp__playwright__browser_fill_form",
       "Bash(gcloud compute url-maps:*)",
-      "mcp__playwright__browser_evaluate"
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_select_option",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:docs.0xprocessing.com)"
     ],
     "deny": [],
     "ask": []

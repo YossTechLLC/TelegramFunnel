@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 80 - **Separated Landing Page and Dashboard Color Themes**
+**Last Updated:** 2025-11-08 Session 81 - **Independent Network/Currency Dropdowns**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,6 +18,83 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-08 Session 81: Independent Network/Currency Dropdowns
+
+**Decision:** Remove auto-population logic between Network and Currency dropdowns - make them fully independent
+
+**Context:**
+- Previous implementation auto-populated Currency when Network was selected (first available option)
+- Previous implementation auto-populated Network when Currency was selected (first available option)
+- User reported this behavior was confusing and unwanted
+- User expected to be able to select Network without Currency being auto-filled (and vice versa)
+- Filtering logic should remain: selecting one dropdown should filter available options in the other
+
+**Options Considered:**
+
+1. **Keep auto-population for better UX** ⚠️
+   - Pros: Faster form completion, one less click for users
+   - Cons: Surprising behavior, removes user control, assumes user wants first option
+   - Example: Select ETH → AAVE auto-selected (user might want USDT instead)
+
+2. **Remove auto-population entirely** ✅ SELECTED
+   - Pros: Full user control, predictable behavior, no surprises
+   - Cons: Requires one extra click per form (minor)
+   - Rationale: User autonomy > convenience, especially for financial selections
+
+3. **Add confirmation dialog before auto-populating** ⚠️
+   - Pros: Gives user choice
+   - Cons: Extra click anyway, more complex UI, annoying popups
+
+**Implementation Details:**
+
+**Before (RegisterChannelPage.tsx:64-76):**
+```typescript
+const handleNetworkChange = (network: string) => {
+  setClientPayoutNetwork(network);
+
+  if (mappings && network && mappings.network_to_currencies[network]) {
+    const currencies = mappings.network_to_currencies[network];
+    const currencyStillValid = currencies.some(c => c.currency === clientPayoutCurrency);
+    if (!currencyStillValid && currencies.length > 0) {
+      setClientPayoutCurrency(currencies[0].currency); // ❌ AUTO-POPULATION
+    }
+  }
+};
+```
+
+**After (RegisterChannelPage.tsx:64-67):**
+```typescript
+const handleNetworkChange = (network: string) => {
+  setClientPayoutNetwork(network);
+  // Dropdowns are independent - no auto-population of currency
+};
+```
+
+**Same pattern applied to:**
+- `handleCurrencyChange` in RegisterChannelPage.tsx
+- `handleNetworkChange` in EditChannelPage.tsx
+- `handleCurrencyChange` in EditChannelPage.tsx
+
+**Filtering Preservation:**
+- Filtering logic remains in `availableCurrencies` computed property (lines 188-195)
+- Filtering logic remains in `availableNetworks` computed property (lines 198-205)
+- Selecting ETH still filters currencies to show only ETH-compatible options
+- Selecting USDT still filters networks to show only USDT-compatible options
+
+**Impact:**
+- Better UX: Users can select Network/Currency in any order without surprises
+- Predictability: Form behavior is explicit and user-controlled
+- No data loss: Filtering ensures only valid combinations can be submitted
+- Forms validated: Backend still enforces valid network/currency pairs
+
+**Rationale:**
+- Financial selections should never be automatic
+- User should consciously choose both Network AND Currency
+- Auto-population felt like form was "taking over" - bad UX for sensitive data
+- Modern forms favor explicit over implicit (Progressive Web Standards)
+
+---
 
 ### 2025-11-08 Session 80: Separated Landing Page and Dashboard Color Themes
 
