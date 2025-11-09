@@ -101,8 +101,8 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700' }}>Your Channels</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <span style={{ color: '#666', fontSize: '14px' }}>
-              {channelCount} / {maxChannels} channels
+            <span style={{ color: '#666', fontSize: '14px', whiteSpace: 'nowrap' }}>
+              {channelCount}/{maxChannels} channels
             </span>
             {channelCount < maxChannels && (
               <button className="btn btn-green" onClick={() => navigate('/register')}>+ Add Channel</button>

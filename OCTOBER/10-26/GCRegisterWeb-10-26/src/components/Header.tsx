@@ -34,7 +34,6 @@ export default function Header({ user }: HeaderProps) {
 
         {user && (
           <div className="header-user">
-            <span className="username">Welcome, {user.username}</span>
             <button
               onClick={handleVerificationClick}
               className={`btn ${user.email_verified ? 'btn-verified' : 'btn-verify'}`}
