@@ -304,8 +304,8 @@ export default function RegisterChannelPage() {
       <div className="container" style={{ maxWidth: '800px' }}>
         <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h1 style={{ fontSize: '32px', fontWeight: '700' }}>Register New Channel</h1>
-            <button onClick={() => navigate('/dashboard')} className="btn btn-green">
+            <h1 style={{ fontSize: '32px', fontWeight: '700', flex: '2 1 0%' }}>Register New Channel</h1>
+            <button onClick={() => navigate('/dashboard')} className="btn btn-green" style={{ flex: '1 1 0%' }}>
               ← Back to Dashboard
             </button>
           </div>

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/authService';
 import './Header.css';
 
@@ -11,9 +12,11 @@ interface HeaderProps {
 
 export default function Header({ user }: HeaderProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const handleLogout = () => {
     authService.logout();
+    queryClient.clear(); // Clear React Query cache to prevent showing previous user's data
     navigate('/login');
   };
 

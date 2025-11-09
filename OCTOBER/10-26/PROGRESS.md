@@ -1,8 +1,228 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-09 Session 101 - **Critical Signup Bug Fixed & Deployed** 🔧✅
+**Last Updated:** 2025-11-09 Session 102 - **CRITICAL SECURITY FIX: React Query Cache Cleared on Logout** 🔒✅
 
 ## Recent Updates
+
+## 2025-11-09 Session 102: CRITICAL SECURITY FIX - React Query Cache Not Cleared on Logout - DEPLOYED ✅🔒
+
+**USER REQUEST**: User reported that after logging out and logging in as a different user, the dashboard still showed the previous user's channel data, even after a full page refresh.
+
+**INVESTIGATION:**
+
+**Step 1: Browser Testing**
+- ✅ Logged in as `slickjunt` → Dashboard showed 3 channels
+- ✅ Logged out
+- ✅ Logged in as `user1user1` → Dashboard STILL showed same 3 channels ❌
+- ✅ Performed full page refresh → STILL showing same 3 channels ❌
+
+**Step 2: Database Investigation**
+Created Python script to query database directly:
+- `slickjunt` user_id: `67227aba-a4e2-4c69-92b0-b56c7eb4bb74`
+- `user1user1` user_id: `4a690051-b06d-4629-8dc0-2f4367403914`
+
+**Database Query Results:**
+```
+Channel -1003268562225 | client_id: 4a690051-b06d-4629-8dc0-2f4367403914 → BELONGS TO: user1user1
+Channel -1003253338212 | client_id: 4a690051-b06d-4629-8dc0-2f4367403914 → BELONGS TO: user1user1
+Channel -1003202734748 | client_id: 4a690051-b06d-4629-8dc0-2f4367403914 → BELONGS TO: user1user1
+
+slickjunt owns: 0 channels
+user1user1 owns: 3 channels
+```
+
+**Step 3: API Testing**
+Created Python script to test login and /api/channels endpoints directly:
+- ✅ `slickjunt` login → JWT with correct user_id (`67227aba...`)
+- ✅ `slickjunt` GET /api/channels → Returns **0 channels** (CORRECT)
+- ✅ `user1user1` login → JWT with correct user_id (`4a690051...`)
+- ✅ `user1user1` GET /api/channels → Returns **3 channels** (CORRECT)
+
+**ROOT CAUSE IDENTIFIED:**
+
+**Backend API is working perfectly** ✅
+- Login returns correct JWT tokens for each user
+- `/api/channels` endpoint correctly filters by `client_id = user_id`
+- Database queries are correct
+
+**Frontend has critical bug** ❌
+- React Query cache configured with `staleTime: 60000` (60 seconds) in `App.tsx:19`
+- When user logs out, the `Header.tsx` component only:
+  - Clears localStorage tokens
+  - Navigates to /login
+  - **Does NOT clear React Query cache** ❌
+- When new user logs in, React Query returns **cached data from previous user** because it's still "fresh" within 60-second window
+- This creates a **critical security/privacy vulnerability** - users can see other users' private channel data!
+
+**FIX IMPLEMENTED:**
+
+**File Modified:** `GCRegisterWeb-10-26/src/components/Header.tsx`
+
+**Changes Made** (Lines 1-21):
+
+```tsx
+// BEFORE:
+import { useNavigate } from 'react-router-dom';
+import { authService } from '../services/authService';
+import './Header.css';
+
+export default function Header({ user }: HeaderProps) {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    authService.logout();
+    navigate('/login');
+  };
+
+// AFTER:
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';  // ← Added import
+import { authService } from '../services/authService';
+import './Header.css';
+
+export default function Header({ user }: HeaderProps) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();  // ← Get queryClient instance
+
+  const handleLogout = () => {
+    authService.logout();
+    queryClient.clear(); // ← Clear React Query cache to prevent showing previous user's data
+    navigate('/login');
+  };
+```
+
+**DEPLOYMENT:**
+- ✅ Built production bundle: `npm run build` (4.65s)
+- ✅ Deployed to GCS bucket: `gs://www-paygateprime-com/`
+- ✅ Set cache headers for assets (immutable, 1 year)
+- ✅ Set no-cache headers for index.html
+- ✅ Invalidated CDN cache
+- ✅ Deployment complete
+
+**TESTING:**
+
+**Test Round 1:**
+- ✅ Login as `slickjunt` → Dashboard shows **0/10 channels** (CORRECT)
+- ✅ Logout → React Query cache cleared
+- ✅ Login as `user1user1` → Dashboard shows **3/10 channels** (CORRECT - user1user1's actual channels, NOT cached data from slickjunt)
+
+**Test Round 2 (Verification):**
+- ✅ Logout → React Query cache cleared
+- ✅ Login as `slickjunt` → Dashboard shows **0/10 channels** (CORRECT - NOT showing cached 3 channels from user1user1!)
+
+**IMPACT:**
+- ✅ **Critical security/privacy bug RESOLVED**
+- ✅ Users can no longer see other users' channel data when switching accounts
+- ✅ React Query cache properly cleared on logout
+- ✅ Each user now sees only their own channels, regardless of who logged in previously
+- ✅ No backend changes required - issue was purely frontend caching
+
+**FILES CHANGED:**
+1. `GCRegisterWeb-10-26/src/components/Header.tsx` - Added queryClient.clear() to logout handler
+
+**SEVERITY:** 🔴 **CRITICAL** - Security/Privacy Vulnerability
+**STATUS:** ✅ **RESOLVED & DEPLOYED**
+
+---
+
+## 2025-11-09 Session 101: Layout Fix - Back to Dashboard Button Spacing - DEPLOYED ✅📐
+
+**USER REQUEST**: Fix layout issue on /register and /edit pages where h1 heading was compressed to ~30% width and wrapping to multiple lines, while the "Back to Dashboard" button took up ~70% width. Goal: Make h1 occupy 2/3 of space and button occupy 1/3.
+
+**PROBLEM IDENTIFIED:**
+
+**Measurements Before Fix:**
+- h1 "Register New Channel": **228px (30% of container)** - wrapping to 2 lines ❌
+- Button "← Back to Dashboard": **531px (70% of container)** ❌
+
+**Root Cause:**
+- Flex container used `justifyContent: 'space-between'` with no explicit flex ratios
+- Button's long text content (19 characters) forced it to be very wide
+- Both elements had default `flex: 0 1 auto` (no grow, can shrink, auto basis)
+- h1 was shrinking and wrapping to accommodate button's minimum width
+
+**SOLUTION IMPLEMENTED:**
+
+Applied flexbox grow ratios to create proper 2:1 split:
+
+**Files Modified:**
+
+**1. RegisterChannelPage.tsx** (Lines 307-308):
+```tsx
+// BEFORE:
+<h1 style={{ fontSize: '32px', fontWeight: '700' }}>Register New Channel</h1>
+<button onClick={() => navigate('/dashboard')} className="btn btn-green">
+
+// AFTER:
+<h1 style={{ fontSize: '32px', fontWeight: '700', flex: '2 1 0%' }}>Register New Channel</h1>
+<button onClick={() => navigate('/dashboard')} className="btn btn-green" style={{ flex: '1 1 0%' }}>
+```
+
+**2. EditChannelPage.tsx** (Lines 369-370):
+```tsx
+// BEFORE:
+<h1 style={{ fontSize: '32px', fontWeight: '700' }}>Edit Channel</h1>
+<button onClick={() => navigate('/dashboard')} className="btn btn-green">
+
+// AFTER:
+<h1 style={{ fontSize: '32px', fontWeight: '700', flex: '2 1 0%' }}>Edit Channel</h1>
+<button onClick={() => navigate('/dashboard')} className="btn btn-green" style={{ flex: '1 1 0%' }}>
+```
+
+**Flex Properties Explained:**
+- `flex: '2 1 0%'` for h1 = grow 2x, can shrink, start from 0 basis
+- `flex: '1 1 0%'` for button = grow 1x, can shrink, start from 0 basis
+- Creates natural 2:1 ratio without hardcoded widths
+
+**DEPLOYMENT:**
+- ✅ Built frontend: `npm run build` (3.59s, 382 modules)
+- ✅ Deployed to GCS bucket: `gs://www-paygateprime-com/`
+- ✅ Set cache control for index.html: `Cache-Control: no-cache, max-age=0`
+- ✅ CDN cache invalidated: `www-paygateprime-urlmap --path "/*"`
+
+**VERIFICATION RESULTS:**
+
+**Register Page (/register):**
+- h1 width: **478.672px (63% of container)** ✅
+- Button width: **281.328px (37% of container)** ✅
+- h1 height: **37px (single line, no wrapping)** ✅
+- Total container: 760px
+- Flex properties applied correctly
+
+**Edit Page (/edit/:channelId):**
+- h1 width: **478.672px (63% of container)** ✅
+- Button width: **281.328px (37% of container)** ✅
+- h1 height: **37px (single line, no wrapping)** ✅
+- Total container: 760px
+- Flex properties applied correctly
+
+**IMPACT:**
+- ✅ h1 heading now occupies ~2/3 of available space (63%)
+- ✅ Button now occupies ~1/3 of available space (37%)
+- ✅ h1 text no longer wraps to multiple lines
+- ✅ Layout is visually balanced and professional
+- ✅ Responsive - maintains ratio on different screen sizes
+- ✅ Both elements can still shrink proportionally if needed
+
+**Before Fix:**
+- h1: 228px (30%) - wrapped to 2 lines
+- Button: 531px (70%)
+
+**After Fix:**
+- h1: 479px (63%) - single line
+- Button: 281px (37%)
+
+**Files Changed:**
+1. `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx` - Added flex properties to h1 and button
+2. `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx` - Added flex properties to h1 and button
+
+**Documentation Updated:**
+1. PROGRESS.md - This entry
+2. BACK_TO_DASHBOARD_REVIEW.md - Created comprehensive CSS analysis document earlier
+
+**Status**: ✅ DEPLOYED - Layout issue resolved, proper 2:1 ratio established
+
+---
 
 ## 2025-11-09 Session 101: Critical Signup Bug Fix - DEPLOYED ✅🔧
 
