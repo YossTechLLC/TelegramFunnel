@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import debounce from 'lodash/debounce';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
 import api from '../services/api';
 import { detectNetworkFromAddress, detectPrivateKey, validateWalletAddress } from '../utils/walletAddressValidator';
+import Header from '../components/Header';
 
 interface CurrencyNetworkMappings {
   network_to_currencies: Record<string, Array<{ currency: string; currency_name: string }>>;
@@ -18,6 +19,13 @@ export default function EditChannelPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { channelId } = useParams<{ channelId: string }>();
+
+  // Fetch current user data for Header component
+  const { data: userData } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: authService.getCurrentUser,
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,11 +203,6 @@ export default function EditChannelPage() {
     [initialLoadComplete, clientPayoutNetwork, mappings]
   );
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
-  };
-
   const handleNetworkChange = (network: string) => {
     setClientPayoutNetwork(network);
 
@@ -348,12 +351,7 @@ export default function EditChannelPage() {
   if (isLoading) {
     return (
       <div>
-        <div className="header">
-          <div className="header-content">
-            <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
-            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
-          </div>
-        </div>
+        <Header user={userData ? { username: userData.username, email_verified: userData.email_verified } : undefined} />
         <div className="container" style={{ textAlign: 'center', padding: '48px 0' }}>
           <p style={{ fontSize: '18px', color: '#666' }}>Loading channel data...</p>
         </div>
@@ -363,12 +361,7 @@ export default function EditChannelPage() {
 
   return (
     <div>
-      <div className="header">
-        <div className="header-content">
-          <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
-          <button onClick={handleLogout} className="btn btn-logout">Logout</button>
-        </div>
-      </div>
+      <Header user={userData ? { username: userData.username, email_verified: userData.email_verified } : undefined} />
 
       <div className="container" style={{ maxWidth: '800px' }}>
         <div style={{ marginBottom: '24px' }}>

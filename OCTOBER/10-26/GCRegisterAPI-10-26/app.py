@@ -19,13 +19,13 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 
 from config_manager import config_manager
 from api.routes.auth import auth_bp
+from api.routes.account import account_bp
 from api.routes.channels import channels_bp
 from api.routes.mappings import mappings_bp
+from api.middleware.rate_limiter import setup_rate_limiting, get_rate_limit_error_handler
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -35,8 +35,18 @@ config = config_manager.get_config()
 
 # Flask configuration
 app.config['JWT_SECRET_KEY'] = config['jwt_secret_key']
+app.config['SIGNUP_SECRET_KEY'] = config['signup_secret_key']
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 900  # 15 minutes
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = 2592000  # 30 days
+
+# Email service configuration (for EmailService to access)
+os.environ['SENDGRID_API_KEY'] = config['sendgrid_api_key']
+os.environ['FROM_EMAIL'] = config['from_email']
+os.environ['FROM_NAME'] = config['from_name']
+os.environ['BASE_URL'] = config['base_url']
+
+# Frontend URL for email links (email change confirmation, etc.)
+app.config['FRONTEND_URL'] = config.get('frontend_url', 'https://www.paygateprime.com')
 
 # Initialize JWT
 jwt = JWTManager(app)
@@ -97,15 +107,14 @@ def after_request(response):
     return response
 
 # Rate limiting (OPTIONS requests are handled in before_request, so won't be rate limited)
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
-)
+limiter = setup_rate_limiting(app)
+
+# Register custom rate limit error handler
+app.register_error_handler(429, get_rate_limit_error_handler())
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
+app.register_blueprint(account_bp, url_prefix='/api/auth/account')
 app.register_blueprint(channels_bp, url_prefix='/api/channels')
 app.register_blueprint(mappings_bp, url_prefix='/api/mappings')
 

@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 85 - **Comprehensive Endpoint Documentation Strategy**
+**Last Updated:** 2025-11-09 Session 99 - **Rate Limiting Adjustment**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -15,10 +15,1075 @@ This document records all significant architectural decisions made during the de
 6. [Error Handling & Resilience](#error-handling--resilience)
 7. [User Interface](#user-interface)
 8. [Documentation Strategy](#documentation-strategy)
+9. [Email Verification & Account Management](#email-verification--account-management)
+10. [Deployment Strategy](#deployment-strategy)
+11. [Rate Limiting Strategy](#rate-limiting-strategy)
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-09 Session 99: Rate Limiting Adjustment - Global Limits Increased 3x ⏱️
+
+**Decision:** Increase global default rate limits by 3x to prevent legitimate usage from being blocked.
+
+**Context:**
+- Session 87 introduced global rate limiting: 200 req/day, 50 req/hour
+- Production usage revealed limits were too restrictive for normal operation
+- Dashboard page makes frequent API calls to `/api/auth/me` and `/api/channels`
+- Users hitting 50 req/hour limit during normal browsing/testing
+- Website appeared broken with "Failed to load channels" error (429 responses)
+
+**Problem:**
+- **Overly Restrictive Global Limits**: 50 requests/hour is insufficient for:
+  - React app making API calls on every page load/navigation
+  - Header component checking auth status frequently
+  - Dashboard polling for channel updates
+  - Development/testing workflows
+- **Poor User Experience**: Legitimate users seeing rate limit errors
+- **Endpoint Misalignment**: Read-only endpoints treated same as write endpoints
+
+**Solution Implemented:**
+
+Changed global default limits in `api/middleware/rate_limiter.py`:
+```python
+# Before (Session 87):
+default_limits=["200 per day", "50 per hour"]
+
+# After (Session 99):
+default_limits=["600 per day", "150 per hour"]
+```
+
+**Rationale:**
+1. **3x Multiplier**: Provides headroom for normal usage patterns while still preventing abuse
+2. **Hourly Limit**: 150 req/hour = ~2.5 req/minute (reasonable for SPA with multiple components)
+3. **Daily Limit**: 600 req/day = ~25 req/hour average (allows burst usage during active sessions)
+4. **Security Maintained**: Critical endpoints retain stricter specific limits:
+   - `/auth/signup`: 5 per 15 minutes
+   - `/auth/login`: 10 per 15 minutes
+   - `/auth/resend-verification`: 3 per hour
+   - `/auth/verify-email`: 10 per hour
+
+**Trade-offs:**
+
+✅ **Benefits:**
+- Normal users won't hit rate limits during legitimate usage
+- Better developer experience during testing
+- Read-only endpoints can be accessed frequently
+- Website functionality restored
+
+⚠️ **Risks (Mitigated):**
+- Slightly more exposure to brute force (still have endpoint-specific limits)
+- Higher server load potential (Cloud Run auto-scales to handle)
+- More lenient than industry standard (acceptable for private beta/controlled launch)
+
+**Alternative Considered:**
+- **Endpoint-specific limits only** (no global limit)
+  - Rejected: Still want global protection against runaway clients/bots
+  - Would require careful analysis of each endpoint's expected usage
+
+**Future Considerations:**
+- Monitor actual usage patterns in production
+- Consider Redis-based distributed rate limiting for horizontal scaling
+- May need to exempt certain endpoints (health checks, metrics) from global limits
+- Consider user-tier based limits (free vs paid users)
+
+**Deployment:**
+- Revision: `gcregisterapi-10-26-00021-rc5`
+- Zero downtime deployment via Cloud Run progressive rollout
+- No database changes required
+
+**Status**: ✅ IMPLEMENTED & DEPLOYED
+
+---
+
+### 2025-11-09 Session 96: Production Deployment Strategy - Zero Downtime Release
+
+**Decision:** Deploy verification architecture to production using zero-downtime Cloud Run deployment with progressive rollout strategy.
+
+**Context:**
+- Full email verification architecture ready for production
+- 87 tasks completed across 15 phases
+- Need to deploy without disrupting existing users
+- Migration 002 already applied to production database
+
+**Implementation Approach:**
+
+1. **Pre-Deployment Verification:**
+   - ✅ Confirmed migration 002 already applied (7 new columns in production)
+   - ✅ Verified all required secrets exist in Secret Manager
+   - ✅ Backend code review complete
+   - ✅ Frontend build tested successfully
+
+2. **Backend Deployment (Cloud Run):**
+   - **Service**: `gcregisterapi-10-26`
+   - **Strategy**: Progressive rollout with traffic migration
+   - **Build**: Docker image via Cloud Build (`gcloud builds submit`)
+   - **Configuration**:
+     - Service account: `291176869049-compute@developer.gserviceaccount.com`
+     - Secrets: 10 total (JWT, database, email, CORS)
+     - Cloud SQL: `telepay-459221:us-central1:telepaypsql`
+     - Memory: 512Mi, CPU: 1, Max instances: 10
+   - **Result**: New revision `gcregisterapi-10-26-00017-xwp` serving 100% traffic
+   - **Downtime**: 0 seconds
+
+3. **Frontend Deployment (Cloud Storage):**
+   - **Target**: `gs://www-paygateprime-com/`
+   - **Build**: Vite production build (380 modules, 5.05s)
+   - **Strategy**: Atomic replacement with cache headers
+   - **Cache Policy**:
+     - `index.html`: `Cache-Control: no-cache` (always fetch latest)
+     - `assets/*`: `Cache-Control: public, max-age=31536000` (1 year)
+   - **Deployment**: `gsutil -m rsync -r -d` (atomic update)
+   - **Result**: New build live instantly, old assets deleted
+
+4. **Production Verification Tests:**
+   - ✅ Health check: API returns healthy status
+   - ✅ Signup auto-login: Returns access_token + refresh_token
+   - ✅ Email verified field: Included in all auth responses
+   - ✅ Verification endpoints: `/verification/status` and `/verification/resend` working
+   - ✅ Account endpoints: All 4 account management endpoints deployed
+   - ✅ Frontend routes: All new pages accessible
+
+**Deployment Decisions:**
+
+✅ **Decision 1: Secrets via Secret Manager**
+- **Rationale**: All sensitive config in Secret Manager (not env vars)
+- **Implementation**: `--update-secrets` flag with Secret Manager references
+- **Benefit**: Automatic secret rotation, audit logging, secure storage
+
+✅ **Decision 2: Cache Strategy**
+- **Rationale**: Balance performance vs. instant updates
+- **Implementation**:
+  - HTML: No cache (immediate updates)
+  - Assets: 1-year cache (hash-based filenames)
+- **Benefit**: Fast loading + instant deployments
+
+✅ **Decision 3: Zero-Downtime Deployment**
+- **Rationale**: Existing users should not experience any interruption
+- **Implementation**:
+  - Cloud Run progressive rollout (automatic)
+  - Frontend atomic replacement (gsutil rsync)
+- **Benefit**: Seamless user experience
+
+✅ **Decision 4: Migration Already Applied**
+- **Rationale**: Migration 002 was already run in previous session
+- **Verification**: Used `check_migration.py` to confirm 7 columns exist
+- **Decision**: Skip migration step, proceed directly to deployment
+- **Benefit**: Faster deployment, no database downtime
+
+✅ **Decision 5: Production Testing Post-Deployment**
+- **Rationale**: Verify all features work in production environment
+- **Implementation**: Created `test_production_flow.sh` script
+- **Tests Performed**:
+  - Website accessibility (200 OK)
+  - API health check
+  - Signup with auto-login
+  - Verification status endpoint
+  - All new endpoints accessible
+- **Result**: All tests passed ✅
+
+**Rollback Plan (Not Needed):**
+- Backend: Roll back to previous Cloud Run revision
+- Frontend: Restore previous Cloud Storage files from backup
+- Database: No rollback needed (migration already applied)
+
+**Monitoring Strategy:**
+- Cloud Logging: Monitor error rates via `gcloud run services logs`
+- Health checks: API `/health` endpoint monitoring
+- User feedback: Monitor support channels for issues
+- Email delivery: Monitor SendGrid dashboard
+
+**Results:**
+- ✅ Zero downtime achieved
+- ✅ All features working in production
+- ✅ No user-reported issues
+- ✅ Clean deployment logs
+- ✅ All tests passing
+
+**Impact:**
+- Users can now sign up and get immediate access (auto-login)
+- Unverified users can use the full application
+- Visual verification indicator in header
+- Complete account management for verified users
+- Rate-limited email sending prevents abuse
+- Dual-factor email change for security
+
+---
+
+### 2025-11-09 Session 95: Email Verification Architecture - Complete Implementation Strategy
+
+**Decision:** Implement "soft verification" model with auto-login, allowing unverified users full app access while requiring verification only for sensitive account management operations.
+
+**Context:**
+- Traditional email verification blocks users from using the app until they verify their email
+- Modern UX best practice is to reduce friction and allow immediate access
+- Need balance between security and user experience
+- Email changes and password changes are high-risk operations requiring verification
+- Rate limiting needed to prevent abuse of verification emails
+
+**Implementation Strategy:**
+
+1. **Auto-Login on Signup - Remove Verification Barrier:**
+   - **Decision**: Return JWT tokens immediately on signup (no verification required)
+   - **Modified Endpoints**: `/auth/signup` now returns `access_token` and `refresh_token`
+   - **User Flow**: Signup → Auto-login → Dashboard (unverified state)
+   - **Rationale**: Reduces friction, improves conversion, matches modern SaaS patterns
+   - **Security**: Email still sent for verification, required for account management
+
+2. **Unverified User Access - "Soft Verification" Model:**
+   - **Decision**: Allow unverified users to login and access dashboard
+   - **Modified Service**: `AuthService.authenticate_user()` removed email verification check
+   - **Modified Endpoint**: `/auth/login` now accepts unverified users
+   - **User Access**: Unverified users can view all content, use app features
+   - **Restrictions**: Cannot change email or password until verified
+   - **Rationale**: Balance between security and UX, reduces support burden
+
+3. **Verification Rate Limiting - Prevent Email Bombing:**
+   - **Decision**: 1 verification resend per 5 minutes per user
+   - **Implementation**: Database tracking (last_verification_resent_at, verification_resend_count)
+   - **Response**: 429 Too Many Requests with retry_after timestamp
+   - **Rationale**: Prevents abuse while allowing legitimate resends
+
+4. **Email Change Security - Dual-Factor Email Verification:**
+   - **Decision**: Send notification to OLD email + confirmation to NEW email
+   - **Workflow**:
+     - User requests change → password required → notification to old → confirmation to new
+     - User clicks link in new email → race condition check → atomic update
+   - **Token Expiration**: 1 hour (shorter than verification due to sensitivity)
+   - **Password Confirmation**: Required for all email changes
+   - **Pending Email**: Stored in database, protected by UNIQUE constraint
+   - **Rationale**: Prevents account takeover, user informed of unauthorized attempts
+
+5. **Password Change Security - Verification Requirement:**
+   - **Decision**: Require email verification before allowing password changes
+   - **Checks**: Email verified + current password correct + new password different + strength validation
+   - **No Re-login**: User stays logged in after password change
+   - **Confirmation Email**: Sent to user's email address
+   - **Rationale**: Verified email ensures user has access to account recovery
+
+6. **Database Schema - Pending Email Tracking:**
+   - **New Columns**: pending_email, pending_email_token, pending_email_token_expires, pending_email_old_notification_sent
+   - **New Columns**: last_verification_resent_at, verification_resend_count, last_email_change_requested_at
+   - **Indexes**: idx_pending_email (UNIQUE), idx_verification_token_expires, idx_pending_email_token_expires
+   - **Constraints**: CHECK(pending_email != email), UNIQUE(pending_email)
+   - **Rationale**: Supports email change flow, prevents conflicts, enables cleanup queries
+
+7. **Token Security - Separate Token Types:**
+   - **Email Verification**: 24-hour expiration (long window for user convenience)
+   - **Email Change**: 1-hour expiration (shorter for security)
+   - **Password Reset**: 1-hour expiration (high security requirement)
+   - **TokenService**: Separate methods for each token type with unique salts
+   - **Rationale**: Prevents token re-use across different operations
+
+8. **Modular Service Architecture - Separation of Concerns:**
+   - **Decision**: Create separate `account.py` routes file for account management
+   - **AuthService**: Focused on authentication (signup, login, password hashing)
+   - **Account Endpoints**: Separate blueprint (`/api/auth/account/`)
+   - **Email Service**: Extended with email change templates
+   - **Token Service**: Extended with email change token methods
+   - **Rationale**: Keeps files under 800 lines, clear separation of concerns, maintainability
+
+9. **Frontend Services Layer - TypeScript Integration:**
+   - **Decision**: Extend authService.ts with 6 new methods
+   - **New Methods**: getCurrentUser(), getVerificationStatus(), resendVerification(), requestEmailChange(), cancelEmailChange(), changePassword()
+   - **TypeScript Interfaces**: Created dedicated types file (auth.ts)
+   - **Error Handling**: Axios interceptors handle token auto-attachment
+   - **Rationale**: Type safety, consistent API client patterns, reusable service methods
+
+10. **Frontend Component Strategy - Page-Level Components:**
+    - **Decision**: Create separate pages for each user flow
+    - **VerificationStatusPage**: Shows status, resend button, rate limit info, restrictions
+    - **AccountManagePage**: Two sections (email change, password change), verification check on load
+    - **EmailChangeConfirmPage**: Handles token confirmation with loading/success/error states
+    - **Header Component**: Reusable across all pages, shows verification status
+    - **Rationale**: Clear user journeys, easy to test, matches REST endpoint structure
+
+11. **Rate Limiting Strategy - Endpoint-Specific Limits:**
+    - **Verification Resend**: 1 per 5 minutes (prevents email bombing)
+    - **Email Change**: 3 per hour (prevents rapid account changes)
+    - **Password Change**: 5 per 15 minutes (prevents brute force)
+    - **Signup**: 5 per 15 minutes (prevents bot accounts)
+    - **Login**: 10 per 15 minutes (prevents brute force)
+    - **Implementation**: Database-level tracking + Redis in production
+    - **Rationale**: Tailored to each operation's risk profile
+
+12. **Audit Logging - Comprehensive Security Tracking:**
+    - **New Methods**: log_email_change_requested, log_email_changed, log_email_change_cancelled, log_password_changed
+    - **Logged Data**: user_id, email, timestamp, IP address, reason (for failures)
+    - **User Enumeration Protection**: Generic error messages externally, detailed logs internally
+    - **Rationale**: Security monitoring, compliance, debugging, user support
+
+**Impact:**
+- ✅ Better user experience (no verification barrier)
+- ✅ Improved security for account management operations
+- ✅ Comprehensive audit trail
+- ✅ Modular, maintainable codebase
+- ✅ Type-safe frontend integration
+- ✅ Clear separation of concerns
+
+**Trade-offs:**
+- ⚠️ Unverified users can use app (acceptable for non-sensitive features)
+- ⚠️ More complex dual-email flow for email changes (better security)
+- ⚠️ Additional database columns and indexes (necessary for features)
+
+---
+
+### 2025-11-09 Session 94 (Continued): Frontend Components - Visual Verification UX & Component Structure
+
+**Decision:** Implement verification status with clear visual indicators (yellow/green) and separate page components for each user flow
+
+**Context:**
+- Users need clear visual feedback about their verification status
+- Unverified users can use the app but need to know what features are restricted
+- Email change and password change are sensitive operations requiring separate UX
+- Email confirmation from link requires smooth landing page experience
+- Need consistent header across all authenticated pages
+
+**Implementation:**
+
+1. **Header Component Decision - Reusable & Always Visible:**
+   - Created standalone `Header.tsx` component (not integrated into pages)
+   - Props-based design: accepts `user` object with `username` and `email_verified`
+   - **Visual States:**
+     - **Unverified**: Yellow button (#fbbf24) - "Please Verify E-Mail" (calls attention)
+     - **Verified**: Green button (#22c55e) - "✓ Verified" (positive confirmation)
+   - Click handler navigates to `/verification` page
+   - Logo click returns to `/dashboard`
+   - Logout button uses authService.logout()
+   - **Rationale**: Persistent visual reminder without blocking user, matches "soft verification" architecture
+
+2. **VerificationStatusPage Component - Dual State Design:**
+   - **Verified State**: Green checkmark, congratulatory message, "Back to Dashboard" button
+   - **Unverified State**: Yellow warning, resend button, restrictions notice box
+   - Resend button disabled when rate limited (5-minute cooldown)
+   - Rate limiting countdown shown in UI
+   - Alert messages for success/error feedback
+   - **Rationale**: Clear distinction between states, actionable UI for unverified users
+
+3. **AccountManagePage Component - Verified Users Only:**
+   - Auto-redirects to `/verification` if user is unverified
+   - Two separate form sections (email change, password change)
+   - Independent state management for each form
+   - Client-side validation (passwords must match)
+   - Clear success/error messages per section
+   - Forms clear on success
+   - **Rationale**: Enforce verification requirement, prevent confusion with separate forms
+
+4. **EmailChangeConfirmPage Component - Token-Based Landing Page:**
+   - Reads token from URL query parameter (`?token=...`)
+   - Auto-executes confirmation on mount (no user interaction needed)
+   - Three visual states: Loading (spinner), Success (green checkmark + countdown), Error (red X)
+   - Auto-redirect countdown (3 seconds) with manual override button
+   - **Rationale**: Smooth email link experience, clear feedback, automatic flow completion
+
+5. **Routing Architecture:**
+   - Public routes: `/confirm-email-change` (token-based)
+   - Protected routes: `/verification`, `/account/manage`
+   - ProtectedRoute wrapper enforces authentication
+   - **Rationale**: Security enforcement at route level, clear separation of public/private flows
+
+**Alternatives Considered:**
+- **Alternative 1**: Integrate header directly into each page component
+  - **Rejected**: Would require duplicate code, harder to maintain consistency
+- **Alternative 2**: Modal dialogs for email/password change instead of separate page
+  - **Rejected**: Forms are complex, separate page provides better UX and focus
+- **Alternative 3**: Redirect/green verification indicator
+  - **Rejected**: Yellow (warning) is more attention-grabbing for unverified state
+
+**Benefits:**
+- Clear visual feedback across entire app (yellow = action needed, green = verified)
+- Reusable Header component reduces code duplication
+- Separate pages provide focused UX for each flow
+- Auto-redirect with countdown improves conversion (email confirmation)
+- Protected routes enforce business logic (account management requires verification)
+- Loading states prevent user confusion during async operations
+
+**Trade-offs:**
+- More page components = larger bundle size (minimal impact with code splitting)
+- Auto-redirect countdown may feel rushed (3 seconds is standard, can be adjusted)
+
+**File:** `GCRegisterWeb-10-26/src/components/Header.tsx`, `src/pages/VerificationStatusPage.tsx`, `src/pages/AccountManagePage.tsx`, `src/pages/EmailChangeConfirmPage.tsx`, `src/App.tsx`
+
+---
+
+### 2025-11-09 Session 94: Frontend Services - Type Safety & Auto-Login Decision
+
+**Decision:** Implement comprehensive TypeScript interfaces for all verification and account management flows
+
+**Context:**
+- Frontend needs to call new backend verification and account management endpoints
+- TypeScript provides compile-time type safety for API calls
+- Backend responses include complex nested structures (VerificationStatus, EmailChangeResponse, etc.)
+- Auto-login behavior requires signup to return tokens (breaking change from previous behavior)
+
+**Implementation:**
+
+1. **TypeScript Interfaces Added:**
+   - Updated `User` interface to include `email_verified`, `created_at`, `last_login`
+   - Updated `AuthResponse` to include `email_verified` field
+   - Added `VerificationStatus` (6 fields: email_verified, email, token_expires, can_resend, last_resent_at, resend_count)
+   - Added `EmailChangeRequest` (new_email, password)
+   - Added `EmailChangeResponse` (success, message, pending_email, notifications status)
+   - Added `PasswordChangeRequest` (current_password, new_password, confirm_password)
+   - Added `PasswordChangeResponse` (success, message)
+
+2. **AuthService Methods Added:**
+   - `getCurrentUser()` - Fetches user with email_verified status
+   - `getVerificationStatus()` - Fetches detailed verification info
+   - `resendVerification()` - Authenticated resend (no email parameter needed)
+   - `requestEmailChange(newEmail, password)` - Initiates email change
+   - `cancelEmailChange()` - Cancels pending change
+   - `changePassword(current, new)` - Changes password
+
+3. **Auto-Login Behavior:**
+   - **Modified:** `signup()` now stores access_token and refresh_token
+   - **Rationale:** Matches backend's new auto-login flow (signup returns tokens)
+   - **Impact:** Users auto-logged in after signup, can use app immediately
+
+**Rationale:**
+
+1. **Type Safety:**
+   - Catches API contract mismatches at compile time
+   - IntelliSense provides autocomplete for API responses
+   - Prevents runtime errors from incorrect field access
+
+2. **Developer Experience:**
+   - Clear contract between frontend and backend
+   - Self-documenting code (interfaces show what data looks like)
+   - Easier refactoring (TypeScript shows all usages)
+
+3. **Maintainability:**
+   - Centralized type definitions in `src/types/auth.ts`
+   - Easy to update when backend changes
+   - Consistent typing across all components
+
+4. **Auto-Login Decision:**
+   - **Problem:** Old flow required email verification before login (high friction)
+   - **Solution:** Signup returns tokens immediately, verification optional for account changes
+   - **Security:** Unverified users can use app, but can't change email/password
+   - **UX:** Zero-friction onboarding, clear verification prompts in UI
+
+**Alternatives Considered:**
+
+**Option 1: Use `any` types (rejected)**
+- Pros: Faster initial implementation
+- Cons: No type safety, runtime errors, poor developer experience
+
+**Option 2: Inline types in service methods (rejected)**
+- Pros: Types close to usage
+- Cons: Duplication, inconsistency, harder to maintain
+
+**Option 3: Centralized interfaces in types file (CHOSEN)**
+- Pros: Single source of truth, reusable, maintainable
+- Cons: Extra file to manage (minimal overhead)
+
+**Impact:**
+- ✅ All frontend API calls are now type-safe
+- ✅ Signup flow auto-logs user in (matches backend)
+- ✅ Ready for Phase 9 UI components
+- ✅ No breaking changes for existing login flow
+- ✅ Clear separation between authenticated and public endpoints
+
+**Pattern:** Type-safe API client with centralized interface definitions
+
+---
+
+### 2025-11-09 Session 93: Verification Endpoints - Modular Design Decision
+
+**Decision:** Add verification endpoints to existing `auth.py` instead of creating separate `verification.py` file
+
+**Context:**
+- VERIFICATION_ARCHITECTURE_1_CHECKLIST.md recommends creating separate file if auth.py exceeds 800 lines
+- Current auth.py is 568 lines (well under threshold)
+- Need to add 2 new verification endpoints: `/verification/status` and `/verification/resend`
+- Must maintain clean code organization while avoiding premature optimization
+
+**Options Considered:**
+
+**Option 1: Create Separate verification.py File**
+- Pros: Maximum modularity, clear separation of concerns, easier testing
+- Cons: Overhead for small codebase, multiple files to navigate, may be premature
+- Pattern: Microservices-style separation
+
+**Option 2: Add to Existing auth.py with Clear Section Markers (CHOSEN)**
+- Pros: All auth-related routes in one place, simpler navigation, no premature splitting
+- Cons: File will grow (but still manageable at ~745 lines after additions)
+- Pattern: Monolithic but organized
+
+**Rationale:**
+1. **File Size:** 568 + ~180 lines = ~748 lines (still under 800-line threshold)
+2. **Cohesion:** Verification is closely related to authentication (same security context)
+3. **Simplicity:** Easier for developers to find all auth-related endpoints
+4. **Section Markers:** Used clear `# ===== VERIFICATION ENDPOINTS (Phase 5) =====` separator
+5. **Future-Proofing:** Can split later if auth.py approaches 1000 lines
+
+**Implementation Details:**
+- Added clear section marker comment for verification endpoints
+- Placed verification endpoints after existing auth endpoints
+- Maintained consistent error handling and audit logging patterns
+- Both endpoints require JWT authentication (same security model as other auth endpoints)
+
+**Future Considerations:**
+- If auth.py exceeds 900 lines, consider splitting:
+  - `auth.py`: signup, login, logout, refresh, /me
+  - `verification.py`: /verification/*, /verify-email
+  - `account.py`: /account/* (email change, password change)
+
+---
+
+### 2025-11-09 Session 93: Rate Limiting Implementation - Database-Level Tracking
+
+**Decision:** Implement rate limiting using database timestamps and counts instead of Redis/Memcached
+
+**Context:**
+- Need to enforce 5-minute rate limit on verification email resends
+- Could use external cache (Redis) or database tracking
+- System already has PostgreSQL with all user data
+
+**Options Considered:**
+
+**Option 1: Redis/Memcached for Rate Limiting**
+- Pros: Fast, designed for this use case, atomic operations
+- Cons: Additional infrastructure, data inconsistency risk, overengineering for current scale
+- Pattern: High-scale distributed systems
+
+**Option 2: Database-Level Tracking (CHOSEN)**
+- Pros: Single source of truth, persistent tracking, simpler architecture, no new dependencies
+- Cons: Slightly slower (negligible for current scale), DB load increase
+- Pattern: Monolithic applications, startups
+
+**Rationale:**
+1. **Simplicity:** No additional infrastructure needed
+2. **Data Consistency:** All rate limiting data lives with user data
+3. **Auditability:** Can query resend history directly from database
+4. **Scale:** Current user base doesn't justify Redis complexity
+5. **Performance:** PostgreSQL is more than fast enough for this use case
+
+**Implementation:**
+- Added `last_verification_resent_at` TIMESTAMP column
+- Added `verification_resend_count` INTEGER column
+- Rate limiting check: `time_since_resend.total_seconds() > 300` (5 minutes)
+- Increment count on each resend: `verification_resend_count = COALESCE(verification_resend_count, 0) + 1`
+
+**Monitoring:**
+- Track resend_count to identify users who repeatedly request verification
+- Can analyze last_verification_resent_at patterns to detect abuse
+
+---
+
+### 2025-11-09 Session 92: Email Verification Architecture - Auto-Login Pattern
+
+**Decision:** Implement "soft verification" with auto-login after signup instead of mandatory pre-login email verification
+
+**Context:**
+- Current system blocks login until email is verified (403 Forbidden)
+- Users report frustration at not being able to access the dashboard immediately
+- High signup abandonment rate due to verification friction
+- Modern UX best practice favors immediate access with optional verification
+- Based on OWASP guidelines and industry standards (GitHub, Twitter, LinkedIn pattern)
+
+**Options Considered:**
+
+**Option 1: Keep Mandatory Pre-Login Verification (Current)**
+- Pros: Maximum email validity assurance, prevents fake accounts
+- Cons: High friction, poor UX, signup abandonment, frustrated users
+- Pattern: Traditional (outdated for most SaaS)
+
+**Option 2: Auto-Login with Soft Verification (CHOSEN)**
+- Pros: Zero friction onboarding, immediate value delivery, higher conversion, modern UX
+- Cons: Some unverified accounts may exist, requires feature gating
+- Pattern: Modern SaaS (GitHub, LinkedIn, most web apps)
+
+**Option 3: Optional Verification (No Requirements)**
+- Pros: Lowest friction possible
+- Cons: No way to enforce email validity, security concerns for account recovery
+- Pattern: Not recommended for systems with account management
+
+**Rationale:**
+1. **User Experience**: Users can start using the app immediately without waiting for email
+2. **Conversion**: Reduces signup-to-value time from minutes to seconds
+3. **Flexibility**: Verification becomes a feature unlock rather than a blocker
+4. **Industry Standard**: Matches pattern used by GitHub, Twitter, LinkedIn, Discord
+5. **Security**: Still secure - sensitive operations (email change, password change) require verification
+
+**Implementation Details:**
+
+**Database Changes:**
+- Added columns for pending email changes with dual verification
+- Added rate limiting columns (last_verification_resent_at, verification_resend_count)
+- Added CHECK constraint to prevent pending_email = current email
+- Added UNIQUE constraint on pending_email to prevent race conditions
+
+**Backend API Changes:**
+- `/signup`: Now returns access_token and refresh_token immediately
+- `/login`: Removed email verification check, allows unverified logins
+- `/me`: Returns email_verified status for frontend UI decisions
+- `AuthService.authenticate_user()`: Removed email_verified requirement
+
+**Feature Gating Strategy:**
+- ✅ **Allowed for Unverified Users**: Login, dashboard access, all current features
+- ⚠️ **Requires Verification**: Email change, password change, advanced account settings
+- 🔒 **Security Rationale**: Can't change account security settings without proving email ownership
+
+**UI/UX Pattern:**
+- Dashboard header shows verification status button:
+  - Unverified: Yellow border button "Please Verify E-Mail"
+  - Verified: Green border button "✓ Verified"
+- Clicking button navigates to `/verification` page
+- Verification page allows resending email (rate limited: 1 per 5 minutes)
+- Restrictions clearly communicated on verification page
+
+**Rate Limiting:**
+- Verification email resend: 1 per 5 minutes per user
+- Email change requests: 3 per hour per user
+- Prevents abuse while allowing legitimate resends
+
+**Security Considerations:**
+- Email verification tokens still expire after 24 hours
+- Dual verification for email changes (old email notification + new email confirmation)
+- Password change requires current password + verified email
+- All sensitive operations logged in audit trail
+- UNIQUE constraints prevent duplicate pending emails
+
+**Trade-offs Accepted:**
+- Some users may never verify their email (acceptable for read-only features)
+- Need clear UI to encourage verification (yellow button in header)
+- Support burden may increase for users who lose access to unverified email (mitigated by clear messaging)
+
+**Success Metrics:**
+- Signup completion rate should increase
+- Time to first dashboard access should decrease from ~2 minutes to ~5 seconds
+- Verification completion rate within 24 hours (target: >60%)
+- User satisfaction with onboarding flow
+
+**Alternatives Rejected:**
+- Magic link login (too complex for this use case)
+- SMS verification (costly, not necessary for our use case)
+- Social login (privacy concerns, added complexity)
+
+**References:**
+- OWASP Email Verification Best Practices
+- VERIFICATION_ARCHITECTURE_1.md (full specification)
+- Industry patterns: GitHub, Twitter, LinkedIn, Discord
+
+### 2025-11-09 Session 91: Enforce UNIQUE Constraints at Database Level
+
+**Decision:** Add UNIQUE constraints on username and email columns in registered_users table
+
+**Context:**
+- Discovered duplicate user accounts were created despite application-level checks
+- user2 was registered twice (13:55 and 14:09) with different password hashes
+- Login failures occurred because password hash didn't match the surviving account
+- Application-level duplicate checks in `auth_service.py` lines 68-81 were insufficient
+
+**Options Considered:**
+
+**Option 1: Keep Application-Level Checks Only**
+- Pros: No database changes required, simpler deployment
+- Cons: Race conditions can still create duplicates, no DB-level guarantee, requires perfect application code
+
+**Option 2: Add UNIQUE Constraints (CHOSEN)**
+- Pros: Database enforces uniqueness, prevents race conditions, catches application bugs, industry best practice
+- Cons: Requires migration, must clean up existing duplicates first
+
+**Option 3: Add Triggers**
+- Pros: More flexible than constraints, can add custom logic
+- Cons: More complex to maintain, slower than constraints, overkill for simple uniqueness
+
+**Rationale:**
+- Database constraints provide critical safety net beyond application code
+- PostgreSQL UNIQUE constraints are highly performant (using B-tree indexes)
+- Prevents race conditions when multiple signup requests occur simultaneously
+- Catches bugs in application code before they cause data corruption
+- Standard practice in production systems for data integrity
+
+**Implementation:**
+```sql
+-- Migration: fix_duplicate_users_add_unique_constraints.sql
+ALTER TABLE registered_users
+ADD CONSTRAINT unique_username UNIQUE (username);
+
+ALTER TABLE registered_users
+ADD CONSTRAINT unique_email UNIQUE (email);
+```
+
+**Cleanup Strategy:**
+- Delete duplicate records keeping most recent (ROW_NUMBER() OVER PARTITION BY)
+- Preserves user with latest created_at timestamp
+- Transaction-safe migration with rollback capability
+
+**Impact:**
+- ✅ Future duplicates impossible at database level
+- ✅ Application errors caught immediately
+- ✅ Better user experience (clear "username exists" errors)
+- ⚠️ Existing users with old duplicates may need password reset
+
+**Monitoring:**
+- Watch for constraint violation errors in application logs
+- These are EXPECTED and properly handled by application code
+- Indicates duplicate signup attempts (normal behavior)
+
+**Related Code:**
+- `auth_service.py` lines 68-81: Application-level duplicate checks
+- `database/migrations/fix_duplicate_users_add_unique_constraints.sql`: Migration
+- `run_migration.py`: Migration executor
+
+### 2025-11-09 Session 89: Production Deployment Strategy
+
+**Decision:** Deploy all email verification & password reset functionality to production in single deployment
+
+**Context:**
+- All Phase 5 implementation complete (migration, cleanup script, 33 unit tests passing)
+- Email service configuration complete with SendGrid
+- Database indexes applied
+- Comprehensive testing done locally
+- User requested: "Deploy to Cloud Run and test!"
+
+**Deployment Approach:**
+- ✅ Build Docker image with all new functionality
+- ✅ Deploy to existing Cloud Run service (gcregisterapi-10-26)
+- ✅ Verify all secrets loaded correctly via Cloud Logging
+- ✅ Health check validation before marking complete
+
+**Risk Mitigation:**
+- All unit tests passing (33/33) before deployment
+- Health check endpoint confirms service is running
+- Cloud Logging verification of secret loading
+- Incremental testing on production website planned
+
+**Result:**
+- ✅ Successfully deployed revision `gcregisterapi-10-26-00015-hrc`
+- ✅ All 10 secrets loaded successfully
+- ✅ Health check: HEALTHY
+- ✅ Ready for production testing
+
+**Rationale:**
+- Comprehensive local testing reduces deployment risk
+- All secrets pre-configured in Secret Manager
+- Cloud Run provides automatic rollback capability if needed
+- Better to deploy complete feature set than partial functionality
+
+---
+
+### 2025-11-09 Session 88 (Continued): Reuse CORS_ORIGIN as BASE_URL
+
+**Decision:** Reuse existing `CORS_ORIGIN` secret as `BASE_URL` instead of creating a duplicate secret
+
+**Context:**
+- EmailService needs `BASE_URL` to build verification/reset links
+- CORS already configured with `CORS_ORIGIN` = `https://www.paygateprime.com`
+- Both values would be identical (frontend URL)
+- User asked: "Should I create BASE_URL secret or reuse CORS_ORIGIN?"
+
+**Options Considered:**
+1. **Create separate BASE_URL secret**
+   - ❌ Duplicates identical value
+   - ❌ Risk of mismatch if one is updated but not the other
+   - ❌ More secrets to manage
+   - ✅ Explicit naming
+
+2. **Reuse CORS_ORIGIN as BASE_URL**
+   - ✅ Single source of truth for frontend URL
+   - ✅ No duplicate secrets
+   - ✅ Impossible to get out of sync
+   - ✅ Less configuration complexity
+   - ❌ Slightly less explicit naming
+
+**Decision Made:**
+- ✅ Reuse `CORS_ORIGIN` secret as `BASE_URL` in config_manager
+
+**Implementation:**
+```python
+# config_manager.py
+config = {
+    'cors_origin': self.access_secret('CORS_ORIGIN'),
+    # Reuse CORS_ORIGIN as BASE_URL (same frontend URL)
+    'base_url': self.access_secret('CORS_ORIGIN'),
+}
+```
+
+**Rationale:**
+- **Single Source of Truth:** Frontend URL only needs to be defined once
+- **Future-Proof:** If domain changes, update one secret and both CORS + email links update
+- **Less Error-Prone:** Can't forget to update BASE_URL when changing domain
+- **Semantically Correct:** Both represent "where the frontend lives"
+
+**Benefits:**
+- Reduced configuration complexity
+- Eliminated risk of CORS_ORIGIN ≠ BASE_URL mismatch
+- Easier maintenance (one secret instead of two)
+
+**Trade-offs:**
+- BASE_URL name not explicitly in Secret Manager (documented in code comments)
+- Future maintainers need to understand CORS_ORIGIN serves dual purpose
+
+**Result:**
+- Configuration simplified from 4 new secrets to 3 new secrets
+- Email links will correctly point to `https://www.paygateprime.com`
+- CORS and email service use consistent frontend URL
+
+---
+
+### 2025-11-09 Session 88: Database Indexing & Testing Strategy
+
+**Decision:** Use partial indexes for token fields and pytest for comprehensive unit testing
+
+**Context:**
+- Token lookups (verification_token, reset_token) scanning full table (O(n) performance)
+- Most users have NULL tokens (already verified or no reset pending)
+- Need comprehensive test coverage for new authentication services
+- Want fast, maintainable test suite
+
+**Options Considered:**
+1. **Full indexes on token columns**
+   - ❌ Indexes 100% of rows including NULLs
+   - ❌ Wastes storage on unnecessary entries
+   - ✅ Simple to implement
+
+2. **Partial indexes (WHERE token IS NOT NULL)**
+   - ✅ Only indexes rows that need fast lookup
+   - ✅ ~90% storage savings (most users have NULL tokens)
+   - ✅ Same performance as full index for lookups
+   - ✅ PostgreSQL native feature
+
+3. **No testing / Manual testing only**
+   - ❌ Regression risks
+   - ❌ Hard to verify edge cases
+   - ❌ No automation
+
+4. **pytest with fixtures**
+   - ✅ Industry standard for Python testing
+   - ✅ Excellent fixture support
+   - ✅ Clear test output
+   - ✅ Easy to run and maintain
+
+**Decision Made:**
+- ✅ Implement **partial indexes** on verification_token and reset_token
+- ✅ Use **pytest** with fixtures for comprehensive unit testing
+
+**Rationale:**
+- **Partial Indexes:**
+  - Speeds up token lookups from O(n) to O(log n)
+  - Minimal storage overhead (only non-NULL values indexed)
+  - PostgreSQL-native feature, well-tested and performant
+  - Perfect for sparse data (most tokens are NULL after use)
+
+- **pytest Testing:**
+  - Industry standard with excellent community support
+  - Fixture system perfect for test isolation
+  - Clear, readable test output
+  - Easy to integrate with CI/CD pipelines
+
+**Implementation:**
+```sql
+-- Partial indexes for token lookups
+CREATE INDEX idx_registered_users_verification_token
+ON registered_users(verification_token)
+WHERE verification_token IS NOT NULL;
+
+CREATE INDEX idx_registered_users_reset_token
+ON registered_users(reset_token)
+WHERE reset_token IS NOT NULL;
+```
+
+**Test Coverage:**
+- 17 tests for TokenService (100% pass rate)
+- 16 tests for EmailService (100% pass rate)
+- Total: 33 tests covering all core functionality
+
+**Results:**
+- Query performance improved significantly (O(n) → O(log n))
+- Index size ~90% smaller than full index
+- All tests passing with 100% coverage
+- Fast test execution (~6 seconds for full suite)
+
+**Alternatives Rejected:**
+- Full indexes: Wasteful for sparse data
+- Manual testing: Too error-prone, not scalable
+- Other testing frameworks: pytest is Python standard
+
+---
+
+### 2025-11-09 Session 87: Rate Limiting & Audit Logging Architecture
+
+**Decision:** Implement Flask-Limiter with Redis backend for rate limiting and comprehensive audit logging
+
+**Context:**
+- Authentication endpoints vulnerable to brute force attacks
+- No rate limiting to prevent bot signups or password reset flooding
+- No audit trail for security events (login attempts, verification failures)
+- User enumeration protection must be maintained while logging internally
+
+**Options Considered:**
+
+**Rate Limiting:**
+1. **Flask-Limiter with Redis** (CHOSEN)
+   - ✅ Already dependency in requirements.txt
+   - ✅ Supports distributed rate limiting via Redis
+   - ✅ In-memory fallback for development
+   - ✅ Flexible per-endpoint limits
+   - ✅ IP-based rate limiting out of the box
+   - ✅ Integrates seamlessly with Flask
+
+2. **Custom rate limiting with Redis**
+   - ❌ Reinventing the wheel
+   - ❌ More code to maintain
+   - ❌ Harder to test
+
+3. **Nginx/CDN rate limiting**
+   - ❌ Not suitable for application-level rate limiting
+   - ❌ Can't differentiate between endpoints
+   - ❌ Adds infrastructure complexity
+
+**Audit Logging:**
+1. **Custom AuditLogger utility class** (CHOSEN)
+   - ✅ Simple, focused responsibility
+   - ✅ Matches existing logging style (emojis)
+   - ✅ Token masking for security
+   - ✅ ISO timestamp formatting
+   - ✅ No external dependencies
+   - ✅ Easy to extend for future needs
+
+2. **Python logging module with handlers**
+   - ❌ Overkill for current needs
+   - ❌ More complex setup
+   - ❌ Harder to standardize log format
+
+3. **Third-party audit logging service**
+   - ❌ Additional cost
+   - ❌ External dependency
+   - ❌ Latency on every request
+
+**Implementation Details:**
+- **Rate Limits Chosen:**
+  - Signup: 5/15min (prevents bot signups)
+  - Login: 10/15min (prevents brute force)
+  - Verify Email: 10/hour (prevents token enumeration)
+  - Resend Verification: 3/hour (prevents email flooding)
+  - Forgot Password: 3/hour (prevents email flooding)
+  - Reset Password: 5/15min (prevents token brute force)
+
+- **Audit Events:**
+  - All signup/login attempts (success/failure)
+  - Email verification events
+  - Password reset events
+  - Rate limit exceeded events
+  - Internal tracking of user existence (not revealed externally)
+
+- **Security Considerations:**
+  - User enumeration protection maintained (generic responses)
+  - Token masking in logs (first 8 chars only)
+  - IP tracking for rate limiting and suspicious activity
+  - UTC timestamps for consistent logging
+
+**Trade-offs:**
+- ✅ Security: Prevents abuse and provides audit trail
+- ✅ Performance: Redis adds minimal latency
+- ✅ Cost: Redis can run on same VM or Cloud Memorystore
+- ⚠️ Complexity: Adds Redis dependency for production
+- ⚠️ Development: In-memory mode for dev (not distributed)
+
+**Future Enhancements:**
+- Anomaly detection based on audit logs
+- User-specific rate limits (after authentication)
+- Geo-blocking based on suspicious IP patterns
+- Integration with Cloud Logging for long-term storage
+
+---
+
+### 2025-11-09 Session 86: Email Verification & Password Reset Architecture
+
+**Decision:** Implement OWASP-compliant email verification and password reset using itsdangerous + SendGrid
+
+**Context:**
+- GCRegisterAPI-10-26 currently has no email verification flow
+- Users can access system without verifying email (security risk)
+- No self-service password reset mechanism exists
+- Database schema already has token fields (verification_token, reset_token) but unused
+
+**Options Considered:**
+1. **itsdangerous + SendGrid** (CHOSEN)
+   - ✅ Cryptographically secure token generation
+   - ✅ Built-in expiration handling
+   - ✅ URL-safe encoding
+   - ✅ No database storage of token secrets needed
+   - ✅ SendGrid has 100 emails/day free tier
+
+2. **UUID tokens stored in database**
+   - ❌ Requires secure random generation
+   - ❌ Manual expiration checking
+   - ❌ More database queries
+
+3. **JWT tokens**
+   - ❌ Overkill for this use case
+   - ❌ Larger token size in URLs
+   - ❌ More complex validation
+
+**Implementation Approach:**
+- **Token Generation**: `URLSafeTimedSerializer` with unique salts per type
+  - Email verification salt: 'email-verify-v1'
+  - Password reset salt: 'password-reset-v1'
+  - Prevents token cross-use attacks
+
+- **Token Expiration**: Built into itsdangerous
+  - Email verification: 24 hours (86400 seconds)
+  - Password reset: 1 hour (3600 seconds)
+  - Automatic validation on deserialization
+
+- **Database Strategy**: Partial indexes for performance
+  - Store token in DB for single-use enforcement
+  - Partial index `WHERE token IS NOT NULL` saves 90% space
+  - Only ~10% of users have pending tokens at any time
+
+- **Email Service**: SendGrid with dev mode fallback
+  - Production: SendGrid API with HTML templates
+  - Development: Console logging for testing
+  - Responsive HTML with gradient designs
+
+- **User Enumeration Protection**: Generic responses
+  - Same response whether user exists or not
+  - Prevents attackers from discovering valid emails
+  - OWASP best practice compliance
+
+**Security Considerations:**
+- ✅ SECRET_KEY stored in environment (never in code)
+- ✅ Tokens are cryptographically signed
+- ✅ Automatic expiration enforcement
+- ✅ Single-use tokens (cleared after verification)
+- ✅ Rate limiting on all endpoints (Flask-Limiter)
+- ✅ Audit logging for all auth events
+- ✅ HTTPS-only email links
+
+**Trade-offs:**
+- ✅ Pros:
+  - Industry-standard approach
+  - Minimal database overhead
+  - Easy to test in dev mode
+  - Professional email templates
+  - OWASP compliant
+
+- ⚠️ Cons:
+  - Requires SendGrid account (but free tier sufficient)
+  - SECRET_KEY rotation invalidates all tokens
+  - Email delivery depends on third-party service
+
+**Decision Rationale:**
+- itsdangerous is battle-tested, used by Flask/Werkzeug internally
+- SendGrid is reliable with 99.9% uptime SLA
+- Approach follows OWASP Forgot Password Cheat Sheet exactly
+- Partial indexes are PostgreSQL best practice for sparse columns
+- Dev mode enables testing without SendGrid API key
+
+**Files Created:**
+- `api/services/token_service.py` - Token generation/validation
+- `api/services/email_service.py` - Email sending with templates
+- `database/migrations/add_token_indexes.sql` - Performance indexes
+- `.env.example` - Environment variable template
+
+**Related Documents:**
+- `LOGIN_UPDATE_ARCHITECTURE.md` - Full architecture specification
+- `LOGIN_UPDATE_ARCHITECTURE_CHECKLIST.md` - Implementation checklist
 
 ### 2025-11-08 Session 85: Comprehensive Endpoint Documentation Strategy
 
@@ -533,655 +1598,5 @@ token_manager.encrypt_gcsplit1_to_gcsplit2_token(
 - ⚠️ Threshold changes require service redeployment (acceptable: rare operational event)
 - ⚠️ All instances must be restarted to pick up new threshold (acceptable: standard deployment process)
 
-### 2025-11-07 Session 73: Replace Flask abort() with jsonify() Returns for Proper Logging
 
-**Decision:** Standardize error handling in GCMicroBatchProcessor by replacing all `abort()` calls with `return jsonify()` statements
-
-**Context:**
-- GCMicroBatchProcessor-10-26 was returning HTTP 200 but producing ZERO stdout logs
-- Flask's `abort()` function terminates requests abruptly, preventing stdout buffer from flushing
-- GCBatchProcessor-10-26 (comparison service) successfully produced 11 logs per request using `return jsonify()`
-- Cloud Logging visibility is critical for debugging scheduled jobs
-
-**Problem:**
-- Flask `abort(status, message)` raises an HTTP exception immediately
-- Stdout buffer may not flush before exception terminates request handler
-- Result: HTTP responses succeed but logs are lost
-- Impact: Cannot debug or monitor service behavior, especially early initialization failures
-
-**Options Considered:**
-1. **Add sys.stdout.flush() after every print() + keep abort()** ⚠️
-   - Pros: Minimal code changes
-   - Cons: Still relies on abort() which can skip buffered output, not foolproof
-
-2. **Replace ALL abort() with return jsonify()** ✅ SELECTED
-   - Pros: Graceful request completion, guaranteed log flushing, consistent with working services
-   - Cons: Slightly more verbose code
-   - Rationale: Ensures proper stdout handling, matches gcbatchprocessor-10-26 pattern
-
-3. **Use logging module instead of print()**
-   - Pros: More robust, structured logging
-   - Cons: Requires refactoring entire codebase, breaks emoji logging pattern
-   - Deferred: Would require extensive testing across all services
-
-**Implementation Approach:**
-- Replace `abort(status, message)` with `return jsonify({"status": "error", "message": message}), status`
-- Add `import sys` at top of file
-- Add `sys.stdout.flush()` immediately after initial print statements for immediate visibility
-- Add `sys.stdout.flush()` before all error returns to ensure logs are captured even during failures
-- Maintain existing emoji logging patterns (as per CLAUDE.md guidelines)
-- Apply to all 13 abort() locations across /check-threshold and /swap-executed endpoints
-
-**Affected Code Patterns:**
-
-**Before:**
-```python
-if not db_manager:
-    print(f"❌ [ENDPOINT] Required managers not available")
-    abort(500, "Service not properly initialized")  # ❌ Logs may be lost
-```
-
-**After:**
-```python
-if not db_manager:
-    print(f"❌ [ENDPOINT] Required managers not available")
-    sys.stdout.flush()  # ✅ Force immediate flush
-    return jsonify({
-        "status": "error",
-        "message": "Service not properly initialized"
-    }), 500  # ✅ Graceful return, logs preserved
-```
-
-**Benefits:**
-- ✅ Guaranteed stdout log visibility in Cloud Logging
-- ✅ Consistent error handling across all microservices
-- ✅ Easier debugging of initialization and runtime failures
-- ✅ No functional changes to API behavior (same HTTP status codes and error messages)
-- ✅ Aligns with GCBatchProcessor-10-26 working implementation
-
-**Trade-offs:**
-- Slightly more verbose code (3-5 lines vs 1 line per error)
-- Negligible performance impact (jsonify is lightweight)
-
-**Verification Method:**
-- Deploy fixed service and wait for next Cloud Scheduler trigger (every 5 minutes)
-- Check Cloud Logging stdout stream for presence of print statements
-- Compare log output with gcbatchprocessor-10-26 (should be similar verbosity)
-
-### 2025-11-07 Session 72: Enable Dynamic MICRO_BATCH_THRESHOLD_USD Configuration
-
-**Decision:** Switch MICRO_BATCH_THRESHOLD_USD from static environment variable injection to dynamic Secret Manager API fetching
-
-**Context:**
-- MICRO_BATCH_THRESHOLD_USD controls when batch ETH→USDT conversions are triggered
-- Static configuration requires service redeployment for every threshold adjustment
-- As network grows, threshold tuning will become more frequent
-- Need ability to adjust threshold without downtime or redeployment
-
-**Options Considered:**
-1. **Keep static env var injection (status quo)** ❌
-   - Pros: Fastest access (no API call), predictable
-   - Cons: Requires redeployment for changes, ~5 min downtime per adjustment
-
-2. **Switch to dynamic Secret Manager API (per-request fetching)** ✅ SELECTED
-   - Pros: Zero-downtime updates, instant configuration changes, version history
-   - Cons: Slight latency (+50-100ms), 96 API calls/day
-   - Rationale: Latency negligible for scheduled job (every 15 min), flexibility outweighs cost
-
-3. **Implement caching layer with TTL**
-   - Pros: Balance between static and dynamic
-   - Cons: Added complexity, cache invalidation issues, not needed for 15-min schedule
-
-**Implementation Approach:**
-- Code already supports dynamic fetching (lines 57-66 in config_manager.py)
-- Dual-path logic: `os.getenv()` first, Secret Manager API fallback
-- Remove MICRO_BATCH_THRESHOLD_USD from --set-secrets deployment flag
-- Keep other 11 secrets as static (no need for dynamic updates)
-
-**Trade-offs Accepted:**
-- ✅ Flexibility over microsecond-level performance
-- ✅ Operational simplicity over absolute optimization
-- ✅ Audit trail (Secret Manager versions) over env var simplicity
-
-**Deployment Strategy:**
-1. Update secret value ($2.00 → $5.00)
-2. Redeploy service WITHOUT MICRO_BATCH_THRESHOLD_USD in --set-secrets
-3. Verify dynamic fetching via logs
-4. Test rapid threshold changes (no redeploy)
-
-**Consequences:**
-- ✅ Threshold changes take effect within 15 minutes (next scheduled check)
-- ✅ Zero redeployment overhead for configuration tuning
-- ✅ Secret Manager provides version history and rollback capability
-- ⚠️ Dependency on Secret Manager availability (fallback to $20.00 if unavailable)
-- ⚠️ +$0.003 per 10,000 API calls (96/day = $0.000003/day, negligible)
-
-**Success Metrics:**
-- Threshold updates without redeployment: ✅ Confirmed working
-- Service stability: ✅ No degradation
-- Configuration change velocity: Improved from ~5 min to <1 min
-
-**Future Considerations:**
-- Could extend pattern to other frequently-tuned parameters
-- Could implement caching if API call latency becomes issue (unlikely)
-- Consider database-backed config for multi-parameter dynamic updates
-
-### 2025-11-07 Session 71: Fix from_amount Assignment in Token Decryption
-
-**Decision:** Use estimated_eth_amount (fee-adjusted) instead of first_amount (unadjusted) for from_amount in GCHostPay1 token decryption
-
-**Context:**
-- Instant payouts were sending unadjusted ETH amount (0.00149302) to ChangeNOW instead of fee-adjusted amount (0.001269067)
-- Platform losing 15% TP fee revenue on every instant payout (sent to ChangeNOW instead of retained)
-- GCHostPay1 token_manager.py:238 incorrectly assigned from_amount = first_amount (actual_eth_amount)
-- from_amount flows through GCHostPay1→GCHostPay3 and determines payment amount
-
-**Options Considered:**
-1. **Fix in GCHostPay1 token_manager.py line 238** ✅ SELECTED
-   - Change: from_amount = first_amount → from_amount = estimated_eth_amount
-   - Pros: Single-line fix, maintains backward compatibility, fixes root cause
-   - Cons: None identified
-
-2. **Fix in GCSplit1 token packing (swap order)**
-   - Swap: actual_eth_amount and estimated_eth_amount positions
-   - Pros: Would work for instant payouts
-   - Cons: Breaks backward compatibility with threshold payouts, requires multiple service changes
-
-3. **Fix in GCHostPay3 payment logic**
-   - Change: Prioritize estimated_eth_amount over actual_eth_amount
-   - Pros: None (infeasible)
-   - Cons: GCHostPay3 doesn't receive these fields in token (only from_amount)
-
-**Rationale:**
-- Option 1 is the cleanest fix with minimal risk
-- For instant payouts: estimated_eth_amount contains the fee-adjusted amount (0.001269067)
-- For threshold payouts: both amounts are equal (backward compatibility maintained)
-- Single-line change with clear intent and proper comments
-
-**Implementation:**
-- File: GCHostPay1-10-26/token_manager.py
-- Line 238: from_amount = estimated_eth_amount
-- Comment: "Use fee-adjusted amount (instant) or single amount (threshold)"
-- Deployment: gchostpay1-10-26 revision 00022-h54
-
-**Consequences:**
-- ✅ Platform retains 15% TP fee on instant payouts
-- ✅ ChangeNOW receives amount matching swap creation request
-- ✅ Financial integrity restored
-- ✅ Threshold payouts unaffected
-- ✅ No database changes required
-- ✅ No changes to other services required
-
-**Validation:**
-- Created INSTANT_PAYOUT_ISSUE_ANALYSIS_1.md documenting full flow
-- Next instant payout will validate fix with ChangeNOW API response
-
-### 2025-11-07 Session 70: actual_eth_amount Storage in split_payout_que
-
-**Decision:** Add actual_eth_amount column to split_payout_que table and populate from NowPayments outcome_amount
-
-**Context:**
-- split_payout_request and split_payout_hostpay had actual_eth_amount column (from NowPayments), but split_payout_que did not
-- Incomplete audit trail: Missing the actual ETH amount from NowPayments in the middle of the payment flow
-- Cannot reconcile ChangeNow estimates vs NowPayments actual amounts
-- Data quality issue: Each table had different source for actual_eth_amount, making cross-table analysis difficult
-
-**Implementation:**
-- Added NUMERIC(20,18) column with DEFAULT 0 to split_payout_que (backward compatible)
-- Updated all database insertion methods to accept actual_eth_amount parameter
-- Updated all callers to pass actual_eth_amount value from encrypted token
-- Deployed to 3 services: GCSplit1-10-26, GCHostPay1-10-26, GCHostPay3-10-26
-
-**Rationale:**
-- **Complete audit trail**: All 3 payment tracking tables now have actual_eth_amount from same source (NowPayments)
-- **Financial reconciliation**: Can compare ChangeNow estimate (from_amount) vs NowPayments actual (actual_eth_amount)
-- **Data quality**: Single source of truth for actual ETH received from payment processor
-- **Backward compatible**: DEFAULT 0 ensures existing code continues to work
-- **Future analysis**: Can identify patterns in estimate vs actual discrepancies
-
-**Trade-offs:**
-- Schema change requires migration (low risk - column is nullable with default)
-- Existing records will show 0 for actual_eth_amount (acceptable - historical data not affected)
-- No rollback needed (column is backward compatible with DEFAULT 0)
-
-**Impact:**
-- ✅ Complete financial audit trail across all 3 tables
-- ✅ Can verify payment processor accuracy
-- ✅ Can identify and reconcile estimate vs actual discrepancies
-- ✅ Data quality improved for financial auditing
-- ✅ Foundation for Phase 2 (schema correction)
-
-**Related Issues:**
-- Resolves Issue 4 from SPLIT_PAYOUT_TABLES_INC_ANALYSIS_REVIEW.md
-- Resolves Issue 6 (split_payout_hostpay.actual_eth_amount not populated)
-- Prepares foundation for Issue 3 (PRIMARY KEY correction in Phase 2)
-
-**Next Phase:**
-- Phase 2: Change PRIMARY KEY from unique_id to cn_api_id
-- Phase 2: Add UNIQUE constraint on cn_api_id
-- Phase 2: Add INDEX on unique_id for 1-to-many lookups
-
----
-
-### 2025-11-07 Session 68: Defense-in-Depth Status Validation + Idempotency
-
-**Decision:** Two-layer NowPayments status validation + idempotency protection
-
-**Context:**
-- System processed ALL NowPayments IPNs regardless of payment_status → risk of premature payouts
-- Cloud Tasks retries caused duplicate key errors in split_payout_que
-
-**Implementation:**
-1. Layer 1 (np-webhook): Validate status='finished' before GCWebhook1 trigger
-2. Layer 2 (GCWebhook1): Re-validate status='finished' before routing (defense-in-depth)
-3. GCSplit1: Check cn_api_id exists before insertion, return 200 OK if duplicate (idempotent)
-
-**Rationale:**
-- Defense-in-depth prevents bypass attempts and config errors
-- Idempotent operations (by cn_api_id) prevent Cloud Tasks retry loops
-- 200 OK response for duplicates tells Cloud Tasks "job done"
-
-**Impact:**
-- ✅ No premature payouts before funds confirmed
-- ✅ No duplicate key errors
-- ✅ System resilience improved
-
----
-
-### 2025-11-07 Session 67: Currency-Agnostic Naming Convention in GCSplit1
-
-**Decision:** Standardized on generic/currency-agnostic variable and dictionary key naming throughout GCSplit1 endpoint code to support dual-currency architecture.
-
-**Status:** ✅ **IMPLEMENTED AND DEPLOYED**
-
-**Problem:**
-- GCSplit1 endpoint_2 used legacy ETH-specific naming (`to_amount_eth_post_fee`, `from_amount_usdt`)
-- Token decrypt method returned generic naming (`to_amount_post_fee`, `from_amount`)
-- Mismatch caused KeyError blocking both instant (ETH) and threshold (USDT) payouts
-
-**Decision Rationale:**
-1. **Dual-Currency Support**: System now processes both ETH and USDT as swap currencies
-2. **Semantic Accuracy**: Variable names should reflect meaning, not specific currency
-   - `to_amount_post_fee` = output amount in target currency (post-fees)
-   - `from_amount` = input amount in swap currency (ETH or USDT)
-3. **Maintainability**: Generic names prevent future issues when adding new currencies
-4. **Consistency**: Aligns endpoint code with token manager naming conventions
-
-**Implementation:**
-- Updated function signature: `calculate_pure_market_conversion(from_amount, to_amount_post_fee, ...)`
-- Replaced all references to `from_amount_usdt` with `from_amount`
-- Replaced all references to `to_amount_eth_post_fee` with `to_amount_post_fee`
-- Updated print statements to be currency-agnostic
-- Total changes: 10 lines in `/GCSplit1-10-26/tps1-10-26.py`
-
-**Benefits:**
-- ✅ Fixes KeyError blocking production
-- ✅ Enables both instant (ETH) and threshold (USDT) modes
-- ✅ Future-proof for additional swap currencies
-- ✅ Reduces cognitive load (names match their semantic meaning)
-- ✅ Maintains consistency across all GCSplit services
-
-**Trade-offs:**
-- None - This is strictly an improvement over legacy naming
-
-**Alternative Considered:**
-- Update decrypt method to return legacy `to_amount_eth_post_fee` key
-- **Rejected:** Would contradict dual-currency architecture and mislead for USDT swaps
-
-**Related Work:**
-- Session 66: Fixed token field ordering in decrypt method
-- Session 65: Added dual-currency support to GCSplit2 token manager
-
-**Documentation:**
-- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST.md` (analysis)
-- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST_PROGRESS.md` (implementation)
-
----
-
-### 2025-11-07 Session 66: Comprehensive Token Flow Review & Validation
-
-**Decision:** Conducted comprehensive review of all token packing/unpacking across GCSplit1, GCSplit2, and GCSplit3 to ensure complete system compatibility after Session 66 fix.
-
-**Status:** ✅ **VALIDATED - ALL FLOWS OPERATIONAL**
-
-**Context:**
-- After Session 66 field ordering fix, needed to verify all 6 token flows work correctly
-- Examined encryption/decryption methods across all 3 services
-- Verified field ordering consistency and backward compatibility
-
-**Analysis Results:**
-1. ✅ **GCSplit1 → GCSplit2 → GCSplit1**: Fully compatible with dual-currency fields
-2. ✅ **GCSplit1 → GCSplit3 → GCSplit1**: Works via backward compatibility in GCSplit3
-3. 🟡 **GCSplit3 Token Manager**: Has outdated unused methods (cosmetic issue only)
-4. 🟢 **No Critical Issues**: All production flows functional
-
-**Key Findings:**
-- GCSplit1 and GCSplit2 fully synchronized with dual-currency implementation
-- GCSplit3's backward compatibility in decrypt methods prevents breakage
-- GCSplit3 can correctly extract new fields (swap_currency, payout_mode, actual_eth_amount)
-- Methods each service doesn't use can be safely ignored
-
-**Benefits:**
-- Confirmed Session 66 fix resolves all blocking issues
-- Dual-currency implementation ready for production testing
-- Clear understanding of which token flows matter
-- Identified cosmetic cleanup opportunities (low priority)
-
-**Documentation:**
-- `/10-26/GCSPLIT_TOKEN_REVIEW_FINAL.md` (comprehensive analysis)
-- Complete verification matrix of all encrypt/decrypt pairs
-- Testing checklist for instant and threshold payouts
-
-**Recommendation:**
-- 🟢 NO IMMEDIATE ACTION REQUIRED: System is operational
-- 🟡 OPTIONAL: Update GCSplit3's unused methods for consistency
-- ✅ PRIORITY: Monitor first test transaction for validation
-
----
-
-### 2025-11-07 Session 66: Token Field Ordering Standardization (Critical Bug Fix)
-
-**Decision:** Fix binary struct unpacking order in GCSplit1 to match GCSplit2's packing order, resolving critical token decryption failure.
-
-**Status:** ✅ **DEPLOYED**
-
-**Context:**
-- Session 65 added new fields (`swap_currency`, `payout_mode`, `actual_eth_amount`) to token structure
-- GCSplit2 packed these fields AFTER fee fields (correct architectural position)
-- GCSplit1 unpacked them IMMEDIATELY after from_amount (wrong position)
-- Result: Complete byte offset misalignment causing token decryption failures and data corruption
-
-**Problem:**
-- **GCSplit2 packing:** `from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency → payout_mode → actual_eth_amount`
-- **GCSplit1 unpacking:** `from_amount → swap_currency → payout_mode → to_amount → deposit_fee → withdrawal_fee` ❌
-- Misalignment caused "Token expired" errors and corrupted `actual_eth_amount` values
-
-**Resolution:**
-- Reordered GCSplit1 unpacking to match GCSplit2 packing exactly
-- All amount fields (from_amount, to_amount, deposit_fee, withdrawal_fee) now unpacked FIRST
-- Then swap_currency and payout_mode unpacked (matching GCSplit2 order)
-- Preserved backward compatibility with try/except blocks
-
-**Benefits:**
-- Token decryption now works correctly for both instant and threshold payouts
-- Dual-currency implementation fully unblocked
-- Data integrity restored (no more corrupted values)
-- Both ETH and USDT payment flows operational
-
-**Lessons Learned:**
-- Binary struct packing/unpacking order must be validated across all services
-- Token format changes require coordinated updates to both sender and receiver
-- Unit tests needed for encrypt/decrypt roundtrip validation
-- Cross-service token flow testing required before production deployment
-
-**Prevention Strategy:**
-- Add integration tests for full token flow (GCSplit1→GCSplit2→GCSplit1)
-- Document exact byte structure in both encrypt and decrypt methods
-- Use token versioning to detect format changes
-- Code review checklist: Verify packing/unpacking orders match
-
-**Deployment:**
-- Build ID: 35f8cdc1-16ec-47ba-a764-5dfa94ae7129
-- Revision: gcsplit1-10-26-00019-dw4
-- Time: 2025-11-07 15:57:58 UTC
-- Total fix time: ~8 minutes
-
----
-
-### 2025-11-07 Session 65: GCSplit2 Token Manager Dual-Currency Support
-
-**Decision:** Deploy GCSplit2 with full dual-currency token support, enabling both ETH and USDT swap operations with backward compatibility.
-
-**Status:** ✅ **DEPLOYED**
-
-**Context:**
-- Instant payouts use ETH→ClientCurrency swaps
-- Threshold payouts use USDT→ClientCurrency swaps
-- GCSplit2 token manager needed to support both currencies dynamically
-- Must maintain backward compatibility with existing threshold payout tokens
-
-**Implementation:**
-- Updated all 3 token methods in `token_manager.py`
-- Added `swap_currency`, `payout_mode`, `actual_eth_amount` fields to all tokens
-- Implemented backward compatibility with try/except and offset validation
-- Changed variable names from currency-specific to generic (adjusted_amount, from_amount)
-- Updated main service to extract and use new fields dynamically
-
-**Benefits:**
-- GCSplit2 can now handle both ETH and USDT swaps seamlessly
-- Old threshold payout tokens still work (backward compatible)
-- New instant payout tokens work with ETH routing
-- Clear logging for debugging currency type
-
-**Trade-offs:**
-- Slightly larger token size due to additional fields
-- More complex decryption logic with backward compatibility checks
-- Accepted: Benefits of flexibility outweigh minor performance cost
-
-**Deployment:**
-- Build: `c47c15cf-d154-445e-b207-4afa6c9c0150`
-- Revision: `gcsplit2-10-26-00014-4qn`
-- Traffic: 100%
-- Health: All components healthy
-
----
-
-### 2025-11-07 Session 64: Dual-Mode Currency Routing - TP_FEE Application
-
-**Decision:** Always apply TP_FEE deduction to actual_eth_amount for instant payouts before initiating ETH→ClientCurrency swaps.
-
-**Status:** ✅ **IMPLEMENTED** - Bug fix ready for deployment
-
-**Context:**
-- Implementing dual-mode currency routing (ETH for instant, USDT for threshold)
-- Architecture specified TP_FEE must be deducted from actual_eth_amount
-- Initial implementation missed this critical calculation
-
-**Problem:**
-- GCSplit1 was passing full `actual_eth_amount` to ChangeNow without deducting platform fee
-- Result: TelePay not collecting revenue on instant payouts
-- Example: User pays $1.35 → receives 0.0005668 ETH → Full amount sent to client (0% platform fee) ❌
-
-**Solution:**
-```python
-tp_fee_decimal = float(tp_flat_fee if tp_flat_fee else "3") / 100
-adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)
-```
-
-**Rationale:**
-- Platform fee must be collected on ALL payouts (instant and threshold)
-- Instant: Deduct from ETH before swap → Client gets (ETH - TP_FEE) in their currency
-- Threshold: Deduct from USD before accumulation → Client gets (USDT - TP_FEE) in their currency
-- Maintains revenue consistency across both payout modes
-
-**Impact:**
-- ✅ Revenue protection: Platform fee now collected on instant payouts
-- ✅ Parity: Both payout modes now apply TP_FEE consistently
-- ✅ Transparency: Enhanced logging shows TP_FEE calculation explicitly
-
-**Example:**
-- NowPayments sends: 0.0005668 ETH
-- TP_FEE (15%): 0.00008502 ETH (platform revenue)
-- Client swap amount: 0.00048178 ETH → SHIB
-
-**Files Modified:**
-- `GCSplit1-10-26/tps1-10-26.py:350-357`
-
-### 2025-11-07 Session 63: UPSERT Strategy for NowPayments IPN Processing
-
-**Decision:** Replace UPDATE-only approach with conditional UPSERT (INSERT or UPDATE) in `np-webhook-10-26` IPN handler.
-
-**Status:** ✅ **IMPLEMENTED & DEPLOYED** - Production issue resolved
-
-**Context:**
-- System assumed all payments would originate from Telegram bot, which pre-creates database records
-- Direct payment links (bookmarked, shared, or replayed) bypass bot initialization
-- Race conditions could result in payment completing before record creation
-- Original UPDATE-only query failed silently when no pre-existing record found
-- Result: Payment confirmed at NowPayments but stuck "pending" internally
-
-**Problem Statement:**
-```
-Payment Flow Assumption (ORIGINAL):
-1. User → Telegram Bot → /subscribe
-2. Bot creates record in private_channel_users_database (payment_status='pending')
-3. Bot generates NowPayments invoice
-4. User pays
-5. IPN arrives → UPDATE existing record → Success ✅
-
-Broken Flow (WHAT ACTUALLY HAPPENED):
-1. User → Direct payment link (no bot interaction)
-2. No record created ❌
-3. User pays
-4. IPN arrives → UPDATE attempts to find record → 0 rows affected ❌
-5. Returns HTTP 500 → NowPayments retries infinitely ❌
-6. User stuck on "Processing..." page ❌
-```
-
-**Solution Architecture:**
-```python
-# OLD (UPDATE-only):
-UPDATE private_channel_users_database
-SET payment_id = %s, payment_status = 'confirmed', ...
-WHERE user_id = %s AND private_channel_id = %s
--- Fails if no record exists
-
-# NEW (UPSERT with conditional logic):
-1. Check if record exists (SELECT id WHERE user_id = %s AND private_channel_id = %s)
-2a. IF EXISTS → UPDATE payment fields only
-2b. IF NOT EXISTS → INSERT new record with:
-    - Default 30-day subscription
-    - Client config from main_clients_database
-    - All NowPayments metadata
-    - payment_status = 'confirmed'
-```
-
-**Alternatives Considered:**
-
-1. **PostgreSQL UPSERT (ON CONFLICT DO UPDATE):**
-   - Requires UNIQUE constraint on `(user_id, private_channel_id)`
-   - Cleaner single-query approach
-   - **Rejected:** Requires database migration, higher risk
-   - **Future consideration:** Add unique constraint in next schema update
-
-2. **Enforce Bot-First Flow:**
-   - Make all payment links single-use with expiration
-   - Reject direct/replayed links
-   - **Rejected:** Reduces user convenience, doesn't solve race conditions
-
-3. **Two-Pass Strategy (CHECK then INSERT/UPDATE):**
-   - **Accepted:** Clear logic, handles both scenarios explicitly
-   - Minimal code changes, lower risk
-   - Easy to debug and maintain
-
-**Rationale:**
-- **Resilience:** Handles edge cases (direct links, race conditions, link sharing)
-- **Backward Compatibility:** Existing bot flow unchanged, UPDATE path preserved
-- **Idempotency:** Safe to retry, no duplicate records created
-- **Zero Downtime:** No schema changes required
-- **User Experience:** Payment links work in all scenarios
-
-**Implementation Details:**
-- File: `np-webhook-10-26/app.py`
-- Function: `update_payment_data()` (lines 290-535)
-- Query client config from `main_clients_database` to populate INSERT
-- Default subscription: 30 days (configurable in future)
-- Calculate expiration dates automatically
-- Full NowPayments metadata preserved in both paths
-
-**Monitoring & Alerts (Recommended):**
-- Track INSERT vs UPDATE ratio (high INSERT = many direct links)
-- Alert on repeated INSERT for same user (potential bot bypass)
-- Dashboard showing payment source: bot vs direct link
-
-**Long-Term Improvements:**
-1. Add `UNIQUE (user_id, private_channel_id)` constraint
-2. Migrate to true PostgreSQL UPSERT syntax
-3. Add payment source tracking field (`payment_source`: 'bot' | 'direct_link')
-4. Implement payment link expiration (24-hour validity)
-5. Add reconciliation job to auto-fix stuck payments
-
-**Lessons Learned:**
-- Never assume single entry point for critical operations
-- UPSERT patterns essential for external webhook integrations
-- Direct payment link support improves user experience but requires defensive coding
-- Production issues often reveal assumptions in system design
-
-### 2025-11-04 Session 62 (Continued - Part 2): System-Wide UUID Truncation Fix - GCHostPay3 ✅
-
-**Decision:** Complete UUID truncation fix rollout to GCHostPay3, securing entire batch conversion critical path.
-
-**Status:** ✅ **GCHOSTPAY3 DEPLOYED & VERIFIED** - Critical path secured
-
-**Context:**
-- GCHostPay3 is the FINAL service in batch conversion path: GCHostPay1 → GCHostPay2 → GCHostPay3
-- Session 60 previously fixed 1 function (`encrypt_gchostpay3_to_gchostpay1_token()`)
-- System-wide audit revealed 7 remaining functions with fixed 16-byte truncation pattern
-- Until GCHostPay3 fully fixed, batch conversions could still fail at payment execution stage
-
-**Services Fixed:**
-1. ✅ GCHostPay1 - 9 functions fixed, deployed and verified
-2. ✅ GCHostPay2 - 8 functions fixed, deployed (Session 62 continued)
-3. ✅ GCHostPay3 - 8 functions total (1 from Session 60 + 7 new), build in progress
-4. ⏳ GCSplit1/2/3 - Instant payment flows (medium priority)
-
-**GCHostPay3 Functions Fixed:**
-- `encrypt_gchostpay1_to_gchostpay2_token()` - Line 248
-- `decrypt_gchostpay1_to_gchostpay2_token()` - Line 297
-- `encrypt_gchostpay2_to_gchostpay1_token()` - Line 400
-- `decrypt_gchostpay2_to_gchostpay1_token()` - Line 450
-- `encrypt_gchostpay1_to_gchostpay3_token()` - Line 562
-- `decrypt_gchostpay1_to_gchostpay3_token()` - Line 620
-- `decrypt_gchostpay3_to_gchostpay1_token()` - Line 806
-
-**Rationale:**
-- Completes end-to-end batch conversion path with consistent variable-length encoding
-- Prevents UUID truncation at payment execution stage (final critical step)
-- All inter-service token exchanges now preserve full unique_id integrity
-- Future-proofs entire payment pipeline for any identifier length
-
-### 2025-11-04 Session 62 (Continued): System-Wide UUID Truncation Fix - GCHostPay2 ✅
-
-**Decision:** Extend variable-length string encoding fix to ALL services with fixed 16-byte encoding pattern, starting with GCHostPay2.
-
-**Status:** ✅ **GCHOSTPAY2 CODE COMPLETE & DEPLOYED**
-
-**Context:**
-- System-wide audit revealed 5 services with identical UUID truncation pattern
-- GCHostPay2 identified as CRITICAL (direct batch conversion path)
-- Same 42 log errors in 24 hours showing pattern across multiple services
-
-**Services Fixed:**
-1. ✅ GCHostPay1 - 9 functions fixed, deployed and verified
-2. ✅ GCHostPay2 - 8 functions fixed, deployed (Session 62 continued)
-3. ✅ GCHostPay3 - 1 function already fixed (Session 60), 7 added (Session 62 continued part 2)
-4. ⏳ GCSplit1/2/3 - Instant payment flows (medium priority)
-
-**Rationale:**
-- Prevents UUID truncation errors from propagating across service boundaries
-- Ensures batch conversions work end-to-end without data loss
-- Future-proofs all services for variable-length identifiers (up to 255 bytes)
-- Consistent encoding strategy across all inter-service communication
-
-### 2025-11-04 Session 62: Variable-Length String Encoding for Token Manager - Fix UUID Truncation ✅
-
-**Decision:** Replace fixed 16-byte encoding with variable-length string packing for ALL unique_id fields in GCHostPay1 token encryption/decryption functions.
-
-**Status:** ✅ **CODE COMPLETE & DEPLOYED**
-
-**Context:**
-- Batch conversions failing 100% with PostgreSQL error: `invalid input syntax for type uuid`
-- UUIDs truncated from 36 characters to 11 characters
-- Root cause: Fixed 16-byte encoding `unique_id.encode('utf-8')[:16]`
-- Batch unique_id: `"batch_{uuid}"` = 42 characters (exceeds 16-byte limit)
-- Instant payment unique_id: `"abc123"` = 6-12 characters (fits in 16 bytes) ✅
-- Identical issue to Session 60, but affecting ALL GCHostPay1 internal tokens
-
-**Problem Analysis:**
-```python
-# BROKEN CODE:
-unique_id = "batch_fc3f8f55-c123-4567-8901-234567890123"  # 42 characters
-unique_id_bytes = unique_id.encode('utf-8')[:16]         # Truncates to 16 bytes
-# Result: b"batch_fc3f8f55-c" (16 bytes)
-# After extraction: "fc3f8f55-c" (11 characters) ❌ INVALID UUID
 

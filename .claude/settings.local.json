@@ -174,7 +174,10 @@
       "mcp__playwright__browser_evaluate",
       "mcp__playwright__browser_select_option",
       "WebFetch(domain:gist.github.com)",
-      "WebFetch(domain:docs.0xprocessing.com)"
+      "WebFetch(domain:docs.0xprocessing.com)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(\"host=/cloudsql/telepay-459221:us-central1:telepaypsql dbname=telepaydb user=postgres\" )"
     ],
     "deny": [],
     "ask": []

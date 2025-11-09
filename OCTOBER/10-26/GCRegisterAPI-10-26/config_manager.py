@@ -22,12 +22,12 @@ class ConfigManager:
             secret_name: Name of the secret (e.g., 'JWT_SECRET_KEY')
 
         Returns:
-            The secret value as a string
+            The secret value as a string (whitespace stripped)
         """
         try:
             secret_path = f"projects/{self.project_id}/secrets/{secret_name}/versions/latest"
             response = self.client.access_secret_version(request={"name": secret_path})
-            secret_value = response.payload.data.decode('UTF-8')
+            secret_value = response.payload.data.decode('UTF-8').strip()  # Strip whitespace/newlines
             print(f"✅ Secret '{secret_name}' loaded successfully")
             return secret_value
         except Exception as e:
@@ -47,6 +47,9 @@ class ConfigManager:
             # JWT Configuration
             'jwt_secret_key': self.access_secret('JWT_SECRET_KEY'),
 
+            # Email Verification & Password Reset Token Signing
+            'signup_secret_key': self.access_secret('SIGNUP_SECRET_KEY'),
+
             # Database Configuration
             'cloud_sql_connection_name': self.access_secret('CLOUD_SQL_CONNECTION_NAME'),
             'database_name': self.access_secret('DATABASE_NAME_SECRET'),
@@ -55,6 +58,13 @@ class ConfigManager:
 
             # CORS Configuration
             'cors_origin': self.access_secret('CORS_ORIGIN') if self._secret_exists('CORS_ORIGIN') else 'https://www.paygateprime.com',
+
+            # Email Service Configuration
+            'sendgrid_api_key': self.access_secret('SENDGRID_API_KEY'),
+            'from_email': self.access_secret('FROM_EMAIL'),
+            'from_name': self.access_secret('FROM_NAME'),
+            # Use CORS_ORIGIN as BASE_URL (frontend URL for email links)
+            'base_url': self.access_secret('CORS_ORIGIN') if self._secret_exists('CORS_ORIGIN') else 'https://www.paygateprime.com',
         }
 
         print("✅ Configuration loaded successfully")

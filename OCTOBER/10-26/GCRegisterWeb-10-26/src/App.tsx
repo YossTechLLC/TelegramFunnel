@@ -3,9 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import RegisterChannelPage from './pages/RegisterChannelPage';
 import EditChannelPage from './pages/EditChannelPage';
+import VerificationStatusPage from './pages/VerificationStatusPage';
+import AccountManagePage from './pages/AccountManagePage';
+import EmailChangeConfirmPage from './pages/EmailChangeConfirmPage';
 import { authService } from './services/authService';
 
 const queryClient = new QueryClient({
@@ -33,11 +38,30 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/confirm-email-change" element={<EmailChangeConfirmPage />} />
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/verification"
+            element={
+              <ProtectedRoute>
+                <VerificationStatusPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/account/manage"
+            element={
+              <ProtectedRoute>
+                <AccountManagePage />
               </ProtectedRoute>
             }
           />

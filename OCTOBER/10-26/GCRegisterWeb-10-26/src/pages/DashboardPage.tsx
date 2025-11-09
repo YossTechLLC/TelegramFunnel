@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
+import Header from '../components/Header';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -11,15 +12,16 @@ export default function DashboardPage() {
   const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
   const [visibleWallets, setVisibleWallets] = useState<{[key: string]: boolean}>({});
 
+  // Fetch current user data for Header component
+  const { data: userData } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: authService.getCurrentUser,
+  });
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['channels'],
     queryFn: channelService.getChannels,
   });
-
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
-  };
 
   const toggleWalletVisibility = (channelId: string) => {
     setVisibleWallets(prev => ({
@@ -62,12 +64,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div>
-        <div className="header">
-          <div className="header-content">
-            <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
-            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
-          </div>
-        </div>
+        <Header user={userData ? { username: userData.username, email_verified: userData.email_verified } : undefined} />
         <div className="container">
           <div className="loading">Loading your channels...</div>
         </div>
@@ -78,12 +75,7 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div>
-        <div className="header">
-          <div className="header-content">
-            <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
-            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
-          </div>
-        </div>
+        <Header user={userData ? { username: userData.username, email_verified: userData.email_verified } : undefined} />
         <div className="container">
           <div className="alert alert-error">Failed to load channels</div>
         </div>
@@ -97,14 +89,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="header">
-        <div className="header-content">
-          <div className="logo dashboard-logo" onClick={() => navigate('/dashboard')}>PayGatePrime</div>
-          <div className="nav">
-            <button onClick={handleLogout} className="btn btn-logout">Logout</button>
-          </div>
-        </div>
-      </div>
+      <Header user={userData ? { username: userData.username, email_verified: userData.email_verified } : undefined} />
 
       <div className="container">
         {deleteError && (
