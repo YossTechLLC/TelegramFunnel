@@ -1,8 +1,123 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-09 Session 100 - **Dashboard Cosmetic Updates Deployed** 🎨✅
+**Last Updated:** 2025-11-09 Session 101 - **Critical Signup Bug Fixed & Deployed** 🔧✅
 
 ## Recent Updates
+
+## 2025-11-09 Session 101: Critical Signup Bug Fix - DEPLOYED ✅🔧
+
+**USER REQUEST**: User reported "Internal server error" when attempting to signup with username `slickjunt`, email `slickjunt@gmail.com`, password `herpderp123`. Investigate root cause and deploy fix.
+
+**INVESTIGATION:**
+
+**Error Reproduction:**
+- ✅ Successfully reproduced error on production signup page
+- Console showed 500 Internal Server Error from API
+- Error message: "Internal server error" displayed to user
+
+**Root Cause Analysis:**
+
+**1. Password Validation Failure (Expected):**
+- Password `herpderp123` missing required uppercase letter
+- Pydantic `SignupRequest` validator correctly rejected it
+- Location: `api/models/auth.py:27-39`
+
+**2. JSON Serialization Bug (Actual Bug):**
+- ValidationError handler tried to return `e.errors()` directly
+- Pydantic's error objects contain non-JSON-serializable `ValueError` exceptions
+- Flask's `jsonify()` crashed with: `TypeError: Object of type ValueError is not JSON serializable`
+- Converted proper 400 validation error → 500 server error
+- Location: `api/routes/auth.py:108-125`
+
+**Cloud Logging Evidence:**
+```
+2025-11-09 21:30:32 UTC
+Traceback: ValidationError → jsonify() → TypeError: Object of type ValueError is not JSON serializable
+HTTP 500 returned to client (should have been 400)
+```
+
+**FIX IMPLEMENTED:**
+
+**File Modified:** `GCRegisterAPI-10-26/api/routes/auth.py`
+
+**Change:** Updated ValidationError exception handler to properly serialize error objects
+
+**Before (Broken):**
+```python
+except ValidationError as e:
+    return jsonify({
+        'success': False,
+        'error': 'Validation failed',
+        'details': e.errors()  # ← CRASHES: Contains ValueError objects
+    }), 400
+```
+
+**After (Fixed):**
+```python
+except ValidationError as e:
+    # Convert validation errors to JSON-safe format
+    error_details = []
+    for error in e.errors():
+        error_details.append({
+            'field': '.'.join(str(loc) for loc in error['loc']),
+            'message': error['msg'],
+            'type': error['type']
+        })
+
+    return jsonify({
+        'success': False,
+        'error': 'Validation failed',
+        'details': error_details  # ← SAFE: Pure dict/str/int
+    }), 400
+```
+
+**DEPLOYMENT:**
+- ✅ Code updated in `api/routes/auth.py` (lines 121-128)
+- ✅ Built Docker image via `gcloud run deploy`
+- ✅ Deployed to Cloud Run: revision `gcregisterapi-10-26-00022-d2n`
+- ✅ Service URL: https://gcregisterapi-10-26-pjxwjsdktq-uc.a.run.app
+- ✅ Deployment successful (100% traffic to new revision)
+
+**TESTING:**
+
+**Test 1: Invalid Password (Reproducing Original Error)**
+- Input: `slickjunt / slickjunt@gmail.com / herpderp123`
+- Expected: 400 Bad Request with validation error
+- Result: ✅ Returns 400 with "Validation failed" message
+- Frontend displays: "Validation failed" (NOT "Internal server error")
+- Status: FIXED ✅
+
+**Test 2: Valid Password (Verify Signup Works)**
+- Input: `slickjunt2 / slickjunt2@gmail.com / Herpderp123` (uppercase H)
+- Expected: 201 Created, account created, auto-login
+- Result: ✅ Account created successfully
+- Redirected to dashboard with "Please Verify E-Mail" button
+- Status: WORKING ✅
+
+**IMPACT:**
+- ✅ Signup validation errors now return proper HTTP 400 (not 500)
+- ✅ Users see clear validation error messages
+- ✅ Frontend can parse and display specific field errors
+- ✅ Server no longer crashes on validation failures
+- ✅ Audit logging continues to work correctly
+- ✅ All password validation requirements enforced
+
+**PASSWORD REQUIREMENTS REMINDER:**
+- Minimum 8 characters
+- At least one uppercase letter (A-Z) ← User's password was missing this
+- At least one lowercase letter (a-z)
+- At least one digit (0-9)
+
+**Files Changed:**
+1. `GCRegisterAPI-10-26/api/routes/auth.py` - Fixed ValidationError handler
+
+**Documentation Updated:**
+1. BUGS.md - Added to "Recently Resolved" section
+2. PROGRESS.md - This entry
+
+**Status**: ✅ DEPLOYED - Critical signup bug resolved, validation errors now handled properly
+
+---
 
 ## 2025-11-09 Session 100: Dashboard Cosmetic Refinements - DEPLOYED ✅🎨
 

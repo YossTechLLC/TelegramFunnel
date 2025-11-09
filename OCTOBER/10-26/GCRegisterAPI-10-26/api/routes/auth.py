@@ -118,10 +118,19 @@ def signup():
                 ip=client_ip
             )
 
+        # Convert validation errors to JSON-safe format
+        error_details = []
+        for error in e.errors():
+            error_details.append({
+                'field': '.'.join(str(loc) for loc in error['loc']),
+                'message': error['msg'],
+                'type': error['type']
+            })
+
         return jsonify({
             'success': False,
             'error': 'Validation failed',
-            'details': e.errors()
+            'details': error_details
         }), 400
 
     except ValueError as e:
