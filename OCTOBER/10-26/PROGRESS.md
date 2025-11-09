@@ -1,8 +1,92 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 84 - **Fixed Paste Duplication Bug** 🐛✅
+**Last Updated:** 2025-11-08 Session 85 - **Endpoint Webhook Analysis Complete** 📊✅
 
 ## Recent Updates
+
+## 2025-11-08 Session 85: Comprehensive Endpoint Webhook Analysis 📊
+
+**DOCUMENTATION COMPLETE**: Created exhaustive analysis of all 13 microservices and their endpoints
+
+**Analysis Scope:**
+- ✅ **13 microservices** analyzed
+- ✅ **44 HTTP endpoints** documented
+- ✅ **12 Cloud Tasks queues** mapped
+- ✅ **7 database tables** operations documented
+- ✅ **6 external API integrations** detailed
+
+**Services Analyzed:**
+1. **np-webhook-10-26** - NowPayments IPN handler
+2. **GCWebhook1-10-26** - Primary payment orchestrator
+3. **GCWebhook2-10-26** - Instant payment handler
+4. **GCSplit1-10-26** - Instant vs threshold router
+5. **GCSplit2-10-26** - ChangeNow exchange creator (instant)
+6. **GCSplit3-10-26** - ChangeNow exchange creator (threshold)
+7. **GCAccumulator-10-26** - Threshold payment accumulator
+8. **GCBatchProcessor-10-26** - Scheduled batch processor
+9. **GCMicroBatchProcessor-10-26** - Micro batch processor
+10. **GCHostPay1-10-26** - Payment orchestrator
+11. **GCHostPay2-10-26** - ChangeNow status checker
+12. **GCHostPay3-10-26** - ETH payment executor
+13. **GCRegisterAPI-10-26** - Channel registration API
+
+**Documentation Created:**
+- ✅ `ENDPOINT_WEBHOOK_ANALYSIS.md` - Comprehensive 1,200+ line analysis
+  - Executive summary
+  - System architecture overview
+  - Detailed endpoint documentation for each service
+  - Flow charts for payment processing
+  - Instant vs threshold decision tree
+  - Batch processing flow
+  - Endpoint interaction matrix
+  - Cloud Tasks queue mapping
+  - Database operations by service
+  - External API integrations
+
+**Key Flow Charts Documented:**
+1. **Full End-to-End Payment Flow** (instant + threshold unified)
+2. **Instant vs Threshold Decision Tree** (GCSplit1 routing)
+3. **Batch Processing Architecture** (threshold payments ≥ $100)
+
+**Endpoint Breakdown:**
+- **np-webhook**: 4 endpoints (IPN, payment-status API, payment-processing page, health)
+- **GCWebhook1**: 4 endpoints (initial request, validated payment, payment completed, health)
+- **GCWebhook2**: 3 endpoints (instant flow, status verified, health)
+- **GCSplit1**: 2 endpoints (routing decision, health)
+- **GCSplit2**: 2 endpoints (create exchange instant, health)
+- **GCSplit3**: 2 endpoints (create exchange threshold, health)
+- **GCAccumulator**: 3 endpoints (accumulate, swap executed, health)
+- **GCBatchProcessor**: 2 endpoints (scheduled trigger, health)
+- **GCMicroBatchProcessor**: 2 endpoints (scheduled trigger, health)
+- **GCHostPay1**: 4 endpoints (orchestrate, status verified, payment completed, health)
+- **GCHostPay2**: 2 endpoints (status check, health)
+- **GCHostPay3**: 2 endpoints (execute payment, health)
+- **GCRegisterAPI**: 14 endpoints (auth, channels CRUD, mappings, health, root)
+
+**External API Integrations:**
+1. **NowPayments API** - Invoice creation (GCWebhook1)
+2. **ChangeNow API** - Exchange creation + status (GCSplit2, GCSplit3, GCHostPay2)
+3. **CoinGecko API** - Crypto price fetching (np-webhook)
+4. **Alchemy RPC** - Ethereum blockchain (GCHostPay3)
+5. **Telegram Bot API** - User notifications (GCWebhook1, GCAccumulator)
+
+**Database Operations:**
+- `private_channel_users_database` - User subscriptions (np-webhook, GCWebhook1)
+- `main_clients_database` - Channel config (GCWebhook1, GCAccumulator, GCRegisterAPI)
+- `batch_conversions` - Threshold batching (GCSplit1, GCBatchProcessor, GCAccumulator)
+- `hostpay_transactions` - Successful payments (GCHostPay3)
+- `failed_transactions` - Failed payments (GCHostPay3)
+- `processed_payments` - Idempotency tracking (np-webhook, GCWebhook1)
+- `users` - Authentication (GCRegisterAPI)
+
+**Impact:**
+- Complete understanding of microservices architecture
+- Clear documentation for onboarding and maintenance
+- Visual flow charts for payment flows
+- Endpoint interaction matrix for debugging
+- Foundation for future architectural decisions
+
+---
 
 ## 2025-11-08 Session 84: Fixed Wallet Address Paste Duplication Bug 🐛✅
 

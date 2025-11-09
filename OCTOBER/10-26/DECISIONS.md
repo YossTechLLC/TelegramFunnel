@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-08 Session 84 - **Paste Event Handler with preventDefault**
+**Last Updated:** 2025-11-08 Session 85 - **Comprehensive Endpoint Documentation Strategy**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -14,10 +14,102 @@ This document records all significant architectural decisions made during the de
 5. [Database Design](#database-design)
 6. [Error Handling & Resilience](#error-handling--resilience)
 7. [User Interface](#user-interface)
+8. [Documentation Strategy](#documentation-strategy)
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-08 Session 85: Comprehensive Endpoint Documentation Strategy
+
+**Decision:** Create exhaustive endpoint documentation for all 13 microservices with visual flow charts
+
+**Context:**
+- TelePay platform consists of 13 distributed microservices on Google Cloud Run
+- Complex payment flows spanning multiple services (instant vs threshold)
+- Need for clear documentation for onboarding, debugging, and maintenance
+- User requested comprehensive analysis of all endpoints and their interactions
+
+**Problem:**
+- No centralized documentation of all endpoints across services
+- Unclear how different webhooks interact via Cloud Tasks
+- Difficult to understand full payment flow from end to end
+- No visual representation of instant vs threshold routing logic
+- Hard to debug issues without endpoint interaction matrix
+
+**Solution:**
+Created `ENDPOINT_WEBHOOK_ANALYSIS.md` with:
+1. **Service-by-service endpoint documentation** (44 endpoints total)
+2. **Visual flow charts**:
+   - Full end-to-end payment flow (instant + threshold unified)
+   - Instant vs threshold decision tree (GCSplit1 routing)
+   - Batch processing architecture (scheduled jobs)
+3. **Endpoint interaction matrix** (visual grid of service calls)
+4. **Cloud Tasks queue mapping** (12 queues documented)
+5. **Database operations by service** (7 tables mapped)
+6. **External API integrations** (6 APIs detailed)
+
+**Documentation Structure:**
+```
+ENDPOINT_WEBHOOK_ANALYSIS.md
+├── Executive Summary (13 services, 44 endpoints, 2 flows)
+├── System Architecture Overview (visual diagram)
+├── Webhook Services & Endpoints (13 sections)
+│   ├── np-webhook-10-26 (4 endpoints)
+│   ├── GCWebhook1-10-26 (4 endpoints)
+│   ├── GCWebhook2-10-26 (3 endpoints)
+│   ├── GCSplit1-10-26 (2 endpoints)
+│   ├── GCSplit2-10-26 (2 endpoints)
+│   ├── GCSplit3-10-26 (2 endpoints)
+│   ├── GCAccumulator-10-26 (3 endpoints)
+│   ├── GCBatchProcessor-10-26 (2 endpoints)
+│   ├── GCMicroBatchProcessor-10-26 (2 endpoints)
+│   ├── GCHostPay1-10-26 (4 endpoints)
+│   ├── GCHostPay2-10-26 (2 endpoints)
+│   ├── GCHostPay3-10-26 (2 endpoints)
+│   └── GCRegisterAPI-10-26 (14 endpoints)
+├── Flow Chart: Payment Processing Flow (full e2e)
+├── Flow Chart: Instant vs Threshold Decision Tree
+├── Flow Chart: Batch Processing Flow
+├── Endpoint Interaction Matrix (visual grid)
+├── Cloud Tasks Queue Mapping (12 queues)
+├── Database Operations by Service (7 tables)
+└── External API Integrations (6 APIs)
+```
+
+**Rationale:**
+- **Centralized knowledge base**: All endpoint information in one place
+- **Visual learning**: Flow charts aid understanding of complex flows
+- **Debugging aid**: Interaction matrix helps trace requests through system
+- **Onboarding**: New developers can understand architecture quickly
+- **Maintenance**: Clear documentation prevents knowledge loss
+- **Future planning**: Foundation for architectural changes
+
+**Impact:**
+- ✅ Complete understanding of microservices architecture
+- ✅ Visual flow charts for payment flows (instant < $100, threshold ≥ $100)
+- ✅ Endpoint interaction matrix for debugging request flows
+- ✅ Cloud Tasks queue mapping for async orchestration
+- ✅ Database operations documented by service
+- ✅ External API integrations clearly listed
+- ✅ Foundation for future architectural decisions
+
+**Alternative Considered:**
+- Inline code comments only
+- **Rejected:** Code comments don't provide system-wide view or visual flow charts
+
+**Pattern for Future:**
+- Maintain ENDPOINT_WEBHOOK_ANALYSIS.md as living document
+- Update when adding new endpoints or services
+- Include visual flow charts for complex interactions
+- Document Cloud Tasks queues and database operations
+
+**Related Documents:**
+- PAYOUT_ARCHITECTURE_FLOWCHART.md (high-level flow)
+- INSTANT_VS_THRESHOLD_STRUCTURE.canvas (routing logic)
+- ENDPOINT_WEBHOOK_ANALYSIS.md (comprehensive endpoint reference)
+
+---
 
 ### 2025-11-08 Session 84: Paste Event Handler Must Prevent Default Behavior
 
