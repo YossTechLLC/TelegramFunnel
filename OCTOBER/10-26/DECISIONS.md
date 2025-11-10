@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-09 Session 99 - **Rate Limiting Adjustment**
+**Last Updated:** 2025-11-09 Session 103 - **Password Reset Frontend Implementation**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -18,10 +18,106 @@ This document records all significant architectural decisions made during the de
 9. [Email Verification & Account Management](#email-verification--account-management)
 10. [Deployment Strategy](#deployment-strategy)
 11. [Rate Limiting Strategy](#rate-limiting-strategy)
+12. [Password Reset Strategy](#password-reset-strategy)
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-09 Session 103: Password Reset Frontend Implementation - OWASP-Compliant Flow 🔐
+
+**Decision:** Implement frontend password reset flow leveraging existing OWASP-compliant backend implementation.
+
+**Context:**
+- Users with verified email addresses had no way to recover forgotten passwords
+- Backend already implemented complete OWASP-compliant password reset functionality
+- Missing only frontend entry point (ForgotPasswordPage) to initiate the flow
+
+**Problem:**
+- **No Password Recovery**: Users locked out of accounts with no recovery method
+- **Backend Ready**: `/api/auth/forgot-password` & `/api/auth/reset-password` endpoints fully implemented
+- **Partial Frontend**: ResetPasswordPage exists but no way to trigger the flow
+
+**Solution Implemented:**
+
+**Architecture Decisions:**
+
+1. **Anti-User Enumeration Pattern** 🔒
+   - ForgotPasswordPage shows identical success message for existing/non-existing accounts
+   - Backend returns 200 OK in both cases
+   - Prevents attackers from discovering registered email addresses
+   - Follows OWASP Forgot Password Cheat Sheet recommendations
+
+2. **Token Security** 🛡️
+   - Uses existing `itsdangerous.URLSafeTimedSerializer` from backend
+   - Cryptographic signing with secret key + salt (`password-reset-v1`)
+   - 1-hour expiration enforced both by itsdangerous and database timestamp
+   - Single-use tokens (cleared from DB after successful reset)
+
+3. **User Flow Design** 🔄
+   ```
+   LoginPage → [Forgot password?] → ForgotPasswordPage
+   ↓
+   Enter Email → Backend generates token → Email sent
+   ↓
+   User clicks email link → ResetPasswordPage?token=XXX
+   ↓
+   Enter new password → Token validated → Password updated → Redirect to Login
+   ```
+
+4. **Consistent UI/UX** 🎨
+   - ForgotPasswordPage matches styling of LoginPage/SignupPage
+   - Uses same `.auth-container` and `.auth-card` classes
+   - "Forgot password?" link right-aligned below password field (standard pattern)
+   - Success screen with clear instructions
+
+**Files Created:**
+- `src/pages/ForgotPasswordPage.tsx` - Email input form + success screen
+
+**Files Modified:**
+- `src/App.tsx` - Added route for `/forgot-password`
+- `src/pages/LoginPage.tsx` - Added "Forgot password?" link
+
+**Rate Limiting (Inherited from Backend):**
+- `/auth/forgot-password`: 3 requests per hour per IP
+- `/auth/reset-password`: 5 requests per 15 minutes per IP
+- Prevents brute force token guessing
+
+**Trade-offs:**
+
+✅ **Benefits:**
+- Complete password recovery functionality for users
+- OWASP-compliant security (anti-enumeration, secure tokens)
+- Minimal frontend code (leveraged existing backend)
+- Consistent with existing verification flow patterns
+- Single-use tokens prevent replay attacks
+
+⚠️ **Considerations:**
+- Requires SendGrid API key for production email delivery (already configured)
+- Dev mode prints reset links to console (acceptable for development)
+- Token expiration (1 hour) balances security vs usability
+
+**Alternatives Considered:**
+
+1. **Security Questions** ❌
+   - Rejected: Weaker security than email-based reset
+   - OWASP discourages security questions (guessable answers)
+
+2. **SMS-Based Reset** ❌
+   - Rejected: Adds cost, requires phone number collection
+   - Email already verified during registration
+
+3. **Admin-Assisted Reset** ❌
+   - Rejected: Poor UX, doesn't scale, privacy concerns
+
+**Future Considerations:**
+- Add optional 2FA for password reset (extra verification step)
+- Consider rate limiting per email address (not just IP)
+- Add audit logging for password reset attempts
+
+**Status**: ✅ IMPLEMENTED
+
+---
 
 ### 2025-11-09 Session 99: Rate Limiting Adjustment - Global Limits Increased 3x ⏱️
 

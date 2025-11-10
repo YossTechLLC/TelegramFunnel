@@ -179,7 +179,8 @@
       "mcp__context7__get-library-docs",
       "Bash(\"host=/cloudsql/telepay-459221:us-central1:telepaypsql dbname=telepaydb user=postgres\" )",
       "Bash(__NEW_LINE__ echo \"📊 TRUNCATION SUMMARY\")",
-      "Bash(__NEW_LINE__ echo \"📊 ESTIMATED TOKEN USAGE (rough calculation)\")"
+      "Bash(__NEW_LINE__ echo \"📊 ESTIMATED TOKEN USAGE (rough calculation)\")",
+      "WebFetch(domain:cheatsheetseries.owasp.org)"
     ],
     "deny": [],
     "ask": []
