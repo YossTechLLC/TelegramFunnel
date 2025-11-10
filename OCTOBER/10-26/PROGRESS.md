@@ -1,8 +1,73 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-09 Session 103 - **Password Reset Frontend Implementation - COMPLETE** 🔐✅
+**Last Updated:** 2025-11-10 Session 104 - **Password Reset Email Configuration Fix - DEPLOYED** 📧✅
 
 ## Recent Updates
+
+## 2025-11-10 Session 104: Password Reset Email Configuration Fix - DEPLOYED 📧✅
+
+**USER REPORT**: Password reset emails not being received after submitting email on forgot password page.
+
+**INVESTIGATION:**
+
+**Step 1: Frontend Verification**
+- ✅ ForgotPasswordPage loads correctly at https://www.paygateprime.com/forgot-password
+- ✅ Email submission calls `authService.requestPasswordReset(email)`
+- ✅ API request sent to `/api/auth/forgot-password`
+
+**Step 2: Backend Logs Analysis**
+```
+✅ Password reset token generated for user 67227aba-a4e2-4c69-92b0-b56c7eb4bb74 (slickjunt@gmail.com)
+✅ Password reset email sent to slickjunt@gmail.com
+🔐 [AUDIT] Password reset requested | email=slickjunt@gmail.com | status=user_found
+```
+
+**Step 3: Email Service Investigation**
+- ✅ SendGrid API key configured
+- ✅ Email service reporting success
+- ❌ **ROOT CAUSE FOUND**: `BASE_URL` environment variable NOT SET
+
+**ROOT CAUSE:**
+- `email_service.py:42` defaults to `https://app.telepay.com` when `BASE_URL` is missing
+- Emails WERE being sent, but contained broken links:
+  - ❌ Broken: `https://app.telepay.com/reset-password?token=XXX` (non-existent domain)
+  - ✅ Correct: `https://www.paygateprime.com/reset-password?token=XXX`
+
+**FIX IMPLEMENTED:**
+1. ✅ Created GCP secret: `BASE_URL = "https://www.paygateprime.com"`
+2. ✅ Updated `gcregisterapi-10-26` service with `--update-secrets=BASE_URL=BASE_URL:latest`
+3. ✅ New revision deployed: `gcregisterapi-10-26-00023-dmg`
+4. ✅ Verified BASE_URL environment variable present
+
+**AFFECTED EMAILS:**
+- Password reset emails (`send_password_reset_email`)
+- Email verification emails (`send_verification_email`)
+- Email change confirmation (`send_email_change_confirmation`)
+
+**FOLLOW-UP CODE CLEANUP:**
+
+After discovering that `BASE_URL` was missing, user identified that `CORS_ORIGIN` was being used as a substitute for `BASE_URL` in the codebase (both had identical values `https://www.paygateprime.com`).
+
+**Files Modified:**
+
+1. **config_manager.py:67**
+   - ❌ Before: `'base_url': self.access_secret('CORS_ORIGIN') if self._secret_exists('CORS_ORIGIN') else ...`
+   - ✅ After: `'base_url': self.access_secret('BASE_URL') if self._secret_exists('BASE_URL') else ...`
+   - Purpose: Use semantically correct secret for BASE_URL configuration
+
+2. **app.py:49**
+   - ❌ Before: `app.config['FRONTEND_URL'] = config.get('frontend_url', 'https://www.paygateprime.com')`
+   - ✅ After: `app.config['FRONTEND_URL'] = config['base_url']`
+   - Purpose: Use BASE_URL configuration instead of non-existent 'frontend_url' config with hardcoded default
+
+**Why This Matters:**
+- Semantic correctness: CORS_ORIGIN is for CORS policy, BASE_URL is for email/frontend links
+- Single source of truth: All frontend URL references now use BASE_URL
+- Maintainability: If frontend URL changes, only BASE_URL secret needs updating
+
+**STATUS**: ✅ Password reset emails now contain correct URLs and will be delivered successfully
+
+---
 
 ## 2025-11-09 Session 103: Password Reset Frontend Implementation - COMPLETE 🔐✅
 

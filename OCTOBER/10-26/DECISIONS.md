@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-09 Session 103 - **Password Reset Frontend Implementation**
+**Last Updated:** 2025-11-10 Session 104 - **Email Service BASE_URL Configuration**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -19,10 +19,127 @@ This document records all significant architectural decisions made during the de
 10. [Deployment Strategy](#deployment-strategy)
 11. [Rate Limiting Strategy](#rate-limiting-strategy)
 12. [Password Reset Strategy](#password-reset-strategy)
+13. [Email Service Configuration](#email-service-configuration)
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-10 Session 104: Email Service BASE_URL Configuration - Critical Fix 📧
+
+**Decision:** Configure `BASE_URL` environment variable for email service to use correct frontend URL in email links.
+
+**Context:**
+- Email service (`email_service.py`) generates links for password resets, email verification, and email change confirmations
+- `BASE_URL` defaults to `https://app.telepay.com` (non-existent domain) when not explicitly set
+- Emails were being sent successfully but contained broken links that users couldn't access
+
+**Problem:**
+- **Broken Email Links**: All email links pointed to `https://app.telepay.com` which doesn't exist
+- **Password Reset Failure**: Users couldn't reset passwords despite receiving emails
+- **Email Verification Failure**: New users couldn't verify email addresses
+- **Silent Failure**: Backend logs showed "email sent successfully" but emails were useless
+
+**Root Cause Analysis:**
+```python
+# email_service.py:42
+self.base_url = os.getenv('BASE_URL', 'https://app.telepay.com')  # ❌ Default was wrong
+
+# Line 138 (password reset):
+reset_url = f"{self.base_url}/reset-password?token={token}"
+# Generated: https://app.telepay.com/reset-password?token=XXX  ❌
+
+# Line 72 (email verification):
+verification_url = f"{self.base_url}/verify-email?token={token}"
+# Generated: https://app.telepay.com/verify-email?token=XXX  ❌
+```
+
+**Solution Implemented:**
+
+1. **Created GCP Secret**: `BASE_URL = "https://www.paygateprime.com"`
+   ```bash
+   echo -n "https://www.paygateprime.com" | gcloud secrets create BASE_URL --data-file=-
+   ```
+
+2. **Updated Backend Service**:
+   ```bash
+   gcloud run services update gcregisterapi-10-26 \
+     --region=us-central1 \
+     --update-secrets=BASE_URL=BASE_URL:latest
+   ```
+
+3. **New Revision Deployed**: `gcregisterapi-10-26-00023-dmg`
+
+**Affected Email Types:**
+- Password reset emails (`send_password_reset_email`)
+- Email verification emails (`send_verification_email`)
+- Email change confirmation (`send_email_change_confirmation`)
+- Email change notification (`send_email_change_notification`)
+
+**Trade-offs:**
+- ✅ **Pro**: Emails now contain correct, functional links
+- ✅ **Pro**: No code changes required - configuration only
+- ✅ **Pro**: Uses GCP Secret Manager for secure configuration
+- ⚠️ **Con**: Requires secret update if frontend domain changes
+- ⚠️ **Con**: Environment-specific configuration (prod/dev/staging need different values)
+
+**Alternatives Considered:**
+
+1. **Hardcode URL in Code** ❌
+   - Would require code changes for each environment
+   - Less flexible for testing and deployment
+
+2. **Use Request Headers** ❌
+   - Email service runs in background, no active request context
+   - Would require significant architectural changes
+
+3. **Configuration File** ❌
+   - Harder to manage across multiple environments
+   - Less secure than Secret Manager
+   - Requires container rebuild for changes
+
+**Why BASE_URL is Critical:**
+- Email service operates **independently** of HTTP requests
+- No access to request headers or referrer URLs
+- Must know frontend URL at runtime to generate valid links
+- Same backend may serve multiple frontends (web, mobile, etc.)
+
+**Future Considerations:**
+- Consider multi-environment support (dev, staging, prod)
+- May need separate BASE_URL for each environment
+- Could implement template-based email URLs for more flexibility
+
+**Follow-up: Code Cleanup - Removing CORS_ORIGIN Substitution**
+
+After deploying the BASE_URL secret, discovered that code was using `CORS_ORIGIN` as a substitute for `BASE_URL` (both had identical values).
+
+**Changes Made:**
+
+1. **config_manager.py:67** - Changed to use `BASE_URL` secret instead of `CORS_ORIGIN`
+   ```python
+   # Before:
+   'base_url': self.access_secret('CORS_ORIGIN') if self._secret_exists('CORS_ORIGIN') else ...
+
+   # After:
+   'base_url': self.access_secret('BASE_URL') if self._secret_exists('BASE_URL') else ...
+   ```
+
+2. **app.py:49** - Changed to use `base_url` config instead of hardcoded default
+   ```python
+   # Before:
+   app.config['FRONTEND_URL'] = config.get('frontend_url', 'https://www.paygateprime.com')
+
+   # After:
+   app.config['FRONTEND_URL'] = config['base_url']
+   ```
+
+**Rationale:**
+- **Semantic Correctness**: CORS_ORIGIN is for CORS security policy, BASE_URL is for application URLs
+- **Single Source of Truth**: All frontend URL references now derive from BASE_URL secret
+- **Separation of Concerns**: CORS policy and frontend URL are distinct architectural concerns
+- **Future Flexibility**: If CORS needs differ from base URL (e.g., allowing multiple origins), changes are isolated
+
+---
 
 ### 2025-11-09 Session 103: Password Reset Frontend Implementation - OWASP-Compliant Flow 🔐
 

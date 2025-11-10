@@ -63,8 +63,8 @@ class ConfigManager:
             'sendgrid_api_key': self.access_secret('SENDGRID_API_KEY'),
             'from_email': self.access_secret('FROM_EMAIL'),
             'from_name': self.access_secret('FROM_NAME'),
-            # Use CORS_ORIGIN as BASE_URL (frontend URL for email links)
-            'base_url': self.access_secret('CORS_ORIGIN') if self._secret_exists('CORS_ORIGIN') else 'https://www.paygateprime.com',
+            # Frontend URL for email links (password reset, email verification, etc.)
+            'base_url': self.access_secret('BASE_URL') if self._secret_exists('BASE_URL') else 'https://www.paygateprime.com',
         }
 
         print("✅ Configuration loaded successfully")

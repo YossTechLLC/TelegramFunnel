@@ -46,7 +46,7 @@ os.environ['FROM_NAME'] = config['from_name']
 os.environ['BASE_URL'] = config['base_url']
 
 # Frontend URL for email links (email change confirmation, etc.)
-app.config['FRONTEND_URL'] = config.get('frontend_url', 'https://www.paygateprime.com')
+app.config['FRONTEND_URL'] = config['base_url']
 
 # Initialize JWT
 jwt = JWTManager(app)
