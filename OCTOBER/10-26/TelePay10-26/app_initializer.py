@@ -11,6 +11,8 @@ from menu_handlers import MenuHandlers
 from bot_manager import BotManager
 from message_utils import MessageUtils
 from subscription_manager import SubscriptionManager
+from closed_channel_manager import ClosedChannelManager
+from donation_input_handler import DonationKeypadHandler
 
 class AppInitializer:
     def __init__(self):
@@ -39,6 +41,8 @@ class AppInitializer:
         self.bot_manager = None
         self.message_utils = None
         self.subscription_manager = None
+        self.closed_channel_manager = None
+        self.donation_handler = None
     
     def initialize(self):
         """Initialize all application components."""
@@ -57,11 +61,24 @@ class AppInitializer:
         
         # Initialize broadcast manager
         self.broadcast_manager = BroadcastManager(
-            self.config['bot_token'], 
-            self.config['bot_username'], 
+            self.config['bot_token'],
+            self.config['bot_username'],
             self.db_manager
         )
-        
+
+        # Initialize closed channel manager for donations
+        self.closed_channel_manager = ClosedChannelManager(
+            self.config['bot_token'],
+            self.db_manager
+        )
+        self.logger.info("✅ Closed Channel Manager initialized")
+
+        # Initialize donation input handler
+        self.donation_handler = DonationKeypadHandler(
+            self.db_manager
+        )
+        self.logger.info("✅ Donation Input Handler initialized")
+
         # Create payment gateway wrapper function
         async def payment_gateway_wrapper(update, context):
             print(f"🔄 [DEBUG] Payment gateway wrapper called for user: {update.effective_user.id if update.effective_user else 'Unknown'}")
@@ -83,12 +100,13 @@ class AppInitializer:
         # Initialize menu handlers and bot manager
         self.menu_handlers = MenuHandlers(self.input_handlers, payment_gateway_wrapper)
         self.bot_manager = BotManager(
-            self.input_handlers, 
-            self.menu_handlers.main_menu_callback, 
-            self.menu_handlers.start_bot, 
+            self.input_handlers,
+            self.menu_handlers.main_menu_callback,
+            self.menu_handlers.start_bot,
             payment_gateway_wrapper,
             self.menu_handlers,
-            self.db_manager
+            self.db_manager,
+            self.donation_handler
         )
         
         # Initialize subscription manager

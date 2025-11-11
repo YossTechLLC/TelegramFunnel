@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-10 Session 104 - **Email Service BASE_URL Configuration**
+**Last Updated:** 2025-11-11 Session 105 - **Donation Rework: Closed Channel Architecture**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -20,10 +20,157 @@ This document records all significant architectural decisions made during the de
 11. [Rate Limiting Strategy](#rate-limiting-strategy)
 12. [Password Reset Strategy](#password-reset-strategy)
 13. [Email Service Configuration](#email-service-configuration)
+14. [Donation Architecture](#donation-architecture)
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 105: Donation Rework - Closed Channel Architecture 💝
+
+**Decision:** Migrate donation functionality from open channels to closed channels with inline numeric keypad for custom amount input.
+
+**Context:**
+- Previous implementation: Donation button in open channels → ForceReply for amount input
+- Problem: ForceReply doesn't work reliably in channels (Telegram limitation)
+- User experience: Poor UX with text-based input, prone to errors
+- Security concern: Open channel donations exposed sensitive payment flows publicly
+
+**Architectural Decisions:**
+
+#### 1. Channel Separation: Open vs Closed
+**Decision:** Separate donation logic from broadcast logic into dedicated modules
+- `broadcast_manager.py` → Handles only open channel subscription broadcasts
+- `closed_channel_manager.py` → Handles only closed channel donation messages
+- **Rationale:**
+  - Single Responsibility Principle
+  - Easier to maintain and test
+  - Clear separation of concerns (subscriptions vs donations)
+  - Allows independent evolution of each flow
+
+#### 2. Inline Numeric Keypad UI
+**Decision:** Implement calculator-style inline keyboard instead of text input
+- **Alternatives Considered:**
+  - ForceReply: ❌ Doesn't work in channels
+  - Direct text messages: ❌ No validation, error-prone
+  - Pre-set amount buttons: ❌ Not flexible enough
+- **Chosen Solution:** Inline numeric keypad with real-time validation
+- **Rationale:**
+  - Works reliably in channels (inline keyboards supported)
+  - Real-time validation prevents invalid inputs
+  - Intuitive calculator-style UX
+  - No need for text parsing or error recovery
+
+#### 3. Input Validation Strategy
+**Decision:** Client-side validation in button handlers, no server-side recovery needed
+- **Validation Rules:**
+  - Min: $1.00, Max: $9999.99
+  - Single decimal point only
+  - Max 2 decimal places
+  - Max 4 digits before decimal
+  - Replace leading zeros (e.g., "05" → "5")
+- **Implementation:** Button press validation rejects invalid inputs with alerts
+- **Rationale:**
+  - Prevents invalid states from occurring
+  - Better UX (immediate feedback)
+  - Simpler error handling (no recovery needed)
+  - Reduces server validation burden
+
+#### 4. Security: Channel ID Validation
+**Decision:** Validate channel IDs in callback data before processing donations
+- **Attack Vector:** Malicious users could craft fake callback data
+- **Protection:** `database.channel_exists()` verifies channel before accepting donation
+- **Implementation:** Early validation in `start_donation_input()` handler
+- **Rationale:**
+  - Defense in depth
+  - Prevents fake donations to non-existent channels
+  - Logs suspicious attempts for monitoring
+
+#### 5. Payment Gateway Integration
+**Decision:** Reuse existing `PaymentGatewayManager` with compatible order_id format
+- **Order ID Format:** `PGP-{user_id}|{open_channel_id}` (same as subscriptions)
+- **Rationale:**
+  - No webhook changes required
+  - Existing IPN handlers work unchanged
+  - Consistent order tracking across donations and subscriptions
+  - Simpler testing and deployment
+
+#### 6. State Management
+**Decision:** Use `context.user_data` for donation flow state, not database
+- **State Stored:**
+  - `donation_amount_building`: Current amount being entered
+  - `donation_open_channel_id`: Channel for payout routing
+  - `donation_started_at`: Timestamp for timeout tracking
+  - `is_donation`: Flag to distinguish from subscriptions
+- **Rationale:**
+  - In-memory state sufficient for short-lived flow
+  - No database writes until payment confirmed
+  - Simplifies error recovery (state auto-cleared on restart)
+  - Reduces database load
+
+#### 7. Error Handling Strategy
+**Decision:** Graceful degradation with comprehensive logging
+- **Channel-Level Errors:** Continue to next channel if broadcast fails
+- **User-Level Errors:** Show user-friendly error messages, log detailed errors
+- **Payment Errors:** Fallback to error message, allow user to retry
+- **Rationale:**
+  - One channel failure shouldn't block others
+  - User experience prioritized over perfect accuracy
+  - Detailed logs enable post-mortem analysis
+
+#### 8. Module Organization
+**Decision:** Two new standalone modules, minimal changes to existing code
+- **New Files:**
+  - `closed_channel_manager.py` - Broadcast donation messages
+  - `donation_input_handler.py` - Handle keypad interactions
+- **Modified Files:**
+  - `database.py` - Added 2 query methods
+  - `broadcast_manager.py` - Removed donation button
+  - `app_initializer.py` - Initialize new managers
+  - `bot_manager.py` - Register new handlers
+- **Rationale:**
+  - Minimizes risk of breaking existing functionality
+  - New code isolated for easier testing
+  - Clear migration path (old code commented, not deleted)
+
+#### 9. Backward Compatibility
+**Decision:** Keep old donation code commented, not deleted
+- **Location:** `broadcast_manager.py` lines 69-75
+- **Rationale:**
+  - Easy rollback if critical issues found
+  - Historical reference for future developers
+  - Documents what was changed and why
+
+#### 10. No Database Schema Changes
+**Decision:** Use existing schema, no migrations required
+- **Schema Used:**
+  - `closed_channel_id` - Already exists in `main_clients_database`
+  - `client_payout_strategy` - Already exists
+  - `client_payout_threshold_usd` - Already exists
+- **Rationale:**
+  - Faster implementation
+  - Lower deployment risk
+  - Existing fields serve donation needs perfectly
+
+**Impact:**
+- ✅ Better UX: Calculator-style input vs text input
+- ✅ More reliable: Inline keyboard works in channels
+- ✅ More secure: Channel ID validation prevents abuse
+- ✅ Cleaner architecture: Separation of concerns
+- ✅ Easier to maintain: Modular design
+- ⬜ Testing required: New code paths need validation
+
+**Trade-offs:**
+- Additional code complexity (2 new modules, ~890 lines)
+- New callback patterns to monitor (`donate_*`)
+- Requires manual testing before production deployment
+
+**Reference Documents:**
+- Architecture: `DONATION_REWORK.md`
+- Implementation: `DONATION_REWORK_CHECKLIST.md`
+- Progress: `DONATION_REWORK_CHECKLIST_PROGRESS.md`
+
+---
 
 ### 2025-11-10 Session 104: Email Service BASE_URL Configuration - Critical Fix 📧
 

@@ -44,9 +44,15 @@ class BroadcastManager:
         return InlineKeyboardMarkup([[button] for button in buttons])
     
     def broadcast_hash_links(self):
+        """
+        Broadcast subscription links to open channels.
+
+        Note: Donation buttons are no longer included in open channel broadcasts.
+        Donations are now handled in closed channels. See closed_channel_manager.py.
+        """
         if not self.open_channel_list:
             self.fetch_open_channel_list()
-        
+
         for chat_id in self.open_channel_list:
             data = self.open_channel_info_map.get(chat_id, {})
             base_hash = self.encode_id(chat_id)
@@ -65,12 +71,15 @@ class BroadcastManager:
                 url = f"https://t.me/{self.bot_username}?start={token}"
                 emoji = tier_emojis.get(idx, "💰")
                 buttons_cfg.append({"text": f"{emoji} ${price} for {days} days", "url": url})
-            
-            # Add donation button
-            donation_token = f"{base_hash}_DONATE"
-            donation_url = f"https://t.me/{self.bot_username}?start={donation_token}"
-            buttons_cfg.append({"text": "💝 Donate", "url": donation_url})
-            
+
+            # REMOVED: Donation button migrated to closed channels
+            # See: closed_channel_manager.py for new donation implementation
+            # See: DONATION_REWORK.md for architecture details
+            # Donations are now handled exclusively in closed channels via inline keypad
+            # donation_token = f"{base_hash}_DONATE"
+            # donation_url = f"https://t.me/{self.bot_username}?start={donation_token}"
+            # buttons_cfg.append({"text": "💝 Donate", "url": donation_url})
+
             if not buttons_cfg:
                 continue
             

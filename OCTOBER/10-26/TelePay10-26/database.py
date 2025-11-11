@@ -189,7 +189,7 @@ class DatabaseManager:
         """
         Get the first available channel for donations.
         This can be used as a fallback when no specific channel is provided.
-        
+
         Returns:
             The first available open_channel_id, or None if no channels exist
         """
@@ -206,7 +206,111 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ [DEBUG] Error getting default donation channel: {e}")
             return None
-    
+
+    def fetch_all_closed_channels(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all closed channels with their associated metadata for donation messages.
+
+        Returns:
+            List of dicts containing:
+            - closed_channel_id: The closed channel ID
+            - open_channel_id: The associated open channel ID
+            - closed_channel_title: Title of the closed channel
+            - closed_channel_description: Description of the closed channel
+            - payout_strategy: "instant" or "threshold"
+            - payout_threshold_usd: Threshold amount for batch payouts
+
+        Example:
+            [
+                {
+                    "closed_channel_id": "-1002345678901",
+                    "open_channel_id": "-1003268562225",
+                    "closed_channel_title": "Premium Content",
+                    "closed_channel_description": "Exclusive access",
+                    "payout_strategy": "threshold",
+                    "payout_threshold_usd": 100.00
+                },
+                ...
+            ]
+        """
+        try:
+            conn = self.get_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT
+                    closed_channel_id,
+                    open_channel_id,
+                    closed_channel_title,
+                    closed_channel_description,
+                    client_payout_strategy,
+                    client_payout_threshold_usd
+                FROM main_clients_database
+                WHERE closed_channel_id IS NOT NULL
+                    AND closed_channel_id != ''
+                ORDER BY closed_channel_id
+            """)
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+
+            result = []
+            for row in rows:
+                result.append({
+                    "closed_channel_id": row[0],
+                    "open_channel_id": row[1],
+                    "closed_channel_title": row[2] if row[2] else "Premium Channel",
+                    "closed_channel_description": row[3] if row[3] else "exclusive content",
+                    "payout_strategy": row[4] if row[4] else "instant",
+                    "payout_threshold_usd": row[5] if row[5] else 0.0
+                })
+
+            print(f"📋 Fetched {len(result)} closed channels for donation messages")
+            return result
+
+        except Exception as e:
+            print(f"❌ Error fetching closed channels: {e}")
+            return []
+
+    def channel_exists(self, open_channel_id: str) -> bool:
+        """
+        Validate if a channel exists in the database.
+        Used for security validation of callback data.
+
+        Args:
+            open_channel_id: The open channel ID to validate
+
+        Returns:
+            True if channel exists, False otherwise
+
+        Example:
+            >>> db.channel_exists("-1003268562225")
+            True
+            >>> db.channel_exists("-1009999999999")
+            False
+        """
+        try:
+            conn = self.get_connection()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT 1 FROM main_clients_database WHERE open_channel_id = %s LIMIT 1",
+                (str(open_channel_id),)
+            )
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            exists = result is not None
+            if exists:
+                print(f"✅ Channel validation: {open_channel_id} exists")
+            else:
+                print(f"⚠️ Channel validation: {open_channel_id} does not exist")
+
+            return exists
+
+        except Exception as e:
+            print(f"❌ Error validating channel: {e}")
+            return False
+
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """
         Insert a new channel configuration into the database.
