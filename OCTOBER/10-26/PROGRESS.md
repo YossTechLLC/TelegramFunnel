@@ -1,8 +1,84 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105c - **Donation Rework: Database Column Fix** 💝🔧
+**Last Updated:** 2025-11-11 Session 105d - **Donation Rework: Payment Button Routing Fix** 💝🔧
 
 ## Recent Updates
+
+## 2025-11-11 Session 105d: Donation Rework - BUGFIX: Payment Button Sent to Channel Instead of User 🔧
+
+**USER REPORT**: After entering donation amount, error occurs: `❌ Failed to create payment invoice: Inline keyboard expected`
+
+**INVOICE CREATED SUCCESSFULLY** but payment button send failed.
+
+**ROOT CAUSE IDENTIFIED:**
+- Payment button was being sent to **CHANNEL ID** instead of **USER'S PRIVATE CHAT ID**
+- When user clicks donate button in channel, `update.effective_chat.id` returns the channel ID
+- Code tried to send `ReplyKeyboardMarkup` to channel
+- Telegram **doesn't allow** `ReplyKeyboardMarkup` in channels (only inline keyboards)
+- `ReplyKeyboardMarkup` can only be sent to private chats
+
+**BROKEN FLOW:**
+```
+User clicks donate in channel (ID: -1003253338212)
+    ↓
+Invoice created ✅
+    ↓
+Send payment button to update.effective_chat.id
+    ↓
+effective_chat.id = -1003253338212 (CHANNEL ID)
+    ↓
+Try to send ReplyKeyboardMarkup to channel
+    ↓
+❌ ERROR: "Inline keyboard expected"
+```
+
+**FIX IMPLEMENTED:**
+- ✅ Changed `chat_id` from `update.effective_chat.id` to `update.effective_user.id`
+- ✅ Payment button now sent to user's **private chat** (DM), not channel
+- ✅ `update.effective_user.id` always returns user's personal chat ID
+
+**CORRECTED FLOW:**
+```
+User clicks donate in channel
+    ↓
+Invoice created ✅
+    ↓
+Send payment button to update.effective_user.id
+    ↓
+effective_user.id = 6271402111 (USER'S PRIVATE CHAT)
+    ↓
+Send ReplyKeyboardMarkup to user's DM
+    ↓
+✅ SUCCESS: User receives payment button in private chat
+```
+
+**FILE MODIFIED:**
+- `TelePay10-26/donation_input_handler.py` (line 480-482)
+
+**CODE CHANGE:**
+```python
+# BEFORE (WRONG):
+chat_id = update.effective_chat.id  # Returns channel ID
+
+# AFTER (CORRECT):
+chat_id = update.effective_user.id  # Returns user's private chat ID
+```
+
+**EXPECTED RESULT:**
+1. ✅ User clicks donate button in closed channel
+2. ✅ User enters amount via numeric keypad
+3. ✅ Invoice created successfully
+4. ✅ Payment button sent to **user's private chat** (DM)
+5. ✅ User sees "💰 Complete Donation Payment" button in their DM
+6. ✅ User clicks button to open NOWPayments gateway
+7. ✅ No "Inline keyboard expected" errors
+
+**TECHNICAL NOTE:**
+- Telegram API requires `ReplyKeyboardMarkup` (persistent keyboard) to be sent to private chats only
+- Channels and groups can only receive `InlineKeyboardMarkup` (inline buttons)
+- Payment flow correctly routes user to their DM for completing payment
+
+---
 
 ## 2025-11-11 Session 105c: Donation Rework - BUGFIX: Database Column Names 🔧
 

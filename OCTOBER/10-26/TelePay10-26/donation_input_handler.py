@@ -477,8 +477,9 @@ class DonationKeypadHandler:
                 order_id=order_id
             )
 
-            # Get chat ID (use update.effective_chat or callback query message)
-            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
+            # Get user's private chat ID (not the channel where button was clicked)
+            # Must send payment button to user's DM, not to the channel
+            chat_id = update.effective_user.id
 
             if invoice_result.get("success"):
                 invoice_url = invoice_result["data"].get("invoice_url", "")
