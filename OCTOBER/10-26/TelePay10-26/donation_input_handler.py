@@ -107,14 +107,19 @@ class DonationKeypadHandler:
         user_id = update.effective_user.id
         self.logger.info(f"💝 User {user_id} started donation for channel {open_channel_id}")
 
-        # Show numeric keypad
-        await query.edit_message_text(
+        # Send NEW keypad message (don't edit the original "Donate" button message)
+        keypad_message = await context.bot.send_message(
+            chat_id=query.message.chat.id,
             text="<b>💝 Enter Donation Amount</b>\n\n"
                  "Use the keypad below to enter your donation amount in USD.\n"
                  f"Range: ${self.MIN_AMOUNT:.2f} - ${self.MAX_AMOUNT:.2f}",
             parse_mode="HTML",
             reply_markup=self._create_donation_keypad("0")
         )
+
+        # Store keypad message ID for later editing/deletion
+        context.user_data["donation_keypad_message_id"] = keypad_message.message_id
+        self.logger.info(f"📋 Sent keypad message {keypad_message.message_id} to chat {query.message.chat.id}")
 
     def _create_donation_keypad(self, current_amount: str) -> InlineKeyboardMarkup:
         """
@@ -425,21 +430,35 @@ class DonationKeypadHandler:
         user_id = update.effective_user.id
         self.logger.info(f"✅ Donation confirmed: ${amount_float:.2f} for channel {open_channel_id} by user {user_id}")
 
-        # Update message to show confirmation
         await query.answer()
-        await query.edit_message_text(
-            f"✅ <b>Donation Confirmed</b>\n\n"
-            f"Amount: <b>${amount_float:.2f}</b>\n\n"
-            f"Preparing your payment gateway...",
+
+        # Delete the keypad message
+        keypad_message_id = context.user_data.get("donation_keypad_message_id")
+        if keypad_message_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=query.message.chat.id,
+                    message_id=keypad_message_id
+                )
+                self.logger.info(f"🗑️ Deleted keypad message {keypad_message_id}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not delete keypad message {keypad_message_id}: {e}")
+
+        # Send NEW independent confirmation message
+        confirmation_message = await context.bot.send_message(
+            chat_id=query.message.chat.id,
+            text=f"✅ <b>Donation Confirmed</b>\n\n"
+                 f"Amount: <b>${amount_float:.2f}</b>\n\n"
+                 f"Preparing your payment gateway...",
             parse_mode="HTML"
         )
 
-        # Schedule message deletion after 60 seconds
+        # Schedule deletion of confirmation message after 60 seconds
         asyncio.create_task(
             self._schedule_message_deletion(
                 context,
                 query.message.chat.id,
-                query.message.message_id,
+                confirmation_message.message_id,
                 60
             )
         )
@@ -465,14 +484,32 @@ class DonationKeypadHandler:
         self.logger.info(f"🚫 User {user_id} cancelled donation")
 
         await query.answer()
-        await query.edit_message_text("❌ Donation cancelled.")
 
-        # Schedule message deletion after 15 seconds
+        # Delete the keypad message
+        keypad_message_id = context.user_data.get("donation_keypad_message_id")
+        if keypad_message_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=query.message.chat.id,
+                    message_id=keypad_message_id
+                )
+                self.logger.info(f"🗑️ Deleted keypad message {keypad_message_id}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not delete keypad message {keypad_message_id}: {e}")
+
+        # Send NEW independent cancellation message
+        cancellation_message = await context.bot.send_message(
+            chat_id=query.message.chat.id,
+            text="❌ Donation cancelled.",
+            parse_mode="HTML"
+        )
+
+        # Schedule deletion of cancellation message after 15 seconds
         asyncio.create_task(
             self._schedule_message_deletion(
                 context,
                 query.message.chat.id,
-                query.message.message_id,
+                cancellation_message.message_id,
                 15
             )
         )
@@ -481,6 +518,7 @@ class DonationKeypadHandler:
         context.user_data.pop("donation_amount_building", None)
         context.user_data.pop("donation_open_channel_id", None)
         context.user_data.pop("donation_started_at", None)
+        context.user_data.pop("donation_keypad_message_id", None)
 
     async def _trigger_payment_gateway(
         self,

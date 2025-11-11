@@ -26,6 +26,130 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-11 Session 105h: Independent Messages Architecture for Donation Flow 🚨
+
+**Decision:** Use independent NEW messages for donation flow instead of editing the original "Donate" button message.
+
+**Context:**
+- Session 105f implemented auto-deletion for temporary donation messages
+- But it was EDITING the permanent "Donate to Support this Channel" button
+- After 60 seconds, deletion removed the original button - users couldn't donate again!
+- User reported: "deleted messages in closed channel ALSO deletes the 'Donate' button"
+
+**Critical Problem Identified:**
+```
+Flow was:
+1. Original "Donate" button message exists (permanent fixture)
+2. User clicks → Original EDITED to show keypad
+3. User confirms → Keypad EDITED to show "Confirmed"
+4. After 60s → DELETE "Confirmed" message
+5. Result: Original button GONE! ❌
+```
+
+**Root Cause:**
+- Using `query.edit_message_text()` modifies the original message
+- Scheduled deletion then deletes the edited original
+- Permanent button disappears after first donation
+
+**Decision: Message Isolation**
+
+#### Principle: Never Touch Permanent UI Elements
+**Permanent messages:**
+- "Donate to Support this Channel" button
+- Must persist indefinitely
+- Sent during bot initialization
+- Core channel feature
+
+**Temporary messages:**
+- Numeric keypad
+- "✅ Donation Confirmed..."
+- "❌ Donation cancelled."
+- Should be independent and auto-deleted
+
+#### Implementation Strategy: NEW Messages, Not EDITS
+
+**1. Keypad Display (`start_donation_input()`)**
+- **Before:** `query.edit_message_text()` - edited original
+- **After:** `context.bot.send_message()` - sends NEW message
+- **Store:** `donation_keypad_message_id` in `context.user_data`
+- **Result:** Original button untouched
+
+**2. Keypad Updates (`_handle_digit_press()`, etc.)**
+- Already use `query.edit_message_reply_markup()`
+- Now edits the NEW keypad message (not original)
+- No changes needed to these methods
+
+**3. Confirmation (`_handle_confirm()`)**
+- Delete keypad message
+- Send NEW independent confirmation message
+- Schedule deletion of NEW confirmation (60s)
+- Original button preserved
+
+**4. Cancellation (`_handle_cancel()`)**
+- Delete keypad message
+- Send NEW independent cancellation message
+- Schedule deletion of NEW cancellation (15s)
+- Original button preserved
+
+#### Technical Implementation:
+
+**Message Lifecycle Management:**
+```python
+# Step 1: User clicks "Donate" (original button untouched)
+keypad_message = await context.bot.send_message(...)  # NEW message
+context.user_data["donation_keypad_message_id"] = keypad_message.message_id
+
+# Step 2: User confirms
+await context.bot.delete_message(keypad_message_id)  # Delete keypad
+confirmation_message = await context.bot.send_message(...)  # NEW message
+asyncio.create_task(schedule_deletion(confirmation_message.message_id, 60))
+```
+
+**Why NEW Messages Instead of EDITS:**
+1. **Isolation:** Permanent and temporary UI elements don't interfere
+2. **Safety:** Can't accidentally delete permanent elements
+3. **Flexibility:** Each message has independent lifecycle
+4. **Clarity:** Clear distinction between permanent and temporary
+
+**Alternatives Considered:**
+
+**Option A: Track and Skip Original Message ID**
+- Store original button message ID
+- Check before deletion: "Is this the original? Skip deletion"
+- **Rejected:** Complex, error-prone, still edits permanent message
+
+**Option B: Disable Auto-Deletion**
+- Remove scheduled deletion entirely
+- **Rejected:** User specifically requested clean channels
+
+**Option C: Current Solution - Independent Messages** ✅
+- Clean separation of concerns
+- Safe by design (can't delete what you don't touch)
+- Follows single responsibility principle
+
+#### Benefits:
+1. **Safety:** Impossible to accidentally delete permanent button
+2. **Clarity:** Each message has clear purpose and lifecycle
+3. **UX:** Users can donate multiple times without issues
+4. **Maintainability:** Simpler logic, fewer edge cases
+5. **Robustness:** Deletion failures don't affect permanent UI
+
+#### Trade-offs:
+1. **More messages:** Creates 2-3 messages per donation attempt
+   - Acceptable: Temporary messages are cleaned up
+2. **Slightly more complex:** Track keypad message ID in context
+   - Acceptable: Clear structure, well-documented
+
+#### Lessons Learned:
+1. **Never edit permanent UI elements** - always send new messages for temporary states
+2. **Test edge cases** - what happens after scheduled deletion?
+3. **Message lifecycle design** - distinguish permanent vs temporary from the start
+4. **User feedback is critical** - caught a critical bug before wide deployment
+
+**Conclusion:** Independent messages provide clear separation between permanent and temporary UI, preventing critical bugs where permanent elements get deleted.
+
+---
+
 ### 2025-11-11 Session 105g: Database Query Separation - Donations vs Subscriptions 🔧
 
 **Decision:** Remove subscription-specific columns from donation workflow database queries.

@@ -1,8 +1,98 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105g - **Fix Donation Database Query** 🔧
+**Last Updated:** 2025-11-11 Session 105h - **CRITICAL FIX: Preserve Original Donate Button** 🚨
 
 ## Recent Updates
+
+## 2025-11-11 Session 105h: CRITICAL FIX - Stop Deleting Original "Donate" Button Message 🚨
+
+**USER REPORT (CRITICAL)**: Auto-deletion was removing the permanent "Donate to Support this Channel" button!
+
+**ROOT CAUSE:**
+Previous implementation was **EDITING** the original "Donate" button message instead of sending new messages:
+1. User clicks "Donate" → Original button message EDITED to show keypad
+2. User confirms → Keypad message EDITED to show "Confirmed"
+3. After 60s → "Confirmed" message deleted (which is the EDITED original!)
+4. **Result: Permanent "Donate" button disappeared!**
+
+**CRITICAL PROBLEM:**
+- The "Donate to Support this Channel" button message should NEVER be touched
+- It's a permanent fixture sent during bot initialization
+- Deleting it meant users couldn't donate anymore until bot restart
+
+**ARCHITECTURAL FIX:**
+Changed from **message editing** to **independent messages**
+
+**Implementation Details:**
+
+**1. `start_donation_input()` - Lines 110-122**
+- **Before:** `query.edit_message_text()` - EDITED original button message
+- **After:** `context.bot.send_message()` - Sends NEW keypad message
+- **Result:** Original "Donate" button stays untouched
+- **Stores:** `donation_keypad_message_id` in context for later deletion
+
+**2. Keypad Update Methods - Lines 306-353**
+- `_handle_digit_press()`, `_handle_backspace()`, `_handle_clear()`
+- **No changes needed:** Already use `query.edit_message_reply_markup()`
+- **Now edits:** The NEW keypad message (not original)
+- **Result:** Original button still untouched
+
+**3. `_handle_confirm()` - Lines 433-467**
+- **Step 1:** Delete keypad message (lines 435-445)
+- **Step 2:** Send NEW independent confirmation message (lines 447-454)
+- **Step 3:** Schedule deletion of confirmation message after 60s (lines 456-464)
+- **Result:** Original "Donate" button preserved
+
+**4. `_handle_cancel()` - Lines 486-521**
+- **Step 1:** Delete keypad message (lines 488-498)
+- **Step 2:** Send NEW independent cancellation message (lines 500-505)
+- **Step 3:** Schedule deletion of cancellation message after 15s (lines 507-515)
+- **Result:** Original "Donate" button preserved
+
+**MESSAGE FLOW - BEFORE (BROKEN):**
+```
+[Donate Button Message] (Permanent)
+  ↓ User clicks "Donate"
+[Donate Button Message EDITED → Keypad]
+  ↓ User presses digits
+[Keypad Message EDITED → Updated Amount]
+  ↓ User confirms
+[Keypad Message EDITED → "Confirmed"]
+  ↓ After 60 seconds
+[DELETE "Confirmed" Message] ← DELETES THE ORIGINAL BUTTON!
+```
+
+**MESSAGE FLOW - AFTER (FIXED):**
+```
+[Donate Button Message] (Permanent - NEVER TOUCHED)
+  ↓ User clicks "Donate"
+[NEW Keypad Message]
+  ↓ User presses digits
+[Keypad Message EDITED → Updated Amount]
+  ↓ User confirms
+[DELETE Keypad Message]
+[NEW "Confirmed" Message]
+  ↓ After 60 seconds
+[DELETE "Confirmed" Message]
+  ↓
+[Donate Button Message STILL THERE ✅]
+```
+
+**VERIFICATION:**
+- ✅ Original "Donate" button never edited or deleted
+- ✅ Keypad is NEW message (deleted after user action)
+- ✅ Confirmation is NEW message (deleted after 60s)
+- ✅ Cancellation is NEW message (deleted after 15s)
+- ✅ All temporary messages cleaned up properly
+- ✅ User can donate again immediately after previous donation
+
+**IMPACT:**
+- 🚨 **CRITICAL FIX:** Prevents permanent "Donate" button from disappearing
+- ✅ Users can make multiple donations without bot restart
+- ✅ Channel stays clean with temporary message deletion
+- ✅ Original architectural intent preserved
+
+---
 
 ## 2025-11-11 Session 105g: Fix Database Query - Remove sub_value from Donation Workflow 🔧
 
