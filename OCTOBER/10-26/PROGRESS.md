@@ -1,8 +1,53 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105h - **CRITICAL FIX: Preserve Original Donate Button** 🚨
+**Last Updated:** 2025-11-11 Session 106 - **Donation Message Customization Feature** 💝
 
 ## Recent Updates
+
+## 2025-11-11 Session 106: Donation Message Customization Feature 💝
+
+**FEATURE:** Added customizable donation messages for closed channels
+
+**Implementation:**
+- ✅ Added `closed_channel_donation_message` column to database (VARCHAR(256) NOT NULL)
+- ✅ Updated Pydantic models with validation (10-256 chars, trimmed)
+- ✅ Added UI section in registration and edit forms
+- ✅ Implemented character counter and real-time preview
+- ✅ Migrated 16 existing channels with default message
+- ✅ Backend API deployed to Cloud Run
+- ✅ Frontend built successfully
+
+**Database Changes:**
+- Column: `closed_channel_donation_message VARCHAR(256) NOT NULL`
+- Default message: "Enjoying the content? Consider making a donation to help us continue providing quality content. Click the button below to donate any amount you choose."
+- Constraints: NOT NULL, CHECK (LENGTH(TRIM(closed_channel_donation_message)) > 0)
+- Migration: Successfully updated 16 existing channels
+
+**Backend Changes (GCRegisterAPI-10-26):**
+- Updated `ChannelRegistrationRequest`, `ChannelUpdateRequest`, `ChannelResponse` models
+- Added field validators for 10-256 character length
+- Updated `register_channel()`, `get_user_channels()`, `get_channel_by_id()` methods
+- `update_channel()` automatically handles new field via model_dump()
+
+**Frontend Changes (GCRegisterWeb-10-26):**
+- Updated TypeScript interfaces (`Channel`, `ChannelRegistrationRequest`)
+- Added donation message section to `RegisterChannelPage.tsx` (between Closed Channel and Subscription Tiers)
+- Added donation message section to `EditChannelPage.tsx`
+- Implemented character counter (0/256 with warnings at 240+)
+- Added real-time preview box showing formatted message
+- Added form validation (minimum 10 chars, maximum 256 chars)
+
+**Files Modified:**
+- `TOOLS_SCRIPTS_TESTS/scripts/add_donation_message_column.sql` (NEW)
+- `TOOLS_SCRIPTS_TESTS/scripts/rollback_donation_message_column.sql` (NEW)
+- `TOOLS_SCRIPTS_TESTS/tools/execute_donation_message_migration.py` (NEW)
+- `GCRegisterAPI-10-26/api/models/channel.py`
+- `GCRegisterAPI-10-26/api/services/channel_service.py`
+- `GCRegisterWeb-10-26/src/types/channel.ts`
+- `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`
+- `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`
+
+---
 
 ## 2025-11-11 Session 105h: CRITICAL FIX - Stop Deleting Original "Donate" Button Message 🚨
 

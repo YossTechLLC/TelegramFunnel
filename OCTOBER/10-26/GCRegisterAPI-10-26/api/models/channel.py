@@ -19,6 +19,7 @@ class ChannelRegistrationRequest(BaseModel):
     closed_channel_id: str
     closed_channel_title: str
     closed_channel_description: str
+    closed_channel_donation_message: str  # Custom donation message (10-256 chars)
 
     # Subscription Tiers
     tier_count: int
@@ -64,6 +65,18 @@ class ChannelRegistrationRequest(BaseModel):
             raise ValueError('Payout strategy must be instant or threshold')
         return v
 
+    @field_validator('closed_channel_donation_message')
+    @classmethod
+    def validate_donation_message(cls, v):
+        """Validate donation message is not empty and within length limit"""
+        if not v or not v.strip():
+            raise ValueError('Donation message cannot be empty')
+        if len(v) > 256:
+            raise ValueError('Donation message cannot exceed 256 characters')
+        if len(v.strip()) < 10:
+            raise ValueError('Donation message must be at least 10 characters')
+        return v.strip()  # Remove leading/trailing whitespace
+
     def model_post_init(self, __context):
         """Validate tier-dependent fields"""
         # Tier 2 required if tier_count >= 2
@@ -88,6 +101,7 @@ class ChannelUpdateRequest(BaseModel):
     open_channel_description: Optional[str] = None
     closed_channel_title: Optional[str] = None
     closed_channel_description: Optional[str] = None
+    closed_channel_donation_message: Optional[str] = None
 
     # NOTE: tier_count is not updatable - it's calculated dynamically from sub_X_price fields
     sub_1_price: Optional[Decimal] = None
@@ -104,6 +118,20 @@ class ChannelUpdateRequest(BaseModel):
     payout_strategy: Optional[str] = None
     payout_threshold_usd: Optional[Decimal] = None
 
+    @field_validator('closed_channel_donation_message')
+    @classmethod
+    def validate_donation_message(cls, v):
+        """Validate donation message if provided"""
+        if v is not None:
+            if not v.strip():
+                raise ValueError('Donation message cannot be empty')
+            if len(v) > 256:
+                raise ValueError('Donation message cannot exceed 256 characters')
+            if len(v.strip()) < 10:
+                raise ValueError('Donation message must be at least 10 characters')
+            return v.strip()
+        return v
+
 
 class ChannelResponse(BaseModel):
     """Channel data response"""
@@ -113,6 +141,7 @@ class ChannelResponse(BaseModel):
     closed_channel_id: str
     closed_channel_title: str
     closed_channel_description: str
+    closed_channel_donation_message: str  # Custom donation message
 
     tier_count: int
     sub_1_price: Decimal

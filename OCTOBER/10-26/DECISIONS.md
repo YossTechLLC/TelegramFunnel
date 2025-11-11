@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105e - **Donation Message Format Enhancement**
+**Last Updated:** 2025-11-11 Session 106 - **Donation Message Customization**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -25,6 +25,37 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 106: Customizable Donation Messages 💝
+
+**Decision:** Add customizable donation message field to channel registration
+
+**Rationale:**
+- Generic "Enjoying the content?" message doesn't reflect channel owner's voice/brand
+- Channel owners need ability to personalize their ask for donations
+- Enhances user engagement and connection with community
+- Minimal code changes required (modular architecture)
+
+**Implementation:**
+- **Database:** Added `closed_channel_donation_message` column (VARCHAR(256) NOT NULL)
+- **Location:** Between Closed Channel section and Subscription Tiers in UI
+- **Validation:** 10-256 characters (trimmed), NOT NULL, non-empty check constraint
+- **Default:** Set for all existing channels during migration
+- **UI Features:** Character counter, real-time preview, warning at 240+ chars
+
+**Trade-offs:**
+- **Chosen:** Required field with default for existing channels
+- **Alternative Considered:** Optional field → Rejected (could lead to empty states)
+- **Chosen:** 256 char limit → Sufficient for personalized message, prevents abuse
+- **Chosen:** Minimum 10 chars → Ensures meaningful content
+
+**Impact:**
+- All 16 existing channels received default message during migration
+- Zero breaking changes to existing functionality
+- API automatically handles field via Pydantic validation
+- Frontend built successfully with new UI components
+
+---
 
 ### 2025-11-11 Session 105h: Independent Messages Architecture for Donation Flow 🚨
 

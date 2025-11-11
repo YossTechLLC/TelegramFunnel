@@ -5,6 +5,7 @@ export interface Channel {
   closed_channel_id: string;
   closed_channel_title: string;
   closed_channel_description: string;
+  closed_channel_donation_message: string;
   sub_1_price: number;
   sub_1_time: number;
   sub_2_price?: number | null;
@@ -28,6 +29,7 @@ export interface ChannelRegistrationRequest {
   closed_channel_id: string;
   closed_channel_title: string;
   closed_channel_description: string;
+  closed_channel_donation_message: string;
   tier_count: number;
   sub_1_price: number;
   sub_1_time: number;
