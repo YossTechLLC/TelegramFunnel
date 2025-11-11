@@ -217,6 +217,7 @@ class DatabaseManager:
             - open_channel_id: The associated open channel ID
             - closed_channel_title: Title of the closed channel
             - closed_channel_description: Description of the closed channel
+            - closed_channel_donation_message: Custom donation message for the channel
             - payout_strategy: "instant" or "threshold"
             - payout_threshold_usd: Threshold amount for batch payouts
 
@@ -227,6 +228,7 @@ class DatabaseManager:
                     "open_channel_id": "-1003268562225",
                     "closed_channel_title": "Premium Content",
                     "closed_channel_description": "Exclusive access",
+                    "closed_channel_donation_message": "Your support helps us...",
                     "payout_strategy": "threshold",
                     "payout_threshold_usd": 100.00
                 },
@@ -242,6 +244,7 @@ class DatabaseManager:
                     open_channel_id,
                     closed_channel_title,
                     closed_channel_description,
+                    closed_channel_donation_message,
                     payout_strategy,
                     payout_threshold_usd
                 FROM main_clients_database
@@ -260,8 +263,9 @@ class DatabaseManager:
                     "open_channel_id": row[1],
                     "closed_channel_title": row[2] if row[2] else "Premium Channel",
                     "closed_channel_description": row[3] if row[3] else "exclusive content",
-                    "payout_strategy": row[4] if row[4] else "instant",
-                    "payout_threshold_usd": row[5] if row[5] else 0.0
+                    "closed_channel_donation_message": row[4] if row[4] else "Consider supporting our channel!",
+                    "payout_strategy": row[5] if row[5] else "instant",
+                    "payout_threshold_usd": row[6] if row[6] else 0.0
                 })
 
             print(f"📋 Fetched {len(result)} closed channels for donation messages")

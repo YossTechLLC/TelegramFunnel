@@ -86,15 +86,14 @@ class ClosedChannelManager:
         for channel_info in closed_channels:
             closed_channel_id = channel_info["closed_channel_id"]
             open_channel_id = channel_info["open_channel_id"]
-            channel_title = channel_info.get("closed_channel_title", "Premium Channel")
-            channel_description = channel_info.get("closed_channel_description", "exclusive content")
+            donation_message = channel_info.get("closed_channel_donation_message", "Consider supporting our channel!")
 
             try:
                 # Create inline keyboard with single donate button
                 reply_markup = self._create_donation_button(open_channel_id)
 
                 # Format message content
-                message_text = self._format_donation_message(channel_title, channel_description)
+                message_text = self._format_donation_message(donation_message)
 
                 # Send to closed channel
                 await self.bot.send_message(
@@ -105,7 +104,7 @@ class ClosedChannelManager:
                 )
 
                 successful += 1
-                self.logger.info(f"📨 Sent donation message to {closed_channel_id} ({channel_title})")
+                self.logger.info(f"📨 Sent donation message to {closed_channel_id}")
 
             except Forbidden as e:
                 # Bot not in channel or was kicked
@@ -194,47 +193,36 @@ class ClosedChannelManager:
 
     def _format_donation_message(
         self,
-        channel_title: str,
-        channel_description: str
+        donation_message: str
     ) -> str:
         """
-        Format the donation message text with channel information.
+        Format the donation message text with custom message.
 
         Args:
-            channel_title: Title of the closed channel
-            channel_description: Description of the channel content
+            donation_message: Custom donation message from the database
 
         Returns:
             Formatted HTML message text
 
         Note:
             Message is limited to 4096 characters by Telegram API.
-            Current implementation should stay well under this limit.
+            Format: "Enjoying the content? Consider making a donation " + bold custom message
 
         Example:
             >>> message = manager._format_donation_message(
-            ...     "Premium Content",
-            ...     "exclusive access"
+            ...     "Your support helps us create amazing content!"
             ... )
             >>> print(message)
-            <b>💝 Support Premium Content</b>
-
-            Enjoying the content? Consider making a donation to help us
-            continue providing quality exclusive access.
-
-            Click the button below to donate any amount you choose.
+            Enjoying the content? Consider making a donation <b>Your support helps us create amazing content!</b>
         """
         message_text = (
-            f"<b>💝 Support {channel_title}</b>\n\n"
-            f"Enjoying the content? Consider making a donation to help us "
-            f"continue providing quality {channel_description}.\n\n"
-            f"Click the button below to donate any amount you choose."
+            f"Enjoying the content? Consider making a donation <b>{donation_message}</b>"
         )
 
         # Validate message length (Telegram limit: 4096 characters)
         if len(message_text) > 4096:
             self.logger.warning(
-                f"⚠️ Message too long ({len(message_text)} chars) for {channel_title}, truncating"
+                f"⚠️ Message too long ({len(message_text)} chars), truncating"
             )
             message_text = message_text[:4090] + "..."
 
