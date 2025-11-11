@@ -1,8 +1,67 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105 - **Donation Rework: Closed Channel Implementation - COMPLETE** 💝✅
+**Last Updated:** 2025-11-11 Session 105b - **Donation Rework: Critical Bugfix - Broadcast Integration** 💝🔧
 
 ## Recent Updates
+
+## 2025-11-11 Session 105b: Donation Rework - CRITICAL BUGFIX: Missing Broadcast Call 🔧
+
+**USER REPORT**: Donation button removed from open channels ✅, but no donation messages appearing in closed channels ❌
+
+**ROOT CAUSE IDENTIFIED:**
+- `ClosedChannelManager` was initialized but **never invoked**
+- Method `send_donation_message_to_closed_channels()` exists but was never called
+- Unlike `broadcast_manager.broadcast_hash_links()` which runs on startup, closed channel broadcast was missing from initialization flow
+
+**COMPARISON:**
+```python
+# WORKING (Open Channels):
+if self.broadcast_manager:
+    self.broadcast_manager.broadcast_hash_links()  # ← Called!
+
+# BROKEN (Closed Channels):
+if self.closed_channel_manager:
+    # ← MISSING: No call to send_donation_message_to_closed_channels()
+```
+
+**FIX IMPLEMENTED:**
+- ✅ Added closed channel donation broadcast to `app_initializer.py` line 123-128
+- ✅ Used `asyncio.run()` to handle async method in sync context
+- ✅ Added logging for broadcast success/failure statistics
+- ✅ Follows same pattern as broadcast_manager initialization
+
+**CODE ADDED:**
+```python
+# Send donation messages to closed channels
+if self.closed_channel_manager:
+    import asyncio
+    self.logger.info("📨 Sending donation messages to closed channels...")
+    result = asyncio.run(self.closed_channel_manager.send_donation_message_to_closed_channels())
+    self.logger.info(f"✅ Donation broadcast complete: {result['successful']}/{result['total_channels']} successful")
+```
+
+**FILE MODIFIED:**
+- `TelePay10-26/app_initializer.py` (+6 lines at lines 123-128)
+
+**TECHNICAL DETAILS:**
+- Challenge: `send_donation_message_to_closed_channels()` is async, but `initialize()` is sync
+- Solution: `asyncio.run()` executes async method in synchronous context safely
+- Timing: Runs during app initialization, before bot starts polling
+- Impact: Every app restart now broadcasts donation messages to all closed channels
+
+**EXPECTED BEHAVIOR:**
+When you run `telepay10-26.py` now:
+1. ✅ Open channels receive subscription tier buttons (no donate button)
+2. ✅ Closed channels receive donation message with "💝 Donate to Support This Channel" button
+3. ✅ Log shows: `📨 Sending donation messages to closed channels...`
+4. ✅ Log shows: `✅ Donation broadcast complete: X/Y successful`
+
+**NEXT STEPS:**
+- ⬜ Run `telepay10-26.py` and verify donation messages appear in closed channels
+- ⬜ Check logs for broadcast statistics
+- ⬜ Test clicking donation button in closed channel
+
+---
 
 ## 2025-11-11 Session 105: Donation Rework - Closed Channel Implementation 💝✅
 

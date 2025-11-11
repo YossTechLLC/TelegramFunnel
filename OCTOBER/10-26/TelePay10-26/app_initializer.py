@@ -119,7 +119,14 @@ class AppInitializer:
         if self.broadcast_manager:
             self.broadcast_manager.fetch_open_channel_list()
             self.broadcast_manager.broadcast_hash_links()
-    
+
+        # Send donation messages to closed channels
+        if self.closed_channel_manager:
+            import asyncio
+            self.logger.info("📨 Sending donation messages to closed channels...")
+            result = asyncio.run(self.closed_channel_manager.send_donation_message_to_closed_channels())
+            self.logger.info(f"✅ Donation broadcast complete: {result['successful']}/{result['total_channels']} successful")
+
     async def run_bot(self):
         """Run the Telegram bot."""
         if not self.bot_manager:
