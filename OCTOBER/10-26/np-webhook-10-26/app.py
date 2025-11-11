@@ -959,12 +959,39 @@ def handle_ipn():
 
                                                 # Add payment-type-specific data
                                                 if payment_type == 'subscription':
-                                                    # Determine tier based on price
+                                                    # Query tier prices from main_clients_database to determine tier
                                                     tier = 1  # Default
-                                                    if subscription_price == sub_data[9]:  # sub_2_price
-                                                        tier = 2
-                                                    elif subscription_price == sub_data[11]:  # sub_3_price
-                                                        tier = 3
+                                                    try:
+                                                        conn_tiers = get_db_connection()
+                                                        if conn_tiers:
+                                                            cur_tiers = conn_tiers.cursor()
+                                                            cur_tiers.execute("""
+                                                                SELECT sub_1_price, sub_2_price, sub_3_price
+                                                                FROM main_clients_database
+                                                                WHERE open_channel_id = %s
+                                                            """, (open_channel_id,))
+                                                            tier_prices = cur_tiers.fetchone()
+                                                            cur_tiers.close()
+                                                            conn_tiers.close()
+
+                                                            if tier_prices:
+                                                                # Convert subscription_price to Decimal for comparison
+                                                                from decimal import Decimal
+                                                                subscription_price_decimal = Decimal(subscription_price)
+
+                                                                # Match price to determine tier
+                                                                if tier_prices[1] and subscription_price_decimal == tier_prices[1]:
+                                                                    tier = 2
+                                                                elif tier_prices[2] and subscription_price_decimal == tier_prices[2]:
+                                                                    tier = 3
+                                                                # else tier = 1 (already set)
+
+                                                                print(f"🎯 [NOTIFICATION] Determined tier: {tier} (price: ${subscription_price})")
+                                                            else:
+                                                                print(f"⚠️ [NOTIFICATION] Could not fetch tier prices, defaulting to tier 1")
+                                                    except Exception as e:
+                                                        print(f"❌ [NOTIFICATION] Error determining tier: {e}")
+                                                        print(f"⚠️ [NOTIFICATION] Defaulting to tier 1")
 
                                                     notification_payload['payment_data'].update({
                                                         'tier': tier,

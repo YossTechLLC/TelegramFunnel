@@ -1,8 +1,38 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 110 - **Notification Management System DEPLOYED** 🚀
+**Last Updated:** 2025-11-11 Session 111 - **Tier Logic Bug Fix** 🐛
 
 ## Recent Updates
+
+## 2025-11-11 Session 111: Tier Logic Bug Fix - Critical 🐛
+
+**BUG FIX & DEPLOYMENT:** Fixed critical IndexError in subscription notification tier determination
+
+**Summary:**
+- ✅ Fixed tier logic in np-webhook-10-26/app.py (lines 961-1000)
+- ✅ Replaced broken array access (sub_data[9], sub_data[11]) with proper database query
+- ✅ Added Decimal-based price comparison for accurate tier matching
+- ✅ Added comprehensive error handling with fallback to tier 1
+- ✅ Maintained emoji logging pattern (🎯, ⚠️, ❌)
+- ✅ **DEPLOYED** to Cloud Run (revision: np-webhook-10-26-00014-fsf)
+
+**Technical Details:**
+- **Problem:** Code tried to access sub_data[9] and sub_data[11], but tuple only had 5 elements (indices 0-4)
+- **Impact:** IndexError would crash subscription notifications
+- **Solution:** Query tier prices from main_clients_database and match against subscription_price
+- **File:** np-webhook-10-26/app.py
+
+**Deployment:**
+- ✅ Service URL: https://np-webhook-10-26-291176869049.us-central1.run.app
+- ✅ Health check: PASSED
+- ✅ Revision: np-webhook-10-26-00014-fsf (serving 100% traffic)
+
+**Testing Required:**
+- ⚠️ Test subscription notification (tier 1, 2, 3)
+- ⚠️ Test donation notification
+- ⚠️ Verify tier appears correctly in Telegram message
+
+---
 
 ## 2025-11-11 Session 110: Notification Management System - Production Deployment 🚀
 

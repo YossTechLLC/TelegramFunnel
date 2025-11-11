@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 109 - **Notification Management Architecture**
+**Last Updated:** 2025-11-11 Session 111 - **Tier Determination Logic Fix**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -21,11 +21,55 @@ This document records all significant architectural decisions made during the de
 12. [Password Reset Strategy](#password-reset-strategy)
 13. [Email Service Configuration](#email-service-configuration)
 14. [Donation Architecture](#donation-architecture)
-15. [Notification Management](#notification-management) 🆕
+15. [Notification Management](#notification-management)
+16. [Tier Determination Strategy](#tier-determination-strategy) 🆕
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 111: Tier Determination Strategy 🎯
+
+**Decision:** Use database query with price matching instead of array indices for subscription tier determination
+
+**Context:**
+- Notification payload needs to include subscription tier information
+- Original implementation tried to access sub_data[9] and sub_data[11] for tier prices
+- sub_data tuple only contained 5 elements (indices 0-4), causing IndexError
+
+**Options Considered:**
+
+1. **Expand sub_data query** (rejected)
+   - Would require modifying existing payment processing query
+   - Tight coupling between payment and notification logic
+   - Risk of breaking existing functionality
+
+2. **Query tier prices separately** (selected)
+   - Clean separation of concerns
+   - No impact on existing payment flow
+   - Allows accurate price-to-tier matching
+   - Robust error handling with fallback
+
+**Implementation:**
+- Query main_clients_database for sub_1_price, sub_2_price, sub_3_price
+- Use Decimal for accurate price comparison (avoid float precision issues)
+- Match subscription_price against tier prices to determine tier
+- Default to tier 1 if query fails or price doesn't match
+
+**Benefits:**
+- ✅ No IndexError crashes
+- ✅ Accurate tier determination even with custom pricing
+- ✅ Graceful degradation (falls back to tier 1)
+- ✅ Comprehensive error logging
+- ✅ No changes to existing payment processing
+
+**Trade-offs:**
+- Adds one additional database query per subscription notification
+- Performance impact: ~10-50ms per notification (acceptable for async notification flow)
+
+**Location:** np-webhook-10-26/app.py lines 961-1000
+
+---
 
 ### 2025-11-11 Session 109: Notification Management Architecture 📬
 
