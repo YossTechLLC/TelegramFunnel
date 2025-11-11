@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 107 - **Donation Message Format Updates**
+**Last Updated:** 2025-11-11 Session 108 - **Donation Minimum Amount**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -25,6 +25,37 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 108: Minimum Donation Amount Increase 💰
+
+**Decision:** Increased minimum donation amount from $1.00 to $4.99
+
+**Context:**
+- Need to set a reasonable minimum donation threshold
+- $1.00 was too low and didn't account for payment processing overhead
+- $4.99 ensures donations are meaningful and cover transaction costs
+
+**Implementation:**
+- Updated MIN_AMOUNT constant in DonationKeypadHandler class from 1.00 to 4.99
+- All validation logic uses the MIN_AMOUNT constant
+- All user-facing messages use MIN_AMOUNT constant
+- No hardcoded values to maintain
+
+**Rationale:**
+- Prevents micro-donations that don't cover payment gateway fees
+- Ensures users provide meaningful support to channel creators
+- Maintains code flexibility - can easily adjust minimum in future by changing single constant
+- All error messages and range displays automatically reflect new minimum
+
+**User Impact:**
+- Keypad message shows: "Range: $4.99 - $9999.99" (previously $1.00 - $9999.99)
+- Validation rejects amounts below $4.99 with error: "⚠️ Minimum donation: $4.99"
+- No UI changes required - all messages derive from MIN_AMOUNT constant
+
+**Files Modified:**
+- `donation_input_handler.py` (lines 29, 39, 56, 399)
+
+---
 
 ### 2025-11-11 Session 107: Donation Message Format Standardization 💝
 

@@ -26,7 +26,7 @@ class DonationKeypadHandler:
     custom donation amounts, with validation rules to ensure valid inputs.
 
     Validation Rules:
-    - Minimum amount: $1.00
+    - Minimum amount: $4.99
     - Maximum amount: $9999.99
     - Maximum 2 decimal places
     - Maximum 4 digits before decimal point
@@ -36,7 +36,7 @@ class DonationKeypadHandler:
     Attributes:
         db_manager: DatabaseManager instance for database queries
         logger: Logger instance for this module
-        MIN_AMOUNT: Minimum donation amount ($1.00)
+        MIN_AMOUNT: Minimum donation amount ($4.99)
         MAX_AMOUNT: Maximum donation amount ($9999.99)
         MAX_DECIMALS: Maximum decimal places (2)
         MAX_DIGITS_BEFORE_DECIMAL: Maximum digits before decimal (4)
@@ -53,7 +53,7 @@ class DonationKeypadHandler:
         self.logger = logging.getLogger(__name__)
 
         # Validation constants
-        self.MIN_AMOUNT = 1.00
+        self.MIN_AMOUNT = 4.99
         self.MAX_AMOUNT = 9999.99
         self.MAX_DECIMALS = 2
         self.MAX_DIGITS_BEFORE_DECIMAL = 4
@@ -396,7 +396,7 @@ class DonationKeypadHandler:
 
         Final Validations:
         - Amount must be parseable as float
-        - Amount >= MIN_AMOUNT ($1.00)
+        - Amount >= MIN_AMOUNT ($4.99)
         - Amount <= MAX_AMOUNT ($9999.99)
 
         Args:
