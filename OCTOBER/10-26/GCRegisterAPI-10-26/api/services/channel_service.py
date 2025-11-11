@@ -301,7 +301,7 @@ class ChannelService:
         update_fields = []
         values = []
 
-        for field, value in update_data.model_dump(exclude_none=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             update_fields.append(f"{field} = %s")
             values.append(value)
 

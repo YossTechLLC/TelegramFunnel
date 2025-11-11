@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 111 - **Tier Determination Logic Fix**
+**Last Updated:** 2025-11-11 Session 113 - **Pydantic Model Dump Strategy (Channel Updates)**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -22,11 +22,77 @@ This document records all significant architectural decisions made during the de
 13. [Email Service Configuration](#email-service-configuration)
 14. [Donation Architecture](#donation-architecture)
 15. [Notification Management](#notification-management)
-16. [Tier Determination Strategy](#tier-determination-strategy) 🆕
+16. [Tier Determination Strategy](#tier-determination-strategy)
+17. [Pydantic Model Dump Strategy](#pydantic-model-dump-strategy) 🆕
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 113: Pydantic Model Dump Strategy 🔄
+
+**Decision:** Use `exclude_unset=True` instead of `exclude_none=True` for channel update operations
+
+**Context:**
+- Channel tier updates need to support reducing tier count (3→2, 3→1, 2→1)
+- Frontend sends explicit `null` values to clear tier 2/3 when reducing tiers
+- Original implementation used `exclude_none=True`, which filtered out ALL `None` values
+- This prevented database updates from clearing tier columns
+
+**Problem:**
+```python
+# BROKEN: Using exclude_none=True
+update_data.model_dump(exclude_none=True)
+# Result: {"sub_1_price": 5.00} - tier 2/3 nulls filtered out!
+# Database: sub_2_price remains unchanged (not cleared)
+```
+
+**Options Considered:**
+
+1. **Keep exclude_none=True, handle nulls manually** (rejected)
+   - Would require complex conditional logic
+   - Error-prone for future field additions
+   - Violates DRY principle
+
+2. **Use exclude_unset=True** (selected)
+   - Distinguishes between "not sent" vs "explicitly null"
+   - Allows partial updates while supporting explicit clearing
+   - Cleaner, more maintainable code
+
+**Implementation:**
+```python
+# FIXED: Using exclude_unset=True
+update_data.model_dump(exclude_unset=True)
+# Result: {"sub_1_price": 5.00, "sub_2_price": null, "sub_3_price": null}
+# Database: sub_2_price and sub_3_price set to NULL ✅
+```
+
+**Behavior Comparison:**
+
+| Scenario | Frontend Request | exclude_none (BROKEN) | exclude_unset (FIXED) |
+|----------|------------------|----------------------|---------------------|
+| Reduce 3→1 tier | `sub_2_price: null` | Field excluded, no update | Field included, UPDATE to NULL ✅ |
+| Partial update (title only) | Title only, tiers omitted | Tiers excluded, no update ✅ | Tiers excluded, no update ✅ |
+| Update tier 1 price | `sub_1_price: 10.00` | Field included, UPDATE ✅ | Field included, UPDATE ✅ |
+
+**Benefits:**
+- ✅ Tier count can be reduced (3→2, 3→1, 2→1)
+- ✅ Tier count can be increased (1→2, 1→3, 2→3)
+- ✅ Partial updates still work (only modified fields sent)
+- ✅ Explicit NULL values properly clear database columns
+- ✅ Future-proof for additional optional fields
+
+**Trade-offs:**
+- Frontend must explicitly send `null` for fields to clear (already implemented)
+- Requires Pydantic BaseModel (already in use)
+
+**Location:** GCRegisterAPI-10-26/api/services/channel_service.py line 304
+
+**Related Files:**
+- Frontend: GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx (lines 337-340)
+- Model: GCRegisterAPI-10-26/api/models/channel.py (ChannelUpdateRequest)
+
+---
 
 ### 2025-11-11 Session 111: Tier Determination Strategy 🎯
 

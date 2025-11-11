@@ -183,7 +183,8 @@
       "WebFetch(domain:cheatsheetseries.owasp.org)",
       "Bash(gcloud compute backend-buckets list:*)",
       "Bash(DATABASE_PASSWORD_SECRET='Chigdabeast123$' python3:*)",
-      "Bash(DATABASE_PASSWORD_SECRET='Chigdabeast123$' DATABASE_NAME_SECRET='client_table' python3:*)"
+      "Bash(DATABASE_PASSWORD_SECRET='Chigdabeast123$' DATABASE_NAME_SECRET='client_table' python3:*)",
+      "Bash(gcloud sql connect:*)"
     ],
     "deny": [],
     "ask": []

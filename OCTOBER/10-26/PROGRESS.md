@@ -1,8 +1,90 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 111 - **Tier Logic Bug Fix** 🐛
+**Last Updated:** 2025-11-11 Session 113 - **Tier Update Bug Fix (PayGatePrime)** 🐛
 
 ## Recent Updates
+
+## 2025-11-11 Session 113: Tier Update Bug Fix - Critical (PayGatePrime Website) 🐛
+
+**BUG FIX & DEPLOYMENT:** Fixed critical bug preventing tier count changes on PayGatePrime website
+
+**Summary:**
+- ✅ Fixed tier update logic in GCRegisterAPI-10-26 (channel_service.py line 304)
+- ✅ Changed `exclude_none=True` → `exclude_unset=True` in Pydantic model dump
+- ✅ Deployed GCRegisterAPI-10-26 revision 00026-4jw
+- ✅ Tested and verified: 3 tiers → 1 tier update now works correctly
+- ✅ Database values (sub_2_price, sub_2_time, sub_3_price, sub_3_time) properly cleared to NULL
+
+**Technical Details:**
+- **Problem:** When reducing tiers (3→1 or 3→2), tier 2/3 prices remained in database
+- **Root Cause:** `exclude_none=True` filtered out fields explicitly set to `null`, preventing database updates
+- **Impact:** Channel tier count couldn't be reduced, only increased
+- **Solution:** Use `exclude_unset=True` to distinguish between:
+  - "Field not sent" (exclude from update)
+  - "Field explicitly set to null" (include in update to clear value)
+- **File:** GCRegisterAPI-10-26/api/services/channel_service.py
+
+**Deployment:**
+- ✅ Service URL: https://gcregisterapi-10-26-291176869049.us-central1.run.app
+- ✅ Health check: PASSED
+- ✅ Revision: gcregisterapi-10-26-00026-4jw (serving 100% traffic)
+
+**Testing Results:**
+- ✅ Channel -1003202734748: 3 tiers → 1 tier successfully
+- ✅ Dashboard displays only Gold Tier
+- ✅ Edit page shows only Gold Tier section (Silver/Bronze removed)
+- ✅ Database verification: tier 2/3 fields set to NULL
+
+**Architectural Decision:**
+- Using `exclude_unset=True` allows partial updates while supporting explicit NULL values
+- Frontend sends `sub_2_price: null` to clear tier 2
+- Backend now processes NULL values correctly instead of ignoring them
+
+---
+
+## 2025-11-11 Session 112: Cloud Tasks Configuration Fix - Critical ⚙️
+
+**BUG FIX:** Fixed missing Cloud Tasks environment variables in np-webhook-10-26
+
+**Summary:**
+- ✅ Identified 4 missing environment variables (CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION, GCWEBHOOK1_QUEUE, GCWEBHOOK1_URL)
+- ✅ Redeployed np-webhook-10-26 with all 12 required secrets (was only 7)
+- ✅ Cloud Tasks client now initializes successfully
+- ✅ GCWebhook1 orchestration now works after IPN validation
+
+**Technical Details:**
+- **Problem:** Previous deployment (Session 111) only included 7 secrets instead of 12
+- **Impact:** Cloud Tasks client failed to initialize, payments stuck after IPN validation
+- **Root Cause:** Manual deployment command missed Cloud Tasks configuration secrets
+- **Solution:** Deployed with complete secret configuration (12 secrets total)
+
+**Deployment:**
+- ✅ Service URL: https://np-webhook-10-26-291176869049.us-central1.run.app
+- ✅ Health check: PASSED
+- ✅ Revision: np-webhook-10-26-00015-czv (serving 100% traffic)
+- ✅ Cloud Tasks initialization: VERIFIED (logs show "✅ [CLOUDTASKS] Client initialized successfully")
+
+**Complete Secret List:**
+1. NOWPAYMENTS_IPN_SECRET
+2. CLOUD_SQL_CONNECTION_NAME
+3. DATABASE_NAME_SECRET
+4. DATABASE_USER_SECRET
+5. DATABASE_PASSWORD_SECRET
+6. CLOUD_TASKS_PROJECT_ID (🆕 restored)
+7. CLOUD_TASKS_LOCATION (🆕 restored)
+8. GCWEBHOOK1_QUEUE (🆕 restored)
+9. GCWEBHOOK1_URL (🆕 restored)
+10. GCWEBHOOK2_QUEUE
+11. GCWEBHOOK2_URL
+12. TELEPAY_BOT_URL
+
+**Impact:**
+- ✅ Complete payment flow now works end-to-end
+- ✅ GCWebhook1 gets triggered after IPN validation
+- ✅ Telegram invites sent to users
+- ✅ Split payouts work correctly
+
+---
 
 ## 2025-11-11 Session 111: Tier Logic Bug Fix - Critical 🐛
 
