@@ -8,6 +8,7 @@ donation amounts directly within the channel, with real-time validation
 and user-friendly error messages.
 """
 
+import asyncio
 import logging
 from typing import Optional, Dict, Any
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -346,6 +347,38 @@ class DonationKeypadHandler:
             reply_markup=self._create_donation_keypad("0")
         )
 
+    async def _schedule_message_deletion(
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        chat_id: int,
+        message_id: int,
+        delay_seconds: int
+    ) -> None:
+        """
+        Schedule automatic message deletion after specified delay.
+
+        This method creates a background task that waits for the specified
+        delay and then deletes the message. Used for temporary status messages
+        that should not clutter the channel permanently.
+
+        Args:
+            context: Telegram context for bot operations
+            chat_id: Chat ID where message is located
+            message_id: Message ID to delete
+            delay_seconds: Delay in seconds before deletion
+
+        Note:
+            Errors are caught gracefully (e.g., if user manually deletes message
+            or bot loses permissions). Deletion failures are logged as warnings.
+        """
+        try:
+            await asyncio.sleep(delay_seconds)
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            self.logger.info(f"🗑️ Auto-deleted message {message_id} after {delay_seconds}s")
+        except Exception as e:
+            # Message may have been manually deleted or chat no longer accessible
+            self.logger.warning(f"⚠️ Could not delete message {message_id}: {e}")
+
     async def _handle_confirm(
         self,
         update: Update,
@@ -401,6 +434,16 @@ class DonationKeypadHandler:
             parse_mode="HTML"
         )
 
+        # Schedule message deletion after 60 seconds
+        asyncio.create_task(
+            self._schedule_message_deletion(
+                context,
+                query.message.chat.id,
+                query.message.message_id,
+                60
+            )
+        )
+
         # Trigger payment gateway
         await self._trigger_payment_gateway(update, context, amount_float, open_channel_id)
 
@@ -423,6 +466,16 @@ class DonationKeypadHandler:
 
         await query.answer()
         await query.edit_message_text("❌ Donation cancelled.")
+
+        # Schedule message deletion after 15 seconds
+        asyncio.create_task(
+            self._schedule_message_deletion(
+                context,
+                query.message.chat.id,
+                query.message.message_id,
+                15
+            )
+        )
 
         # Clear user data
         context.user_data.pop("donation_amount_building", None)

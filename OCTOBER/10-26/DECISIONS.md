@@ -26,6 +26,195 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+### 2025-11-11 Session 105g: Database Query Separation - Donations vs Subscriptions 🔧
+
+**Decision:** Remove subscription-specific columns from donation workflow database queries.
+
+**Context:**
+- User reported error: `column "sub_value" does not exist` when making donation
+- `get_channel_details_by_open_id()` method was querying `sub_value` (subscription price)
+- This method was created in Session 105e for donation message formatting
+- Donations and subscriptions have fundamentally different pricing models
+
+**Problem:**
+The donation workflow was accidentally including subscription pricing logic:
+- **Donations:** User enters custom amount via numeric keypad ($1-$9999.99)
+- **Subscriptions:** Fixed price stored in database (`sub_value` column)
+- Mixing these concerns caused database query errors
+
+**Decision Rationale:**
+
+#### Principle: Separation of Concerns
+**Donation workflow should:**
+- ✅ Query channel title/description (for display)
+- ❌ NOT query subscription pricing (`sub_value`)
+- ✅ Use user-entered amount from keypad
+
+**Subscription workflow should:**
+- ✅ Query subscription pricing (`sub_value`)
+- ✅ Query channel title/description (for display)
+- ✅ Use fixed price from database
+
+#### Implementation:
+**Modified:** `database.py::get_channel_details_by_open_id()`
+- Removed `sub_value` from SELECT query
+- Updated docstring: "Used exclusively by donation workflow"
+- Return dict now contains only: `closed_channel_title`, `closed_channel_description`
+
+**Why this method is donation-specific:**
+1. Created in Session 105e specifically for donation message formatting
+2. Only called from `donation_input_handler.py`
+3. Subscription workflow uses different database methods
+4. Name implies it's for display purposes, not pricing
+
+**Verification:**
+- Checked all usages of `get_channel_details_by_open_id()` - only in donation flow
+- Confirmed `donation_input_handler.py` only uses title/description
+- Subscription workflow unaffected (uses separate methods for pricing)
+
+**Alternative Considered:**
+Could have created separate methods:
+- `get_channel_display_info()` - title/description only
+- `get_subscription_pricing()` - pricing only
+
+**Rejected because:**
+- Current method name is clear enough
+- Only used by donations
+- Docstring now explicitly states donation-specific usage
+- No need to refactor subscription code
+
+**Lessons Learned:**
+1. **Don't assume column existence** - verify schema before querying
+2. **Separate donation and subscription logic** - they're different business flows
+3. **Method naming matters** - `get_channel_details_by_open_id()` implies display info, not pricing
+4. **Document method scope** - added "exclusively for donation workflow" to docstring
+
+**Benefits of Separation:**
+- Cleaner code: Donation logic doesn't touch subscription pricing
+- Fewer database columns queried: Faster queries
+- Less coupling: Changes to subscription pricing don't affect donations
+- Clearer intent: Method purpose is explicit
+
+---
+
+### 2025-11-11 Session 105f: Temporary Auto-Deleting Messages for Donation Status Updates 🗑️
+
+**Decision:** Implement automatic message deletion for transient donation status messages in closed channels.
+
+**Context:**
+- Donation flow creates status messages: "✅ Donation Confirmed..." and "❌ Donation cancelled."
+- These messages persist indefinitely in closed channels
+- Users asked: "Can these messages be temporary?"
+- Status updates are transient - they clutter the channel after serving their purpose
+
+**Historical Context:**
+On 2025-11-04, auto-deletion was **removed** from open channel subscription prompts because:
+- Users panicked when payment prompts disappeared mid-transaction
+- Trust issue: "Where did my payment link go?"
+- Payment prompts need persistence for user confidence
+
+**Current Decision - Different Use Case:**
+Donation status messages in **closed channels** are different:
+- **Not payment prompts** - just status confirmations
+- Payment link is sent to **user's private chat** (persists there)
+- Status in channel is **redundant** after user sees it
+- Cleanup improves channel aesthetics without impacting UX
+
+**Implementation:**
+
+#### Approach: `asyncio.create_task()` with Background Deletion
+- **Location:** `donation_input_handler.py`
+- **Pattern:** Non-blocking background tasks
+- **Rationale:**
+  1. Doesn't block callback query response
+  2. Already used in codebase (`telepay10-26.py`)
+  3. Clean async/await pattern
+  4. Easy error handling
+
+#### Deletion Timers:
+1. **"✅ Donation Confirmed..." → 60 seconds**
+   - Gives user time to read confirmation
+   - Allows transition to private chat for payment
+   - Long enough to not feel rushed
+
+2. **"❌ Donation cancelled." → 15 seconds**
+   - Short message, less context needed
+   - Quick cleanup since no further action required
+
+#### Error Handling Strategy:
+**Decision:** Graceful degradation with logging
+- **Catch all exceptions** during deletion
+- **Log warnings** (not errors) for deletion failures
+- **Don't retry** - it's a cleanup operation
+- **Possible failures:**
+  - User manually deleted message first
+  - Bot lost channel permissions
+  - Network timeout during deletion
+  - Channel no longer accessible
+
+**Rationale:**
+- Message deletion is **non-critical**
+- Failed deletion doesn't impact payment flow
+- Better to log and continue than to crash
+- Channel admin can manually clean up if needed
+
+#### Technical Details:
+
+**Helper Method: `_schedule_message_deletion()`**
+```python
+async def _schedule_message_deletion(
+    context, chat_id, message_id, delay_seconds
+) -> None:
+    await asyncio.sleep(delay_seconds)
+    await context.bot.delete_message(chat_id, message_id)
+```
+
+**Usage Pattern:**
+```python
+await query.edit_message_text("Status message...")
+asyncio.create_task(
+    self._schedule_message_deletion(context, chat_id, message_id, delay)
+)
+```
+
+**Why `asyncio.create_task()` vs `await`:**
+- `await` would **block** until message is deleted (60+ seconds!)
+- `create_task()` runs in **background** (non-blocking)
+- Payment gateway can proceed immediately
+
+#### Consistency with Codebase:
+- **Emoji usage:** 🗑️ for deletion logs, ⚠️ for warnings
+- **Logging pattern:** Info for success, warning for failures
+- **Async patterns:** Matches existing `asyncio.create_task()` usage
+
+**Benefits:**
+1. **Cleaner channels:** Old donation attempts don't clutter chat history
+2. **Better UX:** Temporary status updates feel modern and polished
+3. **No negative impact:** Deletion failures are silent and logged
+4. **Non-blocking:** Payment flow proceeds without delay
+5. **Maintainable:** Simple, well-documented helper method
+
+**Trade-offs Accepted:**
+- **No cancellation:** Can't cancel scheduled deletion if user clicks another button
+  - Acceptable: Message gets edited, deletion still works on new content
+- **No retry logic:** Failed deletions are not retried
+  - Acceptable: It's a cleanup operation, not critical functionality
+- **Context dependency:** Assumes `context` remains valid for 60 seconds
+  - Safe assumption: Bot sessions last hours/days, not seconds
+
+**Why This is Different from 2025-11-04 Removal:**
+| Aspect | Open Channel Subscriptions (Removed) | Closed Channel Donations (Added) |
+|--------|--------------------------------------|----------------------------------|
+| Message type | Payment prompt with link | Status confirmation |
+| User needs it? | Yes (to complete payment) | No (payment is in private chat) |
+| Persistence needed? | Yes (user trust) | No (transient status) |
+| Consequence if deleted | User panic, lost payment link | None (already in private chat) |
+| UX impact | Negative (confusion) | Positive (clean channel) |
+
+**Conclusion:** Context matters. Same mechanism (auto-deletion), different use cases, opposite decisions.
+
+---
+
 ### 2025-11-11 Session 105e (Part 3): Welcome Message Formatting Hierarchy 📝
 
 **Decision:** Use bold formatting only for dynamic variables in welcome messages, not static text.

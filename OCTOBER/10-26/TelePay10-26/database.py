@@ -315,6 +315,10 @@ class DatabaseManager:
         """
         Fetch channel details by open_channel_id for donation message formatting.
 
+        This method is used exclusively by the donation workflow to display
+        channel information to users. It does NOT fetch subscription pricing
+        (sub_value) since donations use user-entered amounts.
+
         Args:
             open_channel_id: The open channel ID to fetch details for
 
@@ -322,16 +326,14 @@ class DatabaseManager:
             Dict containing channel details or None if not found:
             {
                 "closed_channel_title": str,
-                "closed_channel_description": str,
-                "sub_value": float
+                "closed_channel_description": str
             }
 
         Example:
             >>> db.get_channel_details_by_open_id("-1003268562225")
             {
                 "closed_channel_title": "11-7 #2 SHIBA CLOSED INSTANT",
-                "closed_channel_description": "Another Test.",
-                "sub_value": 6.00
+                "closed_channel_description": "Another Test."
             }
         """
         try:
@@ -340,8 +342,7 @@ class DatabaseManager:
             cur.execute("""
                 SELECT
                     closed_channel_title,
-                    closed_channel_description,
-                    sub_value
+                    closed_channel_description
                 FROM main_clients_database
                 WHERE open_channel_id = %s
                 LIMIT 1
@@ -353,8 +354,7 @@ class DatabaseManager:
             if result:
                 channel_details = {
                     "closed_channel_title": result[0] if result[0] else "Premium Channel",
-                    "closed_channel_description": result[1] if result[1] else "Exclusive content",
-                    "sub_value": result[2] if result[2] else 0.0
+                    "closed_channel_description": result[1] if result[1] else "Exclusive content"
                 }
                 print(f"✅ Fetched channel details for {open_channel_id}")
                 return channel_details

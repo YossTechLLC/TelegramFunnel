@@ -1,8 +1,136 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105e - **Message Formatting Improvements** 💝✨
+**Last Updated:** 2025-11-11 Session 105g - **Fix Donation Database Query** 🔧
 
 ## Recent Updates
+
+## 2025-11-11 Session 105g: Fix Database Query - Remove sub_value from Donation Workflow 🔧
+
+**USER REPORT**: Error when making donation: `❌ Error fetching channel details: column "sub_value" does not exist`
+
+**ROOT CAUSE:**
+- `get_channel_details_by_open_id()` method was querying `sub_value` column
+- This method is used exclusively by the donation workflow
+- Donations use user-entered amounts, NOT subscription pricing
+- `sub_value` is subscription-specific data that shouldn't be queried for donations
+
+**FIX IMPLEMENTED:**
+- Location: `database.py` lines 314-367
+- Removed `sub_value` from SELECT query
+- Updated method to only fetch:
+  - `closed_channel_title`
+  - `closed_channel_description`
+- Updated docstring to clarify this method is donation-specific
+- Confirmed `donation_input_handler.py` only uses title and description (not sub_value)
+
+**Before:**
+```sql
+SELECT
+    closed_channel_title,
+    closed_channel_description,
+    sub_value  -- ❌ Not needed for donations
+FROM main_clients_database
+WHERE open_channel_id = %s
+```
+
+**After:**
+```sql
+SELECT
+    closed_channel_title,
+    closed_channel_description  -- ✅ Only what's needed
+FROM main_clients_database
+WHERE open_channel_id = %s
+```
+
+**VERIFICATION:**
+- ✅ Donation flow only uses channel title/description for display
+- ✅ Donation amount comes from user keypad input
+- ✅ No other code uses `get_channel_details_by_open_id()` (donation-specific method)
+- ✅ Subscription workflow unaffected (uses different methods)
+
+**IMPACT:**
+- ✅ Donations will now work without database errors
+- ✅ No impact on subscription workflow
+- ✅ Cleaner separation between donation and subscription logic
+
+---
+
+## 2025-11-11 Session 105f: Implement Temporary Auto-Deleting Messages for Donation Flow 🗑️
+
+**USER REQUEST**: Make donation confirmation and cancellation messages temporary with auto-deletion
+
+**PROBLEM:**
+- "✅ Donation Confirmed..." messages stay in closed channels permanently
+- "❌ Donation cancelled." messages clutter the channel
+- These are transient status updates that don't need to persist
+
+**IMPLEMENTATION:**
+
+**1. Added asyncio import** (line 11)
+- Enables async task scheduling for delayed message deletion
+
+**2. Created `_schedule_message_deletion()` helper method** (lines 350-380)
+- Accepts: context, chat_id, message_id, delay_seconds
+- Uses `asyncio.sleep()` to wait for specified delay
+- Deletes message using `context.bot.delete_message()`
+- Gracefully handles edge cases:
+  - Message already manually deleted
+  - Bot loses channel permissions
+  - Network issues during deletion
+- Logs success (🗑️) and failures (⚠️)
+
+**3. Updated `_handle_confirm()` method** (lines 437-445)
+- After sending "✅ Donation Confirmed..." message
+- Schedules deletion after **60 seconds** using `asyncio.create_task()`
+- Non-blocking background task
+
+**4. Updated `_handle_cancel()` method** (lines 470-478)
+- After sending "❌ Donation cancelled." message
+- Schedules deletion after **15 seconds** using `asyncio.create_task()`
+- Non-blocking background task
+
+**FLOW:**
+```
+User confirms donation
+  ↓
+Show "✅ Donation Confirmed..." message
+  ↓
+Background task: wait 60 seconds → delete message
+  ↓
+User sees payment gateway in private chat
+  ↓
+Channel stays clean (message auto-removed)
+```
+
+```
+User cancels donation
+  ↓
+Show "❌ Donation cancelled." message
+  ↓
+Background task: wait 15 seconds → delete message
+  ↓
+Channel stays clean (message auto-removed)
+```
+
+**TECHNICAL DETAILS:**
+- Uses `asyncio.create_task()` for non-blocking execution
+- Message deletion happens independently of main flow
+- Errors caught silently with warning logs
+- No impact on payment processing
+- Follows existing codebase patterns (emoji usage: 🗑️ for deletion, ⚠️ for warnings)
+
+**DIFFERENCE FROM PREVIOUS AUTO-DELETION REMOVAL:**
+- **Previous removal (2025-11-04):** Open channel subscription prompts (needed persistence for user trust)
+- **Current implementation:** Closed channel donation status messages (temporary confirmations)
+- **Different use case:** Status updates vs. payment prompts
+
+**IMPACT:**
+- ✅ Cleaner closed channels - no clutter from old donation attempts
+- ✅ Better UX - temporary messages disappear automatically
+- ✅ Graceful error handling - no crashes if deletion fails
+- ✅ Non-blocking - doesn't impact payment flow performance
+
+---
 
 ## 2025-11-11 Session 105e (Part 3): Welcome Message Formatting Fix 📝
 
