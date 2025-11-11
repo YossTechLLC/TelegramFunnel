@@ -1,8 +1,53 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105b - **Donation Rework: Critical Bugfix - Broadcast Integration** 💝🔧
+**Last Updated:** 2025-11-11 Session 105c - **Donation Rework: Database Column Fix** 💝🔧
 
 ## Recent Updates
+
+## 2025-11-11 Session 105c: Donation Rework - BUGFIX: Database Column Names 🔧
+
+**USER REPORT**: Error when starting bot: `❌ Error fetching closed channels: column "client_payout_strategy" does not exist`
+
+**ROOT CAUSE IDENTIFIED:**
+- Query used incorrect column names: `client_payout_strategy`, `client_payout_threshold_usd`
+- Actual column names in database: `payout_strategy`, `payout_threshold_usd` (without "client_" prefix)
+- This was a **planning assumption** that turned out incorrect upon testing
+
+**INVESTIGATION:**
+- Searched codebase for other services using same table
+- Found 3+ services successfully using correct column names:
+  - `GCWebhook1-10-26/database_manager.py`
+  - `np-webhook-10-26/database_manager.py`
+  - `GCBatchProcessor-10-26/database_manager.py`
+- Confirmed: columns exist as `payout_strategy` and `payout_threshold_usd`
+
+**FIX IMPLEMENTED:**
+- ✅ Fixed column names in `database.py` line 245-246
+- ✅ Changed `client_payout_strategy` → `payout_strategy`
+- ✅ Changed `client_payout_threshold_usd` → `payout_threshold_usd`
+- ✅ Logic and mapping unchanged (only names corrected)
+
+**FILE MODIFIED:**
+- `TelePay10-26/database.py` (lines 245-246)
+
+**CORRECTED SQL:**
+```python
+SELECT
+    closed_channel_id,
+    open_channel_id,
+    closed_channel_title,
+    closed_channel_description,
+    payout_strategy,           # ✅ Correct (was: client_payout_strategy)
+    payout_threshold_usd       # ✅ Correct (was: client_payout_threshold_usd)
+FROM main_clients_database
+```
+
+**EXPECTED RESULT:**
+- ✅ Bot starts without database errors
+- ✅ `fetch_all_closed_channels()` successfully queries database
+- ✅ Donation messages broadcast to closed channels
+
+---
 
 ## 2025-11-11 Session 105b: Donation Rework - CRITICAL BUGFIX: Missing Broadcast Call 🔧
 

@@ -242,8 +242,8 @@ class DatabaseManager:
                     open_channel_id,
                     closed_channel_title,
                     closed_channel_description,
-                    client_payout_strategy,
-                    client_payout_threshold_usd
+                    payout_strategy,
+                    payout_threshold_usd
                 FROM main_clients_database
                 WHERE closed_channel_id IS NOT NULL
                     AND closed_channel_id != ''
