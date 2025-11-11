@@ -413,103 +413,6 @@ export default function RegisterChannelPage() {
             </div>
           </div>
 
-          {/* Donation Message Configuration Section */}
-          <div className="card" style={{ marginBottom: '24px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>
-              💝 Donation Message Configuration
-            </h2>
-            <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
-              Customize the message your subscribers will see when they click the donation
-              button in your closed channel. This is your chance to connect with your community
-              and explain how their support helps!
-            </p>
-
-            <div className="form-group">
-              <label>Donation Message *</label>
-              <textarea
-                placeholder="e.g., 'Enjoying our premium content? Your support helps us continue creating quality material. Consider donating any amount to keep us going! 💝'"
-                value={closedChannelDonationMessage}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value.length <= 256) {
-                    setClosedChannelDonationMessage(value);
-                    setDonationMessageCharCount(value.length);
-                  }
-                }}
-                rows={4}
-                required
-                maxLength={256}
-                style={{
-                  resize: 'vertical',
-                  minHeight: '100px'
-                }}
-              />
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginTop: '8px'
-              }}>
-                <small style={{ color: '#666', fontSize: '12px' }}>
-                  ⚠️ This field cannot be empty (minimum 10 characters)
-                </small>
-                <small style={{
-                  color: donationMessageCharCount > 256 ? '#ef4444' : '#666',
-                  fontSize: '12px',
-                  fontWeight: donationMessageCharCount > 240 ? '600' : '400'
-                }}>
-                  {donationMessageCharCount}/256 characters
-                </small>
-              </div>
-
-              {/* Character count warning */}
-              {donationMessageCharCount > 240 && donationMessageCharCount <= 256 && (
-                <div style={{
-                  color: '#f59e0b',
-                  fontSize: '12px',
-                  marginTop: '4px',
-                  padding: '6px',
-                  background: '#fef3c7',
-                  borderRadius: '4px',
-                  borderLeft: '3px solid #f59e0b'
-                }}>
-                  ⚠️ Approaching character limit ({256 - donationMessageCharCount} characters remaining)
-                </div>
-              )}
-            </div>
-
-            {/* Preview Box */}
-            {closedChannelDonationMessage.trim() && (
-              <div style={{
-                padding: '16px',
-                background: '#f9fafb',
-                borderRadius: '8px',
-                border: '1px solid #e5e7eb',
-                marginTop: '16px'
-              }}>
-                <h3 style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  marginBottom: '8px',
-                  color: '#374151'
-                }}>
-                  📱 Preview (how it will appear in your closed channel):
-                </h3>
-                <div style={{
-                  padding: '12px',
-                  background: 'white',
-                  borderRadius: '6px',
-                  border: '1px solid #d1d5db',
-                  fontSize: '14px',
-                  lineHeight: '1.6',
-                  color: '#111827'
-                }}>
-                  {closedChannelDonationMessage}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Subscription Tiers Section */}
           <div className="card" style={{ marginBottom: '24px' }}>
             <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>Subscription Tiers</h2>
@@ -673,6 +576,103 @@ export default function RegisterChannelPage() {
                       required
                     />
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Donation Message Configuration Section */}
+          <div className="card" style={{ marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>
+              Donation Message Configuration
+            </h2>
+            <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+              Customize the message your subscribers will see when they click the donation
+              button in your closed channel. This is your chance to connect with your community
+              and explain how their support helps!
+            </p>
+
+            <div className="form-group">
+              <label>Donation Message *</label>
+              <textarea
+                placeholder="e.g., 'Enjoying our premium content? Your support helps us continue creating quality material. Consider donating any amount to keep us going! 💝'"
+                value={closedChannelDonationMessage}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= 256) {
+                    setClosedChannelDonationMessage(value);
+                    setDonationMessageCharCount(value.length);
+                  }
+                }}
+                rows={4}
+                required
+                maxLength={256}
+                style={{
+                  resize: 'vertical',
+                  minHeight: '100px'
+                }}
+              />
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '8px'
+              }}>
+                <small style={{ color: '#666', fontSize: '12px' }}>
+                  ⚠️ This field cannot be empty (minimum 10 characters)
+                </small>
+                <small style={{
+                  color: donationMessageCharCount > 256 ? '#ef4444' : '#666',
+                  fontSize: '12px',
+                  fontWeight: donationMessageCharCount > 240 ? '600' : '400'
+                }}>
+                  {donationMessageCharCount}/256 characters
+                </small>
+              </div>
+
+              {/* Character count warning */}
+              {donationMessageCharCount > 240 && donationMessageCharCount <= 256 && (
+                <div style={{
+                  color: '#f59e0b',
+                  fontSize: '12px',
+                  marginTop: '4px',
+                  padding: '6px',
+                  background: '#fef3c7',
+                  borderRadius: '4px',
+                  borderLeft: '3px solid #f59e0b'
+                }}>
+                  ⚠️ Approaching character limit ({256 - donationMessageCharCount} characters remaining)
+                </div>
+              )}
+            </div>
+
+            {/* Preview Box */}
+            {closedChannelDonationMessage.trim() && (
+              <div style={{
+                padding: '16px',
+                background: '#f9fafb',
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb',
+                marginTop: '16px'
+              }}>
+                <h3 style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                  color: '#374151'
+                }}>
+                  📱 Preview (how it will appear in your closed channel):
+                </h3>
+                <div style={{
+                  padding: '12px',
+                  background: 'white',
+                  borderRadius: '6px',
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  color: '#111827'
+                }}>
+                  {closedChannelDonationMessage}
                 </div>
               </div>
             )}
