@@ -447,9 +447,9 @@ class DonationKeypadHandler:
         # Send NEW independent confirmation message
         confirmation_message = await context.bot.send_message(
             chat_id=query.message.chat.id,
-            text=f"✅ <b>Donation Confirmed</b>\n\n"
-                 f"Amount: <b>${amount_float:.2f}</b>\n\n"
-                 f"Preparing your payment gateway...",
+            text=f"✅ <b>Donation Confirmed</b>\n"
+                 f"💰 Amount: <b>${amount_float:.2f}</b>\n"
+                 f"Preparing your payment gateway... Check your messages with @PayGatePrime_bot",
             parse_mode="HTML"
         )
 

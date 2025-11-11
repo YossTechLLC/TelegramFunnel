@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 106 - **Donation Message Customization**
+**Last Updated:** 2025-11-11 Session 107 - **Donation Message Format Updates**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -25,6 +25,38 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 107: Donation Message Format Standardization 💝
+
+**Decision:** Standardized donation message and confirmation message formatting for better UX
+
+**Context:**
+- Users reported donation messages were unclear and confirmation messages had awkward spacing
+- Need consistent formatting across closed channel donations and payment confirmations
+
+**Changes:**
+1. **Closed Channel Donation Message:**
+   - Added period after "donation" for proper grammar
+   - Moved custom message to new line for better readability
+   - Format: `"Enjoying the content? Consider making a donation.\n<b>{donation_message}</b>"`
+
+2. **Donation Confirmation Message:**
+   - Removed extra blank lines (`\n\n` → `\n`) for compact display
+   - Added 💰 emoji before "Amount" for visual clarity
+   - Added explicit mention of @PayGatePrime_bot to guide users
+   - Format: `"✅ Donation Confirmed\n💰 Amount: $X.XX\nPreparing your payment gateway... Check your messages with @PayGatePrime_bot"`
+
+**Rationale:**
+- Improved grammar and readability
+- Better visual hierarchy with emoji
+- Explicit bot mention reduces user confusion about where payment gateway appears
+- Compact format reduces message clutter in chat
+
+**Implementation:**
+- Modified `closed_channel_manager.py:219`
+- Modified `donation_input_handler.py:450-452`
+
+---
 
 ### 2025-11-11 Session 106: Customizable Donation Messages 💝
 

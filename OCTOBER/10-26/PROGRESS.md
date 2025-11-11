@@ -1,8 +1,33 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 106 - **Donation Message Customization Feature** 💝
+**Last Updated:** 2025-11-11 Session 107 - **Donation Message Format Updates** 💝
 
 ## Recent Updates
+
+## 2025-11-11 Session 107: Donation Message Format Updates 💝
+
+**FEATURE:** Updated donation message and confirmation message formatting
+
+**Changes to TelePay10-26:**
+- ✅ Updated closed channel donation message format (closed_channel_manager.py)
+  - Added period after "donation"
+  - Custom message now appears on new line
+  - Format: "Enjoying the content? Consider making a donation.\n<b>{donation_message}</b>"
+- ✅ Updated donation confirmation message (donation_input_handler.py)
+  - Removed extra blank lines between text
+  - Added 💰 emoji before "Amount"
+  - Added "@PayGatePrime_bot" mention to prepare message
+
+**Files Modified:**
+- `TelePay10-26/closed_channel_manager.py` (line 219)
+- `TelePay10-26/donation_input_handler.py` (lines 450-452)
+
+**Testing Required:**
+- [ ] Restart telepay10-26 bot locally on VM
+- [ ] Test donation message in closed channel -1003016667267
+- [ ] Verify confirmation message format when user clicks donate button
+
+---
 
 ## 2025-11-11 Session 106: Donation Message Customization Feature 💝
 

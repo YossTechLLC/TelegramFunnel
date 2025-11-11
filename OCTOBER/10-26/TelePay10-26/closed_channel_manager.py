@@ -216,7 +216,7 @@ class ClosedChannelManager:
             Enjoying the content? Consider making a donation <b>Your support helps us create amazing content!</b>
         """
         message_text = (
-            f"Enjoying the content? Consider making a donation <b>{donation_message}</b>"
+            f"Enjoying the content? Consider making a donation.\n<b>{donation_message}</b>"
         )
 
         # Validate message length (Telegram limit: 4096 characters)
