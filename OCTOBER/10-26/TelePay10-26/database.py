@@ -311,6 +311,61 @@ class DatabaseManager:
             print(f"❌ Error validating channel: {e}")
             return False
 
+    def get_channel_details_by_open_id(self, open_channel_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch channel details by open_channel_id for donation message formatting.
+
+        Args:
+            open_channel_id: The open channel ID to fetch details for
+
+        Returns:
+            Dict containing channel details or None if not found:
+            {
+                "closed_channel_title": str,
+                "closed_channel_description": str,
+                "sub_value": float
+            }
+
+        Example:
+            >>> db.get_channel_details_by_open_id("-1003268562225")
+            {
+                "closed_channel_title": "11-7 #2 SHIBA CLOSED INSTANT",
+                "closed_channel_description": "Another Test.",
+                "sub_value": 6.00
+            }
+        """
+        try:
+            conn = self.get_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT
+                    closed_channel_title,
+                    closed_channel_description,
+                    sub_value
+                FROM main_clients_database
+                WHERE open_channel_id = %s
+                LIMIT 1
+            """, (str(open_channel_id),))
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            if result:
+                channel_details = {
+                    "closed_channel_title": result[0] if result[0] else "Premium Channel",
+                    "closed_channel_description": result[1] if result[1] else "Exclusive content",
+                    "sub_value": result[2] if result[2] else 0.0
+                }
+                print(f"✅ Fetched channel details for {open_channel_id}")
+                return channel_details
+            else:
+                print(f"⚠️ No channel details found for {open_channel_id}")
+                return None
+
+        except Exception as e:
+            print(f"❌ Error fetching channel details: {e}")
+            return None
+
     def insert_channel_config(self, channel_data: Dict[str, Any]) -> bool:
         """
         Insert a new channel configuration into the database.

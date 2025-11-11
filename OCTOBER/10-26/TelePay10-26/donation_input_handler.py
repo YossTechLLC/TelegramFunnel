@@ -487,6 +487,18 @@ class DonationKeypadHandler:
                 if invoice_url:
                     self.logger.info(f"✅ Payment invoice created successfully for ${amount:.2f}")
 
+                    # Fetch channel details for message formatting
+                    channel_details = self.db_manager.get_channel_details_by_open_id(open_channel_id)
+
+                    if channel_details:
+                        closed_channel_title = channel_details["closed_channel_title"]
+                        closed_channel_description = channel_details["closed_channel_description"]
+                    else:
+                        # Fallback if channel details not found
+                        closed_channel_title = "Premium Channel"
+                        closed_channel_description = "Exclusive content"
+                        self.logger.warning(f"⚠️ Channel details not found for {open_channel_id}, using fallback")
+
                     # Create payment button with Web App
                     from telegram import KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
@@ -497,12 +509,12 @@ class DonationKeypadHandler:
                         )
                     )
 
-                    # Send payment button to user's private chat
+                    # Send payment button to user's private chat with new format
                     text = (
-                        f"💝 <b>Complete Your ${amount:.2f} Donation</b>\n\n"
-                        f"Click the button below to proceed to the payment gateway.\n\n"
-                        f"You can pay with various cryptocurrencies.\n\n"
-                        f"🔒 <b>Order ID:</b> <code>{order_id}</code>"
+                        f"💝 <b>Click the button below to Complete Your ${amount:.2f} Donation</b> 💝\n\n"
+                        f"🔒 <b>Private Channel:</b> {closed_channel_title}\n"
+                        f"📝 <b>Channel Description:</b> {closed_channel_description}\n"
+                        f"💰 <b>Price:</b> ${amount:.2f}"
                     )
 
                     await context.bot.send_message(

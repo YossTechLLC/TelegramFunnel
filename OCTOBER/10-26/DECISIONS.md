@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105 - **Donation Rework: Closed Channel Architecture**
+**Last Updated:** 2025-11-11 Session 105e - **Donation Message Format Enhancement**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -25,6 +25,149 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 105e (Part 3): Welcome Message Formatting Hierarchy 📝
+
+**Decision:** Use bold formatting only for dynamic variables in welcome messages, not static text.
+
+**Context:**
+- Welcome message had entire first line bold: "**Hello, welcome to [channel]**"
+- This made static text compete visually with dynamic channel information
+- Call-to-action text was verbose: "Please Choose your subscription tier to gain access to the"
+
+**Implementation:**
+- **Location:** `broadcast_manager.py` lines 92-95
+- **Change 1:** Bold only dynamic variables (channel titles/descriptions)
+- **Change 2:** Simplified call-to-action text
+
+**Formatting Hierarchy:**
+```
+Regular text → Static instructions
+Bold text → Dynamic content from database
+```
+
+**Before:**
+```html
+<b>Hello, welcome to {channel}: {description}</b>
+
+Please Choose your subscription tier to gain access to the <b>{premium_channel}: {description}</b>.
+```
+
+**After:**
+```html
+Hello, welcome to <b>{channel}: {description}</b>
+
+Choose your Subscription Tier to gain access to <b>{premium_channel}: {description}</b>.
+```
+
+**Rationale:**
+1. **Visual hierarchy:** Dynamic content (what changes) should stand out more than static text
+2. **Readability:** Selective bolding guides user's eye to important information
+3. **Conciseness:** Shorter call-to-action reduces cognitive load
+4. **Consistency:** Matches formatting patterns in payment messages (Part 1 & 2)
+5. **Professional appearance:** Less "shouty" with targeted bold usage
+
+**Typography Principle:** Bold should highlight what's **variable and important**, not entire sentences.
+
+---
+
+### 2025-11-11 Session 105e (Part 2): Remove Testing Artifacts from Production Messages 🧹
+
+**Decision:** Remove testing success URL display from payment gateway messages in production.
+
+**Context:**
+- Payment gateway messages included testing text: "🧪 For testing purposes, here is the Success URL 🔗"
+- Success URL was displayed to end users as plain text
+- This was a debugging/testing artifact that should not be user-facing
+
+**Implementation:**
+- **Location:** `start_np_gateway.py` lines 217-223
+- **Change:** Removed testing message and success URL display
+- **Message now ends after:** Duration information
+
+**Rationale:**
+1. **Professional appearance:** Removes testing language from production
+2. **Clean UX:** Users don't need to see internal redirect URLs
+3. **Security consideration:** Less exposure of internal URL structures
+4. **Maintains functionality:** Success URL still used internally for payment callbacks
+5. **Consistent with donation flow:** Donation messages don't show success URLs either
+
+**Impact:**
+- Subscription payment messages now match professional standards
+- Success URL still functions normally for payment processing and webhooks
+- No breaking changes to payment flow
+
+---
+
+### 2025-11-11 Session 105e (Part 1): Donation Message Format Enhancement 💝✨
+
+**Decision:** Enhanced donation payment message to include contextual channel information for improved user experience.
+
+**Context:**
+- Previous message format was generic and didn't provide context about which channel user was donating to
+- Order ID was exposed to users (internal implementation detail)
+- Message contained generic payment gateway instructions without channel-specific context
+
+**Implementation:**
+
+#### 1. Database Layer Enhancement
+**Decision:** Added `get_channel_details_by_open_id()` method to DatabaseManager
+- **Location:** `database.py` lines 314-367
+- **Returns:** Dict with `closed_channel_title`, `closed_channel_description`, `sub_value`
+- **Rationale:**
+  - Encapsulates database query logic
+  - Reusable across multiple modules
+  - Includes fallback values for missing data
+  - Maintains Single Responsibility Principle
+
+#### 2. Message Format Redesign
+**Decision:** Display channel context instead of technical details
+- **Before:**
+  ```
+  💝 Complete Your $55.00 Donation
+
+  Click the button below to proceed to the payment gateway.
+  You can pay with various cryptocurrencies.
+  🔒 Order ID: PGP-6271402111|-1003268562225
+  ```
+- **After:**
+  ```
+  💝 Click the button below to Complete Your $55.00 Donation 💝
+
+  🔒 Private Channel: 11-7 #2 SHIBA CLOSED INSTANT
+  📝 Channel Description: Another Test.
+  💰 Price: $55.00
+  ```
+- **Rationale:**
+  - **User-centric:** Shows what channel they're supporting
+  - **Context-aware:** Displays channel description for clarity
+  - **Clean:** Removes internal technical details (Order ID)
+  - **Consistent:** Amount shown in both title and body
+  - **Professional:** Structured, easy-to-read format
+
+#### 3. Security Consideration
+**Decision:** Order ID still used internally but hidden from user
+- **Implementation:** Order ID created and sent to NOWPayments API but not displayed in message
+- **Rationale:**
+  - Users don't need to see internal tracking IDs
+  - Reduces confusion and cognitive load
+  - Maintains traceability in backend logs
+  - Order ID still in webhook callbacks for processing
+
+#### 4. Error Handling
+**Decision:** Graceful fallback when channel details unavailable
+- **Implementation:** Default values "Premium Channel" and "Exclusive content"
+- **Rationale:**
+  - Prevents user-facing errors
+  - Allows payment flow to continue
+  - Logs warning for debugging
+  - Better UX than showing error message
+
+**Benefits:**
+1. **Improved UX:** Users see clear context about what they're donating to
+2. **Reduced Confusion:** No technical IDs or generic instructions
+3. **Brand Consistency:** Channel-specific information reinforces value
+4. **Maintainability:** Database query encapsulated in single method
 
 ### 2025-11-11 Session 105: Donation Rework - Closed Channel Architecture 💝
 

@@ -90,8 +90,8 @@ class BroadcastManager:
             closed_channel_description = data.get("closed_channel_description", "exclusive content")
             
             welcome_message = (
-                f"<b>Hello, welcome to {open_channel_title}: {open_channel_description}</b>\n\n"
-                f"Please Choose your subscription tier to gain access to the <b>{closed_channel_title}: {closed_channel_description}</b>."
+                f"Hello, welcome to <b>{open_channel_title}: {open_channel_description}</b>\n\n"
+                f"Choose your Subscription Tier to gain access to <b>{closed_channel_title}: {closed_channel_description}</b>."
             )
             
             reply_markup = self.build_menu_buttons(buttons_cfg)

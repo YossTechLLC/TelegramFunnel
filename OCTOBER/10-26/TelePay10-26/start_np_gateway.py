@@ -219,9 +219,7 @@ class PaymentGatewayManager:
                 f"🔒 <b>Private Channel:</b> {closed_channel_title}\n"
                 f"📝 <b>Channel Description:</b> {closed_channel_description}\n"
                 f"💰 <b>Price:</b> ${sub_value:.2f}\n"
-                f"⏰ <b>Duration:</b> {sub_time} days\n\n"
-                f"🧪 <b>For testing purposes, here is the Success URL</b> 🔗\n"
-                f"<code>{secure_success_url}</code>"
+                f"⏰ <b>Duration:</b> {sub_time} days"
             )
             await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
         else:

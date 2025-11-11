@@ -1,8 +1,118 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105d - **Donation Rework: Payment Button Routing Fix** 💝🔧
+**Last Updated:** 2025-11-11 Session 105e - **Message Formatting Improvements** 💝✨
 
 ## Recent Updates
+
+## 2025-11-11 Session 105e (Part 3): Welcome Message Formatting Fix 📝
+
+**USER REQUEST**: Fix formatting in welcome message - make only dynamic variables bold
+
+**CHANGES IMPLEMENTED:**
+- Location: `broadcast_manager.py` lines 92-95
+- Made "Hello, welcome to" non-bold (regular text)
+- Kept only dynamic variables bold: channel titles and descriptions
+- Updated text: "Please Choose your subscription tier to gain access to the" → "Choose your Subscription Tier to gain access to"
+
+**Before:**
+```
+**Hello, welcome to 10-24 PUBLIC: Public Test**
+
+Please Choose your subscription tier to gain access to the **10-24 PRIVATE: Private Test**.
+```
+
+**After:**
+```
+Hello, welcome to **10-24 PUBLIC: Public Test**
+
+Choose your Subscription Tier to gain access to **10-24 PRIVATE: Private Test**.
+```
+
+**Impact:**
+- ✅ Better visual hierarchy - dynamic content stands out
+- ✅ Cleaner, more professional appearance
+- ✅ More concise call-to-action text
+
+---
+
+## 2025-11-11 Session 105e (Part 2): Remove Testing Success URL from Payment Gateway 🧹
+
+**USER REQUEST**: Remove testing success URL message from @PayGatePrime_bot
+
+**CHANGE IMPLEMENTED:**
+- Location: `start_np_gateway.py` lines 217-223
+- Removed testing message: "🧪 For testing purposes, here is the Success URL 🔗"
+- Removed success_url display from subscription payment message
+- Message now ends cleanly after Duration information
+
+**Before:**
+```
+💳 Click the button below to start the Payment Gateway 🚀
+
+🔒 Private Channel: [title]
+📝 Channel Description: [description]
+💰 Price: $6.00
+⏰ Duration: 30 days
+
+🧪 For testing purposes, here is the Success URL 🔗
+https://storage.googleapis.com/paygateprime-static/payment-processing.html?order_id=PGP-...
+```
+
+**After:**
+```
+💳 Click the button below to start the Payment Gateway 🚀
+
+🔒 Private Channel: [title]
+📝 Channel Description: [description]
+💰 Price: $6.00
+⏰ Duration: 30 days
+```
+
+**Impact:**
+- ✅ Cleaner, more professional payment message
+- ✅ Removes testing artifacts from production
+- ✅ Success URL still used internally for payment processing
+
+---
+
+## 2025-11-11 Session 105e (Part 1): Donation Message Format Update 💝✨
+
+**USER REQUEST**: Update donation payment message format to include channel details and improve clarity
+
+**CHANGES IMPLEMENTED:**
+
+**1. Added new database method: `get_channel_details_by_open_id()`**
+- Location: `database.py` lines 314-367
+- Fetches closed_channel_title, closed_channel_description, and sub_value
+- Returns dict or None if channel not found
+- Includes fallback values for missing data
+
+**2. Updated donation payment message format**
+- Location: `donation_input_handler.py` lines 490-518
+- Fetches channel details from database before sending payment button
+- New message format:
+  ```
+  💝 Click the button below to Complete Your $[amount] Donation 💝
+
+  🔒 Private Channel: [channel_title]
+  📝 Channel Description: [channel_description]
+  💰 Price: $[amount]
+  ```
+- Removed: Order ID display
+- Removed: Generic "Click the button below to proceed..." text
+- Added: Automatic channel information population
+- Added: Fallback handling if channel details not found
+
+**3. Improved user experience**
+- ✅ Users now see which channel they're donating to
+- ✅ Channel description provides context
+- ✅ Clean, focused message format
+- ✅ Maintains security (Order ID still used internally, just not displayed)
+
+**TESTING NEEDED:**
+- [ ] Test donation flow with valid channel
+- [ ] Verify channel details display correctly
+- [ ] Test fallback when channel details missing
 
 ## 2025-11-11 Session 105d: Donation Rework - BUGFIX: Payment Button Sent to Channel Instead of User 🔧
 
