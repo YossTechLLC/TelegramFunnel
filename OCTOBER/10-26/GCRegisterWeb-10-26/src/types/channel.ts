@@ -18,6 +18,9 @@ export interface Channel {
   payout_strategy: 'instant' | 'threshold';
   payout_threshold_usd?: number | null;
   accumulated_amount?: number | null;
+  // 🆕 Notification Configuration (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+  notification_status: boolean;
+  notification_id: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -42,6 +45,9 @@ export interface ChannelRegistrationRequest {
   client_payout_network: string;
   payout_strategy: 'instant' | 'threshold';
   payout_threshold_usd?: number | null;
+  // 🆕 Notification Configuration (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+  notification_status: boolean;
+  notification_id: number | null;
 }
 
 export interface ChannelsResponse {

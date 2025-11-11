@@ -43,12 +43,15 @@ def main():
         # Initialize the application
         app = AppInitializer()
         app.initialize()
-        
-        # Start Flask server in background thread
+
+        # 🆕 Start Flask server with notification service (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
         server = ServerManager()
+        if hasattr(app, 'notification_service') and app.notification_service:
+            server.set_notification_service(app.notification_service)
+            print("✅ Notification service configured in Flask server")
         flask_thread = Thread(target=server.start, daemon=True)
         flask_thread.start()
-        
+
         # Run the Telegram bot and subscription monitoring
         asyncio.run(run_application(app))
         

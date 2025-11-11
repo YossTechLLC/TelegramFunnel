@@ -181,7 +181,9 @@
       "Bash(__NEW_LINE__ echo \"📊 TRUNCATION SUMMARY\")",
       "Bash(__NEW_LINE__ echo \"📊 ESTIMATED TOKEN USAGE (rough calculation)\")",
       "WebFetch(domain:cheatsheetseries.owasp.org)",
-      "Bash(gcloud compute backend-buckets list:*)"
+      "Bash(gcloud compute backend-buckets list:*)",
+      "Bash(DATABASE_PASSWORD_SECRET='Chigdabeast123$' python3:*)",
+      "Bash(DATABASE_PASSWORD_SECRET='Chigdabeast123$' DATABASE_NAME_SECRET='client_table' python3:*)"
     ],
     "deny": [],
     "ask": []

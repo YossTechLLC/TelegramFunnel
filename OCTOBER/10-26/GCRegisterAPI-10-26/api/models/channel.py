@@ -39,6 +39,10 @@ class ChannelRegistrationRequest(BaseModel):
     payout_strategy: str = 'instant'
     payout_threshold_usd: Optional[Decimal] = None
 
+    # 🆕 Notification Configuration (from NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+    notification_status: bool = False
+    notification_id: Optional[int] = None
+
     @field_validator('open_channel_id', 'closed_channel_id')
     @classmethod
     def validate_channel_id(cls, v):
@@ -76,6 +80,24 @@ class ChannelRegistrationRequest(BaseModel):
         if len(v.strip()) < 10:
             raise ValueError('Donation message must be at least 10 characters')
         return v.strip()  # Remove leading/trailing whitespace
+
+    @field_validator('notification_id')
+    @classmethod
+    def validate_notification_id(cls, v, info):
+        """Validate notification_id when notifications enabled"""
+        notification_status = info.data.get('notification_status', False)
+
+        if notification_status:
+            # Notifications enabled - ID is required
+            if v is None:
+                raise ValueError('notification_id required when notifications enabled')
+            if v <= 0:
+                raise ValueError('notification_id must be positive')
+            # Telegram user IDs are typically 9-10 digits, but support range 5-15
+            if len(str(v)) < 5 or len(str(v)) > 15:
+                raise ValueError('Invalid Telegram ID format (must be 5-15 digits)')
+
+        return v
 
     def model_post_init(self, __context):
         """Validate tier-dependent fields"""
@@ -118,6 +140,10 @@ class ChannelUpdateRequest(BaseModel):
     payout_strategy: Optional[str] = None
     payout_threshold_usd: Optional[Decimal] = None
 
+    # 🆕 Notification Configuration (from NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+    notification_status: Optional[bool] = None
+    notification_id: Optional[int] = None
+
     @field_validator('closed_channel_donation_message')
     @classmethod
     def validate_donation_message(cls, v):
@@ -130,6 +156,24 @@ class ChannelUpdateRequest(BaseModel):
             if len(v.strip()) < 10:
                 raise ValueError('Donation message must be at least 10 characters')
             return v.strip()
+        return v
+
+    @field_validator('notification_id')
+    @classmethod
+    def validate_notification_id(cls, v, info):
+        """Validate notification_id when notifications enabled"""
+        notification_status = info.data.get('notification_status')
+
+        # Only validate if notification_status is being set to True
+        if notification_status is True and v is None:
+            raise ValueError('notification_id required when enabling notifications')
+
+        if v is not None:
+            if v <= 0:
+                raise ValueError('notification_id must be positive')
+            if len(str(v)) < 5 or len(str(v)) > 15:
+                raise ValueError('Invalid Telegram ID format (must be 5-15 digits)')
+
         return v
 
 
@@ -158,6 +202,10 @@ class ChannelResponse(BaseModel):
     payout_strategy: str
     payout_threshold_usd: Optional[Decimal]
     accumulated_amount: Optional[Decimal] = None  # For threshold strategy
+
+    # 🆕 Notification Configuration (from NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+    notification_status: bool
+    notification_id: Optional[int]
 
     created_at: str
     updated_at: Optional[str]

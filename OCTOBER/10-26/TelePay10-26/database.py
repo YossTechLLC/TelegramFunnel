@@ -618,6 +618,45 @@ class DatabaseManager:
             print(f"❌ [ERROR] Database error deactivating subscription for user {user_id}, channel {private_channel_id}: {e}")
             return False
 
+    def get_notification_settings(self, open_channel_id: str) -> Optional[Tuple[bool, Optional[int]]]:
+        """
+        Get notification settings for a channel.
+        🆕 Added for NOTIFICATION_MANAGEMENT_ARCHITECTURE
+
+        Args:
+            open_channel_id: The open channel ID to look up
+
+        Returns:
+            Tuple of (notification_status, notification_id) if found, None otherwise
+
+        Example:
+            >>> db.get_notification_settings("-1003268562225")
+            (True, 123456789)
+        """
+        try:
+            conn = self.get_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT notification_status, notification_id
+                FROM main_clients_database
+                WHERE open_channel_id = %s
+            """, (str(open_channel_id),))
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            if result:
+                notification_status, notification_id = result
+                print(f"✅ [NOTIFICATION] Settings for {open_channel_id}: enabled={notification_status}, id={notification_id}")
+                return notification_status, notification_id
+            else:
+                print(f"⚠️ [NOTIFICATION] No settings found for {open_channel_id}")
+                return None
+
+        except Exception as e:
+            print(f"❌ [NOTIFICATION] Error fetching settings: {e}")
+            return None
+
 # Validation functions
 def _valid_channel_id(text: str) -> bool:
     """Validate that a channel ID is properly formatted."""

@@ -56,6 +56,10 @@ export default function EditChannelPage() {
   const [payoutStrategy, setPayoutStrategy] = useState('instant');
   const [payoutThresholdUsd, setPayoutThresholdUsd] = useState('');
 
+  // 🆕 Notification settings state (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
+  const [notificationId, setNotificationId] = useState('');
+
   // Wallet validation state
   const [validationWarning, setValidationWarning] = useState('');
   const [validationSuccess, setValidationSuccess] = useState('');
@@ -110,6 +114,10 @@ export default function EditChannelPage() {
 
         setPayoutStrategy(channel.payout_strategy);
         setPayoutThresholdUsd(channel.payout_threshold_usd?.toString() || '');
+
+        // 🆕 Load notification settings (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+        setNotificationEnabled(channel.notification_status || false);
+        setNotificationId(channel.notification_id?.toString() || '');
 
         setIsLoading(false);
         setInitialLoadComplete(true); // Mark initial load complete
@@ -244,6 +252,15 @@ export default function EditChannelPage() {
     // Repopulate networks with all options
   };
 
+  // 🆕 Notification ID validation (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+  const validateNotificationId = (id: string): boolean => {
+    if (!id.trim()) return false;
+    const numId = parseInt(id, 10);
+    if (isNaN(numId) || numId <= 0) return false;
+    if (id.length < 5 || id.length > 15) return false;
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -302,6 +319,11 @@ export default function EditChannelPage() {
         throw new Error('Threshold amount must be at least $20.00');
       }
 
+      // 🆕 Validate notification settings (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+      if (notificationEnabled && !validateNotificationId(notificationId)) {
+        throw new Error('Valid Telegram User ID required when notifications enabled (5-15 digits)');
+      }
+
       // Build request payload (channel IDs and tier_count cannot be changed)
       // NOTE: tier_count is calculated dynamically from sub_X_price fields
       const payload = {
@@ -321,6 +343,9 @@ export default function EditChannelPage() {
         client_payout_network: clientPayoutNetwork,
         payout_strategy: payoutStrategy as 'instant' | 'threshold',
         payout_threshold_usd: payoutStrategy === 'threshold' ? parseFloat(payoutThresholdUsd) : null,
+        // 🆕 Notification settings (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+        notification_status: notificationEnabled,
+        notification_id: notificationEnabled ? parseInt(notificationId, 10) : null,
       };
 
       if (!channelId) {
@@ -737,6 +762,82 @@ export default function EditChannelPage() {
                   {closedChannelDonationMessage}
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* 🆕 Notification Settings Section (NOTIFICATION_MANAGEMENT_ARCHITECTURE) */}
+          <div className="card" style={{ marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>
+              📬 Payment Notification Settings
+            </h2>
+            <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+              Receive instant Telegram notifications when customers complete subscription or donation payments.
+            </p>
+
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={notificationEnabled}
+                  onChange={(e) => {
+                    setNotificationEnabled(e.target.checked);
+                    if (!e.target.checked) {
+                      setNotificationId('');
+                    }
+                  }}
+                  style={{ marginRight: '8px', width: '18px', height: '18px' }}
+                />
+                <span style={{ fontWeight: '500' }}>Enable payment notifications</span>
+              </label>
+            </div>
+
+            {notificationEnabled && (
+              <>
+                <div style={{
+                  padding: '12px',
+                  background: '#e7f3ff',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  color: '#0066cc',
+                  marginBottom: '16px',
+                  border: '1px solid #b3d9ff'
+                }}>
+                  ℹ️ You will receive a Telegram message when a customer completes a subscription or donation payment. Notifications are sent only after payment confirmation.
+                </div>
+
+                <div className="form-group">
+                  <label>Telegram User ID *</label>
+                  <input
+                    type="text"
+                    placeholder="Enter your Telegram user ID"
+                    value={notificationId}
+                    onChange={(e) => setNotificationId(e.target.value)}
+                    style={{
+                      borderColor: notificationId && !validateNotificationId(notificationId) ? '#ef4444' : undefined
+                    }}
+                  />
+                  <small style={{ color: '#666', fontSize: '12px' }}>
+                    Find your Telegram ID by messaging{' '}
+                    <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" style={{ color: '#4F46E5', textDecoration: 'none' }}>
+                      @userinfobot
+                    </a>
+                    {' '}on Telegram
+                  </small>
+                  {notificationId && !validateNotificationId(notificationId) && (
+                    <div style={{
+                      color: '#ef4444',
+                      fontSize: '12px',
+                      marginTop: '4px',
+                      padding: '6px',
+                      background: '#fee2e2',
+                      borderRadius: '4px',
+                      borderLeft: '3px solid #ef4444'
+                    }}>
+                      ❌ Invalid Telegram ID format (must be 5-15 digits)
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 

@@ -62,7 +62,7 @@ class ChannelService:
             if cursor.fetchone():
                 raise ValueError('Channel ID already registered')
 
-            # Insert channel
+            # Insert channel (🆕 includes notification fields)
             cursor.execute("""
                 INSERT INTO main_clients_database (
                     open_channel_id,
@@ -83,10 +83,12 @@ class ChannelService:
                     client_payout_network,
                     payout_strategy,
                     payout_threshold_usd,
+                    notification_status,
+                    notification_id,
                     client_id,
                     created_by
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """, (
                 channel_data.open_channel_id,
@@ -107,12 +109,14 @@ class ChannelService:
                 channel_data.client_payout_network,
                 channel_data.payout_strategy,
                 channel_data.payout_threshold_usd,
+                channel_data.notification_status,
+                channel_data.notification_id,
                 user_id,
                 username
             ))
 
             cursor.close()
-            print(f"✅ Channel {channel_data.open_channel_id} registered successfully")
+            print(f"✅ Channel {channel_data.open_channel_id} registered with notification settings")
             return True
 
         except Exception as e:
@@ -151,7 +155,9 @@ class ChannelService:
                 client_payout_currency,
                 client_payout_network,
                 payout_strategy,
-                payout_threshold_usd
+                payout_threshold_usd,
+                notification_status,
+                notification_id
             FROM main_clients_database
             WHERE client_id = %s
             ORDER BY open_channel_id DESC
@@ -191,6 +197,8 @@ class ChannelService:
                 'client_payout_network': row[15],
                 'payout_strategy': row[16],
                 'payout_threshold_usd': float(row[17]) if row[17] else None,
+                'notification_status': row[18],
+                'notification_id': row[19],
                 'accumulated_amount': None  # TODO: Calculate from payout_accumulation table
             })
 
@@ -229,6 +237,8 @@ class ChannelService:
                 client_payout_network,
                 payout_strategy,
                 payout_threshold_usd,
+                notification_status,
+                notification_id,
                 client_id
             FROM main_clients_database
             WHERE open_channel_id = %s
@@ -269,7 +279,9 @@ class ChannelService:
             'client_payout_network': row[15],
             'payout_strategy': row[16],
             'payout_threshold_usd': float(row[17]) if row[17] else None,
-            'client_id': str(row[18])
+            'notification_status': row[18],
+            'notification_id': row[19],
+            'client_id': str(row[20])
         }
 
     @staticmethod

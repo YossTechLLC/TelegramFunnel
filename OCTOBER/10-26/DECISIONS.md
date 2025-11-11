@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 108 - **Donation Minimum Amount**
+**Last Updated:** 2025-11-11 Session 109 - **Notification Management Architecture**
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -21,10 +21,72 @@ This document records all significant architectural decisions made during the de
 12. [Password Reset Strategy](#password-reset-strategy)
 13. [Email Service Configuration](#email-service-configuration)
 14. [Donation Architecture](#donation-architecture)
+15. [Notification Management](#notification-management) 🆕
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-11 Session 109: Notification Management Architecture 📬
+
+**Decision:** Implement owner payment notifications via Telegram Bot API
+
+**Context:**
+- Channel owners need real-time payment notifications
+- Must handle both subscriptions and donations
+- Security: Owners must explicitly opt-in and provide their Telegram ID
+- Reliability: Notification failures must not block payment processing
+
+**Architecture Chosen:**
+1. **Database Layer**: Two columns in main_clients_database
+   - `notification_status` (BOOLEAN, DEFAULT false) - Opt-in flag
+   - `notification_id` (BIGINT, NULL) - Owner's Telegram user ID
+
+2. **Service Layer**: Separate NotificationService module
+   - Modular design for maintainability
+   - Reusable across TelePay bot
+   - Comprehensive error handling
+
+3. **Integration Point**: np-webhook IPN handler
+   - Trigger after successful GCWebhook1 enqueue
+   - HTTP POST to TelePay bot /send-notification endpoint
+   - 5-second timeout with graceful degradation
+
+4. **Communication**: HTTP REST over Service Mesh
+   - Simple, debuggable integration
+   - No tight coupling between services
+   - Clear separation of concerns
+
+**Alternatives Considered:**
+- ❌ Cloud Tasks queue: Overkill, adds complexity
+- ❌ Pub/Sub: Unnecessary async overhead
+- ❌ Direct Telegram API in np-webhook: Violates separation of concerns
+- ✅ HTTP POST to TelePay bot: Simple, reliable, maintainable
+
+**Trade-offs:**
+- ✅ Graceful degradation: Notifications can fail independently
+- ✅ Security: Manual Telegram ID prevents unauthorized access
+- ✅ Flexibility: Easy to add new notification types
+- ⚠️ Dependency: Requires TelePay bot to be running
+- ⚠️ Network: Additional HTTP request per payment (minimal latency)
+
+**Implementation Details:**
+- Telegram ID validation: 5-15 digits (covers all valid IDs)
+- Message format: HTML with emojis for rich formatting
+- Error handling: Forbidden (bot blocked), BadRequest, Timeout, ConnectionError
+- Logging: Extensive emoji-based logs for debugging
+- Testing: test_notification() method for setup verification
+
+**Configuration:**
+```bash
+TELEPAY_BOT_URL=https://telepay-bot-url.run.app  # Required for notifications
+```
+
+**See Also:**
+- NOTIFICATION_MANAGEMENT_ARCHITECTURE.md
+- NOTIFICATION_MANAGEMENT_ARCHITECTURE_CHECKLIST_PROGRESS.md
+
+---
 
 ### 2025-11-11 Session 108: Minimum Donation Amount Increase 💰
 

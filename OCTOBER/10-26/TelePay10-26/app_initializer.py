@@ -13,6 +13,8 @@ from message_utils import MessageUtils
 from subscription_manager import SubscriptionManager
 from closed_channel_manager import ClosedChannelManager
 from donation_input_handler import DonationKeypadHandler
+from notification_service import NotificationService  # 🆕 NOTIFICATION_MANAGEMENT_ARCHITECTURE
+from telegram import Bot  # 🆕 For NotificationService
 
 class AppInitializer:
     def __init__(self):
@@ -20,17 +22,17 @@ class AppInitializer:
         logging.getLogger("httpx").setLevel(logging.WARNING)
         self.logger = logging.getLogger(__name__)
         logging.basicConfig(
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
             level=logging.INFO
         )
-        
+
         # Apply nest_asyncio for Flask compatibility
         nest_asyncio.apply()
-        
+
         # Initialize configuration
         self.config_manager = ConfigManager()
         self.config = None
-        
+
         # Initialize managers
         self.db_manager = None
         self.webhook_manager = None
@@ -43,6 +45,7 @@ class AppInitializer:
         self.subscription_manager = None
         self.closed_channel_manager = None
         self.donation_handler = None
+        self.notification_service = None  # 🆕 NOTIFICATION_MANAGEMENT_ARCHITECTURE
     
     def initialize(self):
         """Initialize all application components."""
@@ -111,10 +114,15 @@ class AppInitializer:
         
         # Initialize subscription manager
         self.subscription_manager = SubscriptionManager(
-            self.config['bot_token'], 
+            self.config['bot_token'],
             self.db_manager
         )
-        
+
+        # 🆕 Initialize notification service (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+        bot_instance = Bot(token=self.config['bot_token'])
+        self.notification_service = NotificationService(bot_instance, self.db_manager)
+        self.logger.info("✅ Notification Service initialized")
+
         # Initialize broadcast data
         if self.broadcast_manager:
             self.broadcast_manager.fetch_open_channel_list()
@@ -147,5 +155,6 @@ class AppInitializer:
             'input_handlers': self.input_handlers,
             'menu_handlers': self.menu_handlers,
             'bot_manager': self.bot_manager,
-            'message_utils': self.message_utils
+            'message_utils': self.message_utils,
+            'notification_service': self.notification_service  # 🆕 NOTIFICATION_MANAGEMENT_ARCHITECTURE
         }
