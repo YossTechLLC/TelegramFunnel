@@ -19,7 +19,18 @@
       "Bash(python3:*)",
       "Bash(gcloud run deploy:*)",
       "Bash(gcloud secrets versions access:*)",
-      "Bash(TOKEN=\"8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co\" curl -s \"https://api.telegram.org/bot$TOKEN/getWebhookInfo\")"
+      "Bash(TOKEN=\"8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co\" curl -s \"https://api.telegram.org/bot$TOKEN/getWebhookInfo\")",
+      "Bash(gcloud run services describe:*)",
+      "Bash(PROGRESS_temp.md)",
+      "Bash(PROGRESS_to_archive.md)",
+      "Bash(cat:*)",
+      "Bash(PROGRESS_ARCH_new.md)",
+      "Bash(DECISIONS_temp.md)",
+      "Bash(DECISIONS_to_archive.md)",
+      "Bash(DECISIONS_ARCH_new.md)",
+      "Bash(BUGS_temp.md)",
+      "Bash(BUGS_to_archive.md)",
+      "Bash(BUGS_ARCH_new.md)"
     ],
     "deny": [],
     "ask": []
