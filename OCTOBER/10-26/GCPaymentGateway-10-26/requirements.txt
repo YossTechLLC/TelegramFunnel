@@ -1,0 +1,14 @@
+# Flask web framework
+Flask==3.0.0
+
+# HTTP client for NowPayments API
+httpx==0.25.2
+
+# PostgreSQL database driver
+psycopg2-binary==2.9.9
+
+# Google Cloud Secret Manager
+google-cloud-secret-manager==2.16.4
+
+# Gunicorn WSGI server for production
+gunicorn==21.2.0

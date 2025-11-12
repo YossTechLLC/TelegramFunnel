@@ -1,8 +1,49 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-12 Session 128 - **GCBotCommand Webhook Refactoring & Cloud SQL Connection** 🤖
+**Last Updated:** 2025-11-12 Session 130 - **GCPaymentGateway-10-26 Self-Contained Service** 💳
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
+
+---
+
+## Recent Decisions
+
+### 2025-11-12 Session 130: GCPaymentGateway-10-26 - Self-Contained Payment Invoice Service 💳
+**Decision:** Extract NowPayments invoice creation into standalone Cloud Run service
+**Rationale:**
+- TelePay10-26 monolith is too large (2,402 lines) - extract reusable payment logic
+- Payment gateway functionality needed by multiple services (GCBotCommand, GCDonationHandler)
+- Self-contained design eliminates shared module dependencies (easier maintenance)
+- Separate service allows independent scaling and deployment
+
+**Implementation Details:**
+- Created 5 modular Python files: service.py (160 lines), config_manager.py (175 lines), database_manager.py (237 lines), payment_handler.py (304 lines), validators.py (127 lines)
+- Flask application factory pattern with gunicorn for production
+- Secret Manager integration for all credentials (NOWPAYMENTS_API_KEY, IPN_URL, DB credentials)
+- Input validation: user_id (positive int), amount ($1-$9999.99), channel_id (negative or "donation_default"), subscription_time (1-999 days), payment_type ("subscription"/"donation")
+- Order ID format preserved: `PGP-{user_id}|{channel_id}`
+- Channel validation via database lookup (unless "donation_default" special case)
+
+**Service Configuration:**
+- Min instances: 0 (scale to zero when idle)
+- Max instances: 5 (lightweight workload)
+- Memory: 256Mi (minimal memory for invoice creation)
+- CPU: 1 vCPU
+- Timeout: 60s (30s NowPayments API timeout + buffer)
+- Concurrency: 80 (stateless, can handle many concurrent requests)
+
+**Deployment Fix:**
+- Initial deployment failed with exit code 2
+- Root cause: Gunicorn command `service:create_app()` called function at import
+- Solution: Create `app = create_app()` at module level, change CMD to `service:app`
+- Gunicorn imports `app` instance directly instead of calling factory function
+
+**Testing Results:**
+- ✅ Health endpoint responding
+- ✅ Test invoice created successfully (ID: 5491489566)
+- ✅ Emoji logging working (🚀 🔧 ✅ 💳 📋 🌐)
+- ✅ All secrets loaded from Secret Manager
+- ✅ Order ID format verified
 
 ---
 

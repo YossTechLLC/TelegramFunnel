@@ -30,7 +30,15 @@
       "Bash(DECISIONS_ARCH_new.md)",
       "Bash(BUGS_temp.md)",
       "Bash(BUGS_to_archive.md)",
-      "Bash(BUGS_ARCH_new.md)"
+      "Bash(BUGS_ARCH_new.md)",
+      "Bash(gcloud secrets list:*)",
+      "Bash(gcloud iam service-accounts list:*)",
+      "Bash(gcloud secrets add-iam-policy-binding:*)",
+      "Bash(for secret in NOWPAYMENTS_API_KEY NOWPAYMENTS_IPN_CALLBACK_URL DATABASE_HOST_SECRET DATABASE_NAME_SECRET DATABASE_USER_SECRET DATABASE_PASSWORD_SECRET)",
+      "Bash(do gcloud secrets add-iam-policy-binding $secret --member=\"serviceAccount:291176869049-compute@developer.gserviceaccount.com\" --role=\"roles/secretmanager.secretAccessor\")",
+      "Bash(echo:*)",
+      "Bash(echo \"⚠️ Already has access to $secret\" done)",
+      "Bash(gcloud projects add-iam-policy-binding:*)"
     ],
     "deny": [],
     "ask": []
