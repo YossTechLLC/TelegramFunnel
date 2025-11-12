@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { channelService } from '../services/channelService';
 import { authService } from '../services/authService';
 import Header from '../components/Header';
+import BroadcastControls from '../components/BroadcastControls';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -247,6 +248,12 @@ export default function DashboardPage() {
                     {deletingChannelId === channel.open_channel_id ? 'Deleting...' : '🗑️ Delete'}
                   </button>
                 </div>
+
+                {/* 🆕 Broadcast Controls (BROADCAST_MANAGER_ARCHITECTURE) */}
+                <BroadcastControls
+                  broadcastId={channel.broadcast_id}
+                  channelTitle={channel.open_channel_title}
+                />
               </div>
             ))}
           </div>

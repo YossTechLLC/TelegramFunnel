@@ -21,6 +21,8 @@ export interface Channel {
   // 🆕 Notification Configuration (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
   notification_status: boolean;
   notification_id: number | null;
+  // 🆕 Broadcast Manager (BROADCAST_MANAGER_ARCHITECTURE)
+  broadcast_id?: string | null;  // UUID from broadcast_manager table
   created_at?: string;
   updated_at?: string;
 }

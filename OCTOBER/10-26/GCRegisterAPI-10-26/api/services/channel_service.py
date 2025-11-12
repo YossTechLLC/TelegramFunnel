@@ -138,29 +138,33 @@ class ChannelService:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT
-                open_channel_id,
-                open_channel_title,
-                open_channel_description,
-                closed_channel_id,
-                closed_channel_title,
-                closed_channel_description,
-                closed_channel_donation_message,
-                sub_1_price,
-                sub_1_time,
-                sub_2_price,
-                sub_2_time,
-                sub_3_price,
-                sub_3_time,
-                client_wallet_address,
-                client_payout_currency,
-                client_payout_network,
-                payout_strategy,
-                payout_threshold_usd,
-                notification_status,
-                notification_id
-            FROM main_clients_database
-            WHERE client_id = %s
-            ORDER BY open_channel_id DESC
+                m.open_channel_id,
+                m.open_channel_title,
+                m.open_channel_description,
+                m.closed_channel_id,
+                m.closed_channel_title,
+                m.closed_channel_description,
+                m.closed_channel_donation_message,
+                m.sub_1_price,
+                m.sub_1_time,
+                m.sub_2_price,
+                m.sub_2_time,
+                m.sub_3_price,
+                m.sub_3_time,
+                m.client_wallet_address,
+                m.client_payout_currency,
+                m.client_payout_network,
+                m.payout_strategy,
+                m.payout_threshold_usd,
+                m.notification_status,
+                m.notification_id,
+                b.id AS broadcast_id
+            FROM main_clients_database m
+            LEFT JOIN broadcast_manager b
+                ON m.open_channel_id = b.open_channel_id
+                AND m.closed_channel_id = b.closed_channel_id
+            WHERE m.client_id = %s
+            ORDER BY m.open_channel_id DESC
         """, (user_id,))
 
         rows = cursor.fetchall()
@@ -199,6 +203,7 @@ class ChannelService:
                 'payout_threshold_usd': float(row[17]) if row[17] else None,
                 'notification_status': row[18],
                 'notification_id': row[19],
+                'broadcast_id': str(row[20]) if row[20] else None,  # 🆕 Broadcast Manager ID
                 'accumulated_amount': None  # TODO: Calculate from payout_accumulation table
             })
 
