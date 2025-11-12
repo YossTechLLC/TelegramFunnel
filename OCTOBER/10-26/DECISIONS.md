@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-12 Session 127 - **GCDonationHandler Self-Contained Module Architecture** 📋
+**Last Updated:** 2025-11-12 Session 128 - **GCBotCommand Webhook Refactoring & Cloud SQL Connection** 🤖
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -37,6 +37,90 @@ This document records all significant architectural decisions made during the de
 ---
 
 ## Recent Decisions
+
+### 2025-11-12 Session 128-129: GCBotCommand Webhook Refactoring, Cloud SQL Connection & Production Testing 🤖✅
+
+**Decision:** Successfully refactored TelePay10-26 monolithic bot into GCBotCommand-10-26 webhook service with Cloud SQL Unix socket connection, deployed to Cloud Run, and verified working in production
+
+**Context:**
+- TelePay10-26 bot handled all bot commands in a monolithic polling-based process (~2,402 lines)
+- Needed to convert to stateless webhook-based architecture for scalability
+- Initial deployment failed due to database connection timeout using TCP/IP
+- Cloud Run requires Unix socket connection to Cloud SQL instead of TCP
+- After fixing connection, successfully deployed and tested with real users
+
+**Implementation:**
+1. **Complete Webhook Service** (19 files, ~1,610 lines of Python code):
+   - Core modules: config_manager.py, database_manager.py, service.py
+   - Webhook routes: routes/webhook.py (POST /webhook, GET /health, POST /set-webhook)
+   - Handlers: command_handler.py, callback_handler.py, database_handler.py
+   - Utilities: validators.py, token_parser.py, http_client.py, message_formatter.py
+
+2. **Database Connection Fix**:
+   - Modified database_manager.py to detect Cloud Run environment via CLOUD_SQL_CONNECTION_NAME
+   - Use Unix socket `/cloudsql/telepay-459221:us-central1:telepaypsql` in Cloud Run
+   - Use TCP connection with IP for local/VM mode
+   - Added `--add-cloudsql-instances` to Cloud Run deployment
+
+3. **Secret Manager Integration**:
+   - Used project number format: `projects/291176869049/secrets/SECRET_NAME/versions/latest`
+   - All secrets fetched via Google Secret Manager API
+   - Environment variables point to secret paths, not hardcoded values
+
+**Deployment Commands:**
+```bash
+# Deploy with Cloud SQL connection
+gcloud run deploy gcbotcommand-10-26 \
+  --source=. \
+  --region=us-central1 \
+  --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
+  --set-env-vars="CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql" \
+  --set-env-vars="TELEGRAM_BOT_SECRET_NAME=projects/291176869049/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest" \
+  # ... other env vars
+
+# Set Telegram webhook
+curl -X POST "https://api.telegram.org/bot${TOKEN}/setWebhook" \
+  -d '{"url": "https://gcbotcommand-10-26-291176869049.us-central1.run.app/webhook"}'
+```
+
+**Service URL:** `https://gcbotcommand-10-26-291176869049.us-central1.run.app`
+
+**Health Check:** ✅ Healthy (`{"status":"healthy","service":"GCBotCommand-10-26","database":"connected"}`)
+
+**Features:**
+- ✅ /start command with subscription and donation token parsing
+- ✅ /database command with full inline form editing (open channel, private channel, tiers, wallet)
+- ✅ Payment gateway HTTP routing (GCPaymentGateway-10-26)
+- ✅ Donation handler HTTP routing (GCDonationHandler-10-26)
+- ✅ Conversation state management via database (user_conversation_state table)
+- ✅ Complete input validation (11 validator functions)
+- ✅ Tier enable/disable toggles
+- ✅ Save changes with validation
+
+**Rationale:**
+- Unix socket connection is required for Cloud Run to Cloud SQL connectivity
+- Webhook architecture allows horizontal scaling vs polling-based monolith
+- Stateless design stores conversation state in database (JSONB column)
+- Self-contained modules ensure independence from monolithic bot
+
+**Production Testing Results:**
+- ✅ Real user interaction successfully processed (2025-11-12 22:34:17 UTC)
+  - User ID: 6271402111
+  - Command: /start with subscription token `LTEwMDMyMDI3MzQ3NDg=_5d0_5`
+  - Token decoded: channel=-1003202734748, price=$5.0, time=5days
+  - Response time: ~0.674s webhook latency
+  - Message sent successfully ✅
+
+**Impact:**
+- ✅ Bot commands now handled by scalable webhook service
+- ✅ Database connection stable via Unix socket
+- ✅ Health check passes with database connectivity verification
+- ✅ Telegram webhook successfully configured and receiving updates
+- ✅ /start command with subscription tokens verified working in production
+- ⏳ Remaining tests: /database command, callback handlers, donation flow, form editing
+- 🎯 Ready for continued production use and monitoring
+
+---
 
 ### 2025-11-12 Session 127: GCDonationHandler Self-Contained Module Architecture 📋
 

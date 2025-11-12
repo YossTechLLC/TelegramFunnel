@@ -12,7 +12,14 @@
       "Bash(gcloud run services list:*)",
       "Bash(gcloud functions list:*)",
       "mcp__context7__resolve-library-id",
-      "mcp__context7__get-library-docs"
+      "mcp__context7__get-library-docs",
+      "Bash(tree:*)",
+      "Bash(source:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(gcloud run deploy:*)",
+      "Bash(gcloud secrets versions access:*)",
+      "Bash(TOKEN=\"8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co\" curl -s \"https://api.telegram.org/bot$TOKEN/getWebhookInfo\")"
     ],
     "deny": [],
     "ask": []
