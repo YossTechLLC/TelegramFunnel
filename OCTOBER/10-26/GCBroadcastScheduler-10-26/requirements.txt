@@ -17,8 +17,8 @@ psycopg2-binary>=2.9.0,<3.0.0
 cloud-sql-python-connector[pg8000]>=1.4.0,<2.0.0
 sqlalchemy>=2.0.0,<3.0.0
 
-# Telegram Bot API
-python-telegram-bot>=20.0,<21.0
+# Telegram Bot API (direct HTTP)
+requests>=2.31.0,<3.0.0
 
 # JWT Authentication
 PyJWT>=2.8.0,<3.0.0

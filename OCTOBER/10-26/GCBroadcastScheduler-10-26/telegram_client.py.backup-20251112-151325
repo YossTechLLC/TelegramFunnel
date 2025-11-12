@@ -6,8 +6,9 @@ Handles message sending with proper formatting and error handling
 
 import logging
 import base64
-import requests
 from typing import Dict, Any, List
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError, Forbidden, BadRequest
 
 logger = logging.getLogger(__name__)
 
@@ -31,24 +32,10 @@ class TelegramClient:
             bot_token: Telegram bot token
             bot_username: Bot username (for deep links)
         """
-        self.bot_token = bot_token
+        self.bot = Bot(token=bot_token)
         self.bot_username = bot_username
-        self.api_base = f"https://api.telegram.org/bot{bot_token}"
         self.logger = logging.getLogger(__name__)
-
-        # Test bot connection immediately
-        try:
-            response = requests.get(f"{self.api_base}/getMe", timeout=10)
-            response.raise_for_status()
-            bot_info = response.json()
-            if bot_info.get('ok'):
-                username = bot_info['result']['username']
-                self.logger.info(f"🤖 TelegramClient initialized for @{username}")
-            else:
-                raise ValueError(f"Bot authentication failed: {bot_info}")
-        except Exception as e:
-            self.logger.error(f"❌ Failed to initialize bot: {e}")
-            raise
+        self.logger.info(f"🤖 TelegramClient initialized for @{bot_username}")
 
     @staticmethod
     def encode_id(channel_id: str) -> str:
@@ -84,7 +71,7 @@ class TelegramClient:
             tier_buttons: List of tier info [{'tier': 1, 'price': 5.0, 'time': 30}, ...]
 
         Returns:
-            {'success': bool, 'error': str (if failed), 'message_id': int (if success)}
+            {'success': bool, 'error': str (if failed)}
         """
         try:
             # Build message text
@@ -100,7 +87,7 @@ class TelegramClient:
 
             # Build inline keyboard
             tier_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
-            inline_keyboard = []
+            buttons = []
 
             for tier_info in tier_buttons:
                 tier_num = tier_info.get('tier')
@@ -119,61 +106,39 @@ class TelegramClient:
                 emoji = tier_emojis.get(tier_num, "💰")
                 button_text = f"{emoji} ${price} for {days} days"
 
-                # Each button in its own row (vertical layout)
-                inline_keyboard.append([{
-                    "text": button_text,
-                    "url": url
-                }])
+                buttons.append([InlineKeyboardButton(text=button_text, url=url)])
 
-            if not inline_keyboard:
+            if not buttons:
                 error_msg = "No valid tier buttons to display"
                 self.logger.warning(f"⚠️ {error_msg} for {chat_id}")
                 return {'success': False, 'error': error_msg}
 
-            # Prepare payload
-            payload = {
-                "chat_id": chat_id,
-                "text": message_text,
-                "parse_mode": "HTML",
-                "reply_markup": {
-                    "inline_keyboard": inline_keyboard
-                }
-            }
+            reply_markup = InlineKeyboardMarkup(buttons)
 
-            # Send message via direct HTTP
+            # Send message
             self.logger.info(f"📤 Sending subscription message to {chat_id}")
-            response = requests.post(
-                f"{self.api_base}/sendMessage",
-                json=payload,
-                timeout=10
+            self.bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
             )
-            response.raise_for_status()
 
-            # Parse response
-            result = response.json()
-            if not result.get('ok'):
-                error_msg = result.get('description', 'Unknown error')
-                self.logger.error(f"❌ Telegram API error: {error_msg}")
-                return {'success': False, 'error': error_msg}
+            self.logger.info(f"✅ Subscription message sent to {chat_id}")
+            return {'success': True, 'error': None}
 
-            message_id = result['result']['message_id']
-            self.logger.info(f"✅ Subscription message sent to {chat_id}, message_id: {message_id}")
-            return {'success': True, 'error': None, 'message_id': message_id}
+        except Forbidden as e:
+            error_msg = "Bot not admin or kicked from channel"
+            self.logger.warning(f"⚠️ {error_msg}: {chat_id}")
+            return {'success': False, 'error': error_msg}
 
-        except requests.exceptions.HTTPError as e:
-            # Handle HTTP errors (403, 404, etc.)
-            error_msg = f"HTTP {e.response.status_code}: {e.response.text}"
-
-            if e.response.status_code == 403:
-                error_msg = "Bot not admin or kicked from channel"
-            elif e.response.status_code == 400:
-                error_msg = f"Invalid request: {e.response.text}"
-
+        except BadRequest as e:
+            error_msg = f"Invalid channel or API error: {str(e)}"
             self.logger.error(f"❌ {error_msg}: {chat_id}")
             return {'success': False, 'error': error_msg}
 
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Network error: {str(e)}"
+        except TelegramError as e:
+            error_msg = f"Telegram API error: {str(e)}"
             self.logger.error(f"❌ {error_msg}: {chat_id}")
             return {'success': False, 'error': error_msg}
 
@@ -197,7 +162,7 @@ class TelegramClient:
             open_channel_id: Associated open channel (for callback data)
 
         Returns:
-            {'success': bool, 'error': str (if failed), 'message_id': int (if success)}
+            {'success': bool, 'error': str (if failed)}
         """
         try:
             # Build message text
@@ -218,55 +183,37 @@ class TelegramClient:
                 self.logger.warning(f"⚠️ Callback data too long, truncating")
                 callback_data = callback_data[:60]  # Leave some margin
 
-            inline_keyboard = [[{
-                "text": "💝 Donate to Support This Channel",
-                "callback_data": callback_data
-            }]]
-
-            # Prepare payload
-            payload = {
-                "chat_id": chat_id,
-                "text": message_text,
-                "parse_mode": "HTML",
-                "reply_markup": {
-                    "inline_keyboard": inline_keyboard
-                }
-            }
-
-            # Send message via direct HTTP
-            self.logger.info(f"📤 Sending donation message to {chat_id}")
-            response = requests.post(
-                f"{self.api_base}/sendMessage",
-                json=payload,
-                timeout=10
+            button = InlineKeyboardButton(
+                text="💝 Donate to Support This Channel",
+                callback_data=callback_data
             )
-            response.raise_for_status()
 
-            # Parse response
-            result = response.json()
-            if not result.get('ok'):
-                error_msg = result.get('description', 'Unknown error')
-                self.logger.error(f"❌ Telegram API error: {error_msg}")
-                return {'success': False, 'error': error_msg}
+            reply_markup = InlineKeyboardMarkup([[button]])
 
-            message_id = result['result']['message_id']
-            self.logger.info(f"✅ Donation message sent to {chat_id}, message_id: {message_id}")
-            return {'success': True, 'error': None, 'message_id': message_id}
+            # Send message
+            self.logger.info(f"📤 Sending donation message to {chat_id}")
+            self.bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
 
-        except requests.exceptions.HTTPError as e:
-            # Handle HTTP errors (403, 404, etc.)
-            error_msg = f"HTTP {e.response.status_code}: {e.response.text}"
+            self.logger.info(f"✅ Donation message sent to {chat_id}")
+            return {'success': True, 'error': None}
 
-            if e.response.status_code == 403:
-                error_msg = "Bot not admin or kicked from channel"
-            elif e.response.status_code == 400:
-                error_msg = f"Invalid request: {e.response.text}"
+        except Forbidden as e:
+            error_msg = "Bot not admin or kicked from channel"
+            self.logger.warning(f"⚠️ {error_msg}: {chat_id}")
+            return {'success': False, 'error': error_msg}
 
+        except BadRequest as e:
+            error_msg = f"Invalid channel or API error: {str(e)}"
             self.logger.error(f"❌ {error_msg}: {chat_id}")
             return {'success': False, 'error': error_msg}
 
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Network error: {str(e)}"
+        except TelegramError as e:
+            error_msg = f"Telegram API error: {str(e)}"
             self.logger.error(f"❌ {error_msg}: {chat_id}")
             return {'success': False, 'error': error_msg}
 

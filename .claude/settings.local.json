@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "mcp__playwright__browser_handle_dialog",
-      "Bash(gcloud sql instances describe:*)"
+      "Bash(gcloud sql instances describe:*)",
+      "mcp__observability__list_log_entries",
+      "mcp__gcloud__run_gcloud_command",
+      "Bash(TOKEN=\"8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co\" curl -s \"https://api.telegram.org/bot$TOKEN/getMe\")",
+      "Bash(TOKEN=\"8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co\")",
+      "Bash(curl:*)",
+      "Bash(gcloud builds submit:*)"
     ],
     "deny": [],
     "ask": []
