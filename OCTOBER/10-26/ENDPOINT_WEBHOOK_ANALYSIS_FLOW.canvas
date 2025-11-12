@@ -3,200 +3,191 @@
     {
       "id": "n1",
       "type": "text",
-      "text": "## External Entry: NowPayments\n\n**Triggers:** np-webhook\n\n**Flow:**\n• User completes crypto payment\n• IPN callback sent to np-webhook\n• HMAC-SHA512 signature verification",
-      "x": -800,
+      "text": "# Telegram Bot API\n\n**Entry Point**\n\n- User sends /start command\n- User clicks subscription button\n- User clicks donation button\n- User sends /database command",
+      "x": 0,
       "y": 0,
-      "width": 480,
-      "height": 224
+      "width": 540,
+      "height": 232
     },
     {
       "id": "n2",
       "type": "text",
-      "text": "## External Entry: Telegram Bot\n\n**Triggers:** GCWebhook1\n\n**Flow:**\n• User initiates payment request\n• Bot sends JWT-authenticated request\n• Creates NowPayments invoice",
-      "x": -800,
-      "y": 280,
-      "width": 480,
-      "height": 224
+      "text": "# GCBotCommand\n**Cloud Run Service**\n\n## Endpoints:\n- `POST /webhook`\n  - Receives Telegram updates\n  - Routes commands & callbacks\n- `GET /health`",
+      "x": 820,
+      "y": 0,
+      "width": 540,
+      "height": 256
     },
     {
       "id": "n3",
       "type": "text",
-      "text": "## External Entry: Frontend\n\n**Service:** GCRegisterAPI\n\n**Flow:**\n• React SPA (www.paygateprime.com)\n• JWT authentication\n• Channel CRUD operations",
-      "x": -800,
-      "y": 560,
-      "width": 480,
-      "height": 224
+      "text": "# GCPaymentGateway\n**Cloud Run Service**\n\n## Endpoints:\n- `POST /create-invoice`\n  - Creates NowPayments invoice\n  - Returns invoice URL\n  - Generates order_id\n- `GET /health`",
+      "x": 1640,
+      "y": -200,
+      "width": 540,
+      "height": 280
     },
     {
       "id": "n4",
       "type": "text",
-      "text": "## np-webhook-10-26\n\n**Endpoints:**\n• `POST /` - Handle NowPayments IPN\n• `GET /api/payment-status` - Poll status\n• `GET /payment-processing` - Processing page\n• `GET /health` - Health check\n\n**Operations:**\n• Verify HMAC-SHA512 signature\n• Parse order_id: PGP-{user_id}|{channel_id}\n• Calculate USD amount (CoinGecko)\n• UPSERT to database\n• Idempotency check\n\n**DB:** private_channel_users_database, processed_payments\n\n**Enqueues:** GCWEBHOOK1_QUEUE",
-      "x": -240,
-      "y": 0,
+      "text": "# GCDonationHandler\n**Cloud Run Service**\n\n## Endpoints:\n- `POST /keypad-input`\n  - Processes donation keypad\n  - Validates amount\n  - Routes to payment gateway\n- `GET /health`",
+      "x": 1640,
+      "y": 280,
       "width": 540,
-      "height": 392
+      "height": 280
     },
     {
       "id": "n5",
       "type": "text",
-      "text": "## GCWebhook1-10-26\n\n**Endpoints:**\n• `POST /` - Initial payment request\n• `POST /process-validated-payment` - Process validated\n• `POST /payment-completed` - Completion notification\n• `GET /health` - Health check\n\n**Operations:**\n• Create NowPayments invoice\n• Validate payment amount\n• Store initial record\n• Send Telegram invite link\n• Mark as processed\n\n**DB:** private_channel_users_database, main_clients_database, processed_payments\n\n**API:** NowPayments, Telegram Bot API\n\n**Enqueues:** GCSPLIT1_QUEUE",
-      "x": 380,
-      "y": 0,
+      "text": "# NowPayments API\n**External Service**\n\n## Used by:\n- GCPaymentGateway\n\n## Operations:\n- Create invoice\n- Send IPN callback\n- Track payment status",
+      "x": 2460,
+      "y": -200,
       "width": 540,
-      "height": 440
+      "height": 256
     },
     {
       "id": "n6",
       "type": "text",
-      "text": "## GCRegisterAPI-10-26\n\n**Endpoints:**\n• `POST /api/auth/signup` - User registration\n• `POST /api/auth/login` - User login\n• `POST /api/auth/refresh` - Token refresh\n• `GET /api/auth/me` - Get current user\n• `POST /api/channels/register` - Register channel\n• `GET /api/channels` - Get channels\n• `PUT /api/channels/<id>` - Update channel\n• `DELETE /api/channels/<id>` - Delete channel\n• `GET /api/mappings/currency-network` - Mappings\n\n**Operations:**\n• JWT authentication (stateless)\n• CRUD operations on channels\n• CORS-enabled for SPA\n• Rate limiting: 200/day, 50/hour\n\n**DB:** users, main_clients_database\n\n**Frontend:** React + TypeScript SPA",
-      "x": -240,
-      "y": 560,
+      "text": "# NP-Webhook-10-26\n**Cloud Run Service (Existing)**\n\n## Endpoints:\n- `POST /` (IPN receiver)\n  - Validates IPN signature\n  - Fetches CoinGecko price\n  - Calculates outcome_amount_usd\n  - Updates database",
+      "x": 2460,
+      "y": 280,
       "width": 540,
-      "height": 488
+      "height": 280
     },
     {
       "id": "n7",
       "type": "text",
-      "text": "## GCSplit1-10-26\n### ROUTING DECISION POINT\n\n**Endpoints:**\n• `POST /` - Route to instant or threshold\n• `GET /health` - Health check\n\n**Decision Logic:**\n```\nif outcome_amount_usd < $100:\n    → INSTANT FLOW (GCWebhook2)\nelse:\n    → THRESHOLD FLOW (GCAccumulator)\n```\n\n**Operations:**\n• Decrypt token from GCWebhook1\n• Calculate outcome_amount_usd\n• Route based on threshold\n• INSERT to batch_conversions (threshold only)\n\n**DB:** batch_conversions\n\n**Enqueues:** GCWEBHOOK2_QUEUE, GCACCUMULATOR_QUEUE",
-      "x": 1000,
-      "y": 0,
-      "width": 600,
-      "height": 488
+      "text": "# GCWebhook1-10-26\n**Cloud Run Service (Existing)**\n\n## Endpoints:\n- `POST /process-validated-payment`\n  - Routes instant/threshold\n  - Enqueues GCSplit1 or GCAccumulator\n  - Enqueues GCWebhook2\n  - Triggers notifications",
+      "x": 3280,
+      "y": 280,
+      "width": 540,
+      "height": 280
     },
     {
       "id": "n8",
       "type": "text",
-      "text": "## INSTANT FLOW (< $100 USD)\n\n**Latency:** ~5-10 minutes\n\n**Path:**\nGCWebhook2 → GCSplit2 → GCHostPay1 → GCHostPay2 → GCHostPay3\n\n**Characteristics:**\n• Immediate processing\n• Single payment execution\n• No batching delay",
-      "x": 1700,
-      "y": -200,
+      "text": "# GCNotificationService\n**Cloud Run Service**\n\n## Endpoints:\n- `POST /send-notification`\n  - Checks notification_status\n  - Formats message (sub/donation)\n  - Sends to channel owner\n- `GET /health`",
+      "x": 1640,
+      "y": 760,
       "width": 540,
-      "height": 272
+      "height": 280
     },
     {
       "id": "n9",
       "type": "text",
-      "text": "## GCWebhook2-10-26\n\n**Endpoints:**\n• `POST /` - Process instant payment\n• `POST /status-verified` - ChangeNow status\n• `GET /health` - Health check\n\n**Operations:**\n• Decrypt token from GCSplit1\n• Route to GCSplit2 (ChangeNow exchange)\n• Wait for status verification\n• Route to GCHostPay1 when finished\n\n**DB:** None (stateless)\n\n**Enqueues:** GCSPLIT2_QUEUE, GCHOSTPAY1_QUEUE",
-      "x": 1700,
-      "y": 140,
+      "text": "# GCWebhook2-10-26\n**Cloud Run Service (Existing)**\n\n## Endpoints:\n- `POST /`\n  - Decrypts token\n  - Sends Telegram invite link\n  - Adds user to closed channel",
+      "x": 4100,
+      "y": 0,
       "width": 540,
-      "height": 344
+      "height": 256
     },
     {
       "id": "n10",
       "type": "text",
-      "text": "## GCSplit2-10-26\n\n**Endpoints:**\n• `POST /` - Create ChangeNow exchange (instant)\n• `GET /health` - Health check\n\n**Operations:**\n• Decrypt token from GCWebhook2\n• Call ChangeNow API: create exchange\n• Extract cn_api_id (exchange ID)\n• Route to GCHostPay1\n\n**API:** ChangeNow\n\n**Enqueues:** GCHOSTPAY1_QUEUE",
-      "x": 2320,
-      "y": 140,
+      "text": "# GCSplit1-10-26\n**Cloud Run Service (Existing)**\n\n## Endpoints:\n- `POST /`\n  - Calculates payout split\n  - Enqueues to GCHostPay1-3\n  - Tracks batch_conversions",
+      "x": 4100,
+      "y": 340,
       "width": 540,
-      "height": 320
+      "height": 256
     },
     {
       "id": "n11",
       "type": "text",
-      "text": "## THRESHOLD FLOW (≥ $100 USD)\n\n**Latency:** 1-24 hours (batched)\n\n**Path:**\nGCAccumulator → (wait) → GCBatchProcessor → GCSplit3 → GCHostPay1 → GCHostPay2 → GCHostPay3\n\n**Characteristics:**\n• Batch accumulation in database\n• Scheduled processing (hourly/15min)\n• Single payment for multiple users\n• Cost-efficient for platform",
-      "x": 1700,
-      "y": 600,
+      "text": "# GCHostPay1-3-10-26\n**Cloud Run Services (Existing)**\n\n## Endpoints:\n- `POST /`\n  - Executes ChangeNow exchange\n  - Sends crypto to wallet\n  - Tracks transaction status",
+      "x": 4920,
+      "y": 340,
       "width": 540,
-      "height": 320
+      "height": 256
     },
     {
       "id": "n12",
       "type": "text",
-      "text": "## GCAccumulator-10-26\n\n**Endpoints:**\n• `POST /` - Accept threshold payment\n• `POST /swap-executed` - Swap completion\n• `GET /health` - Health check\n\n**Operations:**\n• Store payment in batch_conversions (status=pending)\n• Wait for batch processor trigger\n• Receive completion from GCHostPay3\n• Update database (status=completed)\n• Send Telegram invites to all users in batch\n\n**DB:** batch_conversions, main_clients_database\n\n**API:** Telegram Bot API\n\n**Enqueues:** None (terminal for accumulation)",
-      "x": 1700,
-      "y": 1000,
+      "text": "# Cloud Scheduler\n**Entry Point**\n\n- Triggers every 60 seconds\n- Invokes subscription monitor\n- OIDC authentication",
+      "x": 0,
+      "y": 480,
       "width": 540,
-      "height": 392
+      "height": 232
     },
     {
       "id": "n13",
       "type": "text",
-      "text": "## GCBatchProcessor-10-26\n### Cloud Scheduler: Every 1 hour\n\n**Endpoints:**\n• `POST /` - Process pending batches\n• `GET /health` - Health check\n\n**Operations:**\n```sql\nSELECT wallet, currency, SUM(usd) AS total\nFROM batch_conversions\nWHERE status='pending'\nGROUP BY wallet, currency\nHAVING SUM(usd) >= 100.0\n```\n• Update status to 'processing'\n• Enqueue to GCSplit3 per batch\n\n**DB:** batch_conversions\n\n**Enqueues:** GCSPLIT3_QUEUE",
-      "x": 2320,
-      "y": 1000,
+      "text": "# GCSubscriptionMonitor\n**Cloud Run Service**\n\n## Endpoints:\n- `POST /check-expirations`\n  - Queries expired subscriptions\n  - Removes users from channels\n  - Updates is_active flag\n- `GET /health`",
+      "x": 820,
+      "y": 480,
       "width": 540,
-      "height": 416
+      "height": 280
     },
     {
       "id": "n14",
       "type": "text",
-      "text": "## GCMicroBatchProcessor-10-26\n### Cloud Scheduler: Every 15 min\n\n**Endpoints:**\n• `POST /` - Process micro-batches\n• `GET /health` - Health check\n\n**Operations:**\n• Same as GCBatchProcessor\n• Lower threshold for faster processing\n• More frequent execution\n• Time-sensitive threshold payments\n\n**DB:** batch_conversions\n\n**Enqueues:** GCSPLIT3_QUEUE",
-      "x": 2320,
-      "y": 1480,
+      "text": "# Manual/Scheduled Triggers\n**Entry Point**\n\n- HTTP POST requests\n- Cloud Scheduler (optional)\n- Admin dashboard (future)",
+      "x": 0,
+      "y": 960,
       "width": 540,
-      "height": 344
+      "height": 232
     },
     {
       "id": "n15",
       "type": "text",
-      "text": "## GCSplit3-10-26\n\n**Endpoints:**\n• `POST /` - Create ChangeNow exchange (batch)\n• `GET /health` - Health check\n\n**Operations:**\n• Decrypt token from GCBatchProcessor\n• Call ChangeNow API: create exchange\n• Extract cn_api_id\n• Route to GCHostPay1 (context='threshold')\n\n**API:** ChangeNow\n\n**Enqueues:** GCHOSTPAY1_QUEUE",
-      "x": 2940,
-      "y": 1000,
+      "text": "# GCBroadcastService\n**Cloud Run Service**\n\n## Endpoints:\n- `POST /broadcast-open-channels`\n  - Sends tier buttons to open channels\n- `POST /broadcast-closed-channels`\n  - Sends donation buttons\n- `POST /broadcast-single-channel`\n- `GET /health`",
+      "x": 820,
+      "y": 960,
       "width": 540,
-      "height": 320
+      "height": 304
     },
     {
       "id": "n16",
       "type": "text",
-      "text": "## GCHostPay1-10-26\n### Payment Orchestrator\n\n**Endpoints:**\n• `POST /` - Receive ChangeNow details\n• `POST /status-verified` - Receive status from HP2\n• `POST /payment-completed` - Receive completion from HP3\n• `GET /health` - Health check\n\n**Operations:**\n• Orchestrate status checking (HP2)\n• Orchestrate payment execution (HP3)\n• Route based on context (instant/threshold)\n• Stateless coordinator\n\n**DB:** None (stateless)\n\n**Enqueues:** GCHOSTPAY2_QUEUE, GCHOSTPAY3_QUEUE, GCWEBHOOK2_RESPONSE_QUEUE, GCACCUMULATOR_RESPONSE_QUEUE",
-      "x": 3560,
-      "y": 400,
-      "width": 600,
-      "height": 416
+      "text": "# PostgreSQL Database\n**telepaypsql**\n\n## Tables:\n- main_clients_database\n- private_channel_users_database\n- processed_payments\n- batch_conversions\n- payout_accumulation_que\n\n**Accessed by ALL services**",
+      "x": 2460,
+      "y": 960,
+      "width": 540,
+      "height": 304
     },
     {
       "id": "n17",
       "type": "text",
-      "text": "## GCHostPay2-10-26\n### ChangeNow Status Checker\n\n**Endpoints:**\n• `POST /` - Check ChangeNow status\n• `GET /health` - Health check\n\n**Operations:**\n• Call ChangeNow API: check transaction status\n• Infinite retry with 60s backoff (24h max)\n• Poll until status='finished'\n• Return to GCHostPay1/status-verified\n\n**Retry Logic:**\n• Infinite retry via Cloud Tasks\n• Fixed 60s backoff\n• Max duration: 24 hours\n\n**API:** ChangeNow\n\n**Enqueues:** GCHOSTPAY1_RESPONSE_QUEUE",
-      "x": 4240,
-      "y": 0,
-      "width": 600,
-      "height": 416
+      "text": "# Telegram Bot API\n**External Service**\n\n## Used by:\n- GCSubscriptionMonitor (ban/unban)\n- GCNotificationService (sendMessage)\n- GCBroadcastService (sendMessage)\n- GCWebhook2 (createChatInviteLink)",
+      "x": 1640,
+      "y": 1460,
+      "width": 540,
+      "height": 280
     },
     {
       "id": "n18",
       "type": "text",
-      "text": "## GCHostPay3-10-26\n### ETH Payment Executor\n\n**Endpoints:**\n• `POST /` - Execute ETH/ERC-20 payment\n• `GET /health` - Health check\n\n**Operations:**\n• Determine currency type (native ETH vs ERC-20)\n• Check wallet balance (Alchemy RPC)\n• Execute blockchain transaction\n• 3-attempt retry limit with error classification\n• Log success or failure to database\n\n**Supported Currencies:**\n• Native ETH\n• ERC-20: USDT, USDC, DAI, etc.\n\n**Retry Logic:**\n• Max 3 attempts\n• 60s delay between retries\n• Store failed_transactions after 3 failures\n\n**DB:** hostpay_transactions, failed_transactions\n\n**API:** Alchemy RPC (Ethereum)\n\n**Enqueues:** GCHOSTPAY1_RESPONSE_QUEUE, GCACCUMULATOR_RESPONSE_QUEUE, GCHOSTPAY3_RETRY_QUEUE",
-      "x": 4240,
-      "y": 500,
-      "width": 600,
-      "height": 536
+      "text": "# User's Telegram Client\n**Final Destination**\n\n- Receives invite link\n- Accesses closed channel\n- Gets removed on expiration",
+      "x": 4920,
+      "y": 0,
+      "width": 540,
+      "height": 232
     },
     {
       "id": "n19",
       "type": "text",
-      "text": "## External APIs\n\n**NowPayments:**\n• Create invoice\n• IPN callbacks\n\n**ChangeNow:**\n• Create exchange\n• Check transaction status\n\n**CoinGecko:**\n• Crypto price in USD\n\n**Alchemy RPC:**\n• ETH balance\n• Send transaction\n• Transaction receipt\n\n**Telegram Bot API:**\n• Send invite links",
-      "x": 4920,
-      "y": 400,
-      "width": 480,
-      "height": 440
+      "text": "# Channel Owner\n**Final Destination**\n\n- Receives payment notifications\n- Gets subscription details\n- Donation confirmations",
+      "x": 2460,
+      "y": 760,
+      "width": 540,
+      "height": 232
     },
     {
       "id": "n20",
       "type": "text",
-      "text": "## Database Tables\n\n**private_channel_users_database:**\n• User subscriptions + payment data\n\n**main_clients_database:**\n• Channel config + wallet info\n\n**batch_conversions:**\n• Threshold payment accumulation\n• Status tracking (pending/processing/completed)\n\n**hostpay_transactions:**\n• Successful ETH payment logs\n\n**failed_transactions:**\n• Failed payment records\n\n**processed_payments:**\n• Idempotency tracking\n\n**users:**\n• Authentication (GCRegisterAPI)",
-      "x": 4920,
-      "y": 920,
+      "text": "# Client Wallet\n**Final Destination**\n\n- Receives crypto payout\n- ETH/BTC/USDT etc.\n- On specified network",
+      "x": 5740,
+      "y": 340,
       "width": 540,
-      "height": 488
+      "height": 232
     },
     {
       "id": "n21",
       "type": "text",
-      "text": "## Cloud Tasks Queues (12 Total)\n\n**Payment Flow:**\n• GCWEBHOOK1_QUEUE\n• GCSPLIT1_QUEUE\n• GCWEBHOOK2_QUEUE (instant)\n• GCSPLIT2_QUEUE (instant)\n• GCACCUMULATOR_QUEUE (threshold)\n• GCSPLIT3_QUEUE (threshold)\n\n**Execution Flow:**\n• GCHOSTPAY1_QUEUE\n• GCHOSTPAY2_QUEUE\n• GCHOSTPAY3_QUEUE\n\n**Response Queues:**\n• GCHOSTPAY1_RESPONSE_QUEUE\n• GCACCUMULATOR_RESPONSE_QUEUE\n• GCHOSTPAY3_RETRY_QUEUE",
-      "x": 1000,
-      "y": 1900,
-      "width": 600,
-      "height": 464
-    },
-    {
-      "id": "n22",
-      "type": "text",
-      "text": "## System Summary\n\n**13 Microservices**\n**44 HTTP Endpoints**\n**2 Payment Flows:**\n• Instant (< $100 USD): 5-10 min latency\n• Threshold (≥ $100 USD): 1-24 hr latency\n\n**Architecture:**\n• Event-driven via Cloud Tasks\n• Encrypted token communication\n• Idempotency protection\n• Retry mechanisms\n• Error classification\n• Database state tracking\n\n**Cloud Infrastructure:**\n• Cloud Run (serverless)\n• Cloud Tasks (async)\n• Cloud SQL (PostgreSQL)\n• Cloud Scheduler (cron)",
-      "x": 1700,
-      "y": 1900,
+      "text": "# GCAccumulator-10-26\n**Cloud Run Service (Existing)**\n\n## Endpoints:\n- `POST /`\n  - Accumulates payments\n  - Checks threshold\n  - Triggers batch payout when reached",
+      "x": 4100,
+      "y": 680,
       "width": 540,
-      "height": 488
+      "height": 256
     }
   ],
   "edges": [
@@ -204,179 +195,233 @@
       "id": "e1",
       "fromNode": "n1",
       "fromSide": "right",
-      "toNode": "n4",
-      "toSide": "left"
+      "toNode": "n2",
+      "toSide": "left",
+      "label": "Telegram webhook"
     },
     {
       "id": "e2",
       "fromNode": "n2",
       "fromSide": "right",
-      "toNode": "n5",
-      "toSide": "left"
+      "toNode": "n3",
+      "toSide": "left",
+      "label": "POST /create-invoice\n(subscription)"
     },
     {
       "id": "e3",
-      "fromNode": "n3",
+      "fromNode": "n2",
       "fromSide": "right",
-      "toNode": "n6",
-      "toSide": "left"
+      "toNode": "n4",
+      "toSide": "left",
+      "label": "POST /keypad-input\n(donation)"
     },
     {
       "id": "e4",
-      "fromNode": "n4",
+      "fromNode": "n3",
       "fromSide": "right",
       "toNode": "n5",
       "toSide": "left",
-      "label": "GCWEBHOOK1_QUEUE"
+      "label": "Create invoice API"
     },
     {
       "id": "e5",
-      "fromNode": "n5",
+      "fromNode": "n4",
       "fromSide": "right",
-      "toNode": "n7",
-      "toSide": "left",
-      "label": "GCSPLIT1_QUEUE"
+      "toNode": "n3",
+      "toSide": "bottom",
+      "label": "Confirmed amount"
     },
     {
       "id": "e6",
-      "fromNode": "n7",
-      "fromSide": "right",
-      "toNode": "n9",
-      "toSide": "left",
-      "label": "GCWEBHOOK2_QUEUE\n(< $100)"
+      "fromNode": "n5",
+      "fromSide": "bottom",
+      "toNode": "n6",
+      "toSide": "top",
+      "label": "IPN callback"
     },
     {
       "id": "e7",
-      "fromNode": "n7",
+      "fromNode": "n6",
       "fromSide": "right",
-      "toNode": "n12",
+      "toNode": "n7",
       "toSide": "left",
-      "label": "GCACCUMULATOR_QUEUE\n(≥ $100)"
+      "label": "POST /process-validated-payment"
     },
     {
       "id": "e8",
-      "fromNode": "n9",
-      "fromSide": "right",
-      "toNode": "n10",
-      "toSide": "left",
-      "label": "GCSPLIT2_QUEUE"
+      "fromNode": "n7",
+      "fromSide": "top",
+      "toNode": "n9",
+      "toSide": "bottom",
+      "label": "Cloud Tasks\n(Telegram invite)"
     },
     {
       "id": "e9",
+      "fromNode": "n7",
+      "fromSide": "right",
+      "toNode": "n10",
+      "toSide": "left",
+      "label": "Cloud Tasks\n(instant payout)"
+    },
+    {
+      "id": "e10",
+      "fromNode": "n7",
+      "fromSide": "bottom",
+      "toNode": "n21",
+      "toSide": "top",
+      "label": "Cloud Tasks\n(threshold payout)"
+    },
+    {
+      "id": "e11",
+      "fromNode": "n7",
+      "fromSide": "left",
+      "toNode": "n8",
+      "toSide": "right",
+      "label": "POST /send-notification"
+    },
+    {
+      "id": "e12",
+      "fromNode": "n10",
+      "fromSide": "right",
+      "toNode": "n11",
+      "toSide": "left",
+      "label": "Cloud Tasks\n(crypto exchange)"
+    },
+    {
+      "id": "e13",
+      "fromNode": "n9",
+      "fromSide": "right",
+      "toNode": "n18",
+      "toSide": "left",
+      "label": "Invite link"
+    },
+    {
+      "id": "e14",
+      "fromNode": "n11",
+      "fromSide": "right",
+      "toNode": "n20",
+      "toSide": "left",
+      "label": "Crypto transfer"
+    },
+    {
+      "id": "e15",
       "fromNode": "n12",
       "fromSide": "right",
       "toNode": "n13",
       "toSide": "left",
-      "label": "Cloud Scheduler\n(1 hour)"
+      "label": "POST /check-expirations\n(every 60s)"
     },
     {
-      "id": "e10",
-      "fromNode": "n12",
-      "fromSide": "right",
-      "toNode": "n14",
-      "toSide": "left",
-      "label": "Cloud Scheduler\n(15 min)"
-    },
-    {
-      "id": "e11",
+      "id": "e16",
       "fromNode": "n13",
-      "fromSide": "right",
-      "toNode": "n15",
-      "toSide": "left",
-      "label": "GCSPLIT3_QUEUE"
+      "fromSide": "bottom",
+      "toNode": "n17",
+      "toSide": "top",
+      "label": "banChatMember\nunbanChatMember"
     },
     {
-      "id": "e12",
+      "id": "e17",
       "fromNode": "n14",
       "fromSide": "right",
       "toNode": "n15",
       "toSide": "left",
-      "label": "GCSPLIT3_QUEUE"
-    },
-    {
-      "id": "e13",
-      "fromNode": "n10",
-      "fromSide": "right",
-      "toNode": "n16",
-      "toSide": "left",
-      "label": "GCHOSTPAY1_QUEUE"
-    },
-    {
-      "id": "e14",
-      "fromNode": "n15",
-      "fromSide": "right",
-      "toNode": "n16",
-      "toSide": "left",
-      "label": "GCHOSTPAY1_QUEUE"
-    },
-    {
-      "id": "e15",
-      "fromNode": "n16",
-      "fromSide": "right",
-      "toNode": "n17",
-      "toSide": "left",
-      "label": "GCHOSTPAY2_QUEUE"
-    },
-    {
-      "id": "e16",
-      "fromNode": "n17",
-      "fromSide": "bottom",
-      "toNode": "n16",
-      "toSide": "top",
-      "label": "GCHOSTPAY1_RESPONSE_QUEUE"
-    },
-    {
-      "id": "e17",
-      "fromNode": "n16",
-      "fromSide": "right",
-      "toNode": "n18",
-      "toSide": "left",
-      "label": "GCHOSTPAY3_QUEUE"
+      "label": "POST /broadcast-*"
     },
     {
       "id": "e18",
-      "fromNode": "n18",
+      "fromNode": "n15",
       "fromSide": "bottom",
-      "toNode": "n16",
-      "toSide": "bottom",
-      "label": "GCHOSTPAY1_RESPONSE_QUEUE (instant)"
+      "toNode": "n17",
+      "toSide": "top",
+      "label": "sendMessage\n(channel broadcasts)"
     },
     {
       "id": "e19",
-      "fromNode": "n18",
-      "fromSide": "left",
-      "toNode": "n12",
-      "toSide": "right",
-      "label": "GCACCUMULATOR_RESPONSE_QUEUE (threshold)"
+      "fromNode": "n8",
+      "fromSide": "bottom",
+      "toNode": "n19",
+      "toSide": "top",
+      "label": "Payment notification"
     },
     {
       "id": "e20",
-      "fromNode": "n18",
-      "fromSide": "right",
-      "toNode": "n19",
+      "fromNode": "n8",
+      "fromSide": "bottom",
+      "toNode": "n17",
       "toSide": "left",
-      "label": "External API calls"
+      "label": "sendMessage"
     },
     {
       "id": "e21",
-      "fromNode": "n16",
-      "fromSide": "right",
-      "toNode": "n19",
-      "toSide": "left"
+      "fromNode": "n2",
+      "fromSide": "bottom",
+      "toNode": "n16",
+      "toSide": "top",
+      "label": "Database queries"
     },
     {
       "id": "e22",
-      "fromNode": "n5",
-      "fromSide": "right",
-      "toNode": "n19",
-      "toSide": "left"
+      "fromNode": "n3",
+      "fromSide": "bottom",
+      "toNode": "n16",
+      "toSide": "top",
+      "label": "Database queries"
     },
     {
       "id": "e23",
       "fromNode": "n4",
+      "fromSide": "bottom",
+      "toNode": "n16",
+      "toSide": "top",
+      "label": "Database queries"
+    },
+    {
+      "id": "e24",
+      "fromNode": "n13",
+      "fromSide": "bottom",
+      "toNode": "n16",
+      "toSide": "left",
+      "label": "Database queries"
+    },
+    {
+      "id": "e25",
+      "fromNode": "n15",
       "fromSide": "right",
-      "toNode": "n19",
-      "toSide": "left"
+      "toNode": "n16",
+      "toSide": "left",
+      "label": "Database queries"
+    },
+    {
+      "id": "e26",
+      "fromNode": "n8",
+      "fromSide": "bottom",
+      "toNode": "n16",
+      "toSide": "top",
+      "label": "Database queries"
+    },
+    {
+      "id": "e27",
+      "fromNode": "n6",
+      "fromSide": "bottom",
+      "toNode": "n16",
+      "toSide": "top",
+      "label": "Database updates"
+    },
+    {
+      "id": "e28",
+      "fromNode": "n7",
+      "fromSide": "bottom",
+      "toNode": "n16",
+      "toSide": "top",
+      "label": "Database queries"
+    },
+    {
+      "id": "e29",
+      "fromNode": "n21",
+      "fromSide": "right",
+      "toNode": "n10",
+      "toSide": "bottom",
+      "label": "Threshold reached"
     }
   ]
 }

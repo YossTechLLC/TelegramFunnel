@@ -8,7 +8,11 @@
       "Bash(TOKEN=\"8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co\" curl -s \"https://api.telegram.org/bot$TOKEN/getMe\")",
       "Bash(TOKEN=\"8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co\")",
       "Bash(curl:*)",
-      "Bash(gcloud builds submit:*)"
+      "Bash(gcloud builds submit:*)",
+      "Bash(gcloud run services list:*)",
+      "Bash(gcloud functions list:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
     ],
     "deny": [],
     "ask": []

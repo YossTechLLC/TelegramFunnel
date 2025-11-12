@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-12 Session 126 - **Broadcast Webhook Migration to Direct HTTP** ✅
+**Last Updated:** 2025-11-12 Session 127 - **GCDonationHandler Self-Contained Module Architecture** 📋
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
@@ -32,10 +32,82 @@ This document records all significant architectural decisions made during the de
 22. [CORS Configuration Strategy](#cors-configuration-strategy)
 23. [JWT Library Standardization Strategy](#jwt-library-standardization-strategy) 🆕
 24. [Secret Manager Whitespace Handling](#secret-manager-whitespace-handling) 🆕
+25. [Self-Contained Module Architecture for Webhooks](#self-contained-module-architecture-for-webhooks) 🆕
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-12 Session 127: GCDonationHandler Self-Contained Module Architecture 📋
+
+**Decision:** Implement GCDonationHandler webhook with self-contained modules instead of shared libraries
+
+**Context:**
+- Refactoring donation handler from TelePay10-26 monolith to independent Cloud Run webhook service
+- Parent architecture document (TELEPAY_REFACTORING_ARCHITECTURE.md) originally proposed shared modules
+- User explicitly requested deviation: "do not use shared modules → I instead want to have these modules existing within each webhook independently"
+
+**Approach:**
+- Each webhook service contains its own complete copies of all required modules
+- Zero internal dependencies between modules (only external packages)
+- Dependency injection pattern: Only service.py imports internal modules
+- All other modules are standalone and accept dependencies via constructor
+
+**Architecture Benefits:**
+1. ✅ **Deployment Simplicity** - Single container image, no external library dependencies
+2. ✅ **Independent Evolution** - Each service can modify modules without affecting others
+3. ✅ **Reduced Coordination** - No need to version-sync shared libraries across services
+4. ✅ **Clearer Ownership** - Each team/service owns its complete codebase
+5. ✅ **Easier Debugging** - All code in one place, no version conflicts
+
+**Trade-offs Accepted:**
+- ❌ Code duplication across services (acceptable for autonomy)
+- ❌ Bug fixes must be applied to each service (mitigated by clear documentation)
+- ✅ Services are completely independent (outweighs downsides)
+
+**Implementation:**
+Created comprehensive 180+ task checklist breaking down implementation into 10 phases:
+- Phase 1: Pre-Implementation Setup (14 tasks)
+- Phase 2: Core Module Implementation (80+ tasks) - 7 self-contained modules
+- Phase 3: Supporting Files (12 tasks)
+- Phase 4: Testing Implementation (24 tasks)
+- Phase 5: Deployment Preparation (15 tasks)
+- Phase 6: Deployment Execution (9 tasks)
+- Phase 7: Integration Testing (15 tasks)
+- Phase 8: Monitoring & Observability (11 tasks)
+- Phase 9: Documentation Updates (8 tasks)
+- Phase 10: Post-Deployment Validation (8 tasks)
+
+**Module Structure:**
+```
+GCDonationHandler-10-26/
+├── service.py                      # Flask app (imports all internal modules)
+├── keypad_handler.py               # Self-contained (only external imports)
+├── payment_gateway_manager.py      # Self-contained (only external imports)
+├── database_manager.py             # Self-contained (only external imports)
+├── config_manager.py               # Self-contained (only external imports)
+├── telegram_client.py              # Self-contained (only external imports)
+└── broadcast_manager.py            # Self-contained (only external imports)
+```
+
+**Verification Strategy:**
+Each module section in checklist includes explicit verification:
+- [ ] Module has NO imports from other internal modules (only external packages)
+- [ ] Module can be imported independently: `from module_name import ClassName`
+- [ ] All error cases are handled with appropriate logging
+
+**Impact on Future Webhooks:**
+This pattern will be followed for all webhook refactoring:
+- GCPaymentHandler (NowPayments IPN webhook)
+- GCPayoutHandler (payout processing webhook)
+- GCBotCommand (command routing webhook)
+
+**Status:** ✅ **CHECKLIST CREATED** - Ready for implementation
+
+**Files Created:**
+- `/OCTOBER/10-26/GCDonationHandler_REFACTORING_ARCHITECTURE_CHECKLIST.md`
+
+---
 
 ### 2025-11-12 Session 126: Broadcast Webhook Migration - IMPLEMENTED ✅
 
