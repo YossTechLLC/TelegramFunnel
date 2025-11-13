@@ -45,7 +45,14 @@
       "Bash(docker:*)",
       "Bash(gcloud builds describe:*)",
       "Bash(gcloud builds log:*)",
-      "Bash(gcloud run services update:*)"
+      "Bash(gcloud run services update:*)",
+      "Bash(test:*)",
+      "Bash(chmod:*)",
+      "Bash(./TOOLS_SCRIPTS_TESTS/scripts/deploy_gcsubscriptionmonitor.sh:*)",
+      "Bash(gcloud iam service-accounts describe:*)",
+      "Bash(for secret in TELEGRAM_BOT_SECRET_NAME DATABASE_HOST_SECRET DATABASE_NAME_SECRET DATABASE_USER_SECRET DATABASE_PASSWORD_SECRET)",
+      "Bash(do gcloud secrets add-iam-policy-binding $secret --member=\"serviceAccount:291176869049-compute@developer.gserviceaccount.com\" --role=\"roles/secretmanager.secretAccessor\" --project=telepay-459221)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

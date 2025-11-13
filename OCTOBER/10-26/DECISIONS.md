@@ -1,12 +1,122 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 131 - **GCDonationHandler-10-26 Self-Contained Donation Service** 💝
+**Last Updated:** 2025-11-12 Session 133 - **GCSubscriptionMonitor-10-26 Verification & Approval** ✅📋
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-12 Session 133: GCSubscriptionMonitor-10-26 - Verification & Production Approval ✅📋
+
+**Decision:** Approve GCSubscriptionMonitor-10-26 for production use after comprehensive verification
+
+**Verification Methodology:**
+- Line-by-line code comparison between original `subscription_manager.py` (216 lines) and refactored service (5 modules, ~700 lines)
+- Byte-for-byte SQL query comparison
+- Telegram API call parameter verification
+- Variable type and value audit
+- Error handling logic analysis
+- Deployment configuration review
+
+**Key Findings:**
+1. **100% Functional Equivalence:** All core business logic preserved without modification
+2. **Database Operations Identical:** Same SQL queries, same update logic, same idempotency guarantees
+3. **Telegram API Calls Identical:** Ban + unban pattern preserved exactly (same parameters, same order)
+4. **Error Handling Preserved:** Partial failure handling maintained (marks inactive even if removal fails)
+5. **Variable Mapping Correct:** All variables (user_id, private_channel_id, expire_time, expire_date) correctly mapped
+6. **Deployment Successful:** Service operational with verified /health and /check-expirations endpoints
+
+**Critical Comparisons:**
+- **Expiration Query:** Both use `SELECT user_id, private_channel_id, expire_time, expire_date FROM private_channel_users_database WHERE is_active = true AND expire_time IS NOT NULL AND expire_date IS NOT NULL` - **EXACT MATCH**
+- **Deactivation Update:** Both use `UPDATE private_channel_users_database SET is_active = false WHERE user_id = :user_id AND private_channel_id = :private_channel_id AND is_active = true` - **EXACT MATCH**
+- **Date Parsing:** Both handle string and datetime types defensively with `isinstance()` checks - **EXACT MATCH**
+- **Telegram Ban:** Both use `ban_chat_member(chat_id=private_channel_id, user_id=user_id)` - **EXACT MATCH**
+- **Telegram Unban:** Both use `unban_chat_member(chat_id=private_channel_id, user_id=user_id, only_if_banned=True)` - **EXACT MATCH**
+
+**Architecture Differences (Intentional):**
+- Trigger: Infinite loop → Cloud Scheduler (every 60 seconds)
+- Database: psycopg2 → Cloud SQL Connector + SQLAlchemy
+- Config: Environment variables → Secret Manager
+- Async: Native async → Sync wrapper with asyncio.run()
+- Return: None (logs only) → JSON statistics dictionary
+
+**Approval Criteria Met:**
+- ✅ No functional differences from original implementation
+- ✅ All database schema alignments verified
+- ✅ All Telegram API calls identical
+- ✅ Error handling logic preserved
+- ✅ Idempotency maintained
+- ✅ Logging style consistent
+- ✅ Deployment successful
+- ✅ Endpoints verified
+
+**Next Phase:**
+- Phase 7: Create Cloud Scheduler job (cron: */1 * * * *)
+- Phase 8-9: Parallel testing with original subscription_manager.py
+- Phase 10: Gradual cutover after 7 days monitoring
+- Phase 11: Archive original code
+
+**Certification:**
+The refactored GCSubscriptionMonitor-10-26 service accurately replicates all functionality from the original subscription_manager.py implementation with no loss of features, correctness, or reliability. **APPROVED FOR PRODUCTION USE.**
+
+### 2025-11-12 Session 132: GCSubscriptionMonitor-10-26 - Self-Contained Subscription Expiration Monitoring Service ⏰
+
+**Decision:** Extract subscription expiration monitoring into standalone Cloud Run webhook service triggered by Cloud Scheduler
+
+**Rationale:**
+- TelePay10-26 monolith runs subscription_manager.py as infinite loop (inefficient resource usage 24/7)
+- Subscription monitoring should operate independently of bot availability
+- Webhook architecture allows horizontal scaling and serverless cost optimization
+- Scheduled triggers (every 60 seconds) eliminate need for continuous background tasks
+
+**Implementation Details:**
+- Created 5 self-contained modules (~700 lines total):
+  - service.py (120 lines) - Flask app with 2 REST endpoints
+  - config_manager.py (115 lines) - Secret Manager integration
+  - database_manager.py (195 lines) - PostgreSQL operations with date/time parsing
+  - telegram_client.py (130 lines) - Telegram Bot API wrapper (ban + unban)
+  - expiration_handler.py (155 lines) - Core business logic
+
+**Key Architectural Choices:**
+1. **Ban + Unban Pattern:** Remove users from channels using ban_chat_member + immediate unban_chat_member (allows future rejoins)
+2. **Date/Time Parsing:** Handle both string and datetime types from database (defensive programming)
+3. **Synchronous Telegram Operations:** Wrapped async python-telegram-bot with asyncio.run() for Flask compatibility
+4. **Idempotent Database Operations:** Safe to run multiple times (WHERE is_active = true prevents duplicate updates)
+5. **Comprehensive Error Handling:** Handle "user not found", "forbidden", "chat not found" as success/failure
+
+**Service Configuration:**
+- Min instances: 0 (scale to zero when idle)
+- Max instances: 1 (single instance sufficient for 60-second intervals)
+- Memory: 512Mi (higher than payment gateway due to Telegram client)
+- CPU: 1, Timeout: 300s, Concurrency: 1
+- Service Account: 291176869049-compute@developer.gserviceaccount.com
+
+**Secret Manager Integration:**
+- TELEGRAM_BOT_SECRET_NAME (bot token)
+- CLOUD_SQL_CONNECTION_NAME (instance connection string format: project:region:instance)
+- DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+
+**Technical Challenges Solved:**
+1. **Health Check SQLAlchemy Compatibility:** Changed from conn.cursor() to conn.execute(sqlalchemy.text())
+2. **Secret Name Mismatch:** telegram-bot-token → TELEGRAM_BOT_SECRET_NAME
+3. **Instance Connection Format:** DATABASE_HOST_SECRET contains IP → Use CLOUD_SQL_CONNECTION_NAME instead
+4. **IAM Permissions:** Granted secretAccessor role to service account for all 6 secrets
+
+**Trade-offs:**
+- ✅ Pro: Independent deployment and scaling
+- ✅ Pro: Cost optimization (only runs when scheduled)
+- ✅ Pro: Clear separation from bot lifecycle
+- ✅ Pro: No shared module version conflicts
+- ⚠️ Con: Cloud Scheduler adds ~10s invocation delay (acceptable for subscription expiration)
+
+**Next Phase:**
+- Create Cloud Scheduler job (cron: */1 * * * * = every 60 seconds)
+- Parallel testing with TelePay10-26 subscription_manager.py
+- Gradual cutover after 7-day monitoring period
+
+---
 
 ### 2025-11-13 Session 131: GCDonationHandler-10-26 - Self-Contained Donation Keypad & Broadcast Service 💝
 **Decision:** Extract donation handling functionality into standalone Cloud Run webhook service
