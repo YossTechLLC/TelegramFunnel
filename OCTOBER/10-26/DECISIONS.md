@@ -1,12 +1,139 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 136 - **Centralized Notification Architecture** ✅
+**Last Updated:** 2025-11-13 Session 139 - **GCBroadcastService Deployment Configuration** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-13 Session 139: GCBroadcastService Deployment & Scheduler Configuration
+
+**Decision:** Deploy GCBroadcastService-10-26 to Cloud Run with daily Cloud Scheduler job
+
+**Context:**
+- Service fully implemented and ready for production deployment
+- Need to automate daily broadcast execution
+- Existing GCBroadcastScheduler-10-26 service running every 5 minutes
+- New service should follow best practices for Cloud Run deployment
+
+**Deployment Decisions:**
+
+1. **Cloud Run Service Configuration**
+   - ✅ Service Name: `gcbroadcastservice-10-26` (distinct from old scheduler)
+   - ✅ Region: us-central1 (same as other services)
+   - ✅ Memory: 512Mi (sufficient for broadcast processing)
+   - ✅ CPU: 1 (adequate for I/O-bound operations)
+   - ✅ Timeout: 300s (5 minutes for broadcast batch processing)
+   - ✅ Min Instances: 0 (cost optimization)
+   - ✅ Max Instances: 3 (handles load spikes)
+   - ✅ Concurrency: 80 (standard Cloud Run default)
+   - **Rationale:** Balanced configuration for cost and performance
+
+2. **Service Account & IAM Permissions**
+   - ✅ Service Account: 291176869049-compute@developer.gserviceaccount.com
+   - ✅ Secret Manager Access: Granted for all 9 required secrets
+   - ✅ Cloud SQL Client: Already assigned to default compute SA
+   - **Rationale:** Minimal privilege model with explicit secret access
+
+3. **Cloud Scheduler Job Configuration**
+   - ✅ Job Name: `gcbroadcastservice-daily` (distinct from old job)
+   - ✅ Schedule: `0 12 * * *` (daily at noon UTC)
+   - ✅ HTTP Method: POST with `Content-Type: application/json` header
+   - ✅ Authentication: OIDC with service account
+   - ✅ Target: /api/broadcast/execute endpoint
+   - **Rationale:** Daily execution prevents spam, UTC noon for consistency
+
+4. **Gunicorn Configuration Fix**
+   - ✅ Added module-level `app = create_app()` in main.py
+   - ✅ Enables gunicorn to find app instance at import time
+   - ✅ Maintains application factory pattern for testing
+   - **Rationale:** Required for gunicorn WSGI server compatibility
+
+5. **Content-Type Header Fix**
+   - ✅ Added `--headers="Content-Type=application/json"` to scheduler job
+   - ✅ Prevents Flask 415 Unsupported Media Type error
+   - ✅ Ensures request.get_json() works correctly
+   - **Rationale:** Flask requires explicit Content-Type for JSON parsing
+
+**Migration Strategy:**
+- ✅ New service deployed alongside old service
+- ✅ Both services can run concurrently during validation period
+- ⏳ Monitor new service for 24-48 hours before decommissioning old service
+- ⏳ Old service: `gcbroadcastscheduler-10-26` (runs every 5 minutes)
+- **Rationale:** Zero-downtime migration with rollback capability
+
+**Impact:**
+- ✅ Service is LIVE and operational
+- ✅ Automated daily broadcasts configured
+- ✅ Manual trigger API available for website integration
+- ✅ No disruption to existing broadcast functionality
+- ⏳ Old service still active (pending validation)
+
+---
+
+### 2025-11-13 Session 138: GCBroadcastService Self-Contained Architecture
+
+**Decision:** Refactor GCBroadcastScheduler-10-26 into GCBroadcastService-10-26 with fully self-contained modules
+
+**Context:**
+- Original GCBroadcastScheduler-10-26 was functional but needed architectural alignment
+- TelePay microservices architecture requires each webhook to be fully self-contained
+- No shared module dependencies allowed across services
+
+**Architecture Decisions:**
+
+1. **Self-Contained Modules** - Each service contains its own copies of utility modules
+   - ✅ utils/config.py - Secret Manager integration
+   - ✅ utils/auth.py - JWT authentication helpers
+   - ✅ utils/logging_utils.py - Structured logging setup
+   - **Rationale:** Independent deployment, no runtime dependency conflicts
+
+2. **Renamed Components for Consistency**
+   - ✅ DatabaseManager → DatabaseClient
+   - ✅ db_manager parameter → db_client parameter
+   - ✅ config_manager parameter → config parameter
+   - **Rationale:** Clear naming convention (clients vs managers)
+
+3. **Application Factory Pattern** - Flask app initialization
+   - ✅ create_app() function for testability
+   - ✅ Separate error handler registration
+   - ✅ Blueprint-based route organization
+   - **Rationale:** Enables testing, cleaner initialization
+
+4. **Singleton Pattern in Routes** - Component initialization
+   - ✅ Single instances of Config, DatabaseClient, TelegramClient
+   - ✅ Shared across all route handlers
+   - ✅ Initialized at module import time
+   - **Rationale:** Efficient resource usage, connection pooling
+
+5. **Module Organization**
+   - ✅ routes/ - HTTP endpoints (broadcast_routes, api_routes)
+   - ✅ services/ - Business logic (scheduler, executor, tracker)
+   - ✅ clients/ - External API wrappers (telegram, database)
+   - ✅ utils/ - Reusable utilities (config, auth, logging)
+   - **Rationale:** Clear separation of concerns, easy to navigate
+
+**Benefits:**
+- ✅ **Independent Deployment:** Each service can be deployed without affecting others
+- ✅ **Version Control:** Services can evolve at different rates
+- ✅ **No Runtime Dependencies:** No risk of shared module version conflicts
+- ✅ **Simplified Testing:** Each service has its own test suite
+- ✅ **Clear Ownership:** Each service is a single Docker container
+
+**Trade-offs:**
+- ⚠️ **Code Duplication:** Utility modules duplicated across services
+- ⚠️ **Update Coordination:** Changes to common patterns require updating multiple services
+- ✅ **Accepted:** Benefits of independence outweigh duplication concerns
+
+**Implementation Notes:**
+- All imports updated to use local modules (no external shared imports)
+- Maintained existing emoji logging patterns for consistency
+- Preserved all existing functionality (automated + manual broadcasts)
+- No database schema changes required
+
+---
 
 ### 2025-11-13 Session 136: Centralized Notification Architecture - Single Entry Point
 

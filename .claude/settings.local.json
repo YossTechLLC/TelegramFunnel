@@ -57,7 +57,14 @@
       "Bash(gcloud secrets get-iam-policy:*)",
       "Bash(do echo \"Granting access to $secret...\")",
       "Bash(do echo -n \"  $secret: \")",
-      "Bash(bash deploy_gcnotificationservice.sh:*)"
+      "Bash(bash deploy_gcnotificationservice.sh:*)",
+      "Bash(for secret in TELEGRAM_BOT_SECRET_NAME TELEGRAM_BOT_USERNAME JWT_SECRET_KEY BROADCAST_AUTO_INTERVAL BROADCAST_MANUAL_INTERVAL CLOUD_SQL_CONNECTION_NAME DATABASE_NAME_SECRET DATABASE_USER_SECRET DATABASE_PASSWORD_SECRET)",
+      "Bash(do echo \"Granting access to $secret...\" gcloud secrets add-iam-policy-binding $secret --member=\"serviceAccount:291176869049-compute@developer.gserviceaccount.com\" --role=\"roles/secretmanager.secretAccessor\")",
+      "Bash(gcloud scheduler jobs list:*)",
+      "Bash(gcloud scheduler jobs describe:*)",
+      "Bash(gcloud scheduler jobs create:*)",
+      "Bash(gcloud scheduler jobs run:*)",
+      "Bash(gcloud scheduler jobs delete:*)"
     ],
     "deny": [],
     "ask": []
