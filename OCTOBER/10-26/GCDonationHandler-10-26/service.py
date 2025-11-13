@@ -15,6 +15,7 @@ from config_manager import ConfigManager
 from database_manager import DatabaseManager
 from telegram_client import TelegramClient
 from keypad_handler import KeypadHandler
+from keypad_state_manager import KeypadStateManager
 from broadcast_manager import BroadcastManager
 
 # Configure logging with emoji support
@@ -77,15 +78,24 @@ def create_app():
         logger.error(f"❌ Failed to initialize Telegram client: {e}")
         raise RuntimeError(f"Telegram client initialization failed: {e}")
 
+    # Initialize keypad state manager (database-backed state)
+    try:
+        state_manager = KeypadStateManager(db_manager=db_manager)
+        logger.info("🗄️ Keypad state manager initialized (database-backed)")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize keypad state manager: {e}")
+        raise RuntimeError(f"Keypad state manager initialization failed: {e}")
+
     # Initialize keypad handler
     try:
         keypad_handler = KeypadHandler(
             db_manager=db_manager,
             telegram_client=telegram_client,
             payment_token=config['payment_token'],
-            ipn_callback_url=config['ipn_callback_url']
+            ipn_callback_url=config['ipn_callback_url'],
+            state_manager=state_manager
         )
-        logger.info("🔢 Keypad handler initialized")
+        logger.info("🔢 Keypad handler initialized (with database-backed state)")
     except Exception as e:
         logger.error(f"❌ Failed to initialize keypad handler: {e}")
         raise RuntimeError(f"Keypad handler initialization failed: {e}")

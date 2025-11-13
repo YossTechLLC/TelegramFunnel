@@ -17,9 +17,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all Python modules
-COPY service.py keypad_handler.py payment_gateway_manager.py \
-     database_manager.py config_manager.py telegram_client.py \
-     broadcast_manager.py ./
+COPY service.py keypad_handler.py keypad_state_manager.py \
+     payment_gateway_manager.py database_manager.py config_manager.py \
+     telegram_client.py broadcast_manager.py ./
 
 # Expose port 8080 (Cloud Run default)
 EXPOSE 8080

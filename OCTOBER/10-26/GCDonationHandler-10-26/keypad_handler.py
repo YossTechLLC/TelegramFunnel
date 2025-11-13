@@ -4,14 +4,15 @@ Keypad Handler for GCDonationHandler
 Handles inline numeric keypad for donation amount input
 
 This module provides a calculator-style interface for users to enter
-custom donation amounts with real-time validation. It manages in-memory
-user state for the donation input flow.
+custom donation amounts with real-time validation. It manages user state
+in database for horizontal scaling support.
 """
 
 import logging
 import time
 from typing import Optional, Dict, Any
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from keypad_state_manager import KeypadStateManager
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,8 @@ class KeypadHandler:
     Handles inline numeric keypad for donation amount input.
 
     This class provides a calculator-style interface with validation rules
-    to ensure valid donation amounts. User state is stored in-memory using
-    a dictionary keyed by user_id.
+    to ensure valid donation amounts. User state is stored in database using
+    KeypadStateManager to enable horizontal scaling.
 
     Validation Constants:
         MIN_AMOUNT: Minimum donation amount ($4.99)
@@ -34,7 +35,7 @@ class KeypadHandler:
         db_manager: DatabaseManager instance for channel validation
         telegram_client: TelegramClient instance for bot operations
         payment_gateway: PaymentGatewayManager instance for invoices
-        user_states: In-memory storage for user donation states
+        state_manager: KeypadStateManager instance for database-backed state
     """
 
     # Validation constants
@@ -43,7 +44,7 @@ class KeypadHandler:
     MAX_DECIMALS = 2
     MAX_DIGITS_BEFORE_DECIMAL = 4
 
-    def __init__(self, db_manager, telegram_client, payment_token: str, ipn_callback_url: str):
+    def __init__(self, db_manager, telegram_client, payment_token: str, ipn_callback_url: str, state_manager: Optional[KeypadStateManager] = None):
         """
         Initialize the KeypadHandler.
 
@@ -52,6 +53,7 @@ class KeypadHandler:
             telegram_client: TelegramClient instance
             payment_token: NowPayments API token
             ipn_callback_url: IPN callback URL for payment notifications
+            state_manager: Optional KeypadStateManager instance (auto-created if not provided)
         """
         self.db_manager = db_manager
         self.telegram_client = telegram_client
@@ -60,10 +62,10 @@ class KeypadHandler:
         from payment_gateway_manager import PaymentGatewayManager
         self.payment_gateway = PaymentGatewayManager(payment_token, ipn_callback_url)
 
-        # In-memory state storage: {user_id: {amount_building, open_channel_id, started_at, chat_id, keypad_message_id}}
-        self.user_states = {}
+        # Database-backed state storage (replaces in-memory user_states dict)
+        self.state_manager = state_manager or KeypadStateManager(db_manager)
 
-        logger.info("🔢 KeypadHandler initialized")
+        logger.info("🔢 KeypadHandler initialized (database-backed state)")
 
     def start_donation_input(
         self,
@@ -93,14 +95,17 @@ class KeypadHandler:
                 text="💝 Opening donation keypad..."
             )
 
-            # Initialize user state
-            self.user_states[user_id] = {
-                'amount_building': '0',
-                'open_channel_id': open_channel_id,
-                'started_at': time.time(),
-                'chat_id': chat_id,
-                'keypad_message_id': None
-            }
+            # Initialize user state in database
+            success = self.state_manager.create_state(
+                user_id=user_id,
+                channel_id=open_channel_id,
+                chat_id=chat_id,
+                state_type='keypad_input'
+            )
+
+            if not success:
+                logger.error(f"❌ Failed to create state for user {user_id}")
+                return {'success': False, 'error': 'Failed to initialize state'}
 
             # Create keypad message text
             text = (
@@ -118,8 +123,6 @@ class KeypadHandler:
             )
 
             if result['success']:
-                # Store message ID in user state
-                self.user_states[user_id]['keypad_message_id'] = result['message_id']
                 logger.info(f"💝 User {user_id} started donation for channel {open_channel_id}")
                 return {'success': True, 'message_id': result['message_id']}
             else:
@@ -155,8 +158,10 @@ class KeypadHandler:
             {'success': False, 'error': str} on failure
         """
         try:
-            # Check if user has active session
-            if user_id not in self.user_states:
+            # Check if user has active session in database
+            user_state = self.state_manager.get_state(user_id)
+
+            if not user_state:
                 self.telegram_client.answer_callback_query(
                     callback_query_id=callback_query_id,
                     text="⚠️ Session expired. Please start a new donation.",
@@ -164,15 +169,11 @@ class KeypadHandler:
                 )
                 return {'success': False, 'error': 'Session expired'}
 
-            # Get current state
-            user_state = self.user_states[user_id]
+            # Get current amount from state
             current_amount = user_state['amount_building']
-            stored_message_id = user_state['keypad_message_id']
-            stored_chat_id = user_state['chat_id']
 
-            # Use stored values if not provided
-            message_id = message_id or stored_message_id
-            chat_id = chat_id or stored_chat_id
+            # Note: message_id and chat_id are provided by GCBotCommand in the HTTP request
+            # We don't need to store them in state anymore
 
             # Route to appropriate handler
             if callback_data.startswith("donate_digit_"):
@@ -272,8 +273,8 @@ class KeypadHandler:
         else:
             new_amount = current_amount + digit
 
-        # Update user state
-        self.user_states[user_id]['amount_building'] = new_amount
+        # Update user state in database
+        self.state_manager.update_amount(user_id, new_amount)
 
         # Answer callback query
         self.telegram_client.answer_callback_query(callback_query_id)
@@ -300,8 +301,8 @@ class KeypadHandler:
         # Remove last character, reset to "0" if empty
         new_amount = current_amount[:-1] if len(current_amount) > 1 else "0"
 
-        # Update user state
-        self.user_states[user_id]['amount_building'] = new_amount
+        # Update user state in database
+        self.state_manager.update_amount(user_id, new_amount)
 
         # Answer callback query
         self.telegram_client.answer_callback_query(callback_query_id)
@@ -324,8 +325,8 @@ class KeypadHandler:
         chat_id: int
     ) -> Dict[str, Any]:
         """Handle clear button - reset to $0.00."""
-        # Reset amount
-        self.user_states[user_id]['amount_building'] = "0"
+        # Reset amount in database
+        self.state_manager.update_amount(user_id, "0")
 
         # Answer callback query
         self.telegram_client.answer_callback_query(callback_query_id)
@@ -378,8 +379,12 @@ class KeypadHandler:
             )
             return {'success': False, 'error': 'Amount above maximum'}
 
-        # Get open_channel_id from state
-        open_channel_id = self.user_states[user_id]['open_channel_id']
+        # Get open_channel_id from database state
+        user_state = self.state_manager.get_state(user_id)
+        if not user_state:
+            return {'success': False, 'error': 'State not found'}
+
+        open_channel_id = user_state['open_channel_id']
 
         logger.info(f"✅ Donation confirmed: ${amount_float:.2f} for channel {open_channel_id} by user {user_id}")
 
@@ -401,8 +406,8 @@ class KeypadHandler:
         # Trigger payment gateway
         payment_result = self._trigger_payment_gateway(user_id, amount_float, open_channel_id, chat_id)
 
-        # Clean up user state (optional: could keep for analytics)
-        # del self.user_states[user_id]
+        # Clean up user state from database (optional: could keep for analytics)
+        # self.state_manager.delete_state(user_id)
 
         return {'success': True, 'payment_result': payment_result}
 
@@ -429,9 +434,8 @@ class KeypadHandler:
             parse_mode="HTML"
         )
 
-        # Clean up user state
-        if user_id in self.user_states:
-            del self.user_states[user_id]
+        # Clean up user state from database
+        self.state_manager.delete_state(user_id)
 
         return {'success': True}
 

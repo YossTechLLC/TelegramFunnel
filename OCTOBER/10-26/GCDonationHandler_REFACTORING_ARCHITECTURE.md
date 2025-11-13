@@ -2364,6 +2364,82 @@ PORT=8080
 
 ## API Endpoints Specification
 
+### 🆕 IMPORTANT: HTTP Call Chain Clarification
+
+**GCDonationHandler does NOT register a Telegram webhook.**
+
+All Telegram updates (messages, callback_queries) are received by **GCBotCommand first**, which then proxies donation-related callbacks to GCDonationHandler via HTTP POST requests.
+
+#### Webhook Registration Architecture
+
+```
+❌ INCORRECT ASSUMPTION:
+    Telegram → GCDonationHandler /webhook  (GCDonationHandler does NOT have a Telegram webhook)
+
+✅ ACTUAL FLOW:
+    Telegram → GCBotCommand /webhook  (ONLY GCBotCommand registers webhook)
+        → GCBotCommand routes callback to GCDonationHandler
+            → GCDonationHandler /start-donation-input (HTTP POST from GCBotCommand)
+            → GCDonationHandler /keypad-input (HTTP POST from GCBotCommand)
+```
+
+#### Who Calls What?
+
+| Caller | Endpoint | Purpose |
+|--------|----------|---------|
+| **GCBotCommand** | `POST /start-donation-input` | User clicked "💝 Donate" button in broadcast |
+| **GCBotCommand** | `POST /keypad-input` | User pressed keypad button (digit, backspace, etc.) |
+| **GCDonationHandler** | `POST /create-invoice` (GCPaymentGateway) | User confirmed amount, create invoice |
+| **GCBroadcastService** | `POST /broadcast-closed-channels` | Trigger broadcast to all closed channels |
+
+#### Complete Donation Flow from User Perspective
+
+```
+1. User sees "💝 Donate $X.XX or more" in closed channel broadcast
+2. User clicks "💝 Donate" button
+3. Telegram sends callback_query to GCBotCommand (only service with registered webhook)
+4. GCBotCommand: callback_handler.py identifies callback_data.startswith("donate_start_")
+5. GCBotCommand → HTTP POST to GCDonationHandler /start-donation-input
+6. GCDonationHandler sends numeric keypad to user via Telegram Bot API
+7. User presses digit button (e.g., "2", "5", ".", "0", "0")
+8. Telegram sends callback_query to GCBotCommand for EACH button press
+9. GCBotCommand → HTTP POST to GCDonationHandler /keypad-input for EACH press
+10. GCDonationHandler updates keypad display after each input
+11. User presses "✅ Confirm" button
+12. Telegram sends callback_query to GCBotCommand
+13. GCBotCommand → HTTP POST to GCDonationHandler /keypad-input
+14. GCDonationHandler validates amount ($4.99 minimum)
+15. GCDonationHandler → HTTP POST to GCPaymentGateway /create-invoice
+16. GCPaymentGateway → NowPayments API to create invoice
+17. GCDonationHandler sends payment button with invoice_url to user
+18. User clicks payment button → redirected to NowPayments payment page
+```
+
+#### Security Note
+
+⚠️ **Issue #5:** HTTP calls between GCBotCommand and GCDonationHandler are currently **NOT authenticated**.
+
+🔧 **Fix Required:** Implement JWT-based inter-service authentication (see MAIN_REFACTOR_REVIEW_TELEPAY_CHECKLIST.md Task 4.1-4.4)
+
+**Recommended Implementation:**
+- GCBotCommand generates JWT token with claims: `{source_service: 'gcbotcommand', target_service: 'gcdonationhandler'}`
+- GCDonationHandler verifies JWT signature and checks target_service matches itself
+- Reject requests without valid JWT (return 401 Unauthorized)
+
+#### State Management Note
+
+⚠️ **Issue #3:** GCDonationHandler currently uses **in-memory state** (`user_states` dict) to track keypad amounts.
+
+This creates a problem:
+- If GCDonationHandler scales to 2+ instances (horizontal scaling)
+- User presses digit "2" → goes to instance A
+- User presses digit "5" → goes to instance B (doesn't know about "2")
+- User sees "$5.00" instead of "$25.00"
+
+🔧 **Fix Required:** Migrate to database-backed state using `donation_keypad_state` table (see MAIN_REFACTOR_REVIEW_TELEPAY_CHECKLIST.md Task 3.1-3.4)
+
+---
+
 ### 🌐 Complete API Reference
 
 #### 1. Health Check Endpoint

@@ -1,12 +1,78 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 141 - **Cloud SQL Unix Socket Pattern** ✅
+**Last Updated:** 2025-11-13 Session 142 - **Database-Backed State Pattern for Stateless Services** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-13 Session 142: Database-Backed State for GCDonationHandler Keypad
+
+**Decision:** Migrate GCDonationHandler from in-memory state (`self.user_states = {}`) to database-backed state (`donation_keypad_state` table).
+
+**Context:**
+- GCDonationHandler stored donation keypad state in memory using a Python dictionary
+- In-memory state prevents horizontal scaling (multiple instances would have different state)
+- If Cloud Run spawns 2+ instances, user keypad presses could go to wrong instance
+- User would see incorrect amounts or "session expired" errors randomly
+- This violated the stateless microservices principle
+
+**Options Considered:**
+1. **Database-Backed State (CHOSEN)**
+   - ✅ Enables horizontal scaling without state loss
+   - ✅ State persists across service restarts
+   - ✅ Automatic cleanup of stale sessions via SQL function
+   - ✅ Consistent with other services (GCBroadcastService uses database state)
+   - ❌ Requires database round-trips for each keypad button press
+   - ❌ Additional database table and migration
+
+2. **Redis/Memcached In-Memory Cache**
+   - ✅ Fast reads/writes
+   - ✅ Built-in TTL for session expiration
+   - ❌ Additional infrastructure (Redis instance)
+   - ❌ Additional cost (~$50/month for Memorystore)
+   - ❌ More complex deployment
+   - ❌ Another service to monitor and maintain
+
+3. **Session Affinity (Sticky Sessions)**
+   - ✅ No code changes required
+   - ❌ Defeats purpose of horizontal scaling
+   - ❌ If instance crashes, all sessions on that instance are lost
+   - ❌ Uneven load distribution
+   - ❌ Not recommended for Cloud Run
+
+4. **Client-Side State (Callback Data)**
+   - ✅ Completely stateless
+   - ❌ Limited to 64 bytes in Telegram callback_data
+   - ❌ Can't store full keypad state (amount, decimal_entered, channel_id, etc.)
+   - ❌ Security concern (client can manipulate state)
+
+**Decision Rationale:**
+- **Database-backed state** is the only scalable, reliable solution
+- Performance impact is minimal: PostgreSQL queries < 50ms, keypad operations are interactive (human-speed)
+- Consistent with existing architecture (GCBroadcastService already uses `broadcast_manager` table for state)
+- No additional infrastructure or cost
+- Automatic cleanup via SQL function prevents table bloat
+
+**Implementation Details:**
+- Created `donation_keypad_state` table with 7 columns
+- Created `KeypadStateManager` class wrapping all database operations
+- Refactored `KeypadHandler` to use dependency injection
+- Added automatic cleanup function: `cleanup_stale_donation_states()` (1 hour TTL)
+
+**Trade-offs Accepted:**
+- Small latency increase per keypad button press (~30-50ms database round-trip)
+- Additional database table to maintain
+- More complex code (KeypadStateManager abstraction layer)
+
+**Impact:**
+- ✅ GCDonationHandler can now scale horizontally without state loss
+- ✅ Donation flow resilient to service restarts
+- ✅ Fixes Issue #3 (HIGH): Stateful Design
+
+---
 
 ### 2025-11-13 Session 141: Cloud SQL Unix Socket Connection Pattern for Cloud Run Services
 

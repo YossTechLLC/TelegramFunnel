@@ -157,6 +157,179 @@ The current TelePay10-26 bot handles **all Telegram bot interactions** in a mono
 
 ---
 
+### 🆕 Donation Flow HTTP Call Chain
+
+**IMPORTANT:** This section clarifies the complete HTTP call chain for donation flows, addressing ambiguity in the original architecture design.
+
+GCBotCommand supports **TWO donation flows**:
+
+#### Flow 1: Simple Text Input (Legacy/Simple)
+```
+User clicks /start {hash}_DONATE
+    → Telegram sends message update to GCBotCommand
+        → GCBotCommand: command_handler.py/_handle_donation_token()
+            → Bot asks user to type amount via text
+                → User types "25.50"
+                    → Telegram sends message update to GCBotCommand
+                        → GCBotCommand: command_handler.py/_handle_donation_input()
+                            → HTTP POST to GCPaymentGateway /create-invoice
+                                {user_id, amount, open_channel_id, payment_type='donation'}
+```
+
+**Key Points:**
+- ✅ GCBotCommand receives **ALL** Telegram webhooks (messages, callbacks)
+- ✅ GCBotCommand handles text input directly
+- ✅ GCBotCommand calls GCPaymentGateway **directly** (does NOT involve GCDonationHandler)
+- ⚠️ Simple but limited UX (requires typing)
+
+#### Flow 2: Keypad Interface (Current/Preferred)
+```
+User clicks "💝 Donate" button in closed channel broadcast
+    → Telegram sends callback_query to GCBotCommand
+        → GCBotCommand: callback_handler.py/_handle_donate_start()
+            → HTTP POST to GCDonationHandler /start-donation-input
+                {user_id, chat_id, open_channel_id, callback_query_id}
+                    → GCDonationHandler sends numeric keypad interface
+                        → User clicks digit button (0-9, ., backspace, etc.)
+                            → Telegram sends callback_query to GCBotCommand
+                                → GCBotCommand: callback_handler.py/_handle_donate_keypad()
+                                    → HTTP POST to GCDonationHandler /keypad-input
+                                        {user_id, callback_data, callback_query_id, message_id}
+                                            → GCDonationHandler updates keypad display
+                                                → (Repeat for each digit/action)
+                                                    → User clicks "Confirm"
+                                                        → GCDonationHandler: HTTP POST to GCPaymentGateway /create-invoice
+```
+
+**Key Points:**
+- ✅ GCBotCommand receives **ALL** Telegram webhooks (callback_query for keypad buttons)
+- ✅ GCBotCommand **PROXIES** all keypad callbacks to GCDonationHandler
+- ✅ GCBotCommand does NOT process keypad logic itself
+- ✅ GCDonationHandler manages keypad state and calls GCPaymentGateway when user confirms
+- ⚠️ **CRITICAL:** GCDonationHandler does NOT register its own Telegram webhook
+
+#### Callback Data Patterns
+
+**Handled by GCBotCommand and forwarded to GCDonationHandler:**
+
+```python
+# Start donation flow
+"donate_start_{open_channel_id}"  → POST /start-donation-input
+
+# Keypad digit buttons
+"donate_digit_0" through "donate_digit_9"  → POST /keypad-input
+"donate_digit_."  # Decimal point         → POST /keypad-input
+
+# Keypad action buttons
+"donate_backspace"  → POST /keypad-input
+"donate_clear"      → POST /keypad-input
+"donate_confirm"    → POST /keypad-input  (GCDonationHandler → GCPaymentGateway)
+"donate_cancel"     → POST /keypad-input
+"donate_noop"       → POST /keypad-input  (display-only, no action)
+```
+
+#### HTTP Request/Response Examples
+
+**1. Start Donation Flow**
+
+```http
+POST https://gcdonationhandler-10-26-.../start-donation-input
+Content-Type: application/json
+
+{
+    "user_id": 6271402111,
+    "chat_id": 6271402111,
+    "open_channel_id": "-1003268562225",
+    "callback_query_id": "1234567890"
+}
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "message": "Donation keypad sent to user"
+}
+```
+
+**2. Keypad Input (Digit Press)**
+
+```http
+POST https://gcdonationhandler-10-26-.../keypad-input
+Content-Type: application/json
+
+{
+    "user_id": 6271402111,
+    "callback_data": "donate_digit_5",
+    "callback_query_id": "1234567891",
+    "message_id": 12345,
+    "chat_id": 6271402111
+}
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "current_amount": "5"
+}
+```
+
+**3. Keypad Confirm (Final Action)**
+
+```http
+POST https://gcdonationhandler-10-26-.../keypad-input
+Content-Type: application/json
+
+{
+    "user_id": 6271402111,
+    "callback_data": "donate_confirm",
+    "callback_query_id": "1234567892",
+    "message_id": 12345,
+    "chat_id": 6271402111
+}
+```
+
+**Response:**
+```json
+{
+    "success": true,
+    "invoice_url": "https://nowpayments.io/payment/...",
+    "amount": "25.00"
+}
+```
+
+*Note: GCDonationHandler internally calls GCPaymentGateway to create the invoice before responding*
+
+#### Architectural Notes
+
+1. **Telegram Webhook Registration:**
+   - ✅ **ONLY GCBotCommand** registers a webhook with Telegram Bot API
+   - ❌ GCDonationHandler does **NOT** register a webhook
+   - ℹ️ All Telegram updates (messages, callback_queries) go to GCBotCommand first
+
+2. **Callback Routing:**
+   - GCBotCommand acts as a **router/proxy** for donation keypad callbacks
+   - Pattern matching in `callback_handler.py` determines which service to call
+   - Format: `callback_data.startswith("donate_")` → forward to GCDonationHandler
+
+3. **State Management:**
+   - GCBotCommand stores minimal conversation state (donation context)
+   - GCDonationHandler manages keypad state (current amount, decimal entered)
+   - ⚠️ **Issue #3:** GCDonationHandler uses **in-memory state** (`user_states` dict) which is NOT horizontally scalable
+   - 🔧 **Fix Required:** Migrate to database-backed state (see Task 3.1-3.4 in MAIN_REFACTOR_REVIEW_TELEPAY_CHECKLIST.md)
+
+4. **Error Handling:**
+   - GCBotCommand catches HTTP errors from GCDonationHandler and fails gracefully
+   - Keypad callbacks always return `{"status": "ok"}` to avoid disrupting user interaction
+   - GCDonationHandler sends error messages directly to user via Telegram if needed
+
+5. **Security:**
+   - ⚠️ **Issue #5:** HTTP calls between GCBotCommand and GCDonationHandler are **NOT authenticated**
+   - 🔧 **Fix Required:** Implement JWT-based inter-service auth (see Task 4.1-4.4 in checklist)
+
+---
+
 ## Directory Structure
 
 **IMPORTANT:** All modules are self-contained within GCBotCommand-10-26/ directory.
