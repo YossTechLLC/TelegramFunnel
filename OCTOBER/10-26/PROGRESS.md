@@ -1,8 +1,50 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 139 - **GCBroadcastService DEPLOYED & LIVE** ✅🚀🎉
+**Last Updated:** 2025-11-13 Session 140 - **GCBotCommand Donation Callback Fix DEPLOYED** ✅🚀
 
 ## Recent Updates
+
+## 2025-11-13 Session 140: GCBotCommand Donation Callback Handlers - DEPLOYED ✅🚀
+
+**Critical Bug Fix:**
+- ✅ Added donation callback handlers to GCBotCommand
+- ✅ Fixed donation button workflow (previously non-functional)
+- ✅ Deployed GCBotCommand revision gcbotcommand-10-26-00004-26n
+- ✅ Service deployed and serving 100% traffic
+
+**Implementation Details:**
+- Added routing for `donate_start_*` callbacks → `_handle_donate_start()` method
+- Added routing for `donate_*` keypad callbacks → `_handle_donate_keypad()` method
+- Both methods forward requests to GCDonationHandler via HTTP POST
+- Verified GCDONATIONHANDLER_URL already configured in environment
+
+**Files Modified:**
+- `GCBotCommand-10-26/handlers/callback_handler.py`
+  - Lines 70-75: Added callback routing logic
+  - Lines 240-307: Added `_handle_donate_start()` method
+  - Lines 309-369: Added `_handle_donate_keypad()` method
+
+**Deployment Details:**
+- Build ID: 1a7dfc9b-b18f-4ca9-a73f-80ef6ead9233
+- Image digest: sha256:cc6da9a8232161494079bee08f0cb0a0af3bb9f63064dd9a1c24b4167a18e15a
+- Service URL: https://gcbotcommand-10-26-291176869049.us-central1.run.app
+- Build time: 29 seconds
+- Status: 🟢 DEPLOYED & HEALTHY
+
+**Root Cause Identified:**
+- Logs showed `donate_start_*` callbacks falling through to "Unknown callback_data"
+- GCBotCommand (webhook receiver) had no code to forward to GCDonationHandler
+- Refactored microservice architecture created gap in callback routing
+
+**Testing Status:**
+- ⏳ Awaiting user validation of donation button workflow
+- ⏳ Need to verify keypad appears when donate button clicked
+- ⏳ Need to verify keypad interactions work correctly
+- 📋 Logs should now show proper forwarding to GCDonationHandler
+
+**Service Status:** 🟢 DEPLOYED - Ready for testing
+
+---
 
 ## 2025-11-13 Session 139: GCBroadcastService DEPLOYED TO CLOUD RUN - 90% Complete ✅🚀🎉
 

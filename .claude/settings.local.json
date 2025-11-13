@@ -64,7 +64,8 @@
       "Bash(gcloud scheduler jobs describe:*)",
       "Bash(gcloud scheduler jobs create:*)",
       "Bash(gcloud scheduler jobs run:*)",
-      "Bash(gcloud scheduler jobs delete:*)"
+      "Bash(gcloud scheduler jobs delete:*)",
+      "Bash(gcloud sql instances list:*)"
     ],
     "deny": [],
     "ask": []

@@ -5,7 +5,7 @@
 - Please pay attention to the way in which the debug/error/print statements are written and use emojis, please continue to do so but and only use the emojis that have already been used.
 - MONITOR FOR THIS PACKAGE ERROR - google-cloud-sql-connector is not a package, instead call cloud-sql-python-connector --> it imports as google.cloud.sql.connector.
 - Remember USER : PASS for 'www.paygateprime.com' --> user1user1 : user1TEST$
-- .venv &or /.venv is found in ~/Desktop/2025/.venv AND NO LONGER IN ~/Desktop/2025/TelegramFunnel/.venv
+- .venv &or /.venv is found in ~/Desktop/2025/.venv
 - I have given you MCP access to gcloud and observability, you'll see that you're working in the telepay-459221 project.
 - You are allowed to enable any API or gcloud service you may need, however you are to EXPLICITLY ask if you must disable any API or gcloud service.
 - You'll have explicit read/write permissions to the telepaypsql database instance.
@@ -14,7 +14,7 @@
 - You are to deploy the google cloud functions you have built.
 - You are to deploy the google queues/tasks you have built.
 - You are still NOT to make any GitHub commits, I will do that manually afterwards --> DO NOT CREATE NEW BRANCHES, BACKUPS, OR INTERFACE WITH GITHUB AT ALL --> I will always do this manually.
-- If a .md you're looking for isn't found in the /10-26 folder you can find it in /TelegramFunnel/ARCHIVES/NOTES_11-6 or /TelegramFunnel/ARCHIVES/NOTES_11-7
-- If something isn't found in PROGRESS.md DECISION.md &or BUGS.md, and if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md DECISIONS_ARCH.md &or BUGS_ARCH.md which hold all the archived entries if you search for your terms explicitly.
+- If an .md file or the contents of it you're looking for isn't found in the /10-26 folder you can find it in /TelegramFunnel/ARCHIVES/NOTES_11-9 or /TelegramFunnel/ARCHIVES/NOTES_11-7 --> manually search for the explicit terms youre looking for within the contents of NOTES_11-9 & NOTES_11-7 files with grep function as they are too large to read and far exceed the 25000 TOKEN LIMIT
+- If something isn't found in PROGRESS.md DECISION.md &or BUGS.md, and if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md DECISIONS_ARCH.md &or BUGS_ARCH.md which hold all the archived entries if you search for your terms explicitly as they way you do with NOTES_11-9 & NOTES_11-7.
 - DO NOT MAKE PSQL requests like 'Bash(PGPASSWORD='Chigdabeast123$' psql -h /cloudsql/telepay-459221:us-central1:telepaypsql -U postgres -d telepaydb -c "\d batch_conversions")' --> INSTEAD USE observability - list_log_entries (MCP)
 - The current working directory is TelegramFunnel/OCTOBER/10-26 --> That's where the code we are editing exists, you are free to search outside that directory if necessary, however the working code you are to interface with only exists in TelegramFunnel/OCTOBER/10-26

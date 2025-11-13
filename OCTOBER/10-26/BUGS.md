@@ -1,6 +1,87 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-11 Session 105g
+**Last Updated:** 2025-11-13 Session 140
+
+---
+
+## Recently Resolved
+
+### ✅ [FIXED] Donation Button Not Working - GCBotCommand Missing Callback Handlers
+
+**Date Discovered:** 2025-11-13 Session 140
+**Date Resolved:** 2025-11-13 Session 140
+**File:** `GCBotCommand-10-26/handlers/callback_handler.py`
+**Severity:** 🔴 CRITICAL - Core business functionality broken
+**Resolution Time:** Same session
+
+**Issue:**
+Donation buttons in closed channel broadcasts were completely non-functional. When users clicked the "💝 Donate" button, nothing happened - no keypad appeared, no error message shown to user.
+
+**User Impact:**
+- ❌ ALL donation attempts failed silently
+- ❌ Users couldn't complete donation flow
+- ❌ No visual feedback - buttons appeared to do nothing
+- ✅ Subscription workflow unaffected (uses different code path)
+
+**Root Cause:**
+GCBotCommand `callback_handler.py` was missing routing logic for donation callbacks. The refactored microservice architecture moved donation handling to GCDonationHandler service, but GCBotCommand (the Telegram webhook receiver) had no code to forward donation callbacks to that service.
+
+**Logs Evidence:**
+```
+2025-11-13 18:40:32 - 🔘 Callback: donate_start_-1003268562225 from user 6271402111
+2025-11-13 18:40:33 - ⚠️ Unknown callback_data: donate_start_-1003268562225
+```
+
+Callbacks were received but fell through to the `else` block and were silently ignored.
+
+**Fix Applied:**
+**Location:** `GCBotCommand-10-26/handlers/callback_handler.py`
+
+**Changes:**
+1. Added routing for `donate_start_*` callbacks (lines 70-71):
+   ```python
+   elif callback_data.startswith("donate_start_"):
+       return self._handle_donate_start(chat_id, user_id, callback_data, callback_query)
+   ```
+
+2. Added routing for `donate_*` keypad callbacks (lines 73-75):
+   ```python
+   elif callback_data.startswith("donate_"):
+       return self._handle_donate_keypad(chat_id, user_id, callback_data, callback_query)
+   ```
+
+3. Implemented `_handle_donate_start()` method (lines 240-307):
+   - Extracts `open_channel_id` from callback_data
+   - Calls GCDonationHandler `/start-donation-input` endpoint
+   - Includes error handling and user-friendly error messages
+
+4. Implemented `_handle_donate_keypad()` method (lines 309-369):
+   - Forwards all keypad actions to GCDonationHandler `/keypad-input` endpoint
+   - Handles digits, backspace, clear, confirm, cancel, noop
+   - Fails silently to avoid disrupting keypad interaction
+
+**Deployment:**
+- ✅ Built and deployed GCBotCommand revision: gcbotcommand-10-26-00004-26n
+- ✅ Deployment succeeded in 29 seconds
+- ✅ Service healthy and serving 100% traffic
+- ✅ Build ID: 1a7dfc9b-b18f-4ca9-a73f-80ef6ead9233
+
+**Verification:**
+- ⏳ Awaiting user testing of donation button flow
+- ⏳ Need to confirm keypad appears on button click
+- ⏳ Need to confirm keypad interactions work correctly
+- 📋 Logs should now show: "💝 Donate button clicked" and "🌐 Calling GCDonationHandler"
+
+**Lessons Learned:**
+1. When refactoring to microservices, ensure ALL callback patterns are routed
+2. Missing routing can cause silent failures (callbacks ignored with no error to user)
+3. Integration testing should cover all button interaction flows
+4. Log analysis crucial for identifying missing handler patterns
+
+**Related:**
+- WORKFLOW_ERROR_REVIEW.md: Documented root cause analysis
+- WORKFLOW_ERROR_REVIEW_CHECKLIST.md: Implementation plan
+- WORKFLOW_ERROR_REVIEW_CHECKLIST_PROGRESS.md: Execution tracking
 
 ---
 

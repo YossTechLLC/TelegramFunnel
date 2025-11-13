@@ -67,6 +67,13 @@ class CallbackHandler:
         elif callback_data == "BACK_TO_MAIN":
             return self._handle_back_to_main(chat_id, user_id, message_id)
 
+        elif callback_data.startswith("donate_start_"):
+            return self._handle_donate_start(chat_id, user_id, callback_data, callback_query)
+
+        elif callback_data.startswith("donate_"):
+            # All keypad callbacks: donate_digit_*, donate_backspace, donate_clear, donate_confirm, donate_cancel, donate_noop
+            return self._handle_donate_keypad(chat_id, user_id, callback_data, callback_query)
+
         else:
             logger.warning(f"⚠️ Unknown callback_data: {callback_data}")
             return {"status": "ok"}
@@ -229,3 +236,134 @@ class CallbackHandler:
         except Exception as e:
             logger.error(f"❌ Error editing message: {e}")
             return {"status": "error"}
+
+    def _handle_donate_start(self, chat_id: int, user_id: int, callback_data: str, callback_query: Dict) -> Dict[str, str]:
+        """
+        Handle donate_start callback - forward to GCDonationHandler service.
+
+        This method is triggered when a user clicks the "💝 Donate" button
+        in a closed channel's broadcast message.
+
+        Args:
+            chat_id: Chat ID where callback originated
+            user_id: User ID who clicked the button
+            callback_data: Format "donate_start_{open_channel_id}"
+            callback_query: Full callback query object from Telegram
+
+        Returns:
+            {"status": "ok"} on success, {"status": "error"} on failure
+        """
+        # Extract open_channel_id from callback_data
+        # Format: "donate_start_-1003202734748" → "-1003202734748"
+        open_channel_id = callback_data.replace("donate_start_", "")
+
+        logger.info(f"💝 Donate button clicked: user={user_id}, channel={open_channel_id}")
+
+        # Get GCDonationHandler URL from config
+        donation_handler_url = self.config.get('gcdonationhandler_url')
+
+        if not donation_handler_url:
+            logger.error("❌ GCDonationHandler URL not configured in Secret Manager")
+            return self._send_message(
+                chat_id,
+                "❌ Donation service temporarily unavailable. Please try again later."
+            )
+
+        # Prepare payload for GCDonationHandler /start-donation-input endpoint
+        payload = {
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "open_channel_id": open_channel_id,
+            "callback_query_id": callback_query['id']
+        }
+
+        # Call GCDonationHandler service
+        try:
+            logger.info(f"🌐 Calling GCDonationHandler: {donation_handler_url}/start-donation-input")
+
+            response = self.http_client.post(
+                f"{donation_handler_url}/start-donation-input",
+                payload
+            )
+
+            if response and response.get('success'):
+                logger.info(f"✅ Donation flow started successfully for user {user_id}")
+                return {"status": "ok"}
+            else:
+                error = response.get('error', 'Unknown error') if response else 'No response from service'
+                logger.error(f"❌ GCDonationHandler returned error: {error}")
+
+                return self._send_message(
+                    chat_id,
+                    "❌ Failed to start donation flow. Please try again or contact support."
+                )
+
+        except Exception as e:
+            logger.error(f"❌ HTTP error calling GCDonationHandler: {e}", exc_info=True)
+
+            return self._send_message(
+                chat_id,
+                "❌ Service error. Please try again in a few moments."
+            )
+
+    def _handle_donate_keypad(self, chat_id: int, user_id: int, callback_data: str, callback_query: Dict) -> Dict[str, str]:
+        """
+        Handle keypad callback - forward to GCDonationHandler service.
+
+        This method handles all numeric keypad interactions during donation input:
+        - donate_digit_0 through donate_digit_9
+        - donate_digit_. (decimal point)
+        - donate_backspace
+        - donate_clear
+        - donate_confirm
+        - donate_cancel
+        - donate_noop (display-only button)
+
+        Args:
+            chat_id: Chat ID where callback originated
+            user_id: User ID who clicked the button
+            callback_data: Keypad action (e.g., "donate_digit_5", "donate_confirm")
+            callback_query: Full callback query object from Telegram
+
+        Returns:
+            {"status": "ok"} - always returns success to avoid user-facing errors
+        """
+        logger.info(f"🔢 Keypad input: user={user_id}, action={callback_data}")
+
+        # Get GCDonationHandler URL from config
+        donation_handler_url = self.config.get('gcdonationhandler_url')
+
+        if not donation_handler_url:
+            logger.error("❌ GCDonationHandler URL not configured")
+            # Fail silently for keypad inputs - user already has keypad open
+            return {"status": "ok"}
+
+        # Prepare payload for GCDonationHandler /keypad-input endpoint
+        payload = {
+            "user_id": user_id,
+            "callback_data": callback_data,
+            "callback_query_id": callback_query['id'],
+            "message_id": callback_query['message']['message_id'],
+            "chat_id": chat_id
+        }
+
+        # Call GCDonationHandler service
+        try:
+            response = self.http_client.post(
+                f"{donation_handler_url}/keypad-input",
+                payload
+            )
+
+            if response and response.get('success'):
+                logger.info(f"✅ Keypad input processed: user={user_id}, action={callback_data}")
+            else:
+                error = response.get('error', 'Unknown error') if response else 'No response'
+                logger.warning(f"⚠️ GCDonationHandler keypad error: {error}")
+
+            # Always return success - GCDonationHandler handles user feedback
+            return {"status": "ok"}
+
+        except Exception as e:
+            logger.error(f"❌ HTTP error calling GCDonationHandler keypad: {e}")
+            # Fail silently - don't disrupt user's keypad interaction
+            return {"status": "ok"}

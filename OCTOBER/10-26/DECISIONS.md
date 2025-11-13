@@ -1,12 +1,74 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 139 - **GCBroadcastService Deployment Configuration** ✅
+**Last Updated:** 2025-11-13 Session 140 - **Donation Callback Routing Strategy** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-13 Session 140: Donation Callback Routing Strategy
+
+**Decision:** Route donation callbacks from GCBotCommand to GCDonationHandler via HTTP POST
+
+**Context:**
+- GCBotCommand is the webhook receiver for all Telegram updates
+- GCDonationHandler is a separate Cloud Run service with keypad logic
+- Donation buttons (`donate_start_*`) were being received but not handled
+- Refactored microservice architecture created gap in callback routing
+
+**Problem:**
+Logs showed donation callbacks falling through to "Unknown callback_data":
+```
+🔘 Callback: donate_start_-1003268562225 from user 6271402111
+⚠️ Unknown callback_data: donate_start_-1003268562225
+```
+
+**Rationale:**
+- Maintains microservice architecture boundaries
+- GCBotCommand acts as router, GCDonationHandler handles business logic
+- HTTP integration enables service-to-service communication
+- GCDONATIONHANDLER_URL already configured as environment variable
+- Follows existing pattern used for GCPaymentGateway integration
+
+**Implementation:**
+- Added two handler methods in `callback_handler.py`:
+  - `_handle_donate_start()` forwards to `/start-donation-input` endpoint
+  - `_handle_donate_keypad()` forwards to `/keypad-input` endpoint
+- Both methods use existing HTTPClient with timeout handling
+- Error handling includes graceful degradation for keypad inputs
+
+**Trade-offs:**
+- ✅ Pro: Maintains service boundaries and independent deployability
+- ✅ Pro: Allows GCDonationHandler to be reused by other services
+- ✅ Pro: Follows established microservice communication patterns
+- ⚠️ Con: Adds HTTP latency (~50-200ms per callback)
+- ⚠️ Con: Requires service discovery via environment variables
+- ⚠️ Con: Potential failure point if GCDonationHandler is down
+
+**Alternatives Considered:**
+1. **Merge GCDonationHandler into GCBotCommand** (rejected)
+   - Violates microservice architecture principles
+   - Makes GCBotCommand monolithic again
+   - Loses independent deployability
+
+2. **Use Pub/Sub for async communication** (rejected)
+   - Adds latency for real-time interactions (user expects immediate response)
+   - Complicates error handling for keypad interactions
+   - Overkill for simple request-response pattern
+
+3. **Direct database sharing for state** (rejected)
+   - Tight coupling between services
+   - Violates service boundary principles
+   - Makes testing more complex
+
+**Monitoring:**
+- Watch for HTTP errors in GCBotCommand logs
+- Monitor response times from GCDonationHandler
+- Track success rate of donation flow completions
+
+---
 
 ### 2025-11-13 Session 139: GCBroadcastService Deployment & Scheduler Configuration
 
