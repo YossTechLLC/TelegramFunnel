@@ -8,6 +8,7 @@ required by the donation handler service. It has no internal dependencies.
 """
 
 import logging
+import os
 from typing import Optional, List, Dict, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -35,9 +36,12 @@ class DatabaseManager:
         """
         Initialize the DatabaseManager with connection parameters.
 
+        Automatically detects Cloud Run environment and uses Unix socket
+        for Cloud SQL connections when CLOUD_SQL_CONNECTION_NAME is set.
+
         Args:
-            db_host: Database host connection string
-            db_port: Database port number
+            db_host: Database host connection string (or IP for local/fallback)
+            db_port: Database port number (ignored for Unix socket)
             db_name: Name of the database
             db_user: Database username
             db_password: Database password
@@ -48,17 +52,32 @@ class DatabaseManager:
         if not all([db_host, db_name, db_user, db_password]):
             raise ValueError("All database connection parameters are required")
 
-        self.db_host = db_host
-        self.db_port = db_port
+        # Check if running in Cloud Run (use Unix socket) or locally (use TCP)
+        cloud_sql_connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+
+        if cloud_sql_connection_name:
+            # Cloud Run mode - use Unix socket
+            self.db_host = f"/cloudsql/{cloud_sql_connection_name}"
+            self.db_port = None  # Port is not used for Unix socket
+            logger.info(f"🔌 Using Cloud SQL Unix socket: {self.db_host}")
+        else:
+            # Local/VM mode - use TCP connection
+            self.db_host = db_host
+            self.db_port = db_port
+            logger.info(f"🔌 Using TCP connection to: {self.db_host}:{self.db_port}")
+
         self.db_name = db_name
         self.db_user = db_user
         self.db_password = db_password
 
-        logger.info(f"🗄️ DatabaseManager initialized for {db_user}@{db_host}:{db_port}/{db_name}")
+        logger.info(f"🗄️ DatabaseManager initialized for {db_user}@{self.db_host}/{db_name}")
 
     def _get_connection(self):
         """
         Create and return a database connection.
+
+        Uses Unix socket when CLOUD_SQL_CONNECTION_NAME is set (Cloud Run),
+        otherwise uses TCP connection (local development).
 
         Returns:
             psycopg2 connection object, or None if connection fails
@@ -67,13 +86,19 @@ class DatabaseManager:
             psycopg2.Error: If database connection fails
         """
         try:
-            conn = psycopg2.connect(
-                host=self.db_host,
-                port=self.db_port,
-                dbname=self.db_name,
-                user=self.db_user,
-                password=self.db_password
-            )
+            # Build connection parameters
+            conn_params = {
+                "host": self.db_host,
+                "dbname": self.db_name,
+                "user": self.db_user,
+                "password": self.db_password
+            }
+
+            # Only include port for TCP connections (not Unix socket)
+            if self.db_port is not None:
+                conn_params["port"] = self.db_port
+
+            conn = psycopg2.connect(**conn_params)
             return conn
         except psycopg2.Error as e:
             logger.error(f"❌ Database connection error: {e}")

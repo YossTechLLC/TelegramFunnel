@@ -18,3 +18,5 @@
 - If something isn't found in PROGRESS.md DECISION.md &or BUGS.md, and if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md DECISIONS_ARCH.md &or BUGS_ARCH.md which hold all the archived entries if you search for your terms explicitly as they way you do with NOTES_11-9 & NOTES_11-7.
 - DO NOT MAKE PSQL requests like 'Bash(PGPASSWORD='Chigdabeast123$' psql -h /cloudsql/telepay-459221:us-central1:telepaypsql -U postgres -d telepaydb -c "\d batch_conversions")' --> INSTEAD USE observability - list_log_entries (MCP)
 - The current working directory is TelegramFunnel/OCTOBER/10-26 --> That's where the code we are editing exists, you are free to search outside that directory if necessary, however the working code you are to interface with only exists in TelegramFunnel/OCTOBER/10-26
+REMEMBER ON DEPLOYMENT COMMAND - you can't use both --set-env-vars and --update-env-vars: 
+REMEMBER ON DEPLOYMENT COMMAND - --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql

@@ -1,10 +1,130 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 140
+**Last Updated:** 2025-11-13 Session 141
 
 ---
 
 ## Recently Resolved
+
+### ✅ [FIXED] Donation Flow Database Connection Timeout - GCDonationHandler Missing Cloud SQL Socket
+
+**Date Discovered:** 2025-11-13 Session 141
+**Date Resolved:** 2025-11-13 Session 141
+**File:** `GCDonationHandler-10-26/database_manager.py`
+**Severity:** 🔴 CRITICAL - Blocks ALL donation functionality
+**Resolution Time:** Same session (30 minutes)
+
+**Issue:**
+After deploying Session 140's callback routing fix, users clicking "💝 Donate" button received error: "❌ Failed to start donation flow. Please try again or contact support." after 60 second wait. ALL donation attempts failed.
+
+**User Impact:**
+- ❌ 100% donation failure rate
+- ⏱️ 60 second timeout on every attempt
+- ❌ Zero donation revenue possible
+- 😞 Poor user experience (long wait → generic error)
+
+**Root Cause:**
+GCDonationHandler was using raw TCP connection to Cloud SQL instead of Unix socket. Cloud Run's security sandbox blocks direct TCP connections to external IPs, causing all database queries to timeout after 60 seconds.
+
+**Database Connection Attempted:**
+```python
+# BROKEN: Direct TCP connection
+psycopg2.connect(
+    host="34.58.246.248",  # ❌ Public IP blocked from Cloud Run
+    port=5432,
+    dbname="telepaydb",
+    user="postgres",
+    password="***"
+)
+```
+
+**Logs Evidence:**
+```
+2025-11-13 20:34:36 - ❌ Database connection error: connection to server at "34.58.246.248", port 5432 failed: Connection timed out
+2025-11-13 20:34:36 - ❌ Error checking channel existence: Connection timed out
+2025-11-13 20:34:36 - ⚠️ Invalid channel ID (misleading - actual cause: database timeout)
+HTTP 504 Gateway Timeout (latency: 60.000665692s)
+```
+
+**Fix Applied:**
+**Location:** `GCDonationHandler-10-26/database_manager.py`
+
+**Changes:**
+1. Added `import os` (line 11)
+2. Modified `__init__()` to detect Cloud SQL connection mode (lines 55-67):
+   ```python
+   # Check if running in Cloud Run (use Unix socket) or locally (use TCP)
+   cloud_sql_connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+
+   if cloud_sql_connection_name:
+       # Cloud Run mode - use Unix socket
+       self.db_host = f"/cloudsql/{cloud_sql_connection_name}"
+       self.db_port = None
+       logger.info(f"🔌 Using Cloud SQL Unix socket: {self.db_host}")
+   else:
+       # Local/VM mode - use TCP connection
+       self.db_host = db_host
+       self.db_port = db_port
+       logger.info(f"🔌 Using TCP connection to: {self.db_host}:{self.db_port}")
+   ```
+
+3. Updated `_get_connection()` to handle Unix socket (lines 88-105):
+   ```python
+   # Build connection parameters
+   conn_params = {
+       "host": self.db_host,
+       "dbname": self.db_name,
+       "user": self.db_user,
+       "password": self.db_password
+   }
+
+   # Only include port for TCP connections (not Unix socket)
+   if self.db_port is not None:
+       conn_params["port"] = self.db_port
+
+   conn = psycopg2.connect(**conn_params)
+   ```
+
+4. Added `CLOUD_SQL_CONNECTION_NAME` environment variable to Cloud Run service:
+   ```bash
+   CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+   ```
+
+**Deployment:**
+- ✅ Built and deployed GCDonationHandler revision: gcdonationhandler-10-26-00003-q5z
+- ✅ Deployment succeeded in ~45 seconds
+- ✅ Service healthy and serving 100% traffic
+- ✅ Environment variable properly configured
+
+**Expected Behavior After Fix:**
+- ⚡ Database queries complete in < 100ms (vs 60 second timeout)
+- ✅ Keypad appears within 2-3 seconds of button click
+- ✅ No more "Invalid channel ID" errors for valid channels
+- 📋 Logs show "🔌 Using Cloud SQL Unix socket: /cloudsql/telepay-459221:us-central1:telepaypsql"
+
+**Verification Status:**
+- ⏳ Awaiting user testing of donation button flow
+- 📋 Expected log on first request: "🔌 Using Cloud SQL Unix socket"
+
+**Lessons Learned:**
+1. **Cloud Run requires Cloud SQL Unix socket** - TCP connections to public IPs are blocked by security sandbox
+2. **Deployment success ≠ functional correctness** - health checks passed, but business logic was broken
+3. **Integration testing gap** - tested callback routing, but not database connectivity from GCDonationHandler
+4. **Misleading error messages** - "Invalid channel ID" was actually "database timeout"
+5. **Standardize database patterns** - GCBotCommand had Unix socket support, GCDonationHandler didn't
+
+**Related Documentation:**
+- WORKFLOW_ERROR_MONEYFLOW.md: 45-page comprehensive root cause analysis
+- WORKFLOW_ERROR_REVIEW.md: Initial callback routing issue (Session 140)
+- WORKFLOW_ERROR_REVIEW_CHECKLIST.md: Implementation plan
+
+**Follow-Up Actions:**
+1. Create shared database module for all services (prevent recurrence)
+2. Add integration tests covering database operations
+3. Implement startup database connectivity check (fail-fast)
+4. Audit other services for Cloud SQL configuration
+
+---
 
 ### ✅ [FIXED] Donation Button Not Working - GCBotCommand Missing Callback Handlers
 

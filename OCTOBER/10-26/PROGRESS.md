@@ -1,8 +1,53 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 140 - **GCBotCommand Donation Callback Fix DEPLOYED** ✅🚀
+**Last Updated:** 2025-11-13 Session 141 - **GCDonationHandler Database Connection Fix DEPLOYED** ✅🚀🔧
 
 ## Recent Updates
+
+## 2025-11-13 Session 141: GCDonationHandler Database Connection Fix - DEPLOYED ✅🚀🔧
+
+**Critical Infrastructure Fix:**
+- ✅ Fixed database connection architecture in GCDonationHandler
+- ✅ Added Cloud SQL Unix socket support (was using broken TCP connection)
+- ✅ Deployed GCDonationHandler revision gcdonationhandler-10-26-00003-q5z
+- ✅ Service deployed and serving 100% traffic
+
+**Root Cause:**
+- GCDonationHandler was attempting TCP connection to Cloud SQL public IP (34.58.246.248:5432)
+- Cloud Run security sandbox blocks direct TCP connections to external IPs
+- All donation requests timed out after 60 seconds with "Connection timed out" error
+- User saw: "❌ Failed to start donation flow. Please try again or contact support."
+
+**Fix Applied:**
+- Updated `database_manager.py` to detect Cloud SQL Unix socket mode
+- Added `os` module import
+- Modified `__init__()` to check for `CLOUD_SQL_CONNECTION_NAME` environment variable
+- Updated `_get_connection()` to use Unix socket when available: `/cloudsql/telepay-459221:us-central1:telepaypsql`
+- Added `CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql` environment variable to service
+
+**Files Modified:**
+- `GCDonationHandler-10-26/database_manager.py`
+  - Line 11: Added `import os`
+  - Lines 55-67: Added Cloud SQL connection detection logic
+  - Lines 88-105: Updated connection method to handle Unix socket
+
+**Deployment Details:**
+- Service URL: https://gcdonationhandler-10-26-291176869049.us-central1.run.app
+- Build time: ~45 seconds
+- Status: 🟢 DEPLOYED & HEALTHY
+
+**Documentation:**
+- Created comprehensive root cause analysis: `WORKFLOW_ERROR_MONEYFLOW.md` (45 pages)
+- Documents full error chain, technical details, and lessons learned
+
+**Testing Status:**
+- ⏳ Awaiting user test of donation button flow
+- 🎯 Expected: Keypad appears within 2-3 seconds (vs 60 second timeout before)
+- 📋 Logs should show "🔌 Using Cloud SQL Unix socket" on first request
+
+**Service Status:** 🟢 DEPLOYED - Ready for testing
+
+---
 
 ## 2025-11-13 Session 140: GCBotCommand Donation Callback Handlers - DEPLOYED ✅🚀
 

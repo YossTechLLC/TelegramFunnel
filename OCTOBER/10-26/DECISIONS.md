@@ -1,12 +1,97 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 140 - **Donation Callback Routing Strategy** ✅
+**Last Updated:** 2025-11-13 Session 141 - **Cloud SQL Unix Socket Pattern** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-13 Session 141: Cloud SQL Unix Socket Connection Pattern for Cloud Run Services
+
+**Decision:** Standardize all Cloud Run services to use Cloud SQL Unix socket connections instead of TCP connections.
+
+**Context:**
+- GCDonationHandler was using direct TCP connection to Cloud SQL public IP (34.58.246.248:5432)
+- Cloud Run security sandbox blocks direct TCP connections to external IPs
+- All database queries timed out after 60 seconds, causing 100% donation failure rate
+- GCBotCommand already had Unix socket support working correctly
+
+**Options Considered:**
+1. **Use Cloud SQL Unix Socket (CHOSEN)**
+   - ✅ Required by Cloud Run security model
+   - ✅ Fast (<100ms queries)
+   - ✅ No network latency
+   - ✅ Automatic SSL/TLS encryption
+   - ❌ Requires environment variable configuration
+
+2. **Use Cloud SQL Proxy Sidecar**
+   - ❌ More complex deployment
+   - ❌ Additional container resource usage
+   - ❌ More moving parts to debug
+   - ✅ Works with existing TCP code
+
+3. **Use Cloud SQL Auth Proxy**
+   - ❌ Requires running proxy process
+   - ❌ Additional configuration
+   - ❌ Not recommended for Cloud Run
+
+4. **Allow TCP connections via VPC**
+   - ❌ Complex networking setup
+   - ❌ Higher latency
+   - ❌ Additional cost
+   - ❌ Not recommended pattern
+
+**Decision Rationale:**
+- Unix socket is the **officially recommended** method for Cloud Run → Cloud SQL connections
+- Simplest and most performant solution
+- Already working in GCBotCommand, just needed to replicate pattern
+- Zero additional infrastructure required
+- Automatic environment detection (Cloud Run vs local development)
+
+**Implementation Pattern:**
+```python
+# Check if running in Cloud Run (use Unix socket) or locally (use TCP)
+cloud_sql_connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+
+if cloud_sql_connection_name:
+    # Cloud Run mode - use Unix socket
+    db_host = f"/cloudsql/{cloud_sql_connection_name}"
+    db_port = None
+else:
+    # Local/VM mode - use TCP connection
+    db_host = config['db_host']
+    db_port = config['db_port']
+```
+
+**Environment Variable Required:**
+```bash
+CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+```
+
+**Trade-offs:**
+- ✅ Must configure environment variable (one-time setup)
+- ✅ Code becomes environment-aware (good for dev/prod parity)
+- ✅ No changes needed for local development (falls back to TCP)
+- ✅ Clear logging shows which mode is active
+
+**Impact:**
+- All future Cloud Run services MUST use this pattern
+- Create shared database module to enforce consistency
+- Add to deployment checklist: verify CLOUD_SQL_CONNECTION_NAME is set
+
+**Follow-Up Actions:**
+1. Audit all other services for Cloud SQL configuration
+2. Create shared database connection module for reuse
+3. Update deployment documentation with required environment variables
+4. Add startup check to fail-fast if configuration is missing
+
+**Related Decisions:**
+- Session 140: Donation Callback Routing Strategy
+- Session 138-139: GCBroadcastService Architecture
+
+---
 
 ### 2025-11-13 Session 140: Donation Callback Routing Strategy
 
