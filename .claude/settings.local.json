@@ -38,7 +38,14 @@
       "Bash(do gcloud secrets add-iam-policy-binding $secret --member=\"serviceAccount:291176869049-compute@developer.gserviceaccount.com\" --role=\"roles/secretmanager.secretAccessor\")",
       "Bash(echo:*)",
       "Bash(echo \"⚠️ Already has access to $secret\" done)",
-      "Bash(gcloud projects add-iam-policy-binding:*)"
+      "Bash(gcloud projects add-iam-policy-binding:*)",
+      "Bash(gcloud config get-value:*)",
+      "Bash(gcloud builds list:*)",
+      "Bash(gcloud logging read:*)",
+      "Bash(docker:*)",
+      "Bash(gcloud builds describe:*)",
+      "Bash(gcloud builds log:*)",
+      "Bash(gcloud run services update:*)"
     ],
     "deny": [],
     "ask": []

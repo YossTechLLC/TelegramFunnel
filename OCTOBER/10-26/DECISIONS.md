@@ -1,12 +1,70 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-12 Session 130 - **GCPaymentGateway-10-26 Self-Contained Service** 💳
+**Last Updated:** 2025-11-13 Session 131 - **GCDonationHandler-10-26 Self-Contained Donation Service** 💝
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-13 Session 131: GCDonationHandler-10-26 - Self-Contained Donation Keypad & Broadcast Service 💝
+**Decision:** Extract donation handling functionality into standalone Cloud Run webhook service
+**Rationale:**
+- TelePay10-26 monolith is too large - extract donation-specific logic
+- Donation keypad and broadcast functionality needed independent lifecycle from main bot
+- Self-contained design with no shared module dependencies
+- Separate service allows independent scaling for donation traffic spikes
+- Enables easier testing and maintenance of donation flow
+
+**Implementation Details:**
+- Created 7 self-contained modules (~1100 lines total):
+  - service.py (299 lines) - Flask app with 4 REST endpoints
+  - config_manager.py (133 lines) - Secret Manager integration
+  - database_manager.py (216 lines) - PostgreSQL channel operations
+  - telegram_client.py (236 lines) - Synchronous wrapper for Telegram Bot API
+  - payment_gateway_manager.py (215 lines) - NowPayments invoice creation
+  - keypad_handler.py (477 lines) - Donation input keypad with validation
+  - broadcast_manager.py (176 lines) - Closed channel broadcast logic
+
+**Key Architectural Choices:**
+1. **Synchronous Telegram Operations:** Wrapped async python-telegram-bot with `asyncio.run()` for Flask compatibility
+2. **In-Memory State Management:** User donation sessions stored in `self.user_states` dict (no external state store needed for MVP)
+3. **Dependency Injection:** All dependencies passed via constructors, no global state
+4. **Validation Constants:** MIN_AMOUNT, MAX_AMOUNT, MAX_DECIMALS as class attributes (not hardcoded)
+
+**Validation Rules (6 rules):**
+1. Replace leading zero: "0" + "5" → "5"
+2. Single decimal point: reject second "."
+3. Max 2 decimal places: reject third decimal digit
+4. Max 4 digits before decimal: max $9999.99
+5. Minimum amount: $4.99 on confirm
+6. Maximum amount: $9999.99 on confirm
+
+**Service Configuration:**
+- Min instances: 0 (scale to zero)
+- Max instances: 5
+- Memory: 512Mi (higher than payment gateway due to Telegram client)
+- CPU: 1, Timeout: 60s, Concurrency: 80
+- Service Account: 291176869049-compute@developer.gserviceaccount.com
+
+**Integration Pattern:**
+- GCBotCommand receives callback_query from Telegram → calls /start-donation-input
+- GCDonationHandler sends keypad message to user
+- Each keypad button press → GCBotCommand → /keypad-input
+- On confirm → creates payment invoice → sends Web App button
+
+**Trade-offs:**
+- ✅ Pro: Independent deployment and scaling
+- ✅ Pro: Clear separation of concerns
+- ✅ Pro: No shared module version conflicts
+- ⚠️ Con: State lost on container restart (acceptable for MVP - users can restart donation)
+- ⚠️ Con: Extra network hop (GCBotCommand → GCDonationHandler) adds latency
+
+**Technical Challenges Solved:**
+1. **Dependency Conflict:** httpx 0.25.0 incompatible with python-telegram-bot 21.0 (requires httpx~=0.27) - updated to httpx 0.27.0
+2. **Dockerfile Multi-File COPY:** Added trailing slash to destination: `COPY ... ./`
+3. **Secret Manager Paths:** Corrected secret names from lowercase to uppercase (DATABASE_HOST_SECRET vs database-host)
 
 ### 2025-11-12 Session 130: GCPaymentGateway-10-26 - Self-Contained Payment Invoice Service 💳
 **Decision:** Extract NowPayments invoice creation into standalone Cloud Run service
