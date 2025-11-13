@@ -1,0 +1,201 @@
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "text",
+      "text": "# Two-Key Security Architecture\n\n## External Boundary\n**TPS_HOSTPAY_SIGNING_KEY**\n- GCSplit1 ↔ GCHostPay1\n- GCBatchProcessor → GCSplit1\n\n## Internal Boundary\n**SUCCESS_URL_SIGNING_KEY**\n- All other service communication\n\n## Signature Verification\n**NOWPAYMENTS_IPN_SECRET**\n- np-webhook (not encryption)",
+      "x": 0,
+      "y": 0,
+      "width": 520,
+      "height": 424
+    },
+    {
+      "id": "n2",
+      "type": "text",
+      "text": "# np-webhook\n\n**Directory:** `/np-webhook-10-26`\n**Main File:** `app.py`\n\n## Token Manager\n❌ NO\n\n## Encryption/Decryption\n- DECRYPT: ❌\n- ENCRYPT: ❌\n\n## Security Method\n**HMAC-SHA256 Signature Verification**\n- Key: `NOWPAYMENTS_IPN_SECRET`\n- Verifies NowPayments IPN callbacks\n- NOT encryption - signature only\n\n## Data Flow\nReceives IPN → Verifies signature → Plain JSON to GCWebhook1",
+      "x": 610,
+      "y": 0,
+      "width": 620,
+      "height": 520
+    },
+    {
+      "id": "n3",
+      "type": "text",
+      "text": "# GCWebhook1\n\n**Directory:** `/GCWebhook1-10-26`\n**Main File:** `tph1-10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ✅ (legacy GET / from NOWPayments)\n- ENCRYPT: ✅ (to GCWebhook2)\n\n## Signing Key\n**SUCCESS_URL_SIGNING_KEY**\n\n## Token Flow\n1. DECRYPT: Legacy success_url token\n2. ENCRYPT: New token for GCWebhook2\n3. Route: Plain JSON to GCSplit1 OR GCAccumulator",
+      "x": 1320,
+      "y": 0,
+      "width": 620,
+      "height": 496
+    },
+    {
+      "id": "n4",
+      "type": "text",
+      "text": "# GCWebhook2\n\n**Directory:** `/GCWebhook2-10-26`\n**Main File:** `tph2-10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ✅ (from GCWebhook1)\n- ENCRYPT: ❌\n\n## Signing Key\n**SUCCESS_URL_SIGNING_KEY**\n\n## Pattern\n**DECRYPT ONLY** - Terminal service\n\n## Purpose\nSends Telegram invite\nNo further token propagation\n\n## Token Expiration\n**24 hours**",
+      "x": 1320,
+      "y": 586,
+      "width": 620,
+      "height": 496
+    },
+    {
+      "id": "n5",
+      "type": "text",
+      "text": "# GCAccumulator\n\n**Directory:** `/GCAccumulator-10-26`\n**Main File:** `acc10-26.py`\n\n## Token Manager\n⚠️ YES but **UNUSED**\n\n## Encryption/Decryption\n- DECRYPT: ❌\n- ENCRYPT: ❌\n\n## Data Format\n**Plain JSON** from GCWebhook1\n\n## Critical Note\nHas `token_manager.py` but never uses it\n- Architectural artifact\n- Safe to remove or keep for future\n- No impact on operations",
+      "x": 2030,
+      "y": 0,
+      "width": 620,
+      "height": 472
+    },
+    {
+      "id": "n6",
+      "type": "text",
+      "text": "# GCSplit1 (Orchestrator)\n\n**Directory:** `/GCSplit1-10-26`\n**Main File:** `tps1-10-26.py`\n\n## Token Manager\n✅ YES - **DUAL KEY**\n\n## Encryption/Decryption\n- DECRYPT: ✅ (estimate-response, swap-response)\n- ENCRYPT: ✅ (to GCSplit2, GCSplit3, GCHostPay1)\n\n## Signing Keys\n1. **SUCCESS_URL_SIGNING_KEY**\n   - GCSplit2, GCSplit3 communication\n2. **TPS_HOSTPAY_SIGNING_KEY** ⚠️\n   - GCHostPay1 (external boundary)\n\n## Pattern\nMain endpoint: ENCRYPT only (receives plain JSON)\nResponse endpoints: DECRYPT + ENCRYPT",
+      "x": 2740,
+      "y": 0,
+      "width": 650,
+      "height": 568
+    },
+    {
+      "id": "n7",
+      "type": "text",
+      "text": "# GCSplit2 (Estimator)\n\n**Directory:** `/GCSplit2-10-26`\n**Main File:** `tps2-10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ✅ (from GCSplit1)\n- ENCRYPT: ✅ (to GCSplit1)\n\n## Signing Key\n**SUCCESS_URL_SIGNING_KEY**\n\n## Pattern\n**Request-Response**\n1. DECRYPT: Extract USDT amount\n2. Call ChangeNow API\n3. ENCRYPT: Response with estimate\n4. Return to GCSplit1",
+      "x": 3480,
+      "y": 0,
+      "width": 620,
+      "height": 496
+    },
+    {
+      "id": "n8",
+      "type": "text",
+      "text": "# GCSplit3 (Swapper)\n\n**Directory:** `/GCSplit3-10-26`\n**Main File:** `tps3-10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ✅ (from GCSplit1)\n- ENCRYPT: ✅ (to GCSplit1)\n\n## Signing Key\n**SUCCESS_URL_SIGNING_KEY**\n\n## Pattern\n**Request-Response**\n1. DECRYPT: Extract ETH amount\n2. Create ChangeNow fixed-rate transaction\n3. ENCRYPT: Response with cn_api_id\n4. Return to GCSplit1",
+      "x": 3480,
+      "y": 586,
+      "width": 620,
+      "height": 520
+    },
+    {
+      "id": "n9",
+      "type": "text",
+      "text": "# GCHostPay1 (Orchestrator)\n\n**Directory:** `/GCHostPay1-10-26`\n**Main File:** `tphp1-10-26.py`\n\n## Token Manager\n✅ YES - **DUAL KEY**\n\n## Encryption/Decryption\n- DECRYPT: ✅ (from GCSplit1, GCHostPay2, GCHostPay3)\n- ENCRYPT: ✅ (to GCHostPay2, GCHostPay3, GCMicroBatch)\n\n## Signing Keys\n1. **TPS_HOSTPAY_SIGNING_KEY** ⚠️\n   - DECRYPT from GCSplit1 (external boundary)\n2. **SUCCESS_URL_SIGNING_KEY**\n   - Internal communication (GCHostPay2/3)\n\n## Token Expiration\n**60 seconds** (strict execution window)",
+      "x": 4190,
+      "y": 0,
+      "width": 720,
+      "height": 568
+    },
+    {
+      "id": "n10",
+      "type": "text",
+      "text": "# GCHostPay2 (Status Checker)\n\n**Directory:** `/GCHostPay2-10-26`\n**Main File:** `tphp2-10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ✅ (from GCHostPay1)\n- ENCRYPT: ✅ (to GCHostPay1)\n\n## Signing Key\n**SUCCESS_URL_SIGNING_KEY**\n\n## Pattern\n**Request-Response**\n1. DECRYPT: Extract cn_api_id\n2. Check ChangeNow status\n3. ENCRYPT: Response with status\n4. Return to GCHostPay1",
+      "x": 5000,
+      "y": 0,
+      "width": 620,
+      "height": 496
+    },
+    {
+      "id": "n11",
+      "type": "text",
+      "text": "# GCHostPay3 (Payment Executor)\n\n**Directory:** `/GCHostPay3-10-26`\n**Main File:** `tphp3-10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ✅ (from GCHostPay1)\n- ENCRYPT: ✅ (to GCHostPay1)\n\n## Signing Key\n**SUCCESS_URL_SIGNING_KEY**\n\n## Pattern\n**Request-Response**\n1. DECRYPT: Extract payment amount\n2. Execute ETH transfer (wallet_manager)\n3. ENCRYPT: Response with tx_hash\n4. Return to GCHostPay1",
+      "x": 5000,
+      "y": 586,
+      "width": 620,
+      "height": 520
+    },
+    {
+      "id": "n12",
+      "type": "text",
+      "text": "# GCMicroBatchProcessor\n\n**Directory:** `/GCMicroBatchProcessor-10-26`\n**Main File:** `microbatch10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ✅ (/callback from GCHostPay1)\n- ENCRYPT: ✅ (callback response)\n\n## Signing Key\n**SUCCESS_URL_SIGNING_KEY**\n\n## Endpoints\n1. `/check-threshold` - NO TOKENS (scheduler)\n2. `/callback` - DECRYPT + ENCRYPT\n\n## Token Expiration\n**30 minutes** (ChangeNow delays)",
+      "x": 5710,
+      "y": 0,
+      "width": 620,
+      "height": 520
+    },
+    {
+      "id": "n13",
+      "type": "text",
+      "text": "# GCBatchProcessor\n\n**Directory:** `/GCBatchProcessor-10-26`\n**Main File:** `batch10-26.py`\n\n## Token Manager\n✅ YES\n\n## Encryption/Decryption\n- DECRYPT: ❌\n- ENCRYPT: ✅ (to GCSplit1)\n\n## Signing Key\n**TPS_HOSTPAY_SIGNING_KEY** ⚠️\n\n## Pattern\n**ENCRYPT ONLY**\n- Triggered by Cloud Scheduler (every 5 min)\n- No incoming tokens\n- Creates batch payout tokens for GCSplit1\n- Uses external boundary key",
+      "x": 2740,
+      "y": 658,
+      "width": 650,
+      "height": 520
+    },
+    {
+      "id": "n14",
+      "type": "text",
+      "text": "# TelePay (Telegram Bot)\n\n**Directory:** `/TelePay10-26`\n**Main File:** `telepay10-26.py`\n\n## Token Manager\n❌ NO\n\n## Encryption/Decryption\n- DECRYPT: ❌\n- ENCRYPT: ❌\n\n## Communication Method\n**Direct Telegram Bot API**\n\n## Purpose\nUser interaction, command handling\nNo inter-service token communication",
+      "x": 610,
+      "y": 610,
+      "width": 620,
+      "height": 424
+    },
+    {
+      "id": "n15",
+      "type": "text",
+      "text": "# Services Summary\n\n## With Encryption/Decryption (9)\n- GCWebhook1\n- GCWebhook2\n- GCSplit1 (dual-key)\n- GCSplit2\n- GCSplit3\n- GCHostPay1 (dual-key)\n- GCHostPay2\n- GCHostPay3\n- GCBatchProcessor\n- GCMicroBatchProcessor\n\n## Without Tokens (3)\n- np-webhook (signature only)\n- GCAccumulator (unused token_manager)\n- TelePay (Telegram bot)\n\n## Dual-Key Services (2)\n- GCSplit1\n- GCHostPay1",
+      "x": 0,
+      "y": 514,
+      "width": 520,
+      "height": 568
+    },
+    {
+      "id": "n16",
+      "type": "text",
+      "text": "# Key Distribution\n\n## SUCCESS_URL_SIGNING_KEY\n**Internal Communication (10 services)**\n- GCWebhook1 ↔ GCWebhook2\n- GCSplit1 ↔ GCSplit2\n- GCSplit1 ↔ GCSplit3\n- GCHostPay1 ↔ GCHostPay2\n- GCHostPay1 ↔ GCHostPay3\n- GCHostPay1 ↔ GCMicroBatchProcessor\n\n## TPS_HOSTPAY_SIGNING_KEY\n**External Boundary (3 services)**\n- GCSplit1 → GCHostPay1 ⚠️\n- GCHostPay1 (DECRYPT)\n- GCBatchProcessor → GCSplit1\n\n## NOWPAYMENTS_IPN_SECRET\n**Signature Verification (1 service)**\n- np-webhook (NOT encryption)",
+      "x": 0,
+      "y": 1172,
+      "width": 650,
+      "height": 592
+    },
+    {
+      "id": "n17",
+      "type": "text",
+      "text": "# Encryption Patterns\n\n## Request-Response (5 services)\nDECRYPT incoming → Process → ENCRYPT response\n- GCSplit2 (estimate)\n- GCSplit3 (swap)\n- GCHostPay2 (status)\n- GCHostPay3 (payment)\n- GCMicroBatchProcessor (/callback)\n\n## One-Way Encrypt (3 services)\nReceive plain data → ENCRYPT for downstream\n- GCSplit1 (main endpoint)\n- GCBatchProcessor (scheduler)\n- GCWebhook1 (current endpoint)\n\n## One-Way Decrypt (1 service)\nDECRYPT incoming → Terminal\n- GCWebhook2 (Telegram invite)",
+      "x": 740,
+      "y": 1172,
+      "width": 650,
+      "height": 592
+    },
+    {
+      "id": "n18",
+      "type": "text",
+      "text": "# Token Expiration Windows\n\n## Strict (60 seconds)\n- GCSplit1 → GCHostPay1\n- Immediate execution required\n\n## Standard (2 hours)\n- GCWebhook1 → GCWebhook2\n- Accommodate retry delays\n\n## Extended (24 hours)\n- GCWebhook2 processing\n- Large retry window\n\n## Delayed (30 minutes)\n- GCMicroBatchProcessor callback\n- ChangeNow processing delays\n\n## Variable (no explicit limit)\n- GCSplit1 ↔ GCSplit2/3\n- Internal request-response",
+      "x": 1480,
+      "y": 1172,
+      "width": 650,
+      "height": 592
+    },
+    {
+      "id": "n19",
+      "type": "text",
+      "text": "# Security Boundaries\n\n## External Boundary ⚠️\n**GCSplit1 ↔ GCHostPay1**\n- Key: `TPS_HOSTPAY_SIGNING_KEY`\n- Separates payment orchestration from execution\n- Critical security boundary\n\n## Internal Boundary\n**All other services**\n- Key: `SUCCESS_URL_SIGNING_KEY`\n- Trusted internal communication\n- Shared key for efficiency\n\n## External Integration\n**np-webhook**\n- Key: `NOWPAYMENTS_IPN_SECRET`\n- HMAC signature verification\n- NOT encryption - validation only",
+      "x": 2220,
+      "y": 1172,
+      "width": 650,
+      "height": 592
+    },
+    {
+      "id": "n20",
+      "type": "text",
+      "text": "# Critical Findings\n\n## Unused Token Manager\n**GCAccumulator-10-26**\n- Has `token_manager.py`\n- Never uses it\n- Uses plain JSON\n- Safe to remove or keep\n\n## Dual-Key Architecture\nOnly 2 services manage both keys:\n- GCSplit1 (ENCRYPT with both)\n- GCHostPay1 (DECRYPT external, ENCRYPT/DECRYPT internal)\n\n## Signature vs Encryption\n**np-webhook**\n- Uses HMAC-SHA256 signature\n- NOT encryption\n- Standard for external IPNs",
+      "x": 2960,
+      "y": 1268,
+      "width": 650,
+      "height": 496
+    }
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "n2", "fromSide": "right", "toNode": "n3", "toSide": "left"},
+    {"id": "e2", "fromNode": "n3", "fromSide": "bottom", "toNode": "n4", "toSide": "top"},
+    {"id": "e3", "fromNode": "n3", "fromSide": "right", "toNode": "n5", "toSide": "left"},
+    {"id": "e4", "fromNode": "n3", "fromSide": "right", "toNode": "n6", "toSide": "left"},
+    {"id": "e5", "fromNode": "n6", "fromSide": "right", "toNode": "n7", "toSide": "left"},
+    {"id": "e6", "fromNode": "n6", "fromSide": "right", "toNode": "n8", "toSide": "left"},
+    {"id": "e7", "fromNode": "n7", "fromSide": "bottom", "toNode": "n6", "toSide": "right"},
+    {"id": "e8", "fromNode": "n8", "fromSide": "left", "toNode": "n6", "toSide": "bottom"},
+    {"id": "e9", "fromNode": "n6", "fromSide": "right", "toNode": "n9", "toSide": "left"},
+    {"id": "e10", "fromNode": "n9", "fromSide": "right", "toNode": "n10", "toSide": "left"},
+    {"id": "e11", "fromNode": "n9", "fromSide": "right", "toNode": "n11", "toSide": "left"},
+    {"id": "e12", "fromNode": "n10", "fromSide": "bottom", "toNode": "n9", "toSide": "right"},
+    {"id": "e13", "fromNode": "n11", "fromSide": "left", "toNode": "n9", "toSide": "bottom"},
+    {"id": "e14", "fromNode": "n9", "fromSide": "right", "toNode": "n12", "toSide": "left"},
+    {"id": "e15", "fromNode": "n13", "fromSide": "top", "toNode": "n6", "toSide": "bottom"}
+  ]
+}
