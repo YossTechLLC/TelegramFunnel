@@ -65,7 +65,11 @@
       "Bash(gcloud scheduler jobs create:*)",
       "Bash(gcloud scheduler jobs run:*)",
       "Bash(gcloud scheduler jobs delete:*)",
-      "Bash(gcloud sql instances list:*)"
+      "Bash(gcloud sql instances list:*)",
+      "Bash(gcloud secrets versions list:*)",
+      "Bash(gcloud run revisions describe:*)",
+      "Bash(gcloud run revisions list:*)",
+      "Bash(gcloud run services update-traffic:*)"
     ],
     "deny": [],
     "ask": []

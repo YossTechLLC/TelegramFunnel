@@ -11,7 +11,7 @@ in database for horizontal scaling support.
 import logging
 import time
 from typing import Optional, Dict, Any
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from keypad_state_manager import KeypadStateManager
 
 logger = logging.getLogger(__name__)
@@ -394,12 +394,12 @@ class KeypadHandler:
         # Delete keypad message
         self.telegram_client.delete_message(chat_id=chat_id, message_id=message_id)
 
-        # Send confirmation message
+        # Send confirmation message with DM notification
         self.telegram_client.send_message(
             chat_id=chat_id,
             text=f"✅ <b>Donation Confirmed</b>\n"
-                 f"💰 Amount: <b>${amount_float:.2f}</b>\n"
-                 f"Preparing your payment gateway...",
+                 f"💰 <b>Amount:</b> ${amount_float:.2f}\n\n"
+                 f"📨 <b>Check your private messages</b> to complete the payment.",
             parse_mode="HTML"
         )
 
@@ -487,22 +487,69 @@ class KeypadHandler:
                     closed_channel_description = "Exclusive content"
                     logger.warning(f"⚠️ Channel details not found for {open_channel_id}, using fallback")
 
-                # Send payment button with Web App
-                text = (
-                    f"💝 <b>Click the button below to Complete Your ${amount:.2f} Donation</b> 💝\n\n"
-                    f"🔒 <b>Private Channel:</b> {closed_channel_title}\n"
-                    f"📝 <b>Channel Description:</b> {closed_channel_description}\n"
-                    f"💰 <b>Price:</b> ${amount:.2f}"
+                # Send notification to group chat
+                group_notification = (
+                    f"💝 <b>Payment Link Ready</b>\n"
+                    f"💰 <b>Amount:</b> ${amount:.2f}\n\n"
+                    f"📨 A secure payment link has been sent to your private messages."
                 )
 
-                self.telegram_client.send_message_with_webapp_button(
+                self.telegram_client.send_message(
                     chat_id=chat_id,
-                    text=text,
-                    button_text="💰 Complete Donation Payment",
-                    webapp_url=invoice_url
+                    text=group_notification,
+                    parse_mode="HTML"
                 )
 
-                logger.info(f"📨 Payment button sent to user {user_id}")
+                # Prepare payment message for PRIVATE CHAT (DM)
+                private_text = (
+                    f"💝 <b>Complete Your ${amount:.2f} Donation</b>\n\n"
+                    f"🔒 <b>Private Channel:</b> {closed_channel_title}\n"
+                    f"📝 <b>Description:</b> {closed_channel_description}\n"
+                    f"💰 <b>Amount:</b> ${amount:.2f}\n\n"
+                    f"Click the button below to open the secure payment gateway:"
+                )
+
+                # Create WebApp button (opens seamlessly in private chats)
+                button = InlineKeyboardButton(
+                    text="💳 Open Payment Gateway",
+                    web_app=WebAppInfo(url=invoice_url)
+                )
+                keyboard = InlineKeyboardMarkup([[button]])
+
+                # Send to user's PRIVATE CHAT (not group)
+                dm_result = self.telegram_client.send_message(
+                    chat_id=user_id,  # Send to user's DM
+                    text=private_text,
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
+
+                # Handle case where bot is blocked/never started
+                if not dm_result['success']:
+                    error = dm_result.get('error', '').lower()
+
+                    if 'bot was blocked' in error or 'chat not found' in error or 'forbidden' in error:
+                        logger.warning(f"⚠️ Cannot DM user {user_id} - bot not started or blocked")
+
+                        # Send fallback message to group with instructions
+                        fallback_text = (
+                            f"⚠️ <b>Cannot Send Payment Link</b>\n\n"
+                            f"Please <b>start a private chat</b> with me first:\n"
+                            f"1. Click my username above\n"
+                            f"2. Press the \"Start\" button\n"
+                            f"3. Return here and try donating again\n\n"
+                            f"Your payment link: {invoice_url}"
+                        )
+
+                        self.telegram_client.send_message(
+                            chat_id=chat_id,
+                            text=fallback_text,
+                            parse_mode="HTML"
+                        )
+
+                        return {'success': False, 'error': 'User must start bot first', 'invoice_url': invoice_url}
+
+                logger.info(f"📨 Payment button sent to user {user_id} private chat")
                 return {'success': True, 'invoice_url': invoice_url}
 
             else:

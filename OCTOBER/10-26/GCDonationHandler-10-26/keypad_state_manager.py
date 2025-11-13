@@ -59,19 +59,24 @@ class KeypadStateManager:
             True if state created successfully, False otherwise
         """
         try:
-            query = """
-                INSERT INTO donation_keypad_state
-                (user_id, channel_id, current_amount, decimal_entered, state_type, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
-                ON CONFLICT (user_id)
-                DO UPDATE SET
-                    channel_id = EXCLUDED.channel_id,
-                    current_amount = '0',
-                    decimal_entered = false,
-                    state_type = EXCLUDED.state_type,
-                    updated_at = NOW()
-            """
-            self.db_manager.execute_query(query, (user_id, channel_id, '0', False, state_type))
+            with self.db_manager._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO donation_keypad_state
+                        (user_id, channel_id, current_amount, decimal_entered, state_type, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+                        ON CONFLICT (user_id)
+                        DO UPDATE SET
+                            channel_id = EXCLUDED.channel_id,
+                            current_amount = '0',
+                            decimal_entered = false,
+                            state_type = EXCLUDED.state_type,
+                            updated_at = NOW()
+                        """,
+                        (user_id, channel_id, '0', False, state_type)
+                    )
+                    conn.commit()
 
             logger.debug(f"💾 Created state for user {user_id} (channel: {channel_id})")
             return True
@@ -100,34 +105,38 @@ class KeypadStateManager:
             None if state not found
         """
         try:
-            query = """
-                SELECT
-                    user_id,
-                    channel_id,
-                    current_amount,
-                    decimal_entered,
-                    state_type,
-                    created_at,
-                    updated_at
-                FROM donation_keypad_state
-                WHERE user_id = %s
-            """
-            result = self.db_manager.execute_query(query, (user_id,))
+            with self.db_manager._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            user_id,
+                            channel_id,
+                            current_amount,
+                            decimal_entered,
+                            state_type,
+                            created_at,
+                            updated_at
+                        FROM donation_keypad_state
+                        WHERE user_id = %s
+                        """,
+                        (user_id,)
+                    )
+                    result = cur.fetchone()
 
-            if result and len(result) > 0:
-                row = result[0]
-                state = {
-                    'user_id': row[0],
-                    'amount_building': row[2],           # current_amount
-                    'open_channel_id': row[1],           # channel_id
-                    'decimal_entered': row[3],           # decimal_entered
-                    'state_type': row[4],                # state_type
-                    'created_at': row[5],                # created_at
-                    'updated_at': row[6]                 # updated_at
-                }
-                return state
-            else:
-                return None
+                    if result:
+                        state = {
+                            'user_id': result[0],
+                            'amount_building': result[2],           # current_amount
+                            'open_channel_id': result[1],           # channel_id
+                            'decimal_entered': result[3],           # decimal_entered
+                            'state_type': result[4],                # state_type
+                            'created_at': result[5],                # created_at
+                            'updated_at': result[6]                 # updated_at
+                        }
+                        return state
+                    else:
+                        return None
 
         except Exception as e:
             logger.error(f"❌ Failed to get state for user {user_id}: {e}")
@@ -148,15 +157,20 @@ class KeypadStateManager:
             # Determine if decimal was entered
             has_decimal = '.' in new_amount
 
-            query = """
-                UPDATE donation_keypad_state
-                SET
-                    current_amount = %s,
-                    decimal_entered = %s,
-                    updated_at = NOW()
-                WHERE user_id = %s
-            """
-            self.db_manager.execute_query(query, (new_amount, has_decimal, user_id))
+            with self.db_manager._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE donation_keypad_state
+                        SET
+                            current_amount = %s,
+                            decimal_entered = %s,
+                            updated_at = NOW()
+                        WHERE user_id = %s
+                        """,
+                        (new_amount, has_decimal, user_id)
+                    )
+                    conn.commit()
 
             logger.debug(f"💾 Updated amount for user {user_id}: {new_amount}")
             return True
@@ -176,8 +190,13 @@ class KeypadStateManager:
             True if deleted successfully, False otherwise
         """
         try:
-            query = "DELETE FROM donation_keypad_state WHERE user_id = %s"
-            self.db_manager.execute_query(query, (user_id,))
+            with self.db_manager._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM donation_keypad_state WHERE user_id = %s",
+                        (user_id,)
+                    )
+                    conn.commit()
 
             logger.debug(f"🗑️ Deleted state for user {user_id}")
             return True
@@ -212,18 +231,14 @@ class KeypadStateManager:
             Number of states deleted
         """
         try:
-            query = """
-                DELETE FROM donation_keypad_state
-                WHERE updated_at < NOW() - INTERVAL '%s hours'
-            """
-            result = self.db_manager.execute_query(query, (max_age_hours,))
+            with self.db_manager._get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Call the database function created in migration
+                    cur.execute("SELECT cleanup_stale_donation_states()")
+                    deleted_count = cur.fetchone()[0]
+                    conn.commit()
 
-            # Get number of deleted rows
-            # Note: This depends on database_manager implementation
-            # May need adjustment based on how execute_query returns affected rows
-            deleted_count = 0
             logger.info(f"🧹 Cleaned up {deleted_count} stale donation states (older than {max_age_hours}h)")
-
             return deleted_count
 
         except Exception as e:

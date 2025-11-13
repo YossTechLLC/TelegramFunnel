@@ -71,13 +71,14 @@ class DatabaseManager:
         if cloud_sql_connection:
             # Cloud Run mode - use Unix socket
             self.host = f"/cloudsql/{cloud_sql_connection}"
+            self.port = None  # Port is not used for Unix socket
             print(f"🔌 Using Cloud SQL Unix socket: {self.host}")
         else:
             # Local/VM mode - use TCP connection
             self.host = fetch_database_host()
-            print(f"🔌 Using TCP connection to: {self.host}")
+            self.port = 5432
+            print(f"🔌 Using TCP connection to: {self.host}:{self.port}")
 
-        self.port = 5432
         self.dbname = fetch_database_name()
         self.user = fetch_database_user()
         self.password = fetch_database_password()
@@ -92,13 +93,19 @@ class DatabaseManager:
 
     def get_connection(self):
         """Create and return a database connection"""
-        return psycopg2.connect(
-            dbname=self.dbname,
-            user=self.user,
-            password=self.password,
-            host=self.host,
-            port=self.port
-        )
+        # Build connection parameters
+        conn_params = {
+            "dbname": self.dbname,
+            "user": self.user,
+            "password": self.password,
+            "host": self.host
+        }
+
+        # Only include port for TCP connections (not Unix socket)
+        if self.port is not None:
+            conn_params["port"] = self.port
+
+        return psycopg2.connect(**conn_params)
 
     def fetch_channel_by_id(self, channel_id: str) -> Optional[Dict[str, Any]]:
         """

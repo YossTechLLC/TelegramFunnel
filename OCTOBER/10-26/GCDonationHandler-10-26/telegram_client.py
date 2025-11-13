@@ -46,6 +46,38 @@ class TelegramClient:
         self.bot = Bot(token=bot_token)
         logger.info("📱 TelegramClient initialized")
 
+    def _run_async(self, coro):
+        """
+        Safely run async coroutine in Flask synchronous context.
+
+        This method handles event loop creation and reuse to avoid
+        "Event loop is closed" errors when multiple Telegram operations
+        are called in the same request.
+
+        Args:
+            coro: Async coroutine to execute
+
+        Returns:
+            Result of coroutine execution
+
+        Raises:
+            Exception: Any exception raised by the coroutine
+        """
+        try:
+            # Try to get existing event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                # Loop exists but is closed, create new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            # No event loop in current thread, create one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        # Run coroutine in the loop (doesn't close it)
+        return loop.run_until_complete(coro)
+
     def send_message(
         self,
         chat_id: int,
@@ -87,7 +119,7 @@ class TelegramClient:
                 )
                 return message
 
-            message = asyncio.run(_send())
+            message = self._run_async(_send())
             logger.info(f"✅ Message sent to chat {chat_id}, message_id: {message.message_id}")
             return {'success': True, 'message_id': message.message_id}
 
@@ -180,7 +212,7 @@ class TelegramClient:
                     reply_markup=reply_markup
                 )
 
-            asyncio.run(_edit())
+            self._run_async(_edit())
             logger.info(f"✅ Message {message_id} reply markup edited in chat {chat_id}")
             return {'success': True}
 
@@ -224,7 +256,7 @@ class TelegramClient:
                     message_id=message_id
                 )
 
-            asyncio.run(_delete())
+            self._run_async(_delete())
             logger.info(f"✅ Message {message_id} deleted from chat {chat_id}")
             return {'success': True}
 
@@ -277,7 +309,7 @@ class TelegramClient:
                     show_alert=show_alert
                 )
 
-            asyncio.run(_answer())
+            self._run_async(_answer())
             logger.debug(f"✅ Answered callback query {callback_query_id}")
             return {'success': True}
 
