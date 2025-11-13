@@ -1,12 +1,129 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-12 Session 133 - **GCSubscriptionMonitor-10-26 Verification & Approval** ✅📋
+**Last Updated:** 2025-11-13 Session 136 - **Centralized Notification Architecture** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+### 2025-11-13 Session 136: Centralized Notification Architecture - Single Entry Point
+
+**Decision:** Centralize payment notifications at np-webhook-10-26 only (do NOT add to other services)
+
+**Context:**
+- Original architecture plan suggested adding notification calls to 5 services
+- Investigation revealed only np-webhook-10-26 had notification code
+- Other services (gcwebhook1/2, gcsplit1, gchostpay1) have no notification implementation
+
+**Analysis:**
+- np-webhook-10-26 is the ONLY entry point for all NowPayments IPN callbacks
+- All payments flow through np-webhook first, then route to other services
+- Adding notifications to downstream services would create **duplicate notifications**
+
+**Decision Made:**
+- ✅ np-webhook-10-26: Sends notification after IPN validation
+- ❌ gcwebhook1-10-26: No notification (handles payment routing)
+- ❌ gcwebhook2-10-26: No notification (handles Telegram invites)
+- ❌ gcsplit1-10-26: No notification (handles payouts)
+- ❌ gchostpay1-10-26: No notification (handles crypto transfers)
+
+**Rationale:**
+- **Single point of truth:** One notification per payment, triggered at validation
+- **No duplicates:** Customer receives exactly ONE notification
+- **Clean separation:** Payment processing vs notification delivery
+- **Simpler maintenance:** Only one integration point to monitor/update
+
+**Implementation:**
+- Updated np-webhook-10-26/app.py to call GCNotificationService
+- Environment variable: `GCNOTIFICATIONSERVICE_URL=https://gcnotificationservice-10-26-291176869049.us-central1.run.app`
+- Timeout: 10 seconds (non-blocking, failures don't block payment processing)
+
+**Benefits:**
+- ✅ No duplicate notifications
+- ✅ Centralized notification logic
+- ✅ Easier debugging (one place to check)
+- ✅ Reduced deployment complexity
+
+---
+
+### 2025-11-13 Session 135: Cloud SQL Unix Socket Connection Pattern
+
+**Decision:** Implement dual-mode database connection (Unix socket for Cloud Run, TCP for local)
+
+**Context:** GCNotificationService was timing out when trying to connect to Cloud SQL via TCP from Cloud Run
+
+**Solution Implemented:**
+- Check for `CLOUD_SQL_CONNECTION_NAME` environment variable
+- If present (Cloud Run): Use Unix socket `/cloudsql/{connection_name}`
+- If absent (local dev): Use TCP with IP from secrets
+- Add `--add-cloudsql-instances` to deployment
+
+**Code Pattern:**
+```python
+cloud_sql_connection = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+if cloud_sql_connection:
+    self.host = f"/cloudsql/{cloud_sql_connection}"
+else:
+    self.host = host  # From secrets
+```
+
+**Rationale:**
+- Cloud Run services cannot connect to Cloud SQL via TCP (firewall)
+- Unix socket is the recommended Cloud Run → Cloud SQL connection method
+- Same codebase works locally and in Cloud Run
+- Pattern established in GCBotCommand-10-26
+
+**Benefits:**
+- ✅ No timeout issues
+- ✅ Secure connection
+- ✅ Environment-agnostic codebase
+
+---
+
+### 2025-11-12 Session 134: GCNotificationService-10-26 - Self-Contained Service Architecture ✅🎉
+
+**Decision:** Implement GCNotificationService as a completely self-contained microservice with NO shared module dependencies
+
+**Rationale:**
+- **"Duplication is far cheaper than the wrong abstraction"** (Sandi Metz principle)
+- In microservices architecture, copying code is better than sharing code when services need to evolve independently
+- Prevents version conflicts, deployment complexity, and tight coupling between services
+- Each service can evolve at its own pace without breaking other services
+
+**Implementation Details:**
+1. **config_manager.py** - COPIED from TelePay10-26 with modifications for notification-specific needs
+2. **database_manager.py** - EXTRACTED only notification-relevant methods from TelePay10-26/database.py
+3. **notification_handler.py** - EXTRACTED core logic from TelePay10-26/notification_service.py
+4. **telegram_client.py** - NEW wrapper with synchronous asyncio bridge for Flask compatibility
+5. **validators.py** - NEW validation utilities for HTTP request validation
+6. **service.py** - NEW Flask application with application factory pattern
+
+**Architecture Principles:**
+- ✅ Self-contained: All functionality included directly within service directory
+- ✅ No external dependencies on shared modules
+- ✅ Independent deployment and evolution
+- ✅ Simplified debugging (all code in one place)
+- ✅ Easy testing (no complex mocking of shared dependencies)
+
+**Benefits:**
+- Independence: Each service evolves at its own pace
+- Simplicity: No external dependencies
+- Reliability: Service A doesn't break Service B
+- Debugging: All code is in one place
+- Testing: Easy to mock and test
+- Deployment: Deploy once, works forever
+
+**Trade-offs Accepted:**
+- Code duplication (acceptable for microservices)
+- Slightly larger codebase (~974 lines vs potential shared modules)
+- Benefits far outweigh costs for this architecture
+
+**Conclusion:**
+Self-contained services provide superior maintainability, reliability, and independence compared to shared module architectures. This pattern will be used for all future service refactorings.
+
+---
 
 ### 2025-11-12 Session 133: GCSubscriptionMonitor-10-26 - Verification & Production Approval ✅📋
 

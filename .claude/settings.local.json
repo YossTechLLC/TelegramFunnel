@@ -52,7 +52,12 @@
       "Bash(gcloud iam service-accounts describe:*)",
       "Bash(for secret in TELEGRAM_BOT_SECRET_NAME DATABASE_HOST_SECRET DATABASE_NAME_SECRET DATABASE_USER_SECRET DATABASE_PASSWORD_SECRET)",
       "Bash(do gcloud secrets add-iam-policy-binding $secret --member=\"serviceAccount:291176869049-compute@developer.gserviceaccount.com\" --role=\"roles/secretmanager.secretAccessor\" --project=telepay-459221)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(do echo \"Checking $secret...\")",
+      "Bash(gcloud secrets get-iam-policy:*)",
+      "Bash(do echo \"Granting access to $secret...\")",
+      "Bash(do echo -n \"  $secret: \")",
+      "Bash(bash deploy_gcnotificationservice.sh:*)"
     ],
     "deny": [],
     "ask": []

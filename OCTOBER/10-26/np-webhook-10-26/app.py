@@ -123,14 +123,14 @@ CLOUD_TASKS_LOCATION = (os.getenv('CLOUD_TASKS_LOCATION') or '').strip() or None
 GCWEBHOOK1_QUEUE = (os.getenv('GCWEBHOOK1_QUEUE') or '').strip() or None
 GCWEBHOOK1_URL = (os.getenv('GCWEBHOOK1_URL') or '').strip() or None
 
-# 🆕 TelePay Bot URL for notification service (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
-TELEPAY_BOT_URL = (os.getenv('TELEPAY_BOT_URL') or '').strip() or None
+# 🆕 GCNotificationService URL for payment notifications (GCNotificationService_REFACTORING_ARCHITECTURE)
+GCNOTIFICATIONSERVICE_URL = (os.getenv('GCNOTIFICATIONSERVICE_URL') or '').strip() or None
 
 print(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
 print(f"   CLOUD_TASKS_LOCATION: {'✅ Loaded' if CLOUD_TASKS_LOCATION else '❌ Missing'}")
 print(f"   GCWEBHOOK1_QUEUE: {'✅ Loaded' if GCWEBHOOK1_QUEUE else '❌ Missing'}")
 print(f"   GCWEBHOOK1_URL: {'✅ Loaded' if GCWEBHOOK1_URL else '❌ Missing'}")
-print(f"   🆕 TELEPAY_BOT_URL: {'✅ Loaded' if TELEPAY_BOT_URL else '❌ Missing (notifications disabled)'}")
+print(f"   🆕 GCNOTIFICATIONSERVICE_URL: {'✅ Loaded' if GCNOTIFICATIONSERVICE_URL else '❌ Missing (notifications disabled)'}")
 
 # Initialize Cloud Tasks client
 cloudtasks_client = None
@@ -934,25 +934,25 @@ def handle_ipn():
                                         print(f"✅ [ORCHESTRATION] Successfully enqueued to GCWebhook1")
                                         print(f"🆔 [ORCHESTRATION] Task: {task_name}")
 
-                                        # 🆕 Trigger notification service (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+                                        # 🆕 Trigger notification service via GCNotificationService (GCNotificationService_REFACTORING_ARCHITECTURE)
                                         try:
                                             print(f"")
                                             print(f"📬 [NOTIFICATION] Triggering payment notification...")
 
-                                            if TELEPAY_BOT_URL:
+                                            if GCNOTIFICATIONSERVICE_URL:
                                                 # Determine payment type
                                                 payment_type = 'donation' if subscription_time_days == 0 else 'subscription'
 
                                                 # Prepare notification payload
                                                 notification_payload = {
-                                                    'open_channel_id': open_channel_id,
+                                                    'open_channel_id': str(open_channel_id),
                                                     'payment_type': payment_type,
                                                     'payment_data': {
                                                         'user_id': user_id,
                                                         'username': None,  # Could fetch from Telegram API if needed
-                                                        'amount_crypto': outcome_amount,
+                                                        'amount_crypto': str(outcome_amount),
                                                         'amount_usd': str(outcome_amount_usd),
-                                                        'crypto_currency': outcome_currency,
+                                                        'crypto_currency': str(outcome_currency),
                                                         'timestamp': payment_data.get('created_at', 'N/A')
                                                     }
                                                 }
@@ -969,7 +969,7 @@ def handle_ipn():
                                                                 SELECT sub_1_price, sub_2_price, sub_3_price
                                                                 FROM main_clients_database
                                                                 WHERE open_channel_id = %s
-                                                            """, (open_channel_id,))
+                                                            """, (str(open_channel_id),))
                                                             tier_prices = cur_tiers.fetchone()
                                                             cur_tiers.close()
                                                             conn_tiers.close()
@@ -999,30 +999,40 @@ def handle_ipn():
                                                         'duration_days': subscription_time_days
                                                     })
 
-                                                # Send HTTP POST to TelePay Bot notification endpoint
+                                                # Send HTTP POST to GCNotificationService
+                                                print(f"📤 [NOTIFICATION] Calling GCNotificationService...")
+                                                print(f"   URL: {GCNOTIFICATIONSERVICE_URL}/send-notification")
+                                                print(f"   Channel ID: {open_channel_id}")
+                                                print(f"   Payment Type: {payment_type}")
+
                                                 try:
                                                     response = requests.post(
-                                                        f"{TELEPAY_BOT_URL}/send-notification",
+                                                        f"{GCNOTIFICATIONSERVICE_URL}/send-notification",
                                                         json=notification_payload,
-                                                        timeout=5
+                                                        timeout=10
                                                     )
 
                                                     if response.status_code == 200:
-                                                        print(f"✅ [NOTIFICATION] Notification triggered successfully")
-                                                        print(f"📤 [NOTIFICATION] Response: {response.json()}")
+                                                        result = response.json()
+                                                        if result.get('status') == 'success':
+                                                            print(f"✅ [NOTIFICATION] Notification sent successfully")
+                                                            print(f"📤 [NOTIFICATION] Response: {result.get('message')}")
+                                                        else:
+                                                            print(f"⚠️ [NOTIFICATION] Notification not sent: {result.get('message')}")
+                                                            print(f"   Status: {result.get('status')}")
                                                     else:
-                                                        print(f"⚠️ [NOTIFICATION] Notification request failed: {response.status_code}")
+                                                        print(f"⚠️ [NOTIFICATION] HTTP {response.status_code}")
                                                         print(f"📄 [NOTIFICATION] Response: {response.text}")
 
                                                 except requests.exceptions.Timeout:
-                                                    print(f"⏱️ [NOTIFICATION] Request timeout (5s) - notification may still be processed")
+                                                    print(f"⏱️ [NOTIFICATION] Request timeout (10s) - notification may still be processed")
                                                 except requests.exceptions.ConnectionError as e:
                                                     print(f"🔌 [NOTIFICATION] Connection error: {e}")
                                                 except Exception as e:
                                                     print(f"❌ [NOTIFICATION] Request error: {e}")
 
                                             else:
-                                                print(f"⏭️ [NOTIFICATION] TELEPAY_BOT_URL not configured, skipping notification")
+                                                print(f"⏭️ [NOTIFICATION] GCNOTIFICATIONSERVICE_URL not configured, skipping notification")
 
                                         except Exception as e:
                                             print(f"❌ [NOTIFICATION] Error in notification flow: {e}")
