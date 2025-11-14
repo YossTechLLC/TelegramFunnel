@@ -147,11 +147,15 @@ class AppInitializer:
             self.donation_handler
         )
         
-        # Initialize subscription manager
+        # Initialize subscription manager with configurable check interval
+        import os
+        check_interval = int(os.getenv("SUBSCRIPTION_CHECK_INTERVAL", "60"))
         self.subscription_manager = SubscriptionManager(
-            self.config['bot_token'],
-            self.db_manager
+            bot_token=self.config['bot_token'],
+            db_manager=self.db_manager,
+            check_interval=check_interval
         )
+        self.logger.info(f"✅ Subscription Manager initialized (check_interval: {check_interval}s)")
 
         # 🆕 NEW_ARCHITECTURE: Initialize notification service (modular version)
         bot_instance = Bot(token=self.config['bot_token'])

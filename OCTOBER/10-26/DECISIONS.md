@@ -1,12 +1,170 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 157 - **Notification Message Refactor: Payout Configuration Display** ✅
+**Last Updated:** 2025-11-14 Session 159 - **GCNotificationService: Persistent Event Loop Pattern** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 159: GCNotificationService - Persistent Event Loop for python-telegram-bot 20.x
+
+**Decision:** Implement persistent event loop pattern in TelegramClient instead of creating/closing loop per request.
+
+**Problem:**
+- "RuntimeError('Event loop is closed')" on second consecutive notification
+- Root cause: Creating new event loop → using it → closing it for EACH request
+- First request succeeded, second request failed with closed event loop error
+
+**Analysis:**
+```
+Request 1: Create loop → Use → Close ✅
+Request 2: Try to create loop → CRASH ❌ (asyncio stale references)
+```
+
+**Solution Options Evaluated:**
+
+1. **Persistent Event Loop (CHOSEN)** ✅
+   - Create loop once in `__init__`, reuse for all requests
+   - Pros: Clean, efficient, follows asyncio best practices
+   - Cons: Need to manage loop lifecycle (handled by Cloud Run)
+
+2. **nest_asyncio Library**
+   - Allow nested event loops with `nest_asyncio.apply()`
+   - Pros: Quick fix, minimal code changes
+   - Cons: Adds dependency, doesn't address root issue
+
+3. **Synchronous Library**
+   - Use python-telegram-bot < 20.x
+   - Cons: Outdated, loses async benefits
+
+**Implementation:**
+```python
+# BEFORE (BROKEN):
+def send_message(self, ...):
+    loop = asyncio.new_event_loop()  # ❌ New loop every time
+    loop.run_until_complete(...)
+    loop.close()                     # ❌ Closes loop
+
+# AFTER (FIXED):
+def __init__(self, bot_token):
+    self.bot = Bot(token=bot_token)
+    self.loop = asyncio.new_event_loop()  # ✅ Persistent loop
+    asyncio.set_event_loop(self.loop)
+
+def send_message(self, ...):
+    self.loop.run_until_complete(...)  # ✅ Reuse existing loop
+    # NO loop.close() - stays open
+```
+
+**Benefits:**
+- Event loop created ONCE during service initialization
+- All `send_message()` calls reuse the same loop
+- Cloud Run container lifecycle handles cleanup
+- Better performance (no loop recreation overhead)
+
+**Tradeoffs:**
+- Loop persists for container lifetime (acceptable - Cloud Run manages lifecycle)
+- Added `close()` method for explicit cleanup (optional, rarely needed)
+
+**Testing:**
+- ✅ First notification: SUCCESS
+- ✅ Second notification: SUCCESS (was failing before)
+- ✅ No "Event loop is closed" errors in logs
+
+**Pattern:** This is the recommended approach for Flask/FastAPI apps using python-telegram-bot >= 20.x in Cloud Run.
+
+---
+
+## 2025-11-14 Session 158: Subscription Expiration - TelePay Consolidation with Database Delegation
+
+**Decision:** Consolidate subscription expiration management entirely within TelePay using DatabaseManager delegation pattern, removing GCSubscriptionMonitor service.
+
+**Context:**
+- THREE redundant implementations of subscription expiration handling discovered:
+  1. TelePay10-26/subscription_manager.py with duplicate SQL methods
+  2. TelePay10-26/database.py with the same SQL methods (96 lines duplicate)
+  3. GCSubscriptionMonitor-10-26 Cloud Run service (separate implementation)
+- No coordination between TelePay and GCSubscriptionMonitor (risk of duplicate processing)
+- 96 lines of duplicate SQL code between subscription_manager.py and database.py
+
+**Rationale:**
+
+1. **Simpler Architecture**
+   - One less service to deploy and maintain (GCSubscriptionMonitor removed)
+   - No additional infrastructure needed (Cloud Scheduler/Cloud Run)
+   - Tight integration: Subscription logic stays with bot application
+   - Reduced complexity: No inter-service coordination needed
+
+2. **Single Source of Truth (DatabaseManager)**
+   - ALL SQL queries handled by DatabaseManager only
+   - subscription_manager.py orchestrates workflow but delegates data access
+   - Follows DRY principle: No duplicate SQL queries
+   - Follows Single Responsibility: DatabaseManager owns SQL, SubscriptionManager owns workflow
+
+3. **Cost Reduction**
+   - GCSubscriptionMonitor scaled to 0 instances: ~$5-10/month → ~$0.50/month
+   - One less Cloud Run service to monitor and maintain
+   - Simplified logging: All subscription logs in TelePay
+
+4. **Best Practices from Context7 MCP**
+   - **Delegation Pattern**: Service layer delegates to data access layer
+   - **Async Context Management**: Using async with patterns for bot operations
+   - **Connection Pooling**: Utilizing SQLAlchemy QueuePool properly
+   - **Rate Limiting**: Small delays (asyncio.sleep) when processing multiple users
+   - **Error Handling**: Proper exception handling for TelegramError and database errors
+
+**Trade-offs:**
+
+✅ **Pros:**
+- Simpler deployment (one service instead of two)
+- Lower infrastructure costs (no separate Cloud Run)
+- Easier debugging (all logs in one place)
+- No coordination issues between services
+- Single source of truth for SQL queries
+
+⚠️ **Cons:**
+- Coupled to main application (can't scale subscription processing independently)
+- Background task in main process (slight overhead, negligible in practice)
+- No separate observability for subscription management (mitigated by good logging)
+
+**Alternatives Considered:**
+- **Option A:** GCSubscriptionMonitor as sole handler (rejected - unnecessary service separation)
+- **Option C:** Keep both with distributed locking (rejected - overcomplicated, coordination overhead)
+- **Selected Option B:** TelePay subscription_manager with DatabaseManager delegation
+
+**Implementation Pattern:**
+```python
+# BEFORE (subscription_manager.py - DUPLICATES SQL):
+def fetch_expired_subscriptions(self):
+    with self.db_manager.pool.engine.connect() as conn:
+        query = "SELECT ... FROM private_channel_users_database WHERE ..."
+        # ... 58 lines of SQL logic ...
+
+# AFTER (subscription_manager.py - DELEGATES):
+expired = self.db_manager.fetch_expired_subscriptions()
+```
+
+**Delegation Architecture:**
+- `subscription_manager.py` orchestrates workflow:
+  - Fetches expired → via `db_manager.fetch_expired_subscriptions()`
+  - Deactivates subscription → via `db_manager.deactivate_subscription()`
+  - Removes user from channel → via Telegram Bot API (unique responsibility)
+- `database.py` provides SQL queries (single source of truth)
+- `remove_user_from_channel()` handles Telegram API (no database equivalent)
+
+**Enhancements Added:**
+- Configurable monitoring interval (env var: `SUBSCRIPTION_CHECK_INTERVAL`, default: 60s)
+- Processing statistics returned: `expired_count`, `processed_count`, `failed_count`
+- Failure rate monitoring (warns if >10% failures)
+- Summary logging: "📊 Expiration check complete: X found, Y processed, Z failed"
+
+**Rollback Plan:**
+If TelePay fails, GCSubscriptionMonitor can be quickly re-enabled:
+1. Scale up Cloud Run: `min-instances=1`
+2. Service remains deployed at: `https://gcsubscriptionmonitor-10-26-291176869049.us-central1.run.app`
+3. Immediate fallback available if needed
 
 ## 2025-11-14 Session 157: Display Payout Configuration in Notifications (Not Payment Amounts)
 

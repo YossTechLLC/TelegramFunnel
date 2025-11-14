@@ -54,8 +54,10 @@ echo ""
 # Get all secrets and configure them
 echo "🔐 Configuring secrets..."
 SECRET_NAMES=(
-    "BOT_TOKEN"
+    "TELEGRAM_BOT_SECRET_NAME"
+    "TELEGRAM_BOT_USERNAME"
     "CLOUD_SQL_CONNECTION_NAME"
+    "DATABASE_HOST_SECRET"
     "DATABASE_NAME_SECRET"
     "DATABASE_USER_SECRET"
     "DATABASE_PASSWORD_SECRET"
@@ -81,6 +83,8 @@ gcloud run deploy $SERVICE_NAME \
     --min-instances=1 \
     --max-instances=3 \
     --execution-environment=gen2 \
+    --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
+    --set-env-vars=SUBSCRIPTION_CHECK_INTERVAL=60 \
     $SECRET_ARGS
 
 if [ $? -eq 0 ]; then

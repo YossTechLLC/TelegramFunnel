@@ -83,7 +83,13 @@
       "Bash(tee:*)",
       "Bash(find:*)",
       "Bash(export DB_PASSWORD='Chigdabeast123$')",
-      "Bash(export NOWPAYMENTS_IPN_SECRET='1EQDQWRpHwAsF7dHmI4N/gAaQ/IKrDQs')"
+      "Bash(export NOWPAYMENTS_IPN_SECRET='1EQDQWRpHwAsF7dHmI4N/gAaQ/IKrDQs')",
+      "Bash(gcloud compute instances describe:*)",
+      "Bash(gcloud compute instances:*)",
+      "Bash(for secret in BOT_TOKEN CLOUD_SQL_CONNECTION_NAME DATABASE_NAME_SECRET DATABASE_USER_SECRET DATABASE_PASSWORD_SECRET)",
+      "Bash(do echo -n \"$secret: \")",
+      "Bash(gcloud secrets describe:*)",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": []

@@ -25,13 +25,7 @@ class TelegramClient:
             raise ValueError("Bot token is required")
 
         self.bot = Bot(token=bot_token)
-
-        # Create persistent event loop (reused for all requests)
-        # This prevents "Event loop is closed" errors on subsequent requests
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-
-        logger.info("🤖 [TELEGRAM] Client initialized with persistent event loop")
+        logger.info("🤖 [TELEGRAM] Client initialized")
 
     def send_message(
         self,
@@ -55,9 +49,11 @@ class TelegramClient:
         try:
             logger.info(f"📤 [TELEGRAM] Sending message to chat_id {chat_id}")
 
-            # Reuse persistent event loop (prevents "Event loop is closed" error)
-            # DO NOT create new loop or close it - keep for subsequent requests
-            self.loop.run_until_complete(
+            # Use synchronous wrapper for python-telegram-bot >= 20.x
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            loop.run_until_complete(
                 self.bot.send_message(
                     chat_id=chat_id,
                     text=text,
@@ -65,6 +61,8 @@ class TelegramClient:
                     disable_web_page_preview=disable_web_page_preview
                 )
             )
+
+            loop.close()
 
             logger.info(f"✅ [TELEGRAM] Message delivered to {chat_id}")
             return True
@@ -87,14 +85,3 @@ class TelegramClient:
         except Exception as e:
             logger.error(f"❌ [TELEGRAM] Unexpected error: {e}", exc_info=True)
             return False
-
-    def close(self):
-        """
-        Close event loop on service shutdown
-
-        Note: This should be called during Flask app teardown, but in Cloud Run
-        the container lifecycle handles cleanup automatically.
-        """
-        if hasattr(self, 'loop') and self.loop and not self.loop.is_closed():
-            self.loop.close()
-            logger.info("🔒 [TELEGRAM] Event loop closed")

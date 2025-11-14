@@ -1,8 +1,108 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 157 - **Notification Message Refactor: PayGatePrime Branding + Payout Method Display** ✅
+**Last Updated:** 2025-11-14 Session 159 - **GCNotificationService Event Loop Fix Deployed** ✅
 
 ## Recent Updates
+
+## 2025-11-14 Session 159: GCNotificationService Event Loop Bug Fix ✅
+
+**Context:** Fixed critical "RuntimeError('Event loop is closed')" bug in GCNotificationService that caused second consecutive notification to fail. Root cause was creating/closing event loop for each request instead of reusing persistent loop.
+
+**Changes Made:**
+
+### Event Loop Fix ✅
+1. **Updated `telegram_client.py`** - Implemented persistent event loop pattern:
+   - Added persistent event loop in `__init__` (lines 29-34): `self.loop = asyncio.new_event_loop()`
+   - Removed loop creation/closure from `send_message()` method (lines 58-67)
+   - Added `close()` method for graceful shutdown (lines 91-100)
+   - Added initialization log: "🤖 [TELEGRAM] Client initialized with persistent event loop"
+   - Result: Event loop created ONCE and reused for all requests
+
+2. **Fixed `requirements.txt`** - Resolved dependency conflict:
+   - Changed `pg8000==1.30.3` to `pg8000>=1.31.1` (line 9)
+   - Reason: cloud-sql-python-connector[pg8000]==1.11.0 requires pg8000>=1.31.1
+
+3. **Fixed deployment environment variables**:
+   - Changed `TELEGRAM_BOT_SECRET_NAME` to `TELEGRAM_BOT_TOKEN_SECRET` (config_manager.py line 54)
+   - Aligned with config_manager expected variable names
+
+**Deployment:**
+- Build: SUCCESS (gcr.io/telepay-459221/gcnotificationservice-10-26)
+- Deploy: SUCCESS (revision gcnotificationservice-10-26-00005-qk8)
+- Service URL: https://gcnotificationservice-10-26-291176869049.us-central1.run.app
+
+**Testing Results:**
+- ✅ First notification sent successfully (20:51:33 UTC)
+- ✅ Second notification sent successfully (20:52:51 UTC) - **NO EVENT LOOP ERROR**
+- ✅ Log confirmation: "🤖 [TELEGRAM] Client initialized with persistent event loop"
+- ✅ Both messages delivered: `✅ [TELEGRAM] Message delivered to 8361239852`
+
+**Bug Fixed:**
+- BEFORE: Request 1 ✅ → Request 2 ❌ "Event loop is closed"
+- AFTER: Request 1 ✅ → Request 2 ✅ → Request N ✅
+
+**Files Modified:**
+- `/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py`
+- `/OCTOBER/10-26/GCNotificationService-10-26/requirements.txt`
+
+**Documentation Created:**
+- `/OCTOBER/10-26/GCNotificationService-10-26/EVENT_LOOP_FIX_CHECKLIST.md`
+- `/OCTOBER/10-26/GCNotificationService-10-26/EVENT_LOOP_FIX_SUMMARY.md`
+
+---
+
+## 2025-11-14 Session 158: Subscription Management TelePay Consolidation ✅
+
+**Context:** Eliminated redundancy in subscription expiration handling by consolidating to a single implementation within TelePay, removing GCSubscriptionMonitor service, and ensuring DatabaseManager is the single source of truth for all SQL operations.
+
+**Changes Made:**
+
+### Phase 1: Database Layer Consolidation ✅
+1. **Updated `subscription_manager.py`** - Removed 96 lines of duplicate SQL code:
+   - Removed `fetch_expired_subscriptions()` method (58 lines) - now delegates to `db_manager.fetch_expired_subscriptions()`
+   - Removed `deactivate_subscription()` method (38 lines) - now delegates to `db_manager.deactivate_subscription()`
+   - Updated `check_expired_subscriptions()` to use delegation pattern (3 call sites updated)
+   - Removed unused imports: `datetime`, `date`, `time`, `List`, `Tuple`, `Optional`
+   - Updated module docstring to reflect delegation architecture
+   - Updated class docstring with architecture details
+   - Verified: 0 SQL queries remain in subscription_manager.py (grep confirmed)
+
+### Phase 2: GCSubscriptionMonitor Service Deactivation ✅
+2. **Scaled down `gcsubscriptionmonitor-10-26` Cloud Run service**:
+   - Checked Cloud Scheduler jobs: No subscription-related scheduler found
+   - Scaled service to `min-instances=0, max-instances=1`
+   - New revision deployed: `gcsubscriptionmonitor-10-26-00005-vdr`
+   - Service URL: `https://gcsubscriptionmonitor-10-26-291176869049.us-central1.run.app`
+   - Result: Service scales to 0 when idle, saving ~$5-10/month → ~$0.50/month
+   - Rollback: Easy - service still deployed, just scaled down
+
+### Phase 3: TelePay Optimization ✅
+3. **Enhanced `subscription_manager.py`** - Added configurable interval and statistics:
+   - Added `check_interval` parameter to `__init__` (default: 60 seconds)
+   - Updated `start_monitoring()` to use `self.check_interval` instead of hardcoded 60
+   - Enhanced `check_expired_subscriptions()` to return statistics dictionary
+   - Added counters: `expired_count`, `processed_count`, `failed_count`
+   - Added summary logging: "📊 Expiration check complete: X found, Y processed, Z failed"
+   - Added failure rate warning (>10% threshold): "⚠️ High failure rate: X%"
+   - Updated `app_initializer.py` to read `SUBSCRIPTION_CHECK_INTERVAL` environment variable
+   - Added initialization logging with actual interval value
+
+**Architecture Impact:**
+- BEFORE: 3 redundant implementations (subscription_manager SQL + database SQL + GCSubscriptionMonitor)
+- AFTER: 1 singular implementation (subscription_manager delegates to database)
+- Code Reduction: 96 lines duplicate SQL removed
+- Services: GCSubscriptionMonitor scaled to 0 instances (effectively disabled)
+- Single Source of Truth: All SQL queries now in DatabaseManager only
+
+**Files Modified:**
+- `TelePay10-26/subscription_manager.py` (224 → 196 lines: -96 duplicate +68 enhancements)
+- `TelePay10-26/app_initializer.py` (added configurable interval support)
+
+**Testing Status:**
+- ⏳ Phase 4 Pending: Unit tests, integration tests, load tests
+- ⏳ Phase 5 Pending: Production deployment, monitoring, final documentation
+
+**Deployment Status:** ⏳ PENDING (Phases 1-3 complete, ready for testing)
 
 ## 2025-11-14 Session 157: Refactored Notification Messages - PayGate Prime Branding + Payout Configuration Display ✅
 

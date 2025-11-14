@@ -5,12 +5,14 @@ python-telegram-bot>=20.0
 
 # Flask Web Framework
 Flask>=3.0.0
+gunicorn>=21.2.0
 
 # Database - SQLAlchemy ORM
 sqlalchemy>=2.0.0
 
 # Database - PostgreSQL Driver (pg8000 is pure Python, no C dependencies)
-pg8000>=1.30.0
+pg8000>=1.31.1
+psycopg2-binary>=2.9.9
 
 # Database - Cloud SQL Python Connector
 cloud-sql-python-connector>=1.5.0
@@ -21,6 +23,7 @@ requests>=2.31.0
 
 # Async Support
 asyncio-mqtt>=0.16.0
+nest-asyncio>=1.5.0
 
 # Security - Cryptography
 cryptography>=41.0.0
