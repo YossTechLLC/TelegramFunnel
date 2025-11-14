@@ -378,3 +378,134 @@ class DatabaseManager:
             error_msg = f"Invalid payment amount data: {e}"
             print(f"❌ [VALIDATION] {error_msg}")
             return False, error_msg
+
+    def get_channel_subscription_details(
+        self,
+        closed_channel_id: int,
+        subscription_price: str,
+        subscription_time_days: int
+    ) -> dict:
+        """
+        Fetch channel title and determine subscription tier number.
+
+        Args:
+            closed_channel_id: The closed (private) channel ID
+            subscription_price: Subscription price from token (USD string)
+            subscription_time_days: Subscription duration from token (days)
+
+        Returns:
+            Dict with channel details:
+            {
+                'channel_title': str,
+                'tier_number': int | str  # 1, 2, 3, or "Unknown"
+            }
+
+            Fallback values if channel not found or tier not matched:
+            {
+                'channel_title': 'Premium Channel',
+                'tier_number': 'Unknown'
+            }
+        """
+        conn = None
+        cur = None
+        try:
+            print(f"📺 [CHANNEL] Fetching details for channel {closed_channel_id}")
+            print(f"📺 [CHANNEL] Looking for match: ${subscription_price} USD, {subscription_time_days} days")
+
+            conn = self.get_connection()
+            if not conn:
+                print(f"❌ [CHANNEL] Could not establish connection - using fallback values")
+                return {
+                    'channel_title': 'Premium Channel',
+                    'tier_number': 'Unknown'
+                }
+
+            cur = conn.cursor()
+
+            # Query for channel and tier information
+            query = """
+                SELECT
+                    closed_channel_title,
+                    sub_1_price,
+                    sub_1_time,
+                    sub_2_price,
+                    sub_2_time,
+                    sub_3_price,
+                    sub_3_time
+                FROM main_clients_database
+                WHERE closed_channel_id = %s
+                LIMIT 1
+            """
+            cur.execute(query, (closed_channel_id,))
+            result = cur.fetchone()
+
+            if not result:
+                print(f"⚠️ [CHANNEL] Channel {closed_channel_id} not found in database - using fallback")
+                return {
+                    'channel_title': 'Premium Channel',
+                    'tier_number': 'Unknown'
+                }
+
+            # Unpack result
+            (channel_title, sub_1_price, sub_1_time, sub_2_price, sub_2_time,
+             sub_3_price, sub_3_time) = result
+
+            # Use fallback if channel title is empty
+            if not channel_title or channel_title.strip() == '':
+                channel_title = 'Premium Channel'
+                print(f"⚠️ [CHANNEL] Channel title empty - using fallback")
+
+            # Determine tier by matching price and duration
+            tier_number = 'Unknown'
+            try:
+                # Convert subscription_price to float for comparison
+                price_float = float(subscription_price)
+
+                # Check Tier 1
+                if (sub_1_price is not None and sub_1_time is not None and
+                    abs(float(sub_1_price) - price_float) < 0.01 and
+                    sub_1_time == subscription_time_days):
+                    tier_number = 1
+
+                # Check Tier 2
+                elif (sub_2_price is not None and sub_2_time is not None and
+                      abs(float(sub_2_price) - price_float) < 0.01 and
+                      sub_2_time == subscription_time_days):
+                    tier_number = 2
+
+                # Check Tier 3
+                elif (sub_3_price is not None and sub_3_time is not None and
+                      abs(float(sub_3_price) - price_float) < 0.01 and
+                      sub_3_time == subscription_time_days):
+                    tier_number = 3
+
+                else:
+                    print(f"⚠️ [CHANNEL] No tier match found for ${price_float}, {subscription_time_days} days")
+                    tier_number = 'Unknown'
+
+            except (ValueError, TypeError) as e:
+                print(f"⚠️ [CHANNEL] Error matching tier: {e}")
+                tier_number = 'Unknown'
+
+            print(f"✅ [CHANNEL] Found: '{channel_title}', Tier {tier_number}")
+
+            return {
+                'channel_title': channel_title,
+                'tier_number': tier_number
+            }
+
+        except Exception as e:
+            print(f"❌ [CHANNEL] Error fetching channel details: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'channel_title': 'Premium Channel',
+                'tier_number': 'Unknown'
+            }
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+                print(f"🔌 [CHANNEL] Connection closed")

@@ -1,12 +1,83 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 159 - **GCNotificationService: Persistent Event Loop Pattern** ✅
+**Last Updated:** 2025-11-14 Session 160 - **GCWebhook2: Enhanced Confirmation Message with Database Lookup** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 160: GCWebhook2 - Enhanced Confirmation Message Design
+
+**Decision:** Implement database lookup for channel title and tier number to enhance invitation confirmation message, with graceful fallback to prevent blocking.
+
+**Problem:**
+- Current message only shows invite link without context
+- Users don't see which channel they're joining or subscription details
+- No tier information displayed (important for multi-tier channels)
+
+**Design Choices:**
+
+1. **Database Lookup Strategy (CHOSEN)** ✅
+   - Query `main_clients_database` for channel title and tier configuration
+   - Match token price/duration against database tiers to determine tier number
+   - Pros: Accurate data, professional user experience
+   - Cons: Adds database query (~50-100ms latency)
+
+2. **Token Embedding (REJECTED)**
+   - Include channel title and tier in token payload
+   - Cons: Increases token size, requires coordinated changes across GCWebhook1/GCWebhook2
+
+3. **Static Message (REJECTED)**
+   - Keep simple message without channel details
+   - Cons: Poor user experience, no context provided
+
+**Implementation Pattern:**
+
+```python
+# Non-blocking design with fallback
+channel_details = {'channel_title': 'Premium Channel', 'tier_number': 'Unknown'}
+if db_manager:
+    try:
+        channel_details = db_manager.get_channel_subscription_details(...)
+    except Exception:
+        # Use fallback values, never block invite send
+        pass
+```
+
+**Tier Matching Logic:**
+- Exact match on BOTH price AND duration required
+- Floating point tolerance: 0.01 (handles precision issues)
+- Returns "Unknown" if no match (e.g., custom pricing, expired tiers)
+
+**Fallback Strategy:**
+- Database unavailable → Use `'Premium Channel'` / `'Unknown'`
+- Channel not found → Use `'Premium Channel'` / `'Unknown'`
+- Empty channel title → Use `'Premium Channel'`
+- No tier match → Use tier_number `'Unknown'`
+
+**Why Cosmetic Enhancement is Safe:**
+- Database lookup happens BEFORE async telegram operations
+- Wrapped in try-except with fallback values
+- Never blocks invite link creation or message send
+- Payment validation remains unchanged and independent
+
+**Message Format Decision:**
+- Tree structure (`├`, `└`) for visual hierarchy
+- Emojis for each element (📺, 🔗, 🎯, 💰, ⏳)
+- Clear sections: Header → Channel/Link → Subscription Details
+
+**Performance Impact:** Acceptable
+- Database query adds ~50-100ms per invite
+- Query is simple single-row lookup with indexed column
+- Only runs once per successful payment (not high frequency)
+
+**Alternative Considered:**
+- Async database lookup: Rejected (adds complexity, minimal benefit)
+- Cache channel data: Rejected (channel titles rarely used, caching overhead not worth it)
+
+---
 
 ## 2025-11-14 Session 159: GCNotificationService - Persistent Event Loop for python-telegram-bot 20.x
 

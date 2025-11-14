@@ -229,6 +229,22 @@ def send_telegram_invite():
             print(f"❌ [ENDPOINT] Telegram bot token not available")
             abort(500, "Telegram bot configuration error")
 
+        # Fetch channel and subscription details for enhanced message
+        channel_details = {'channel_title': 'Premium Channel', 'tier_number': 'Unknown'}
+        if db_manager:
+            try:
+                channel_details = db_manager.get_channel_subscription_details(
+                    closed_channel_id=closed_channel_id,
+                    subscription_price=subscription_price,
+                    subscription_time_days=subscription_time_days
+                )
+            except Exception as e:
+                print(f"⚠️ [ENDPOINT] Could not fetch channel details: {e}")
+                print(f"⚠️ [ENDPOINT] Using fallback values for message")
+
+        channel_title = channel_details.get('channel_title', 'Premium Channel')
+        tier_number = channel_details.get('tier_number', 'Unknown')
+
         # Define async function to handle telegram operations
         async def send_invite_async():
             """
@@ -249,17 +265,22 @@ def send_telegram_invite():
                 )
                 print(f"✅ [ENDPOINT] Invite link created: {invite.invite_link}")
 
-                # Send invite message to user
+                # Send invite message to user with enhanced format
                 await bot.send_message(
                     chat_id=user_id,
                     text=(
-                        "✅ You've been granted access!\n"
-                        "Here is your one-time invite link:\n"
-                        f"{invite.invite_link}"
+                        "🎉 Your ONE-TIME Invitation Link\n\n"
+                        f"📺 Channel: {channel_title}\n"
+                        f"🔗 {invite.invite_link}\n\n"
+                        f"📋 Subscription Details:\n"
+                        f"├ 🎯 Tier: {tier_number}\n"
+                        f"├ 💰 Price: ${subscription_price} USD\n"
+                        f"└ ⏳ Duration: {subscription_time_days} days"
                     ),
                     disable_web_page_preview=True
                 )
-                print(f"✅ [ENDPOINT] Invite message sent to user {user_id}")
+                print(f"✅ [ENDPOINT] Enhanced invite message sent to user {user_id}")
+                print(f"📺 [ENDPOINT] Message details: {channel_title}, Tier {tier_number}, ${subscription_price}, {subscription_time_days} days")
 
                 return {
                     "success": True,

@@ -1,8 +1,89 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 159 - **GCNotificationService Event Loop Fix Deployed** ✅
+**Last Updated:** 2025-11-14 Session 160 - **GCWebhook2 Enhanced Confirmation Message** ✅
 
 ## Recent Updates
+
+## 2025-11-14 Session 160: GCWebhook2 - Enhanced Confirmation Message ✅
+
+**Context:** Updated Telegram invitation confirmation message to include detailed subscription information with channel title, tier number, price, and duration. Added database lookup for channel details with graceful fallback.
+
+**Changes Made:**
+
+### Database Manager Enhancement ✅
+1. **Added `get_channel_subscription_details()` method** - New method in `database_manager.py`:
+   - Queries `main_clients_database` for channel title and tier information (lines 382-511)
+   - Matches subscription price/duration against tier 1/2/3 configurations
+   - Determines tier number (1, 2, 3, or "Unknown") based on exact price/time match
+   - Uses tolerance of 0.01 for price comparison (handles floating point precision)
+   - Returns dict with `channel_title` and `tier_number`
+   - Implements graceful fallback: `'Premium Channel'` / `'Unknown'` if lookup fails
+   - Added emoji logging: `📺 [CHANNEL]` for channel lookups
+
+### Message Format Update ✅
+2. **Updated invitation message in `tph2-10-26.py`** - Enhanced user experience:
+   - Added channel detail lookup before sending invite (lines 232-246)
+   - Wrapped lookup in try-except to prevent blocking invite send
+   - Updated message format with emojis and tree structure (lines 269-281):
+     ```
+     🎉 Your ONE-TIME Invitation Link
+
+     📺 Channel: {channel_title}
+     🔗 {invite_link}
+
+     📋 Subscription Details:
+     ├ 🎯 Tier: {tier_number}
+     ├ 💰 Price: ${subscription_price} USD
+     └ ⏳ Duration: {subscription_time_days} days
+     ```
+   - Added enhanced logging for message details (line 283)
+   - Uses tree structure characters (`├`, `└`) for visual hierarchy
+
+### Implementation Details ✅
+3. **Non-Blocking Design:**
+   - Database lookup happens BEFORE async telegram operations
+   - Fallback values prevent any errors from blocking invite send
+   - Channel detail lookup is cosmetic enhancement only
+   - Payment validation and invite link creation remain unchanged
+
+4. **Tier Matching Logic:**
+   - Compares token price/duration against database tier configurations
+   - Uses floating point tolerance (0.01) for price comparison
+   - Checks all three tiers sequentially
+   - Returns "Unknown" if no exact match found (e.g., custom pricing)
+
+**Files Modified:**
+- `/OCTOBER/10-26/GCWebhook2-10-26/database_manager.py` (added 130 lines)
+- `/OCTOBER/10-26/GCWebhook2-10-26/tph2-10-26.py` (modified message format)
+
+**Documentation Created:**
+- `/OCTOBER/10-26/CONFIRMATION_MESSAGE_UPDATE_CHECKLIST.md`
+
+**Message Enhancement:**
+- BEFORE: Simple 3-line confirmation with just invite link
+- AFTER: Professional 8-line confirmation with channel name, tier, price, duration
+
+**Deployment:**
+- Build: SUCCESS (gcr.io/telepay-459221/gcwebhook2-10-26:latest)
+- Build ID: a7603114-8158-41e5-a1f7-5d8798965db9
+- Build Duration: 36 seconds
+- Deploy: SUCCESS (revision gcwebhook2-10-26-00019-vbj)
+- Service URL: https://gcwebhook2-10-26-pjxwjsdktq-uc.a.run.app
+- Status: Ready ✅
+
+**Verification:**
+- ✅ Database manager initialized for payment validation
+- ✅ Min tolerance: 0.5 (50.0%)
+- ✅ Fallback tolerance: 0.75 (75.0%)
+- ✅ Token manager initialized
+- ✅ Telegram bot token loaded
+- ✅ Service started successfully on port 8080
+
+**Testing:** Pending - Will be tested on next payment completion
+
+**Risk Level:** LOW - Cosmetic change only, non-blocking fallbacks in place
+
+---
 
 ## 2025-11-14 Session 159: GCNotificationService Event Loop Bug Fix ✅
 
