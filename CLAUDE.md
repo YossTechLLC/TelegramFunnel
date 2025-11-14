@@ -21,4 +21,4 @@
 - REMEMBER ON DEPLOYMENT COMMAND - you can't use both --set-env-vars and --update-env-vars: 
 - REMEMBER ON DEPLOYMENT COMMAND - --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql
 - Remember you have access to context7 MCP and google MCP to find out best practices as to how the architecture you're building would be connected together to work seamlessly, securely and reliably
-- WARNING: The script flask is installed in '/home/perc/.local/bin' which is not on PATH.
+- WARNING: The script flask is installed in '/home/perc/.local/bin' which is not on PATH --> Requirement already satisfied: flask in /home/perc/.local/lib/python3.10/site-packages (3.1.2)
