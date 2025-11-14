@@ -783,7 +783,116 @@ class DatabaseManager:
             print(f"❌ [NOTIFICATION] Error fetching settings: {e}")
             return None
 
-# Validation functions
+    def get_last_broadcast_message_ids(
+        self,
+        open_channel_id: str
+    ) -> Dict[str, Optional[int]]:
+        """
+        Get the last sent message IDs for a channel pair.
+
+        Args:
+            open_channel_id: The open channel ID to query
+
+        Returns:
+            {
+                'last_open_message_id': int or None,
+                'last_closed_message_id': int or None
+            }
+        """
+        try:
+            from sqlalchemy import text
+
+            with self.pool.engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT
+                            last_open_message_id,
+                            last_closed_message_id
+                        FROM broadcast_manager
+                        WHERE open_channel_id = :open_channel_id
+                        LIMIT 1
+                    """),
+                    {'open_channel_id': open_channel_id}
+                ).fetchone()
+
+                if result:
+                    return {
+                        'last_open_message_id': result[0],
+                        'last_closed_message_id': result[1]
+                    }
+                else:
+                    return {
+                        'last_open_message_id': None,
+                        'last_closed_message_id': None
+                    }
+
+        except Exception as e:
+            print(f"❌ Error fetching message IDs for {open_channel_id}: {e}")
+            return {
+                'last_open_message_id': None,
+                'last_closed_message_id': None
+            }
+
+    def update_broadcast_message_ids(
+        self,
+        open_channel_id: str,
+        open_message_id: Optional[int] = None,
+        closed_message_id: Optional[int] = None
+    ) -> bool:
+        """
+        Update the last sent message IDs for a channel pair.
+
+        Args:
+            open_channel_id: The open channel ID
+            open_message_id: Telegram message ID sent to open channel
+            closed_message_id: Telegram message ID sent to closed channel
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from sqlalchemy import text
+
+            # Build dynamic update query
+            update_fields = []
+            params = {'open_channel_id': open_channel_id}
+
+            if open_message_id is not None:
+                update_fields.append("last_open_message_id = :open_msg_id")
+                update_fields.append("last_open_message_sent_at = NOW()")
+                params['open_msg_id'] = open_message_id
+
+            if closed_message_id is not None:
+                update_fields.append("last_closed_message_id = :closed_msg_id")
+                update_fields.append("last_closed_message_sent_at = NOW()")
+                params['closed_msg_id'] = closed_message_id
+
+            if not update_fields:
+                print("⚠️ No message IDs provided to update")
+                return False
+
+            query = f"""
+                UPDATE broadcast_manager
+                SET {', '.join(update_fields)}
+                WHERE open_channel_id = :open_channel_id
+            """
+
+            with self.pool.engine.connect() as conn:
+                conn.execute(text(query), params)
+                conn.commit()
+
+                print(
+                    f"📝 Updated message IDs for {open_channel_id} "
+                    f"(open={open_message_id}, closed={closed_message_id})"
+                )
+
+                return True
+
+        except Exception as e:
+            print(f"❌ Error updating message IDs for {open_channel_id}: {e}")
+            return False
+
+
 def _valid_channel_id(text: str) -> bool:
     """Validate that a channel ID is properly formatted."""
     if text.lstrip("-").isdigit():

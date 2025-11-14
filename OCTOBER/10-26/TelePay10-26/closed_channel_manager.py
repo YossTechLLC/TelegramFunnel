@@ -88,7 +88,58 @@ class ClosedChannelManager:
             open_channel_id = channel_info["open_channel_id"]
             donation_message = channel_info.get("closed_channel_donation_message", "Consider supporting our channel!")
 
+            # NEW: Get old message ID for deletion
+            message_ids = self.db_manager.get_last_broadcast_message_ids(open_channel_id)
+            old_message_id = message_ids.get('last_closed_message_id')
+
             try:
+                # NEW: Delete old message if exists
+                if old_message_id:
+                    self.logger.info(
+                        f"🗑️ Deleting old message {old_message_id} from {closed_channel_id}"
+                    )
+                    try:
+                        # Validate message_id
+                        if old_message_id and old_message_id > 0:
+                            await self.bot.delete_message(
+                                chat_id=closed_channel_id,
+                                message_id=old_message_id
+                            )
+                            self.logger.info(f"✅ Deleted old message {old_message_id}")
+                    except BadRequest as del_error:
+                        error_str = str(del_error).lower()
+                        if "message to delete not found" in error_str:
+                            self.logger.debug(f"⚠️ Message {old_message_id} already deleted")
+                            # Idempotent - continue
+                        elif "not enough rights" in error_str or "chat administrator" in error_str:
+                            self.logger.warning(
+                                f"⚠️ No permission to delete message {old_message_id}"
+                            )
+                        else:
+                            self.logger.warning(f"⚠️ Could not delete old message: {del_error}")
+                        # Continue even if deletion fails
+                    except Exception as del_error:
+                        # Handle RetryAfter (already imported from telegram.error)
+                        from telegram.error import RetryAfter
+                        if isinstance(del_error, RetryAfter):
+                            retry_after = del_error.retry_after
+                            self.logger.warning(
+                                f"⏱️ Rate limited when deleting, waiting {retry_after}s..."
+                            )
+                            await asyncio.sleep(retry_after)
+                            # Retry once
+                            try:
+                                await self.bot.delete_message(
+                                    chat_id=closed_channel_id,
+                                    message_id=old_message_id
+                                )
+                                self.logger.info(f"✅ Deleted old message {old_message_id} on retry")
+                            except Exception as retry_err:
+                                self.logger.warning(f"⚠️ Retry failed: {retry_err}")
+                        else:
+                            self.logger.warning(f"⚠️ Could not delete old message: {del_error}")
+                        # Continue even if deletion fails
+
                 # Create inline keyboard with single donate button
                 reply_markup = self._create_donation_button(open_channel_id)
 
@@ -96,15 +147,25 @@ class ClosedChannelManager:
                 message_text = self._format_donation_message(donation_message)
 
                 # Send to closed channel
-                await self.bot.send_message(
+                message = await self.bot.send_message(
                     chat_id=closed_channel_id,
                     text=message_text,
                     parse_mode="HTML",
                     reply_markup=reply_markup
                 )
 
+                # NEW: Update message ID in database
+                new_message_id = message.message_id
+                self.db_manager.update_broadcast_message_ids(
+                    open_channel_id=open_channel_id,
+                    closed_message_id=new_message_id
+                )
+
                 successful += 1
-                self.logger.info(f"📨 Sent donation message to {closed_channel_id}")
+                self.logger.info(
+                    f"📨 Sent donation message to {closed_channel_id} "
+                    f"(message_id={new_message_id})"
+                )
 
             except Forbidden as e:
                 # Bot not in channel or was kicked

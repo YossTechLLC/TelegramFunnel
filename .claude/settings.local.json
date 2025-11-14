@@ -89,7 +89,9 @@
       "Bash(for secret in BOT_TOKEN CLOUD_SQL_CONNECTION_NAME DATABASE_NAME_SECRET DATABASE_USER_SECRET DATABASE_PASSWORD_SECRET)",
       "Bash(do echo -n \"$secret: \")",
       "Bash(gcloud secrets describe:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(./deploy_message_tracking_migration.sh:*)",
+      "Bash(dos2unix:*)"
     ],
     "deny": [],
     "ask": []

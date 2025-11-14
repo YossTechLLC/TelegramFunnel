@@ -229,6 +229,70 @@ def process_validated_payment():
             abort(400, "Missing payment data")
 
         # ============================================================================
+        # IDEMPOTENCY CHECK: Verify payment not already processed
+        # ============================================================================
+
+        # Extract payment_id early for idempotency check
+        nowpayments_payment_id = payment_data.get('nowpayments_payment_id')
+
+        if not nowpayments_payment_id:
+            print(f"❌ [VALIDATED] Missing nowpayments_payment_id")
+            abort(400, "Missing payment_id for idempotency tracking")
+
+        print(f"")
+        print(f"🔍 [IDEMPOTENCY] Checking if payment {nowpayments_payment_id} already processed...")
+
+        if not db_manager:
+            print(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
+            print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+        else:
+            try:
+                conn = db_manager.get_connection()
+                if conn:
+                    cur = conn.cursor()
+                    cur.execute("""
+                        SELECT
+                            gcwebhook1_processed,
+                            gcwebhook1_processed_at
+                        FROM processed_payments
+                        WHERE payment_id = %s
+                    """, (nowpayments_payment_id,))
+                    existing = cur.fetchone()
+                    cur.close()
+                    conn.close()
+                else:
+                    existing = None
+
+                if existing and existing[0]:  # gcwebhook1_processed is index 0
+                    # Payment already processed - return success without re-processing
+                    # Tuple indexes: 0=gcwebhook1_processed, 1=gcwebhook1_processed_at
+                    gcwebhook1_processed = existing[0]
+                    processed_at = existing[1]
+
+                    print(f"✅ [IDEMPOTENCY] Payment already processed")
+                    print(f"   Processed at: {processed_at}")
+                    print(f"   Payment ID: {nowpayments_payment_id}")
+                    print(f"🎉 [VALIDATED] Returning success (no duplicate processing)")
+                    print(f"=" * 80)
+
+                    return jsonify({
+                        "status": "success",
+                        "message": "Payment already processed",
+                        "payment_id": nowpayments_payment_id,
+                        "processed_at": str(processed_at)
+                    }), 200
+                else:
+                    print(f"🆕 [IDEMPOTENCY] Payment not yet processed - proceeding...")
+
+            except Exception as e:
+                print(f"⚠️ [IDEMPOTENCY] Error checking payment status: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+
+        print(f"")
+
+        # ============================================================================
         # CRITICAL: Defense-in-depth - Validate payment_status again
         # ============================================================================
         payment_status = payment_data.get('payment_status', '').lower()
@@ -277,8 +341,7 @@ def process_validated_payment():
         # CRITICAL: This is the ACTUAL outcome amount in USD from CoinGecko
         outcome_amount_usd = payment_data.get('outcome_amount_usd')
 
-        # NowPayments metadata
-        nowpayments_payment_id = payment_data.get('nowpayments_payment_id')
+        # NowPayments metadata (payment_id already extracted for idempotency check)
         nowpayments_pay_address = payment_data.get('nowpayments_pay_address')
         nowpayments_outcome_amount = payment_data.get('nowpayments_outcome_amount')
 

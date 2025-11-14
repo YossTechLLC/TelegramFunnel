@@ -1,8 +1,148 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 160 - **GCWebhook2 Enhanced Confirmation Message** ✅
+**Last Updated:** 2025-01-14 Session - **Live-Time Broadcast Only Implementation** 🚀 IN PROGRESS
 
 ## Recent Updates
+
+## 2025-01-14: Live-Time Broadcast Only - Phases 1-3 Complete ✅
+
+**Context:** Implemented message deletion and replacement to ensure only the latest broadcast messages exist in channels. Messages are now deleted before resending, maintaining a clean "live-time only" presentation.
+
+**Implementation Progress:**
+
+### Phase 1: Database Schema Enhancement ✅
+- ✅ Created migration script: `add_message_tracking_columns.sql`
+- ✅ Added 4 new columns to `broadcast_manager` table:
+  - `last_open_message_id` (BIGINT) - Telegram message ID for open channel
+  - `last_closed_message_id` (BIGINT) - Telegram message ID for closed channel
+  - `last_open_message_sent_at` (TIMESTAMP) - When open message was sent
+  - `last_closed_message_sent_at` (TIMESTAMP) - When closed message was sent
+- ✅ Created indexes for efficient querying
+- ✅ Executed migration on production (`client_table` database)
+- ✅ Created rollback script for safety
+
+### Phase 2: GCBroadcastService Message Tracking ✅
+- ✅ Updated `TelegramClient` (GCBroadcastService-10-26/clients/telegram_client.py):
+  - Added `delete_message()` method with idempotent error handling
+  - Handles "message not found" as success (already deleted)
+  - Comprehensive error handling for permissions, rate limits
+- ✅ Updated `BroadcastTracker` (GCBroadcastService-10-26/services/broadcast_tracker.py):
+  - Added `update_message_ids()` method
+  - Supports partial updates (open only, closed only, or both)
+- ✅ Updated `BroadcastExecutor` (GCBroadcastService-10-26/services/broadcast_executor.py):
+  - Implemented delete-then-send workflow
+  - Deletes old open channel message before sending new one
+  - Deletes old closed channel message before sending new one
+  - Stores new message IDs after successful send
+- ✅ Updated `DatabaseClient` (GCBroadcastService-10-26/clients/database_client.py):
+  - Updated `fetch_due_broadcasts()` to include message ID columns
+
+### Phase 3: TelePay10-26 Message Tracking ✅
+- ✅ Updated `DatabaseManager` (TelePay10-26/database.py):
+  - Added `get_last_broadcast_message_ids()` method
+  - Added `update_broadcast_message_ids()` method
+  - Uses SQLAlchemy `text()` for parameterized queries
+- ✅ Updated `BroadcastManager` (TelePay10-26/broadcast_manager.py):
+  - Added `Bot` instance for async operations
+  - Added `delete_message_safe()` method
+  - Converted `broadcast_hash_links()` to async
+  - Replaced `requests.post()` with `Bot.send_message()`
+  - Implemented delete-then-send workflow
+  - Stores message IDs after send
+- ✅ Updated `ClosedChannelManager` (TelePay10-26/closed_channel_manager.py):
+  - Added message deletion logic to `send_donation_message_to_closed_channels()`
+  - Queries old message ID before sending
+  - Deletes old message if exists
+  - Stores new message ID after send
+
+**Technical Details:**
+- Delete-then-send workflow: Query old message ID → Delete old message → Send new message → Store new message ID
+- Idempotent deletion: Treats "message not found" as success
+- Graceful degradation: Deletion failures don't block sending
+- Message ID tracking: Database stores Telegram message_id for future deletion
+
+**Next Steps:**
+- Phase 4: Create shared message deletion utility module
+- Phase 5: Implement comprehensive edge case handling
+- Phase 6: Create unit and integration tests
+- Phase 7: Deploy and monitor in production
+
+## 2025-11-14 Session 160 (Part 2): GCWebhook1 - Critical Idempotency Fix ✅
+
+**Context:** Fixed CRITICAL bug where users received 3 separate one-time invitation links for 1 payment. Root cause was missing idempotency protection in GCWebhook1, allowing duplicate processing when called multiple times by upstream services.
+
+**Issue Analysis:**
+- User completed 1 payment but received **3 different invitation links**
+- Investigation revealed **3 separate Cloud Tasks** with different payment_ids: `1763148537`, `1763147598`, `1763148344`
+- All tasks for same user (`6271402111`) and channel (`-1003111266231`)
+- GCWebhook1 had idempotency check **only at the END** (marking as processed) but **NOT at the BEGINNING** (checking if already processed)
+- This allowed duplicate processing if np-webhook or other services retried the request
+
+**Security Impact:** HIGH
+- Users could potentially share multiple invite links from one payment
+- Each one-time link grants channel access
+- Violates subscription model (1 payment = 1 access)
+
+**Changes Made:**
+
+### Idempotency Protection Added ✅
+1. **Added early idempotency check in `/process-validated-payment`** (lines 231-293):
+   - Extracts `nowpayments_payment_id` immediately after payload validation
+   - Queries `processed_payments` table for existing `gcwebhook1_processed` flag
+   - Returns `200 success` immediately if payment already processed
+   - Prevents duplicate Cloud Task creation
+   - Logs: `🔍 [IDEMPOTENCY]` for all idempotency checks
+
+2. **Implementation Pattern:**
+   ```python
+   # Check if payment already processed
+   SELECT gcwebhook1_processed, gcwebhook1_processed_at
+   FROM processed_payments
+   WHERE payment_id = %s
+
+   # If already processed, return early:
+   return jsonify({
+       "status": "success",
+       "message": "Payment already processed",
+       "payment_id": nowpayments_payment_id,
+       "processed_at": str(processed_at)
+   }), 200
+
+   # Otherwise, proceed with normal processing...
+   ```
+
+3. **Fail-Open Design:**
+   - If database unavailable, proceeds with processing (logs warning)
+   - Non-blocking error handling
+   - Compatible with Cloud Tasks retry behavior
+
+**Deployment:**
+- Build: SUCCESS (gcr.io/telepay-459221/gcwebhook1-10-26:latest)
+- Deploy: SUCCESS (revision gcwebhook1-10-26-00024-tfb)
+- Service URL: https://gcwebhook1-10-26-pjxwjsdktq-uc.a.run.app
+- Status: Ready ✅
+
+**Verification:**
+- ✅ Service started successfully on port 8080
+- ✅ Database manager initialized
+- ✅ Token manager initialized
+- ✅ Idempotency check logic deployed
+
+**Testing:** Will be verified on next payment - should receive only 1 invite link
+
+**Files Modified:**
+- `/OCTOBER/10-26/GCWebhook1-10-26/tph1-10-26.py` (added idempotency check, ~60 lines)
+
+**Documentation Created:**
+- `/OCTOBER/10-26/DUPLICATE_INVITE_INVESTIGATION_REPORT.md`
+
+**Impact:**
+- BEFORE: 1 payment → potentially 3+ invitation links (security vulnerability)
+- AFTER: 1 payment → exactly 1 invitation link (correct behavior)
+
+**Risk Level:** LOW - Graceful early return, no breaking changes, fail-open design
+
+---
 
 ## 2025-11-14 Session 160: GCWebhook2 - Enhanced Confirmation Message ✅
 

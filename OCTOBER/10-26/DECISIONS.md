@@ -1,12 +1,157 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 160 - **GCWebhook2: Enhanced Confirmation Message with Database Lookup** ✅
+**Last Updated:** 2025-01-14 Session - **Live-Time Broadcast Message Deletion** 🚀
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-01-14: Live-Time Broadcast Message Deletion Architecture
+
+**Decision:** Implement delete-then-send workflow for broadcast messages
+
+**Rationale:**
+- Prevents message clutter in channels
+- Ensures only latest broadcast message is visible
+- Maintains professional channel presentation
+- Users see current pricing/donation options only
+
+**Implementation Choices:**
+
+1. **Database Schema Design:**
+   - Store message IDs as BIGINT (matches Telegram's message_id type)
+   - Separate columns for open vs closed channel messages
+   - Track timestamps for debugging and analytics
+   - Indexed for efficient querying
+
+2. **Deletion Strategy:**
+   - Delete BEFORE sending (prevents race conditions)
+   - Idempotent deletion (treat "not found" as success)
+   - Graceful degradation (deletion failures don't block sends)
+   - No retry on deletion failures (message already gone or permission issue)
+
+3. **Workflow Order:**
+   - Query old message ID from database
+   - Attempt to delete old message
+   - Send new message
+   - Store new message ID
+   - **Rationale:** Ensures database always has most recent message ID
+
+4. **Error Handling Philosophy:**
+   - Deletion errors logged but non-blocking
+   - "Message not found" treated as success (idempotent)
+   - Permission errors logged for admin attention
+   - Send operations always attempted regardless of deletion outcome
+
+5. **Code Organization:**
+   - DatabaseManager methods for message ID operations (TelePay10-26)
+   - BroadcastTracker methods for message ID operations (GCBroadcastService)
+   - Consistent delete_message implementations across both services
+   - Delete logic embedded in broadcast executors (not separate module)
+
+6. **Async/Sync Conversion:**
+   - Converted BroadcastManager.broadcast_hash_links() to async
+   - Replaced requests.post() with Bot.send_message()
+   - **Rationale:** Enables message deletion API and consistent async pattern
+
+**Trade-offs Considered:**
+- ❌ Delete AFTER send: Could leave orphaned messages if send fails
+- ✅ Delete BEFORE send: Clean state even on send failure
+- ❌ Retry deletion failures: Could cause rate limiting
+- ✅ Log and continue: Better availability, admin can investigate
+- ❌ Separate deletion utility module: Over-engineering for current needs
+- ✅ Inline deletion logic: Simpler, fewer abstractions
+
+## 2025-11-14 Session 160 (Part 2): GCWebhook1 - Early Idempotency Check Pattern
+
+**Decision:** Add idempotency check at the BEGINNING of `/process-validated-payment` endpoint to prevent duplicate processing when called multiple times.
+
+**Problem:**
+- User received 3 different invitation links for 1 payment
+- GCWebhook1 only marked payments as processed at the END
+- No check at the BEGINNING to detect already-processed payments
+- Allowed duplicate Cloud Task creation if upstream services retried
+
+**Root Cause:**
+```python
+# BEFORE (BROKEN):
+@app.route("/process-validated-payment", methods=["POST"])
+def process_validated_payment():
+    # Extract payment data
+    # Validate payment
+    # Create Cloud Tasks ❌ DUPLICATE PROCESSING
+    # Queue to GCSplit1
+    # Queue to GCWebhook2
+    # Mark as processed ← TOO LATE!
+```
+
+**Design Choices:**
+
+1. **Early Idempotency Check (CHOSEN)** ✅
+   - Check `processed_payments.gcwebhook1_processed` flag at START
+   - Return 200 success immediately if already processed
+   - Prevent duplicate Cloud Task creation
+   - Pros: Clean, effective, compatible with retries
+   - Cons: None
+
+2. **Request Deduplication Cache (REJECTED)**
+   - Use in-memory cache with request ID
+   - Cons: State not shared across instances, lost on restart
+
+3. **Cloud Tasks Task Name Deduplication (REJECTED)**
+   - Use payment_id as task name
+   - Cons: Doesn't prevent double-processing, only duplicate tasks
+
+**Implementation Pattern:**
+
+```python
+# AFTER (FIXED):
+@app.route("/process-validated-payment", methods=["POST"])
+def process_validated_payment():
+    # Extract payment_id
+    nowpayments_payment_id = payment_data.get('nowpayments_payment_id')
+
+    # ✅ CHECK IDEMPOTENCY FIRST
+    SELECT gcwebhook1_processed FROM processed_payments WHERE payment_id = %s
+
+    if already_processed:
+        # Return success without re-processing
+        return jsonify({"status": "success", "message": "Payment already processed"}), 200
+
+    # Otherwise, proceed with normal processing
+    # Create Cloud Tasks
+    # Queue to GCSplit1
+    # Queue to GCWebhook2
+    # Mark as processed
+```
+
+**Why Early Check is Critical:**
+- Prevents duplicate Cloud Tasks (expensive operations)
+- Prevents duplicate GCSplit1 processing (money movement)
+- Prevents duplicate GCWebhook2 invites (security issue)
+- Compatible with np-webhook retry behavior
+- Idempotent by definition (safe to call multiple times)
+
+**Fail-Open Strategy:**
+- If database unavailable → log warning and proceed
+- Rationale: Better to risk duplicate than block legitimate payments
+- np-webhook will retry failed requests anyway
+- GCWebhook2 has its own idempotency protection
+
+**Security Consideration:**
+- Without this fix: Users could get multiple invite links per payment
+- Each link grants channel access (1 payment → 3 people get access)
+- Violates subscription model
+- Potential revenue loss for channel owners
+
+**Alternative Considered:**
+- Database transaction locks: Rejected (complex, performance impact)
+- Optimistic locking: Rejected (race conditions still possible)
+- Early check is simplest and most effective
+
+---
 
 ## 2025-11-14 Session 160: GCWebhook2 - Enhanced Confirmation Message Design
 
