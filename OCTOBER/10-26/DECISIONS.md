@@ -1,12 +1,136 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Service Redundancy Identified** 🔍
+**Last Updated:** 2025-11-14 - **Service Redundancy Cleanup Complete** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: GCBroadcastService Removal - Cleanup Complete ✅
+
+**Decision:** DELETE GCBroadcastService-10-26 entirely
+**Status:** ✅ **EXECUTED AND COMPLETE**
+
+**Implementation Completed:**
+1. ✅ Paused `gcbroadcastservice-daily` Cloud Scheduler job
+2. ✅ Verified GCBroadcastScheduler-10-26 operational (HEALTHY)
+3. ✅ Deleted `gcbroadcastservice-10-26` Cloud Run service
+4. ✅ Deleted `gcbroadcastservice-daily` scheduler job permanently
+5. ✅ Archived code: `OCTOBER/ARCHIVES/GCBroadcastService-10-26-archived-2025-11-14`
+
+**Infrastructure State After Cleanup:**
+- ✅ ONE broadcast service: `gcbroadcastscheduler-10-26`
+- ✅ ONE scheduler job: `broadcast-scheduler-daily` (every 5 minutes)
+- ✅ Clean code directory: Only Scheduler in `10-26/`
+- ✅ Redundant service archived for historical reference
+
+**Benefits Achieved:**
+- ✅ Eliminated 100% functional duplication
+- ✅ Reduced cloud infrastructure costs (~50% for broadcast services)
+- ✅ Removed developer confusion (single source of truth)
+- ✅ Eliminated potential race conditions at 12:00 UTC daily
+- ✅ Simplified monitoring and debugging
+- ✅ Clear service ownership and responsibility
+
+**Validation:**
+- User insight: "I have a feeling that BroadcastService may not be necessary"
+- Analysis confirmed: 100% redundancy across all endpoints and modules
+- Decision executed: Service and infrastructure completely removed
+- Verification: GCBroadcastScheduler continues operating normally
+
+**Documentation:**
+- Full analysis: `BROADCAST_SERVICE_REDUNDANCY_ANALYSIS.md`
+- Cleanup logged: `PROGRESS.md` (2025-11-14 entry)
+
+---
+
+## 2025-11-14: Database Cursor Management Pattern - Migrate to NEW_ARCHITECTURE ✅
+
+**Decision:** Migrate all database cursor operations to SQLAlchemy `text()` pattern (NEW_ARCHITECTURE)
+
+**Context:**
+- Production error: `'Cursor' object does not support the context manager protocol`
+- Service affected: GCBroadcastScheduler-10-26
+- Error location: `broadcast_tracker.py` line 199 (`update_message_ids` method)
+- Root cause: pg8000 cursors do NOT support `with` statement
+
+**Problem:**
+```python
+# WRONG - pg8000 cursors don't support context managers:
+with self.db.get_connection() as conn:
+    with conn.cursor() as cur:  # ❌ ERROR
+        cur.execute(query, params)
+```
+
+**Options Considered:**
+
+**Option A: Quick Fix (Just add cur.close())**
+```python
+with self.db.get_connection() as conn:
+    cur = conn.cursor()
+    try:
+        cur.execute(query, params)
+    finally:
+        cur.close()  # Manual cleanup
+```
+- ✅ Quick to implement
+- ❌ Still uses %s string formatting (SQL injection risk)
+- ❌ Not aligned with NEW_ARCHITECTURE
+- ❌ Manual resource management
+- **Rejected**
+
+**Option B: NEW_ARCHITECTURE Pattern (SQLAlchemy text())**
+```python
+engine = self._get_engine()
+with engine.connect() as conn:
+    query = text("SELECT ... WHERE id = :id")
+    result = conn.execute(query, {"id": value})
+    conn.commit()  # For DML
+```
+- ✅ Automatic cursor lifecycle management
+- ✅ Named parameters (better SQL injection protection)
+- ✅ Consistent with NEW_ARCHITECTURE design
+- ✅ Future ORM migration path
+- ✅ Better error messages
+- **Selected**
+
+**Decision Rationale:**
+1. Aligns with existing NEW_ARCHITECTURE pattern used in other services
+2. Better security through named parameters (`:param` vs `%s`)
+3. SQLAlchemy handles all resource cleanup automatically
+4. Enables future migration to ORM if needed
+5. Cleaner, more maintainable code
+6. Better debugging with SQLAlchemy's detailed error messages
+
+**Implementation:**
+- ✅ Updated 11 methods across 2 files
+- ✅ All methods migrated to `text()` pattern
+- ✅ Replaced `%s` with `:named_params`
+- ✅ Used `row._mapping` for dictionary conversion
+- ✅ Added `conn.commit()` for DML operations
+
+**Benefits Realized:**
+1. Error eliminated: No more cursor context manager errors
+2. Code quality: Consistent SQLAlchemy pattern across service
+3. Security: Named parameters prevent SQL injection
+4. Maintainability: Easier to understand and modify
+5. Future-proof: ORM migration path available
+
+**Lessons Learned:**
+- pg8000 driver has limitations (no context manager support)
+- SQLAlchemy `text()` is the preferred pattern for raw SQL
+- Always use named parameters for security
+- Resource management should be handled by frameworks, not manually
+- NEW_ARCHITECTURE pattern should be applied universally
+
+**Reference:**
+- CON_CURSOR_MAYBE_CHECKLIST.md - Original guidance
+- CON_CURSOR_CLEANUP_PROGRESS.md - Implementation tracking
+- CLAUDE.md - "REMEMBER Wrong fix (just adding cur.close()) --> correct pattern (SQLAlchemy text())"
+
+---
 
 ## 2025-11-14: GCBroadcastService Redundancy - User Insight Validated ✅
 

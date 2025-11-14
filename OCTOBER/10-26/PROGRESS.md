@@ -1,8 +1,99 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Service Redundancy Analysis Complete** 🔍
+**Last Updated:** 2025-11-14 - **Service Redundancy Cleanup Complete** ✅
 
 ## Recent Updates
+
+## 2025-11-14: GCBroadcastService-10-26 Redundancy Cleanup Complete ✅
+
+**Action:** Removed redundant GCBroadcastService-10-26 service and infrastructure
+**Status:** ✅ **CLEANUP COMPLETE**
+
+**Actions Completed:**
+1. ✅ Paused `gcbroadcastservice-daily` Cloud Scheduler job
+2. ✅ Verified GCBroadcastScheduler-10-26 continues working:
+   - Status: ENABLED, running every 5 minutes
+   - Last execution: 2025-11-14T23:25:00Z
+   - Service health: HEALTHY (revision: gcbroadcastscheduler-10-26-00013-snr)
+3. ✅ Deleted `gcbroadcastservice-10-26` Cloud Run service
+4. ✅ Deleted `gcbroadcastservice-daily` scheduler job
+5. ✅ Archived code: `OCTOBER/ARCHIVES/GCBroadcastService-10-26-archived-2025-11-14`
+
+**Infrastructure Removed:**
+- ❌ Cloud Run Service: `gcbroadcastservice-10-26` (DELETED)
+- ❌ Scheduler Job: `gcbroadcastservice-daily` (DELETED)
+- ❌ Code Directory: `GCBroadcastService-10-26` (ARCHIVED)
+
+**Remaining Active Service:**
+- ✅ Cloud Run Service: `gcbroadcastscheduler-10-26`
+- ✅ Scheduler Job: `broadcast-scheduler-daily` (every 5 minutes)
+- ✅ Latest Revision: `gcbroadcastscheduler-10-26-00013-snr`
+
+**Verification:**
+- GCBroadcastScheduler is the ONLY broadcast service
+- No duplicate scheduler jobs remain
+- Code directory clean (only Scheduler in 10-26/)
+- Redundant service archived for reference
+
+**Benefits Realized:**
+- Eliminated architectural redundancy
+- Reduced cloud infrastructure costs
+- Removed confusion about which service to update
+- Eliminated potential race conditions
+- Single source of truth for broadcast functionality
+
+**User Insight Validated:** "I have a feeling that BroadcastService may not be necessary" ✅ CORRECT
+
+---
+
+## 2025-11-14: GCBroadcastScheduler Cursor Context Manager Fix ✅
+
+**Issue:** Production error - `'Cursor' object does not support the context manager protocol`
+**Service:** gcbroadcastscheduler-10-26
+**Resolution:** Migrated to NEW_ARCHITECTURE SQLAlchemy text() pattern
+
+**Root Cause:**
+- pg8000 cursors do NOT support the `with` statement (context manager protocol)
+- Code was attempting: `with conn.cursor() as cur:` which is invalid for pg8000
+- Error occurred in `broadcast_tracker.py` when updating message IDs
+
+**Changes Made:**
+- ✅ Refactored `database_manager.py` (9 methods)
+- ✅ Refactored `broadcast_tracker.py` (2 methods)
+- ✅ Migrated from cursor pattern to SQLAlchemy `text()` pattern
+- ✅ Replaced `%s` parameters with named parameters (`:param`)
+- ✅ Updated to use `engine.connect()` instead of raw connections
+
+**Methods Updated:**
+1. `fetch_due_broadcasts()` - SELECT with JOIN
+2. `fetch_broadcast_by_id()` - SELECT with parameters
+3. `update_broadcast_status()` - UPDATE
+4. `update_broadcast_success()` - UPDATE with datetime
+5. `update_broadcast_failure()` - UPDATE with RETURNING
+6. `get_manual_trigger_info()` - SELECT tuple
+7. `queue_manual_broadcast()` - UPDATE with RETURNING
+8. `get_broadcast_statistics()` - SELECT stats
+9. `reset_consecutive_failures()` - UPDATE (broadcast_tracker)
+10. `update_message_ids()` - Dynamic UPDATE (broadcast_tracker) **[FIX FOR ORIGINAL ERROR]**
+
+**Deployment:**
+- ✅ Built: `gcr.io/telepay-459221/gcbroadcastscheduler-10-26:latest`
+- ✅ Deployed: Revision `gcbroadcastscheduler-10-26-00013-snr`
+- ✅ Verified: No cursor errors in logs
+- ✅ Service: HEALTHY and OPERATIONAL
+
+**Benefits:**
+- ✅ Automatic cursor lifecycle management
+- ✅ Better SQL injection protection (named params)
+- ✅ Consistent with NEW_ARCHITECTURE pattern
+- ✅ Future ORM migration path enabled
+- ✅ Better error messages from SQLAlchemy
+
+**Documentation:**
+- ✅ Created `CON_CURSOR_CLEANUP_PROGRESS.md` with full tracking
+- ✅ Updated PROGRESS.md, DECISIONS.md, BUGS.md
+
+---
 
 ## 2025-11-14: Broadcast Service Redundancy Identified & Documented ✅
 

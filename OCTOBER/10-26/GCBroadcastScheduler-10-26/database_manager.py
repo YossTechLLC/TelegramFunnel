@@ -10,7 +10,7 @@ from datetime import datetime
 from contextlib import contextmanager
 from google.cloud.sql.connector import Connector
 import sqlalchemy
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 from config_manager import ConfigManager
 
@@ -109,19 +109,19 @@ class DatabaseManager:
 
         Also joins with main_clients_database to get channel details.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() for safe query execution.
+
         Returns:
             List of broadcast entries with full channel details
         """
         try:
             self.logger.info("🔍 [DEBUG] fetch_due_broadcasts() called")
 
-            with self.get_connection() as conn:
+            engine = self._get_engine()
+            with engine.connect() as conn:
                 self.logger.info("🔍 [DEBUG] Database connection obtained")
 
-                cur = conn.cursor()
-                self.logger.info("🔍 [DEBUG] Cursor created")
-
-                query = """
+                query = text("""
                     SELECT
                         bm.id,
                         bm.client_id,
@@ -152,21 +152,21 @@ class DatabaseManager:
                         AND bm.next_send_time <= NOW()
                         AND bm.consecutive_failures < 5
                     ORDER BY bm.next_send_time ASC
-                """
+                """)
 
                 self.logger.info("🔍 [DEBUG] Executing query...")
-                cur.execute(query)
+                result = conn.execute(query)
 
                 self.logger.info("🔍 [DEBUG] Fetching all rows...")
-                rows = cur.fetchall()
+                rows = result.fetchall()
 
                 self.logger.info(f"🔍 [DEBUG] Fetched {len(rows)} rows from database")
 
                 # Convert rows to dictionaries
-                columns = [desc[0] for desc in cur.description]
-                self.logger.info(f"🔍 [DEBUG] Column names: {columns}")
+                columns = result.keys()
+                self.logger.info(f"🔍 [DEBUG] Column names: {list(columns)}")
 
-                broadcasts = [dict(zip(columns, row)) for row in rows]
+                broadcasts = [dict(row._mapping) for row in rows]
 
                 self.logger.info(f"📋 Found {len(broadcasts)} broadcasts due for sending")
 
@@ -188,6 +188,8 @@ class DatabaseManager:
         """
         Fetch a single broadcast entry by ID.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
 
@@ -195,9 +197,9 @@ class DatabaseManager:
             Broadcast entry dict or None if not found
         """
         try:
-            with self.get_connection() as conn:
-                cur = conn.cursor()
-                query = """
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                query = text("""
                     SELECT
                         bm.*,
                         mc.open_channel_title,
@@ -214,15 +216,14 @@ class DatabaseManager:
                     FROM broadcast_manager bm
                     LEFT JOIN main_clients_database mc
                         ON bm.open_channel_id = mc.open_channel_id
-                    WHERE bm.id = %s
-                """
+                    WHERE bm.id = :broadcast_id
+                """)
 
-                cur.execute(query, (broadcast_id,))
-                row = cur.fetchone()
+                result = conn.execute(query, {"broadcast_id": broadcast_id})
+                row = result.fetchone()
 
                 if row:
-                    columns = [desc[0] for desc in cur.description]
-                    return dict(zip(columns, row))
+                    return dict(row._mapping)
                 else:
                     self.logger.warning(f"⚠️ Broadcast not found: {broadcast_id}")
                     return None
@@ -235,6 +236,8 @@ class DatabaseManager:
         """
         Update broadcast status.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
             status: New status ('pending', 'in_progress', 'completed', 'failed', 'skipped')
@@ -243,15 +246,17 @@ class DatabaseManager:
             True if successful, False otherwise
         """
         try:
-            with self.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("""
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                query = text("""
                     UPDATE broadcast_manager
-                    SET broadcast_status = %s
-                    WHERE id = %s
-                """, (status, broadcast_id))
+                    SET broadcast_status = :status
+                    WHERE id = :broadcast_id
+                """)
 
+                conn.execute(query, {"status": status, "broadcast_id": broadcast_id})
                 conn.commit()
+
                 self.logger.debug(f"📝 Updated status: {broadcast_id} → {status}")
                 return True
 
@@ -276,6 +281,8 @@ class DatabaseManager:
         - consecutive_failures = 0
         - last_error_message = NULL
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
             next_send_time: When to send next broadcast
@@ -284,23 +291,28 @@ class DatabaseManager:
             True if successful, False otherwise
         """
         try:
-            with self.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("""
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                query = text("""
                     UPDATE broadcast_manager
                     SET
                         broadcast_status = 'completed',
                         last_sent_time = NOW(),
-                        next_send_time = %s,
+                        next_send_time = :next_send_time,
                         total_broadcasts = total_broadcasts + 1,
                         successful_broadcasts = successful_broadcasts + 1,
                         consecutive_failures = 0,
                         last_error_message = NULL,
                         last_error_time = NULL
-                    WHERE id = %s
-                """, (next_send_time, broadcast_id))
+                    WHERE id = :broadcast_id
+                """)
 
+                conn.execute(query, {
+                    "next_send_time": next_send_time,
+                    "broadcast_id": broadcast_id
+                })
                 conn.commit()
+
                 self.logger.info(f"✅ Marked success: {broadcast_id}")
                 return True
 
@@ -320,6 +332,8 @@ class DatabaseManager:
         - last_error_time = NOW()
         - is_active = false (if consecutive_failures >= 5)
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
             error_message: Error description
@@ -328,29 +342,33 @@ class DatabaseManager:
             True if successful, False otherwise
         """
         try:
-            with self.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("""
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                query = text("""
                     UPDATE broadcast_manager
                     SET
                         broadcast_status = 'failed',
                         failed_broadcasts = failed_broadcasts + 1,
                         consecutive_failures = consecutive_failures + 1,
-                        last_error_message = %s,
+                        last_error_message = :error_message,
                         last_error_time = NOW(),
                         is_active = CASE
                             WHEN consecutive_failures + 1 >= 5 THEN false
                             ELSE is_active
                         END
-                    WHERE id = %s
+                    WHERE id = :broadcast_id
                     RETURNING consecutive_failures, is_active
-                """, (error_message, broadcast_id))
+                """)
 
-                result = cur.fetchone()
+                result = conn.execute(query, {
+                    "error_message": error_message,
+                    "broadcast_id": broadcast_id
+                })
+                row = result.fetchone()
                 conn.commit()
 
-                if result:
-                    failures, is_active = result
+                if row:
+                    failures, is_active = row
                     if not is_active:
                         self.logger.warning(
                             f"⚠️ Broadcast {broadcast_id} deactivated after {failures} consecutive failures"
@@ -370,6 +388,8 @@ class DatabaseManager:
         """
         Get last manual trigger time for rate limiting.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
 
@@ -377,16 +397,18 @@ class DatabaseManager:
             Tuple of (client_id, last_manual_trigger_time) or None
         """
         try:
-            with self.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("""
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                query = text("""
                     SELECT client_id, last_manual_trigger_time
                     FROM broadcast_manager
-                    WHERE id = %s
-                """, (broadcast_id,))
+                    WHERE id = :broadcast_id
+                """)
 
-                result = cur.fetchone()
-                return result if result else None
+                result = conn.execute(query, {"broadcast_id": broadcast_id})
+                row = result.fetchone()
+
+                return tuple(row) if row else None
 
         except Exception as e:
             self.logger.error(f"❌ Error fetching manual trigger info: {e}")
@@ -398,6 +420,8 @@ class DatabaseManager:
 
         Sets next_send_time = NOW() to trigger on next cron run.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
 
@@ -405,23 +429,24 @@ class DatabaseManager:
             True if successfully queued, False otherwise
         """
         try:
-            with self.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("""
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                query = text("""
                     UPDATE broadcast_manager
                     SET
                         next_send_time = NOW(),
                         broadcast_status = 'pending',
                         last_manual_trigger_time = NOW(),
                         manual_trigger_count = manual_trigger_count + 1
-                    WHERE id = %s
+                    WHERE id = :broadcast_id
                     RETURNING id
-                """, (broadcast_id,))
+                """)
 
-                result = cur.fetchone()
+                result = conn.execute(query, {"broadcast_id": broadcast_id})
+                row = result.fetchone()
                 conn.commit()
 
-                if result:
+                if row:
                     self.logger.info(f"✅ Queued manual broadcast: {broadcast_id}")
                     return True
                 else:
@@ -436,6 +461,8 @@ class DatabaseManager:
         """
         Get broadcast statistics for API responses.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
 
@@ -443,9 +470,9 @@ class DatabaseManager:
             Dictionary with statistics or None
         """
         try:
-            with self.get_connection() as conn:
-                cur = conn.cursor()
-                cur.execute("""
+            engine = self._get_engine()
+            with engine.connect() as conn:
+                query = text("""
                     SELECT
                         id,
                         broadcast_status,
@@ -460,14 +487,14 @@ class DatabaseManager:
                         is_active,
                         manual_trigger_count
                     FROM broadcast_manager
-                    WHERE id = %s
-                """, (broadcast_id,))
+                    WHERE id = :broadcast_id
+                """)
 
-                row = cur.fetchone()
+                result = conn.execute(query, {"broadcast_id": broadcast_id})
+                row = result.fetchone()
 
                 if row:
-                    columns = [desc[0] for desc in cur.description]
-                    return dict(zip(columns, row))
+                    return dict(row._mapping)
                 else:
                     return None
 

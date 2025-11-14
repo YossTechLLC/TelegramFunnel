@@ -92,7 +92,9 @@
       "Bash(bash:*)",
       "Bash(./deploy_message_tracking_migration.sh:*)",
       "Bash(dos2unix:*)",
-      "Bash(gcloud sql databases list:*)"
+      "Bash(gcloud sql databases list:*)",
+      "Bash(gcloud scheduler jobs pause:*)",
+      "Bash(gcloud run services delete:*)"
     ],
     "deny": [],
     "ask": []

@@ -7,6 +7,7 @@ Handles state transitions, statistics, and error tracking
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
+from sqlalchemy import text
 from database_manager import DatabaseManager
 from config_manager import ConfigManager
 
@@ -120,6 +121,8 @@ class BroadcastTracker:
 
         This is typically called when manually reactivating a disabled broadcast.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
 
@@ -127,18 +130,20 @@ class BroadcastTracker:
             True if successful, False otherwise
         """
         try:
-            with self.db.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        UPDATE broadcast_manager
-                        SET consecutive_failures = 0,
-                            is_active = true
-                        WHERE id = %s
-                    """, (broadcast_id,))
+            engine = self.db._get_engine()
+            with engine.connect() as conn:
+                query = text("""
+                    UPDATE broadcast_manager
+                    SET consecutive_failures = 0,
+                        is_active = true
+                    WHERE id = :broadcast_id
+                """)
 
-                    conn.commit()
-                    self.logger.info(f"🔄 Reset consecutive failures: {broadcast_id[:8]}...")
-                    return True
+                conn.execute(query, {"broadcast_id": broadcast_id})
+                conn.commit()
+
+                self.logger.info(f"🔄 Reset consecutive failures: {broadcast_id[:8]}...")
+                return True
 
         except Exception as e:
             self.logger.error(f"❌ Error resetting failures: {e}")
@@ -155,6 +160,8 @@ class BroadcastTracker:
 
         This enables deletion of old messages when resending broadcasts.
 
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
         Args:
             broadcast_id: UUID of the broadcast entry
             open_message_id: Telegram message ID sent to open channel
@@ -169,43 +176,41 @@ class BroadcastTracker:
         try:
             # Build dynamic update query
             update_fields = []
-            params = []
+            params = {"broadcast_id": broadcast_id}
 
             if open_message_id is not None:
-                update_fields.append("last_open_message_id = %s")
+                update_fields.append("last_open_message_id = :open_message_id")
                 update_fields.append("last_open_message_sent_at = NOW()")
-                params.append(open_message_id)
+                params["open_message_id"] = open_message_id
 
             if closed_message_id is not None:
-                update_fields.append("last_closed_message_id = %s")
+                update_fields.append("last_closed_message_id = :closed_message_id")
                 update_fields.append("last_closed_message_sent_at = NOW()")
-                params.append(closed_message_id)
+                params["closed_message_id"] = closed_message_id
 
             if not update_fields:
                 self.logger.warning("⚠️ No message IDs provided to update")
                 return False
 
-            # Add broadcast_id to params
-            params.append(broadcast_id)
-
             # Construct query
-            query = f"""
+            query_str = f"""
                 UPDATE broadcast_manager
                 SET {', '.join(update_fields)}
-                WHERE id = %s
+                WHERE id = :broadcast_id
             """
 
-            with self.db.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(query, tuple(params))
-                    conn.commit()
+            engine = self.db._get_engine()
+            with engine.connect() as conn:
+                query = text(query_str)
+                conn.execute(query, params)
+                conn.commit()
 
-                    self.logger.info(
-                        f"📝 Updated message IDs for broadcast {str(broadcast_id)[:8]}... "
-                        f"(open={open_message_id}, closed={closed_message_id})"
-                    )
+                self.logger.info(
+                    f"📝 Updated message IDs for broadcast {str(broadcast_id)[:8]}... "
+                    f"(open={open_message_id}, closed={closed_message_id})"
+                )
 
-                    return True
+                return True
 
         except Exception as e:
             self.logger.error(f"❌ Failed to update message IDs: {e}")

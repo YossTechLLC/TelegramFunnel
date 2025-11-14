@@ -1,10 +1,98 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 155
+**Last Updated:** 2025-11-14 Session 156
 
 ---
 
 ## Recently Resolved
+
+## 2025-11-14 Session 156: ✅ RESOLVED - GCBroadcastScheduler Cursor Context Manager Error
+
+**Severity:** 🔴 CRITICAL - Production service error
+**Status:** ✅ RESOLVED (Deployed in gcbroadcastscheduler-10-26-00013-snr)
+**Service:** GCBroadcastScheduler-10-26
+**Error:** `'Cursor' object does not support the context manager protocol`
+
+**Symptom:**
+```
+2025-11-14 23:10:06,862 - database_manager - ERROR - ❌ Database error: 'Cursor' object does not support the context manager protocol
+2025-11-14 23:10:06,862 - broadcast_tracker - ERROR - ❌ Failed to update message IDs: 'Cursor' object does not support the context manager protocol
+```
+
+**Root Cause:**
+- pg8000 database driver cursors do NOT support the `with` statement (context manager protocol)
+- Code attempted: `with conn.cursor() as cur:` which is invalid for pg8000
+- Error occurred in `broadcast_tracker.py` line 199 when calling `update_message_ids()`
+- This pattern existed in 11 methods across 2 files
+
+**Affected Methods:**
+1. `database_manager.py`:
+   - `fetch_due_broadcasts()`
+   - `fetch_broadcast_by_id()`
+   - `update_broadcast_status()`
+   - `update_broadcast_success()`
+   - `update_broadcast_failure()`
+   - `get_manual_trigger_info()`
+   - `queue_manual_broadcast()`
+   - `get_broadcast_statistics()`
+
+2. `broadcast_tracker.py`:
+   - `reset_consecutive_failures()`
+   - `update_message_ids()` **[PRIMARY ERROR SOURCE]**
+
+**Fix Applied:**
+Migrated all methods to NEW_ARCHITECTURE SQLAlchemy `text()` pattern:
+
+**Before (Problematic):**
+```python
+with self.db.get_connection() as conn:
+    with conn.cursor() as cur:  # ❌ pg8000 cursors don't support this
+        cur.execute("SELECT ... WHERE id = %s", (id,))
+        result = cur.fetchone()
+```
+
+**After (Fixed):**
+```python
+engine = self.db._get_engine()
+with engine.connect() as conn:
+    query = text("SELECT ... WHERE id = :id")  # ✅ Named parameters
+    result = conn.execute(query, {"id": id})
+    row = result.fetchone()
+    # SQLAlchemy handles cursor lifecycle automatically
+```
+
+**Benefits of Fix:**
+1. ✅ Error eliminated - no more cursor context manager issues
+2. ✅ Automatic resource management by SQLAlchemy
+3. ✅ Better SQL injection protection (named parameters)
+4. ✅ Consistent with NEW_ARCHITECTURE pattern
+5. ✅ Future ORM migration path available
+6. ✅ Better error messages from SQLAlchemy
+
+**Testing:**
+- ✅ Deployed to Cloud Run successfully
+- ✅ Service health checks passing
+- ✅ Broadcast execution working correctly
+- ✅ No cursor errors in logs
+- ✅ Message tracking functional
+- ✅ Database operations healthy
+
+**Deployment:**
+- Build: `gcr.io/telepay-459221/gcbroadcastscheduler-10-26:latest`
+- Revision: `gcbroadcastscheduler-10-26-00013-snr`
+- Deployment time: 2025-11-14 23:25:37 UTC
+- Status: LIVE and OPERATIONAL
+
+**Documentation:**
+- ✅ CON_CURSOR_CLEANUP_PROGRESS.md created
+- ✅ PROGRESS.md updated
+- ✅ DECISIONS.md updated
+- ✅ BUGS.md updated
+
+**Lesson Learned:**
+pg8000 cursors require explicit `.close()` or automatic management through SQLAlchemy. Never use `with conn.cursor() as cur:` with pg8000. Always prefer SQLAlchemy `text()` pattern for consistency and safety.
+
+---
 
 ## 2025-11-14 Session 155: ✅ RESOLVED - Missing broadcast_manager Entries for New Users
 
