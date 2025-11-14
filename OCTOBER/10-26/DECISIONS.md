@@ -1,12 +1,94 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 156 - **GCNotificationService NEW_ARCHITECTURE Migration** ✅
+**Last Updated:** 2025-11-14 Session 157 - **Notification Message Refactor: Payout Configuration Display** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 157: Display Payout Configuration in Notifications (Not Payment Amounts)
+
+**Decision:** Refactored payment notification messages to show client payout configuration (instant/threshold) instead of crypto payment amounts, with PayGatePrime branding.
+
+**Context:**
+- Notifications were showing crypto amounts and NowPayments branding
+- Channel owners need to see their payout method configuration, not raw payment details
+- Threshold mode requires live progress tracking to show accumulation towards payout threshold
+- User requested: "Show payout method, not payment amounts"
+
+**Rationale:**
+
+1. **Client-Centric Information**
+   - Channel owners care about HOW they get paid, not raw crypto amounts
+   - Payout method (instant vs threshold) is more actionable information
+   - Wallet address confirmation ensures payouts go to correct destination
+
+2. **PayGatePrime Branding**
+   - Remove 3rd-party payment processor (NowPayments) visibility
+   - Consistent branded experience for channel owners
+   - Reinforces PayGatePrime as the payment platform
+
+3. **Live Threshold Progress**
+   - Threshold mode needs real-time accumulation tracking
+   - Shows "$47.50 / $100.00 (47.5%)" progress towards payout
+   - Helps channel owners anticipate when next payout occurs
+   - Query: `SUM(payment_amount_usd) WHERE is_paid_out = FALSE`
+
+4. **Modular Architecture**
+   - Created separate `_format_payout_section()` method
+   - Keeps notification formatting clean and testable
+   - Easy to add new payout strategies in future
+   - Follows separation of concerns principle
+
+**Implementation Details:**
+
+**New Database Methods:**
+- `get_payout_configuration()` - Returns payout_strategy, wallet_address, currency, network, threshold
+- `get_threshold_progress()` - Calculates live accumulated unpaid amount
+
+**Message Changes:**
+- REMOVED: Payment Amount section (crypto + USD)
+- ADDED: Payout Method section (strategy-specific)
+- CHANGED: "NowPayments IPN" → "PayGatePrime"
+- FIXED: Duplicate User ID line
+
+**Edge Cases:**
+- Long wallet addresses: Truncate to "0x1234...5678" if > 48 chars
+- Division by zero: Check threshold_usd > 0 before calculating percentage
+- Missing config: Display "Payout Method: Not configured"
+- NULL accumulation: Default to Decimal('0.00')
+
+**Performance Impact:**
+- +2 database queries per notification (minimal overhead)
+- Threshold query: Simple SUM with is_paid_out filter (indexed)
+- Connection pooling mitigates query overhead
+
+**Alternatives Considered:**
+
+1. **Keep showing payment amounts**
+   - Rejected: Not useful for channel owners
+   - Raw crypto amounts don't help with business decisions
+
+2. **Cache payout configuration**
+   - Rejected: Configuration changes infrequent, caching overhead not justified
+   - Connection pooling provides adequate performance
+
+3. **Batch threshold progress updates**
+   - Rejected: Real-time progress more valuable
+   - Query is lightweight (single SUM aggregation)
+
+**Follow-up Actions:**
+- Deploy updated GCNotificationService (blocked by build issues)
+- Test threshold mode with mock accumulated payments
+- Monitor notification delivery performance
+- Gather channel owner feedback on new format
+
+**Related Files:**
+- `/GCNotificationService-10-26/database_manager.py`
+- `/GCNotificationService-10-26/notification_handler.py`
+- `/NOTIFICATION_MESSAGE_REFACTOR_CHECKLIST.md`
 
 ## 2025-11-14 Session 156: Migrate GCNotificationService to NEW_ARCHITECTURE Pattern
 

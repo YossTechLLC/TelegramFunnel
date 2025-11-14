@@ -81,7 +81,9 @@
       "Bash(fi)",
       "WebSearch",
       "Bash(tee:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(export DB_PASSWORD='Chigdabeast123$')",
+      "Bash(export NOWPAYMENTS_IPN_SECRET='1EQDQWRpHwAsF7dHmI4N/gAaQ/IKrDQs')"
     ],
     "deny": [],
     "ask": []

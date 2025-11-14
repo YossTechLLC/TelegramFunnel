@@ -5,6 +5,7 @@ Handles PostgreSQL connections and notification queries using NEW_ARCHITECTURE p
 """
 import os
 from typing import Optional, Tuple, Dict, Any
+from decimal import Decimal
 import logging
 from google.cloud.sql.connector import Connector
 from sqlalchemy import create_engine, pool, text
@@ -188,4 +189,120 @@ class DatabaseManager:
 
         except Exception as e:
             logger.error(f"❌ [DATABASE] Error fetching channel details: {e}")
+            return None
+
+    def get_payout_configuration(self, open_channel_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get payout configuration for notification message (NEW_ARCHITECTURE pattern)
+
+        Args:
+            open_channel_id: The open channel ID to fetch payout configuration for
+
+        Returns:
+            Dict containing payout configuration or None if not found:
+            {
+                "payout_strategy": str,        # "instant" or "threshold"
+                "wallet_address": str,         # e.g., "0x249A83b498acE1177920566CE83CADA0A56F69D8"
+                "payout_currency": str,        # e.g., "SHIB", "USDT", "ETH"
+                "payout_network": str,         # e.g., "ETH", "TRX", "BSC"
+                "threshold_usd": Decimal       # e.g., 100.00 (NULL for instant mode)
+            }
+
+        Example:
+            >>> db.get_payout_configuration("-1003202734748")
+            {
+                "payout_strategy": "instant",
+                "wallet_address": "0x249A83b498acE1177920566CE83CADA0A56F69D8",
+                "payout_currency": "SHIB",
+                "payout_network": "ETH",
+                "threshold_usd": None
+            }
+        """
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT
+                            payout_strategy,
+                            client_wallet_address,
+                            client_payout_currency::text,
+                            client_payout_network::text,
+                            payout_threshold_usd
+                        FROM main_clients_database
+                        WHERE open_channel_id = :open_channel_id
+                    """),
+                    {"open_channel_id": str(open_channel_id)}
+                )
+
+                row = result.fetchone()
+
+                if row:
+                    payout_config = {
+                        "payout_strategy": row[0] if row[0] else "instant",
+                        "wallet_address": row[1],
+                        "payout_currency": row[2],
+                        "payout_network": row[3],
+                        "threshold_usd": row[4]  # Can be None for instant mode
+                    }
+                    logger.info(
+                        f"✅ [DATABASE] Payout config for {open_channel_id}: "
+                        f"strategy={payout_config['payout_strategy']}, "
+                        f"currency={payout_config['payout_currency']}, "
+                        f"network={payout_config['payout_network']}"
+                    )
+                    return payout_config
+                else:
+                    logger.warning(f"⚠️ [DATABASE] No payout configuration found for {open_channel_id}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"❌ [DATABASE] Error fetching payout configuration: {e}")
+            return None
+
+    def get_threshold_progress(self, open_channel_id: str) -> Optional[Decimal]:
+        """
+        Get current accumulated amount for threshold payout mode (NEW_ARCHITECTURE pattern)
+
+        Calculates the sum of all unpaid payment amounts for a client channel.
+        Used to display live progress towards payout threshold.
+
+        Args:
+            open_channel_id: The open channel ID (client_id in payout_accumulation)
+
+        Returns:
+            Decimal: Total accumulated USD not yet paid out, or None if query fails
+            Returns Decimal('0.00') if no unpaid payments exist
+
+        Example:
+            >>> db.get_threshold_progress("-1003202734748")
+            Decimal('47.50')
+        """
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT COALESCE(SUM(payment_amount_usd), 0) as current_accumulated
+                        FROM payout_accumulation
+                        WHERE client_id = :open_channel_id
+                          AND is_paid_out = FALSE
+                    """),
+                    {"open_channel_id": str(open_channel_id)}
+                )
+
+                row = result.fetchone()
+
+                if row:
+                    accumulated = row[0] if row[0] is not None else Decimal('0.00')
+                    logger.info(
+                        f"✅ [DATABASE] Threshold progress for {open_channel_id}: "
+                        f"${accumulated} accumulated"
+                    )
+                    return accumulated
+                else:
+                    # Should not happen due to COALESCE, but handle defensively
+                    logger.info(f"✅ [DATABASE] No accumulated payments for {open_channel_id}")
+                    return Decimal('0.00')
+
+        except Exception as e:
+            logger.error(f"❌ [DATABASE] Error fetching threshold progress: {e}")
             return None

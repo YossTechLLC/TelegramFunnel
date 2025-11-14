@@ -5,6 +5,7 @@ Handles notification formatting and delivery logic
 """
 from typing import Optional, Dict, Any
 from datetime import datetime
+from decimal import Decimal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -124,16 +125,21 @@ class NotificationHandler:
         channel_info = self.db_manager.get_channel_details_by_open_id(open_channel_id)
         channel_title = channel_info['closed_channel_title'] if channel_info else 'Your Channel'
 
+        # Fetch payout configuration (NEW)
+        payout_config = self.db_manager.get_payout_configuration(open_channel_id)
+
         # Extract common fields
         user_id = payment_data.get('user_id', 'Unknown')
         username = payment_data.get('username', None)
-        amount_crypto = payment_data.get('amount_crypto', '0')
-        amount_usd = payment_data.get('amount_usd', '0')
-        crypto_currency = payment_data.get('crypto_currency', 'CRYPTO')
         timestamp = payment_data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'))
 
-        # Format user display
-        user_display = f"@{username}" if username else f"User ID: {user_id}"
+        # Format user display (simplified - no duplicate User ID)
+        user_display = f"User ID: <code>{user_id}</code>"
+        if username:
+            user_display = f"@{username} (<code>{user_id}</code>)"
+
+        # Build payout section based on configuration
+        payout_section = self._format_payout_section(open_channel_id, payout_config)
 
         if payment_type == 'subscription':
             # Subscription payment notification
@@ -147,20 +153,17 @@ class NotificationHandler:
 <b>Channel ID:</b> <code>{open_channel_id}</code>
 
 <b>Customer:</b> {user_display}
-<b>User ID:</b> <code>{user_id}</code>
 
 <b>Subscription Details:</b>
 ├ Tier: {tier}
 ├ Price: ${tier_price} USD
 └ Duration: {duration_days} days
 
-<b>Payment Amount:</b>
-├ Crypto: {amount_crypto} {crypto_currency}
-└ USD Value: ${amount_usd}
+{payout_section}
 
 <b>Timestamp:</b> {timestamp}
 
-✅ Payment confirmed via NowPayments IPN"""
+✅ Payment confirmed via PayGatePrime"""
 
         elif payment_type == 'donation':
             # Donation payment notification
@@ -170,15 +173,12 @@ class NotificationHandler:
 <b>Channel ID:</b> <code>{open_channel_id}</code>
 
 <b>Donor:</b> {user_display}
-<b>User ID:</b> <code>{user_id}</code>
 
-<b>Donation Amount:</b>
-├ Crypto: {amount_crypto} {crypto_currency}
-└ USD Value: ${amount_usd}
+{payout_section}
 
 <b>Timestamp:</b> {timestamp}
 
-✅ Payment confirmed via NowPayments IPN
+✅ Payment confirmed via PayGatePrime
 
 Thank you for creating valuable content! 🙏"""
 
@@ -190,13 +190,80 @@ Thank you for creating valuable content! 🙏"""
 <b>Channel ID:</b> <code>{open_channel_id}</code>
 
 <b>Customer:</b> {user_display}
-<b>User ID:</b> <code>{user_id}</code>
 
-<b>Amount:</b> {amount_crypto} {crypto_currency} (${amount_usd} USD)
+{payout_section}
 
-<b>Timestamp:</b> {timestamp}"""
+<b>Timestamp:</b> {timestamp}
+
+✅ Payment confirmed via PayGatePrime"""
 
         return message
+
+    def _format_payout_section(
+        self,
+        open_channel_id: str,
+        payout_config: Optional[Dict[str, Any]]
+    ) -> str:
+        """
+        Format the payout method section of the notification
+
+        Args:
+            open_channel_id: Channel ID for threshold progress lookup
+            payout_config: Payout configuration dict from database
+
+        Returns:
+            Formatted payout section string
+        """
+        if not payout_config:
+            return "<b>Payout Method:</b> Not configured"
+
+        payout_strategy = payout_config.get('payout_strategy', 'instant')
+        wallet_address = payout_config.get('wallet_address', 'N/A')
+        payout_currency = payout_config.get('payout_currency', 'N/A')
+        payout_network = payout_config.get('payout_network', 'N/A')
+        threshold_usd = payout_config.get('threshold_usd')
+
+        # Handle long wallet addresses (truncate if > 48 chars)
+        wallet_display = wallet_address
+        if wallet_address and len(wallet_address) > 48:
+            wallet_display = f"{wallet_address[:20]}...{wallet_address[-20:]}"
+
+        if payout_strategy == 'instant':
+            # Instant payout mode
+            return f"""<b>Payout Method:</b> INSTANT
+├ Currency: {payout_currency}
+├ Network: {payout_network}
+└ Wallet: <code>{wallet_display}</code>"""
+
+        elif payout_strategy == 'threshold':
+            # Threshold payout mode with live progress tracking
+            current_accumulated = self.db_manager.get_threshold_progress(open_channel_id)
+
+            # Handle None return (query error)
+            if current_accumulated is None:
+                current_accumulated = Decimal('0.00')
+
+            # Calculate progress percentage (with division-by-zero protection)
+            if threshold_usd and threshold_usd > 0:
+                progress_percent = (current_accumulated / threshold_usd) * 100
+            else:
+                progress_percent = Decimal('0.0')
+
+            # Format amounts with 2 decimal places
+            current_str = f"{current_accumulated:.2f}"
+            threshold_str = f"{threshold_usd:.2f}" if threshold_usd else "0.00"
+            progress_str = f"{progress_percent:.1f}"
+
+            return f"""<b>Payout Method:</b> THRESHOLD
+├ Currency: {payout_currency}
+├ Network: {payout_network}
+├ Wallet: <code>{wallet_display}</code>
+├ Threshold: ${threshold_str} USD
+└ Progress: ${current_str} / ${threshold_str} ({progress_str}%)"""
+
+        else:
+            # Unknown strategy
+            return f"<b>Payout Method:</b> {payout_strategy} (unknown)"
 
     def test_notification(self, chat_id: int, channel_title: str = "Test Channel") -> bool:
         """

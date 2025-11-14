@@ -1,8 +1,120 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 156 - **GCNotificationService Migrated to NEW_ARCHITECTURE Pattern** ✅
+**Last Updated:** 2025-11-14 Session 157 - **Notification Message Refactor: PayGatePrime Branding + Payout Method Display** ✅
 
 ## Recent Updates
+
+## 2025-11-14 Session 157: Refactored Notification Messages - PayGate Prime Branding + Payout Configuration Display ✅
+
+**Context:** Refactored payment notifications to remove NowPayments branding, hide payment amounts, and display client payout method configuration (instant/threshold with live progress tracking).
+
+**Changes Made:**
+
+1. **Updated `database_manager.py`** - Added 2 new methods for payout configuration:
+   - Added `get_payout_configuration()` - Fetches payout_strategy, wallet_address, payout_currency, payout_network, threshold_usd
+   - Added `get_threshold_progress()` - Calculates live accumulated unpaid amount for threshold mode
+   - Both methods use NEW_ARCHITECTURE pattern (SQLAlchemy text() + named parameters)
+   - Added `from decimal import Decimal` import for precise financial calculations
+
+2. **Updated `notification_handler.py`** - Complete message formatting overhaul:
+   - Added `_format_payout_section()` helper method for modular payout display
+   - Removed payment amount display (amount_crypto, amount_usd, crypto_currency)
+   - Added payout configuration fetching via `self.db_manager.get_payout_configuration()`
+   - Implemented INSTANT mode section: Currency, Network, Wallet
+   - Implemented THRESHOLD mode section: Currency, Network, Wallet, Threshold, Live Progress
+   - Changed branding: "NowPayments IPN" → "PayGatePrime"
+   - Removed duplicate "User ID" line from notification
+   - Added wallet address truncation (>48 chars: first 20 + ... + last 20)
+   - Added division-by-zero protection for threshold percentage calculation
+   - Added None handling for accumulated amounts (defaults to 0.00)
+
+3. **Created test scripts**:
+   - `test_payout_database_methods.py` - Tests both new database methods independently
+   - Test results: ✅ ALL TESTS PASSED - Verified with channel -1003202734748
+
+**New Notification Format (INSTANT mode):**
+```
+🎉 New Subscription Payment!
+
+Channel: 11-11 SHIBA CLOSED INSTANT
+Channel ID: -1003202734748
+
+Customer: User ID: 6271402111
+
+Subscription Details:
+├ Tier: 1
+├ Price: $5.0 USD
+└ Duration: 5 days
+
+Payout Method: INSTANT
+├ Currency: SHIB
+├ Network: ETH
+└ Wallet: 0x249A83b498acE1177920566CE83CADA0A56F69D8
+
+Timestamp: 2025-11-14 12:34:56 UTC
+
+✅ Payment confirmed via PayGatePrime
+```
+
+**New Notification Format (THRESHOLD mode):**
+```
+Payout Method: THRESHOLD
+├ Currency: USDT
+├ Network: TRX
+├ Wallet: TXyz123...abc
+├ Threshold: $100.00 USD
+└ Progress: $47.50 / $100.00 (47.5%)
+```
+
+**Database Queries Added:**
+```sql
+-- Get Payout Configuration
+SELECT payout_strategy, client_wallet_address,
+       client_payout_currency::text, client_payout_network::text,
+       payout_threshold_usd
+FROM main_clients_database
+WHERE open_channel_id = :open_channel_id
+
+-- Get Threshold Progress (Live)
+SELECT COALESCE(SUM(payment_amount_usd), 0) as current_accumulated
+FROM payout_accumulation
+WHERE client_id = :open_channel_id AND is_paid_out = FALSE
+```
+
+**Edge Cases Handled:**
+- NULL threshold_usd for instant mode
+- Missing payout configuration (displays "Not configured")
+- Long wallet addresses (>48 chars truncated)
+- Division by zero in threshold percentage
+- None return from accumulation query (defaults to 0.00)
+- Decimal precision: USD amounts (2 places), percentage (1 place)
+
+**Files Modified:**
+- `/GCNotificationService-10-26/database_manager.py` (+120 lines)
+- `/GCNotificationService-10-26/notification_handler.py` (+80 lines refactor)
+
+**Files Created:**
+- `/NOTIFICATION_MESSAGE_REFACTOR_CHECKLIST.md` (Architecture & verification checklist)
+- `/NOTIFICATION_MESSAGE_REFACTOR_CHECKLIST_PROGRESS.md` (Implementation tracking)
+- `/TOOLS_SCRIPTS_TESTS/tools/test_payout_database_methods.py` (Test script)
+
+**Testing Status:**
+- ✅ Database methods tested independently - ALL TESTS PASSED
+- ✅ Instant mode tested with channel -1003202734748
+- ⏳ Deployment blocked by Cloud Run build failures (infrastructure issue, not code)
+- ⏳ Threshold mode E2E test pending deployment
+
+**Deployment Status:**
+- Code ready and tested
+- Deployment failing during Cloud Build phase (unrelated to code changes)
+- Existing service (revision 00003-84d) still running with old code
+- Manual deployment or build troubleshooting required
+
+**Next Steps:**
+1. Resolve Cloud Run build failure (infrastructure/build config issue)
+2. Deploy updated GCNotificationService
+3. Run E2E test with threshold mode
+4. Verify notifications in production
 
 ## 2025-11-14 Session 156: Migrated GCNotificationService to NEW_ARCHITECTURE Pattern (SQLAlchemy + Cloud SQL Connector) ✅
 
