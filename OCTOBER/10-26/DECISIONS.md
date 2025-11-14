@@ -1,12 +1,142 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 153 - **Secret Manager Fetch Pattern Enforcement** ✅
+**Last Updated:** 2025-11-14 Session 154 - **Standardized Database Connection Pattern** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 154: Standardize Database Connection Pattern Using SQLAlchemy
+
+**Decision:** ALL database operations MUST use `pool.engine.connect()` with SQLAlchemy `text()`, not raw connection patterns with `get_connection()`
+
+**Problem Discovered:**
+Multiple database methods used incorrect nested context manager pattern:
+```python
+# ❌ INCORRECT PATTERN (8 instances found)
+with self.get_connection() as conn, conn.cursor() as cur:
+    cur.execute("SELECT ...", (param,))
+```
+
+This failed because:
+1. `get_connection()` returns SQLAlchemy's `_ConnectionFairy` wrapper
+2. Calling `.cursor()` on `_ConnectionFairy` returns raw psycopg2 cursor
+3. Raw psycopg2 cursor doesn't support nested context manager syntax
+4. Error: "_ConnectionFairy' object does not support the context manager protocol"
+
+**Impact:**
+- 🔴 CRITICAL: 8 database methods non-functional on startup
+- 🔴 Open channel fetching failed (subscription system broken)
+- 🔴 Channel configuration updates failed (dashboard broken)
+- 🔴 Subscription expiration monitoring failed
+- 🔴 Donation flow database queries failed
+
+**Affected Files:**
+- `database.py`: 6 methods
+- `subscription_manager.py`: 2 methods
+
+**Architectural Decision:**
+
+### Mandatory Pattern: SQLAlchemy Connection with text()
+
+**✅ CORRECT PATTERN (All database operations):**
+```python
+from sqlalchemy import text
+
+# For SELECT queries
+with self.pool.engine.connect() as conn:
+    result = conn.execute(text("SELECT * FROM table WHERE id = :id"), {"id": value})
+    rows = result.fetchall()
+
+# For UPDATE/INSERT/DELETE queries
+with self.pool.engine.connect() as conn:
+    result = conn.execute(
+        text("UPDATE table SET field = :field WHERE id = :id"),
+        {"field": new_value, "id": record_id}
+    )
+    conn.commit()  # MUST commit for data modifications
+    rows_affected = result.rowcount
+```
+
+**❌ DEPRECATED PATTERN (Do NOT use):**
+```python
+# NEVER use this pattern - it's incompatible with SQLAlchemy pooling
+with self.get_connection() as conn, conn.cursor() as cur:
+    cur.execute("SELECT ...", (param,))
+```
+
+**Why This Pattern?**
+1. **Consistent with NEW_ARCHITECTURE:** Uses SQLAlchemy engine pooling
+2. **Proper connection management:** Context manager handles cleanup automatically
+3. **Compatible with connection pool:** Works seamlessly with `ConnectionPool` class
+4. **Type safety:** `text()` provides SQL injection protection
+5. **Explicit transactions:** Clear when commits are needed
+6. **Future ORM compatibility:** Can migrate to ORM models later
+
+**Query Parameter Syntax:**
+```python
+# ✅ CORRECT - Named parameters with dict
+text("SELECT * FROM table WHERE id = :id"), {"id": value}
+
+# ❌ INCORRECT - Positional parameters with tuple (old psycopg2 style)
+cur.execute("SELECT * FROM table WHERE id = %s", (value,))
+```
+
+**Commit Rules:**
+- **SELECT queries:** NO commit needed
+- **UPDATE queries:** MUST call `conn.commit()`
+- **INSERT queries:** MUST call `conn.commit()`
+- **DELETE queries:** MUST call `conn.commit()`
+
+**get_connection() Method Status:**
+The `get_connection()` method (database.py:133) is now **DEPRECATED** and kept only for backward compatibility:
+```python
+def get_connection(self):
+    """
+    ⚠️ DEPRECATED: Prefer using execute_query() or get_session() for better connection management.
+    This method is kept for backward compatibility with legacy code.
+    """
+    return self.pool.engine.raw_connection()
+```
+
+**Migration Strategy:**
+1. All NEW code must use `pool.engine.connect()` pattern
+2. All EXISTING code should migrate to new pattern when touched
+3. Search for `with.*get_connection().*conn.cursor()` pattern periodically
+4. Eventually remove `get_connection()` method entirely
+
+**Files Refactored (Session 154):**
+1. `database.py` - 6 methods migrated:
+   - `fetch_open_channel_list()` - Line 209
+   - `get_default_donation_channel()` - Line 305
+   - `fetch_channel_by_id()` - Line 537
+   - `update_channel_config()` - Line 590
+   - `fetch_expired_subscriptions()` - Line 650
+   - `deactivate_subscription()` - Line 708
+
+2. `subscription_manager.py` - 2 methods migrated:
+   - `fetch_expired_subscriptions()` - Line 96
+   - `deactivate_subscription()` - Line 197
+
+**Verification:**
+- ✅ Searched entire codebase: NO remaining instances of broken pattern
+- ✅ All database operations now use consistent pattern
+- ✅ All methods maintain backward-compatible return values
+
+**Benefits:**
+1. Eliminates context manager compatibility issues
+2. Consistent with SQLAlchemy best practices
+3. Better connection pool utilization
+4. Easier to debug (clear transaction boundaries)
+5. Safer parameter handling (prevents SQL injection)
+
+**Related Decisions:**
+- Session 153: Secret Manager fetch pattern enforcement
+- NEW_ARCHITECTURE: Connection pooling with SQLAlchemy
+
+---
 
 ## 2025-11-14 Session 153: Enforce Secret Manager Fetch Pattern for All Secrets
 

@@ -1,8 +1,93 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 153 - **CLOUD_SQL_CONNECTION_NAME Secret Manager Fix** ✅
+**Last Updated:** 2025-11-14 Session 154 - **Context Manager Pattern Fix for Database Operations** ✅
 
 ## Recent Updates
+
+## 2025-11-14 Session 154: Fixed Incorrect Context Manager Pattern in Database Operations ✅
+
+**Issue:** Multiple database query methods failing with "_ConnectionFairy' object does not support the context manager protocol" error
+
+**Error Message:**
+```
+❌ db open_channel error: '_ConnectionFairy' object does not support the context manager protocol
+```
+
+**Affected Methods (8 total):**
+- `database.py`: 6 methods
+  - `fetch_open_channel_list()` (line 209)
+  - `get_default_donation_channel()` (line 305)
+  - `fetch_channel_by_id()` (line 537)
+  - `update_channel_config()` (line 590)
+  - `fetch_expired_subscriptions()` (line 650)
+  - `deactivate_subscription()` (line 708)
+- `subscription_manager.py`: 2 methods
+  - `fetch_expired_subscriptions()` (line 96)
+  - `deactivate_subscription()` (line 197)
+
+**Root Cause:**
+Incorrect nested context manager pattern using `with self.get_connection() as conn, conn.cursor() as cur:` - the `conn.cursor()` call returns a raw psycopg2 cursor that doesn't support nested context manager syntax with SQLAlchemy's `_ConnectionFairy` wrapper.
+
+**Fix Applied:**
+
+**Old Pattern (BROKEN):**
+```python
+with self.get_connection() as conn, conn.cursor() as cur:
+    cur.execute("SELECT ...", (param,))
+    result = cur.fetchall()
+```
+
+**New Pattern (FIXED):**
+```python
+from sqlalchemy import text
+
+with self.pool.engine.connect() as conn:
+    result = conn.execute(text("SELECT ... WHERE id = :id"), {"id": param})
+    rows = result.fetchall()
+    # For UPDATE/INSERT/DELETE:
+    conn.commit()
+```
+
+**Key Changes:**
+1. Changed from `self.get_connection()` to `self.pool.engine.connect()`
+2. Wrapped SQL queries with `text()` for SQLAlchemy compatibility
+3. Changed parameter placeholders from `%s` to `:param_name`
+4. Changed parameter passing from tuples to dictionaries
+5. Added `conn.commit()` for UPDATE/INSERT/DELETE operations
+6. Maintained backward compatibility (all return values unchanged)
+
+**Files Modified:**
+1. ✅ `TelePay10-26/database.py` - Fixed 6 methods:
+   - `fetch_open_channel_list()` - SELECT query
+   - `get_default_donation_channel()` - SELECT query
+   - `fetch_channel_by_id()` - Parameterized SELECT query
+   - `update_channel_config()` - UPDATE query with commit
+   - `fetch_expired_subscriptions()` - Complex SELECT with datetime parsing
+   - `deactivate_subscription()` - UPDATE query with commit
+
+2. ✅ `TelePay10-26/subscription_manager.py` - Fixed 2 methods:
+   - `fetch_expired_subscriptions()` - Complex SELECT with datetime parsing
+   - `deactivate_subscription()` - UPDATE query with commit
+
+**Expected Results:**
+- ✅ Open channel list fetches successfully on startup
+- ✅ Closed channel donation messages work correctly
+- ✅ Channel configurations can be queried and updated via dashboard
+- ✅ Subscription expiration monitoring functions correctly
+- ✅ Database operations use proper connection pooling
+- ✅ All error handling preserved and functional
+
+**Verification:**
+- Searched entire codebase: NO more instances of incorrect pattern found
+- Pattern confirmed consistent with NEW_ARCHITECTURE design
+- All methods use proper SQLAlchemy `text()` syntax
+
+**Documentation Updated:**
+- ✅ BUGS.md - Session 154 entry added
+- ✅ PROGRESS.md - This entry
+- ⏳ DECISIONS.md - Pending
+
+---
 
 ## 2025-11-14 Session 153: Cloud SQL Connection Name Secret Manager Fix ✅
 

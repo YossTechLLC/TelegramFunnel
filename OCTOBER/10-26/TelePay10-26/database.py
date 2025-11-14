@@ -202,13 +202,17 @@ class DatabaseManager:
         Fetch all open_channel_id channels and their subscription info from database.
         Returns: (open_channel_list, open_channel_info_map)
         """
+        from sqlalchemy import text
+
         open_channel_list = []
         open_channel_info_map = {}
 
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT open_channel_id, open_channel_title, open_channel_description, closed_channel_id, closed_channel_title, closed_channel_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency, client_payout_network FROM main_clients_database")
-                for (open_channel_id, open_channel_title, open_channel_desc, closed_channel_id, closed_channel_title, closed_channel_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency, payout_network) in cur.fetchall():
+            with self.pool.engine.connect() as conn:
+                result = conn.execute(text(
+                    "SELECT open_channel_id, open_channel_title, open_channel_description, closed_channel_id, closed_channel_title, closed_channel_description, sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time, client_wallet_address, client_payout_currency, client_payout_network FROM main_clients_database"
+                ))
+                for (open_channel_id, open_channel_title, open_channel_desc, closed_channel_id, closed_channel_title, closed_channel_desc, s1_price, s1_time, s2_price, s2_time, s3_price, s3_time, wallet_addr, payout_currency, payout_network) in result.fetchall():
                     open_channel_list.append(open_channel_id)
                     open_channel_info_map[open_channel_id] = {
                         "open_channel_title": open_channel_title,
@@ -301,13 +305,15 @@ class DatabaseManager:
         Returns:
             The first available open_channel_id, or None if no channels exist
         """
+        from sqlalchemy import text
+
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
-                cur.execute("SELECT open_channel_id FROM main_clients_database LIMIT 1")
-                result = cur.fetchone()
-                if result:
-                    print(f"🎯 [DEBUG] Found default donation channel: {result[0]}")
-                    return result[0]
+            with self.pool.engine.connect() as conn:
+                result = conn.execute(text("SELECT open_channel_id FROM main_clients_database LIMIT 1"))
+                row = result.fetchone()
+                if row:
+                    print(f"🎯 [DEBUG] Found default donation channel: {row[0]}")
+                    return row[0]
                 else:
                     print("ℹ️ [DEBUG] No channels found in database for default donation")
                     return None
@@ -533,37 +539,39 @@ class DatabaseManager:
         Returns:
             Dictionary with all channel data if found, None otherwise
         """
+        from sqlalchemy import text
+
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
+            with self.pool.engine.connect() as conn:
                 print(f"🔍 [DB] Fetching channel config for open_channel_id: {open_channel_id}")
-                cur.execute(
-                    """SELECT open_channel_id, open_channel_title, open_channel_description,
+                result = conn.execute(
+                    text("""SELECT open_channel_id, open_channel_title, open_channel_description,
                               closed_channel_id, closed_channel_title, closed_channel_description,
                               sub_1_price, sub_1_time, sub_2_price, sub_2_time, sub_3_price, sub_3_time,
                               client_wallet_address, client_payout_currency, client_payout_network
                        FROM main_clients_database
-                       WHERE open_channel_id = %s""",
-                    (str(open_channel_id),)
+                       WHERE open_channel_id = :open_channel_id"""),
+                    {"open_channel_id": str(open_channel_id)}
                 )
-                result = cur.fetchone()
+                row = result.fetchone()
 
-                if result:
+                if row:
                     channel_data = {
-                        "open_channel_id": result[0],
-                        "open_channel_title": result[1],
-                        "open_channel_description": result[2],
-                        "closed_channel_id": result[3],
-                        "closed_channel_title": result[4],
-                        "closed_channel_description": result[5],
-                        "sub_1_price": result[6],
-                        "sub_1_time": result[7],
-                        "sub_2_price": result[8],
-                        "sub_2_time": result[9],
-                        "sub_3_price": result[10],
-                        "sub_3_time": result[11],
-                        "client_wallet_address": result[12],
-                        "client_payout_currency": result[13],
-                        "client_payout_network": result[14],
+                        "open_channel_id": row[0],
+                        "open_channel_title": row[1],
+                        "open_channel_description": row[2],
+                        "closed_channel_id": row[3],
+                        "closed_channel_title": row[4],
+                        "closed_channel_description": row[5],
+                        "sub_1_price": row[6],
+                        "sub_1_time": row[7],
+                        "sub_2_price": row[8],
+                        "sub_2_time": row[9],
+                        "sub_3_price": row[10],
+                        "sub_3_time": row[11],
+                        "client_wallet_address": row[12],
+                        "client_payout_currency": row[13],
+                        "client_payout_network": row[14],
                     }
                     print(f"✅ [DB] Channel config found for {open_channel_id}")
                     return channel_data
@@ -586,43 +594,46 @@ class DatabaseManager:
         Returns:
             True if successful, False otherwise
         """
+        from sqlalchemy import text
+
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
+            with self.pool.engine.connect() as conn:
                 print(f"💾 [DB] Updating channel config for {open_channel_id}")
-                cur.execute(
-                    """UPDATE main_clients_database
-                       SET open_channel_title = %s,
-                           open_channel_description = %s,
-                           closed_channel_id = %s,
-                           closed_channel_title = %s,
-                           closed_channel_description = %s,
-                           sub_1_price = %s,
-                           sub_1_time = %s,
-                           sub_2_price = %s,
-                           sub_2_time = %s,
-                           sub_3_price = %s,
-                           sub_3_time = %s,
-                           client_wallet_address = %s,
-                           client_payout_currency = %s
-                       WHERE open_channel_id = %s""",
-                    (
-                        channel_data.get("open_channel_title"),
-                        channel_data.get("open_channel_description"),
-                        channel_data.get("closed_channel_id"),
-                        channel_data.get("closed_channel_title"),
-                        channel_data.get("closed_channel_description"),
-                        channel_data.get("sub_1_price"),
-                        channel_data.get("sub_1_time"),
-                        channel_data.get("sub_2_price"),
-                        channel_data.get("sub_2_time"),
-                        channel_data.get("sub_3_price"),
-                        channel_data.get("sub_3_time"),
-                        channel_data.get("client_wallet_address"),
-                        channel_data.get("client_payout_currency"),
-                        str(open_channel_id),
-                    )
+                result = conn.execute(
+                    text("""UPDATE main_clients_database
+                       SET open_channel_title = :open_channel_title,
+                           open_channel_description = :open_channel_description,
+                           closed_channel_id = :closed_channel_id,
+                           closed_channel_title = :closed_channel_title,
+                           closed_channel_description = :closed_channel_description,
+                           sub_1_price = :sub_1_price,
+                           sub_1_time = :sub_1_time,
+                           sub_2_price = :sub_2_price,
+                           sub_2_time = :sub_2_time,
+                           sub_3_price = :sub_3_price,
+                           sub_3_time = :sub_3_time,
+                           client_wallet_address = :client_wallet_address,
+                           client_payout_currency = :client_payout_currency
+                       WHERE open_channel_id = :open_channel_id"""),
+                    {
+                        "open_channel_title": channel_data.get("open_channel_title"),
+                        "open_channel_description": channel_data.get("open_channel_description"),
+                        "closed_channel_id": channel_data.get("closed_channel_id"),
+                        "closed_channel_title": channel_data.get("closed_channel_title"),
+                        "closed_channel_description": channel_data.get("closed_channel_description"),
+                        "sub_1_price": channel_data.get("sub_1_price"),
+                        "sub_1_time": channel_data.get("sub_1_time"),
+                        "sub_2_price": channel_data.get("sub_2_price"),
+                        "sub_2_time": channel_data.get("sub_2_time"),
+                        "sub_3_price": channel_data.get("sub_3_price"),
+                        "sub_3_time": channel_data.get("sub_3_time"),
+                        "client_wallet_address": channel_data.get("client_wallet_address"),
+                        "client_payout_currency": channel_data.get("client_payout_currency"),
+                        "open_channel_id": str(open_channel_id),
+                    }
                 )
-                rows_affected = cur.rowcount
+                conn.commit()
+                rows_affected = result.rowcount
 
                 if rows_affected > 0:
                     print(f"✅ [DB] Channel config updated successfully for {open_channel_id}")
@@ -638,90 +649,97 @@ class DatabaseManager:
     def fetch_expired_subscriptions(self) -> List[Tuple[int, int, str, str]]:
         """
         Fetch all expired subscriptions from database.
-        
+
         Returns:
             List of tuples: (user_id, private_channel_id, expire_time, expire_date)
         """
         from datetime import datetime
-        
+        from sqlalchemy import text
+
         expired_subscriptions = []
-        
+
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
+            with self.pool.engine.connect() as conn:
                 # Query active subscriptions with expiration data
                 query = """
                     SELECT user_id, private_channel_id, expire_time, expire_date
-                    FROM private_channel_users_database 
-                    WHERE is_active = true 
-                    AND expire_time IS NOT NULL 
+                    FROM private_channel_users_database
+                    WHERE is_active = true
+                    AND expire_time IS NOT NULL
                     AND expire_date IS NOT NULL
                 """
-                
-                cur.execute(query)
-                results = cur.fetchall()
-                
+
+                result = conn.execute(text(query))
+                results = result.fetchall()
+
                 current_datetime = datetime.now()
-                
+
                 for row in results:
                     user_id, private_channel_id, expire_time_str, expire_date_str = row
-                    
+
                     try:
                         # Parse expiration time and date
                         if isinstance(expire_date_str, str):
                             expire_date_obj = datetime.strptime(expire_date_str, '%Y-%m-%d').date()
                         else:
                             expire_date_obj = expire_date_str
-                            
+
                         if isinstance(expire_time_str, str):
                             expire_time_obj = datetime.strptime(expire_time_str, '%H:%M:%S').time()
                         else:
                             expire_time_obj = expire_time_str
-                        
+
                         # Combine date and time
                         expire_datetime = datetime.combine(expire_date_obj, expire_time_obj)
-                        
+
                         # Check if subscription has expired
                         if current_datetime > expire_datetime:
                             expired_subscriptions.append((user_id, private_channel_id, expire_time_str, expire_date_str))
-                    
+
                     except Exception as e:
                         print(f"❌ Error parsing expiration data for user {user_id}: {e}")
                         continue
-                        
+
         except Exception as e:
             print(f"❌ Database error fetching expired subscriptions: {e}")
-            
+
         return expired_subscriptions
     
     def deactivate_subscription(self, user_id: int, private_channel_id: int) -> bool:
         """
         Mark subscription as inactive in database.
-        
+
         Args:
             user_id: User's Telegram ID
             private_channel_id: Private channel ID
-            
+
         Returns:
             True if successful, False otherwise
         """
+        from sqlalchemy import text
+
         try:
-            with self.get_connection() as conn, conn.cursor() as cur:
+            with self.pool.engine.connect() as conn:
                 update_query = """
-                    UPDATE private_channel_users_database 
-                    SET is_active = false 
-                    WHERE user_id = %s AND private_channel_id = %s AND is_active = true
+                    UPDATE private_channel_users_database
+                    SET is_active = false
+                    WHERE user_id = :user_id AND private_channel_id = :private_channel_id AND is_active = true
                 """
-                
-                cur.execute(update_query, (user_id, private_channel_id))
-                rows_affected = cur.rowcount
-                
+
+                result = conn.execute(text(update_query), {
+                    "user_id": user_id,
+                    "private_channel_id": private_channel_id
+                })
+                conn.commit()
+                rows_affected = result.rowcount
+
                 if rows_affected > 0:
                     print(f"📝 [DEBUG] Marked subscription as inactive: user {user_id}, channel {private_channel_id}")
                     return True
                 else:
                     print(f"⚠️ [WARNING] No active subscription found to deactivate: user {user_id}, channel {private_channel_id}")
                     return False
-                    
+
         except Exception as e:
             print(f"❌ [ERROR] Database error deactivating subscription for user {user_id}, channel {private_channel_id}: {e}")
             return False

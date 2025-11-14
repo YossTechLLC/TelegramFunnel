@@ -86,58 +86,60 @@ class SubscriptionManager:
     def fetch_expired_subscriptions(self) -> List[Tuple[int, int, str, str]]:
         """
         Fetch all expired subscriptions from database.
-        
+
         Returns:
             List of tuples: (user_id, private_channel_id, expire_time, expire_date)
         """
+        from sqlalchemy import text
+
         expired_subscriptions = []
-        
+
         try:
-            with self.db_manager.get_connection() as conn, conn.cursor() as cur:
+            with self.db_manager.pool.engine.connect() as conn:
                 # Query active subscriptions with expiration data
                 query = """
                     SELECT user_id, private_channel_id, expire_time, expire_date
-                    FROM private_channel_users_database 
-                    WHERE is_active = true 
-                    AND expire_time IS NOT NULL 
+                    FROM private_channel_users_database
+                    WHERE is_active = true
+                    AND expire_time IS NOT NULL
                     AND expire_date IS NOT NULL
                 """
-                
-                cur.execute(query)
-                results = cur.fetchall()
-                
+
+                result = conn.execute(text(query))
+                results = result.fetchall()
+
                 current_datetime = datetime.now()
-                
+
                 for row in results:
                     user_id, private_channel_id, expire_time_str, expire_date_str = row
-                    
+
                     try:
                         # Parse expiration time and date
                         if isinstance(expire_date_str, str):
                             expire_date_obj = datetime.strptime(expire_date_str, '%Y-%m-%d').date()
                         else:
                             expire_date_obj = expire_date_str
-                            
+
                         if isinstance(expire_time_str, str):
                             expire_time_obj = datetime.strptime(expire_time_str, '%H:%M:%S').time()
                         else:
                             expire_time_obj = expire_time_str
-                        
+
                         # Combine date and time
                         expire_datetime = datetime.combine(expire_date_obj, expire_time_obj)
-                        
+
                         # Check if subscription has expired
                         if current_datetime > expire_datetime:
                             expired_subscriptions.append((user_id, private_channel_id, expire_time_str, expire_date_str))
                             self.logger.debug(f"Found expired subscription: user {user_id}, channel {private_channel_id}, expired at {expire_datetime}")
-                    
+
                     except Exception as e:
                         self.logger.error(f"Error parsing expiration data for user {user_id}: {e}")
                         continue
-                        
+
         except Exception as e:
             self.logger.error(f"Database error fetching expired subscriptions: {e}")
-            
+
         return expired_subscriptions
     
     async def remove_user_from_channel(self, user_id: int, private_channel_id: int) -> bool:
@@ -185,32 +187,38 @@ class SubscriptionManager:
     def deactivate_subscription(self, user_id: int, private_channel_id: int) -> bool:
         """
         Mark subscription as inactive in database.
-        
+
         Args:
             user_id: User's Telegram ID
             private_channel_id: Private channel ID
-            
+
         Returns:
             True if successful, False otherwise
         """
+        from sqlalchemy import text
+
         try:
-            with self.db_manager.get_connection() as conn, conn.cursor() as cur:
+            with self.db_manager.pool.engine.connect() as conn:
                 update_query = """
-                    UPDATE private_channel_users_database 
-                    SET is_active = false 
-                    WHERE user_id = %s AND private_channel_id = %s AND is_active = true
+                    UPDATE private_channel_users_database
+                    SET is_active = false
+                    WHERE user_id = :user_id AND private_channel_id = :private_channel_id AND is_active = true
                 """
-                
-                cur.execute(update_query, (user_id, private_channel_id))
-                rows_affected = cur.rowcount
-                
+
+                result = conn.execute(text(update_query), {
+                    "user_id": user_id,
+                    "private_channel_id": private_channel_id
+                })
+                conn.commit()
+                rows_affected = result.rowcount
+
                 if rows_affected > 0:
                     self.logger.info(f"📝 Marked subscription as inactive: user {user_id}, channel {private_channel_id}")
                     return True
                 else:
                     self.logger.warning(f"⚠️ No active subscription found to deactivate: user {user_id}, channel {private_channel_id}")
                     return False
-                    
+
         except Exception as e:
             self.logger.error(f"❌ Database error deactivating subscription for user {user_id}, channel {private_channel_id}: {e}")
             return False

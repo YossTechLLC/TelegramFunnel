@@ -1,10 +1,100 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 153
+**Last Updated:** 2025-11-14 Session 154
 
 ---
 
 ## Recently Resolved
+
+### ✅ [FIXED] Incorrect Context Manager Pattern Causing "_ConnectionFairy' object does not support the context manager protocol" Error
+
+**Date Discovered:** 2025-11-14 Session 154
+**Date Resolved:** 2025-11-14 Session 154
+**Files:** `TelePay10-26/database.py`, `TelePay10-26/subscription_manager.py`
+**Severity:** 🔴 CRITICAL - Database queries failing on startup
+**Resolution Time:** Same session (30 minutes)
+
+**Issue:**
+Multiple methods in `database.py` and `subscription_manager.py` used an incorrect nested context manager pattern that caused database operations to fail. The pattern `with self.get_connection() as conn, conn.cursor() as cur:` failed because `conn.cursor()` does not return a context-manager-compatible object when using SQLAlchemy's `_ConnectionFairy` wrapper.
+
+Error message:
+```
+❌ db open_channel error: '_ConnectionFairy' object does not support the context manager protocol
+```
+
+**User Impact:**
+- 🔴 Open channel list fetching failed on startup (subscription system broken)
+- 🔴 Closed channel operations failed (donation flow broken)
+- 🔴 Channel configuration queries failed (management dashboard broken)
+- 🔴 Subscription expiration monitoring failed (users not removed when expired)
+- 🔴 Database updates failed (channel configs couldn't be saved)
+
+**Affected Methods (8 total):**
+
+**database.py (6 methods):**
+1. `fetch_open_channel_list()` - Line 209
+2. `get_default_donation_channel()` - Line 305
+3. `fetch_channel_by_id()` - Line 537
+4. `update_channel_config()` - Line 590
+5. `fetch_expired_subscriptions()` - Line 650
+6. `deactivate_subscription()` - Line 708
+
+**subscription_manager.py (2 methods):**
+7. `fetch_expired_subscriptions()` - Line 96
+8. `deactivate_subscription()` - Line 197
+
+**Root Cause:**
+The incorrect pattern attempted to use nested context managers:
+```python
+# ❌ BROKEN - conn.cursor() not a context manager
+with self.get_connection() as conn, conn.cursor() as cur:
+    cur.execute("SELECT ...")
+```
+
+The `get_connection()` method (database.py:147) returns `self.pool.engine.raw_connection()`, which is a SQLAlchemy `_ConnectionFairy` object. While `_ConnectionFairy` supports the context manager protocol, calling `.cursor()` on it returns a raw psycopg2 cursor that does **NOT** support nested context manager syntax.
+
+**Fix Applied:**
+Replaced all 8 occurrences with SQLAlchemy's recommended pattern using `text()`:
+
+```python
+# ✅ FIXED - Use SQLAlchemy engine connection with text()
+from sqlalchemy import text
+
+with self.pool.engine.connect() as conn:
+    result = conn.execute(text("SELECT ..."))
+    rows = result.fetchall()
+    # For UPDATE/INSERT/DELETE:
+    conn.commit()
+```
+
+**Key Changes:**
+- SELECT queries: Use `conn.execute(text(query))` and `result.fetchall()`
+- Parameterized queries: Changed from `%s` placeholders to `:param_name` with dict parameters
+- UPDATE queries: Added `conn.commit()` after execution
+- Consistent error handling maintained
+- All return values unchanged (backward compatible)
+
+**Files Modified:**
+- `TelePay10-26/database.py` - 6 methods fixed
+- `TelePay10-26/subscription_manager.py` - 2 methods fixed
+
+**Expected Behavior After Fix:**
+- ✅ Open channel list fetches successfully on startup
+- ✅ Closed channel donation messages send correctly
+- ✅ Channel configurations can be queried and updated
+- ✅ Expired subscriptions detected and processed
+- ✅ Database operations use proper connection pooling
+
+**Lessons Learned:**
+1. **Follow NEW_ARCHITECTURE patterns:** Always use `pool.engine.connect()` with SQLAlchemy `text()` for consistency
+2. **Avoid raw connection patterns:** The `get_connection()` method is deprecated for good reason
+3. **Test context manager compatibility:** Not all objects support nested context managers
+4. **Search thoroughly:** Found 8 instances across 2 files, not just the initial 6
+
+**Related Issue:**
+This complements the Session 153 fix for `CLOUD_SQL_CONNECTION_NAME` - both were blocking database connectivity on startup.
+
+---
 
 ### ✅ [FIXED] CLOUD_SQL_CONNECTION_NAME Secret Manager Path Not Fetched
 
