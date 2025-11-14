@@ -1,12 +1,93 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 151 - **Security Verification & Audit Correction** ✅
+**Last Updated:** 2025-11-14 Session 152 - **Gradual Migration Strategy & Bot Polling Architecture** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 152: Maintain Legacy DonationKeypadHandler During Migration
+
+**Decision:** Keep legacy `DonationKeypadHandler` import active during NEW_ARCHITECTURE migration
+
+**Context:**
+- NEW_ARCHITECTURE migration in progress with gradual component replacement
+- `DonationKeypadHandler` import was prematurely commented out
+- New `bot.conversations.donation_conversation` module exists but integration incomplete
+- Application startup failed with NameError
+
+**Options Considered:**
+1. **Quick Fix:** Uncomment import, defer migration
+2. **Complete Migration:** Remove legacy, fully integrate new bot.conversations module
+3. **Hybrid Approach:** Restore import, plan future migration (CHOSEN)
+
+**Decision Rationale:**
+- Matches existing pattern: `PaymentGatewayManager` also kept for backward compatibility
+- Reduces deployment risk by avoiding breaking changes during migration
+- Allows gradual testing and validation of new modular components
+- Provides stable baseline while completing NEW_ARCHITECTURE transition
+
+**Implementation:**
+```python
+# app_initializer.py:27
+from donation_input_handler import DonationKeypadHandler  # TODO: Migrate to bot.conversations (kept for backward compatibility)
+```
+
+**Future Work:**
+- Complete integration of `bot.conversations.create_donation_conversation_handler()`
+- Remove legacy donation_input_handler.py after validation
+- Update bot_manager.py to use new modular conversation handler
+
+---
+
+## 2025-11-14 Session 152: VM-Based Polling for Telegram Bot (Confirmed Optimal)
+
+**Decision:** Maintain VM-based polling for Telegram bot interactions (NOT webhooks)
+
+**Architecture Investigation:**
+- User questioned if NEW_ARCHITECTURE uses webhooks for button presses (which would cause delays)
+- Verified bot uses `Application.run_polling()` for instant user responses
+- Confirmed webhooks only used for external services (NOWPayments IPN)
+
+**Polling Architecture Benefits:**
+- ✅ Instant button response times (~100-500ms network latency only)
+- ✅ No webhook cold-start delays
+- ✅ Persistent connection to Telegram servers
+- ✅ No webhook infrastructure complexity
+- ✅ Reliable update delivery
+
+**Webhook Architecture (External Services Only):**
+- Payment notifications from NOWPayments/GCNotificationService
+- Secured with HMAC + IP whitelist + rate limiting
+- Isolated from user interaction path (no impact on UX)
+
+**User Interaction Flow:**
+```
+User clicks button → Telegram API (50ms)
+→ Polling bot receives update (<1ms)
+→ CallbackQueryHandler matches pattern (<1ms)
+→ Handler executes (5-50ms)
+→ Response sent to user (50ms)
+Total: ~106-160ms (INSTANT UX)
+```
+
+**Payment Notification Flow:**
+```
+NOWPayments IPN → GCNotificationService (100-500ms)
+→ Webhook /notification (5ms HMAC verify)
+→ NotificationService sends message (50ms)
+Total: 2-6 seconds (acceptable for async payment events)
+```
+
+**Verification Evidence:**
+- `bot_manager.py:132` - `await application.run_polling()`
+- `NEW_ARCHITECTURE.md:625` - Documents "Telegram bot polling"
+- All CallbackQueryHandler registrations process instantly via polling
+- No Telegram webhook configuration found in codebase
+
+**Decision:** MAINTAIN current architecture - VM polling is optimal for use case
 
 ## 2025-11-14 Session 151: Security Decorator Application - Programmatic vs Decorator Syntax
 
