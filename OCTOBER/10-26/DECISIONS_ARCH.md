@@ -1,3 +1,586 @@
+
+**Decision:** Grant service account explicit IAM permissions for Telegram bot secrets
+
+**Context:**
+- GCBroadcastScheduler-10-26 service deployed with correct environment variable references
+- Environment variables correctly pointing to `TELEGRAM_BOT_SECRET_NAME` and `TELEGRAM_BOT_USERNAME`
+- Service crashing on startup with 404 errors attempting to access secrets
+- Service account: `291176869049-compute@developer.gserviceaccount.com` (default Compute Engine service account)
+
+**Problem:**
+Service account had no IAM bindings on TELEGRAM secrets, resulting in:
+```
+google.api_core.exceptions.NotFound: 404 Secret [projects/291176869049/secrets/BOT_TOKEN] not found or has no versions
+```
+
+**Solution Implemented:**
+```bash
+# Grant secretAccessor role on both TELEGRAM secrets
+gcloud secrets add-iam-policy-binding TELEGRAM_BOT_SECRET_NAME \
+  --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding TELEGRAM_BOT_USERNAME \
+  --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+**Rationale:**
+- Secret Manager requires explicit IAM bindings per secret
+- Default Compute Engine service account has no inherent secret access
+- Least-privilege approach: grant access only to required secrets
+- Other secrets (DATABASE_*, JWT_SECRET_KEY, BROADCAST_*) already had proper IAM bindings
+
+**Impact:**
+- ✅ Service starts successfully without errors
+- ✅ Bot token loaded from `TELEGRAM_BOT_SECRET_NAME`
+- ✅ Bot username loaded from `TELEGRAM_BOT_USERNAME`
+- ✅ Health endpoint returning 200 OK
+- ✅ Broadcast execution endpoint operational
+
+**Alternative Considered:**
+- **Option A:** Create dedicated service account with pre-configured permissions ❌
+  - Rejected: Unnecessary complexity for single service
+  - Would require updating Cloud Run deployment configuration
+- **Option B:** Use workload identity with GKE service account binding ❌
+  - Rejected: Not using GKE, Cloud Run uses service accounts directly
+- **Option C:** Grant blanket `roles/secretmanager.admin` ❌
+  - Rejected: Excessive permissions, violates least-privilege principle
+
+---
+
+### 2025-11-12 Session 118 (Phase 6): Website Integration for Manual Broadcast Triggers 📬
+
+**Decision:** Integrate manual broadcast trigger functionality directly into channel dashboard cards
+
+**Context:**
+- Broadcast Manager backend (GCBroadcastScheduler-10-26) operational
+- API endpoints `/api/broadcast/trigger` and `/api/broadcast/status/:id` available
+- Need user-friendly way for clients to manually trigger broadcasts
+- Must enforce 5-minute rate limit (BROADCAST_MANUAL_INTERVAL)
+- Dashboard already displays channel cards with Edit/Delete actions
+
+**Problem:**
+How to expose manual broadcast trigger functionality to users while maintaining security, rate limiting, and user experience?
+
+**Options Considered:**
+
+1. **Option A: Separate broadcast management page** ❌
+   - Create new route `/broadcasts` with dedicated broadcast management UI
+   - Pros: Dedicated space for advanced features (scheduling, history, analytics)
+   - Cons: Extra navigation step, feature buried, overkill for simple trigger
+   - **Rejected:** Too complex for primary use case (simple manual trigger)
+
+2. **Option B: Inline controls in dashboard channel cards** ✅ **CHOSEN**
+   - Add "Resend Messages" button directly to each channel card on dashboard
+   - Include confirmation dialog before triggering
+   - Display rate limit countdown timer inline
+   - Pros: Zero extra clicks, immediate feedback, natural UX flow
+   - Cons: Limited space for advanced features
+   - **Chosen:** Best balance of accessibility and simplicity
+
+3. **Option C: Context menu / dropdown actions** ❌
+   - Add broadcast trigger to existing Edit/Delete action menu
+   - Pros: Compact, follows existing pattern
+   - Cons: Hidden behind menu, less discoverable, more clicks
+   - **Rejected:** Feature should be prominently displayed
+
+**Decision Rationale:**
+
+**Frontend Architecture:**
+- **broadcast Service Separate:** Keep broadcast API calls separate from channelService
+  - Rationale: Different backend service (GCBroadcastScheduler vs GCRegisterAPI)
+  - Benefit: Clean separation of concerns, easier to modify independently
+
+- **Component-Based Approach:** Create reusable `BroadcastControls` component
+  - Rationale: Encapsulates all broadcast logic (API calls, rate limiting, UI state)
+  - Benefit: Can be reused in future pages (Edit Channel, Analytics)
+
+- **Inline Rate Limit UI:** Show countdown timer directly on button
+  - Rationale: Users should immediately see when they can trigger again
+  - Benefit: Reduces support questions, prevents failed API calls
+
+**Backend Changes:**
+- **JOIN broadcast_manager in channel query:** Return broadcast_id with channel data
+  - Rationale: Avoid separate API call to get broadcast_id
+  - Benefit: Reduces latency, simplifies frontend logic
+  - Implementation: LEFT JOIN ensures channels work even if broadcast not created yet
+
+**Error Handling Strategy:**
+- **429 Rate Limit:** Display countdown timer, don't redirect to login
+- **401 Unauthorized:** Clear tokens and redirect to login after 2s delay
+- **500 Server Error:** Show error message, allow retry after 5s
+- **Missing broadcast_id:** Disable button with "Not Configured" label
+
+**UX Decisions:**
+- **Confirmation Dialog:** Prevent accidental triggers
+  - Message explains what will be sent (subscription + donation messages)
+  - Mentions 5-minute rate limit upfront
+
+- **Button States:** Clear visual feedback for all states
+  - `📬 Resend Messages` - Ready to send
+  - `⏳ Sending...` - In progress
+  - `⏰ Wait 4:32` - Rate limited with countdown
+  - `📭 Not Configured` - Missing broadcast_id
+
+**Implementation Details:**
+
+**broadcastService.ts:**
+```typescript
+// Separate service for broadcast API calls
+// Handles authentication, error transformation
+// Returns structured errors with retry_after_seconds for 429
+```
+
+**BroadcastControls.tsx:**
+```typescript
+// Self-contained component
+// Manages all broadcast state (loading, messages, countdown)
+// Countdown timer updates every second
+```
+
+**channel_service.py:**
+```python
+# Modified get_user_channels() query
+SELECT m.*, b.id AS broadcast_id
+FROM main_clients_database m
+LEFT JOIN broadcast_manager b
+    ON m.open_channel_id = b.open_channel_id
+    AND m.closed_channel_id = b.closed_channel_id
+WHERE m.client_id = %s
+```
+
+**Implications:**
+- ✅ Users can trigger broadcasts without leaving dashboard
+- ✅ Rate limiting prevents abuse while maintaining good UX
+- ✅ Clear feedback reduces support burden
+- ✅ Component reusable for future features
+- ⚠️ Frontend directly calls GCBroadcastScheduler (cross-service call)
+- ⚠️ broadcast_id may be null for newly registered channels (handle gracefully)
+
+**Future Enhancements:**
+- Add broadcast history/status display
+- Show last broadcast time inline
+- Add broadcast scheduling (specific time)
+- Analytics dashboard for broadcast performance
+
+---
+
+### 2025-11-12 Session 117 (Phase 5): Cloud Scheduler Configuration for Daily Broadcasts ⏰
+
+**Decision:** Configure Cloud Scheduler with OIDC authentication, midnight UTC schedule, and comprehensive retry logic
+
+**Context:**
+- GCBroadcastScheduler-10-26 service deployed and operational
+- Need automated daily broadcasts to all channel pairs
+- Cloud Scheduler will invoke Cloud Run service via HTTP POST
+- Service already supports `/api/broadcast/execute` endpoint
+
+**Problem:**
+How to configure Cloud Scheduler for reliable daily broadcasts with proper authentication, error handling, and operational flexibility?
+
+**Options Considered:**
+
+1. **Option A: Basic schedule without authentication** ❌
+   - Use `--allow-unauthenticated` with no OIDC
+   - Pros: Simple setup, no auth configuration
+   - Cons: Security risk (anyone can trigger endpoint), no audit trail
+   - **Rejected:** Violates security best practices
+
+2. **Option B: OIDC authentication with retry logic** ✅ **CHOSEN**
+   - Use OIDC with service account (291176869049-compute@developer.gserviceaccount.com)
+   - Configure comprehensive retry logic (max backoff, doublings)
+   - Add management scripts (pause/resume) for operational flexibility
+   - Pros: Secure, auditable, resilient to failures, operational tools ready
+   - Cons: Slightly more complex setup
+   - **Chosen:** Best balance of security and reliability
+
+3. **Option C: Use Cloud Tasks instead of Cloud Scheduler** ❌
+   - Queue broadcasts as Cloud Tasks
+   - Pros: More flexible retry logic, can queue individual broadcasts
+   - Cons: Overkill for simple daily schedule, more complexity
+   - **Rejected:** Cloud Scheduler simpler for fixed daily schedule
+
+**Decision Rationale:**
+- **Schedule:** `0 0 * * *` (midnight UTC) ensures broadcasts sent at consistent time
+- **OIDC Authentication:** Service account provides secure, auditable invocations
+- **Retry Logic:** Handles transient failures (network issues, cold starts)
+  - Max backoff: 3600s (1 hour) - won't hammer service if down
+  - Max doublings: 5 - exponential backoff prevents thundering herd
+  - Min backoff: 5s - quick retry for transient failures
+  - Attempt deadline: 180s - sufficient for batch processing
+- **Management Scripts:** Pause/resume capabilities for maintenance windows
+- **Time Zone:** UTC ensures consistent behavior across regions
+
+**Implementation Details:**
+
+**Cloud Scheduler Job:**
+```bash
+gcloud scheduler jobs create http broadcast-scheduler-daily \
+    --location=us-central1 \
+    --schedule="0 0 * * *" \
+    --uri="https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/execute" \
+    --http-method=POST \
+    --oidc-service-account-email="291176869049-compute@developer.gserviceaccount.com" \
+    --oidc-token-audience="https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app" \
+    --headers="Content-Type=application/json" \
+    --message-body='{"source":"cloud_scheduler"}' \
+    --time-zone="UTC"
+```
+
+**Management Scripts:**
+- `pause_broadcast_scheduler.sh` - Pause for maintenance
+- `resume_broadcast_scheduler.sh` - Resume after maintenance
+
+**Implications:**
+- ✅ **Automation:** Broadcasts run daily without manual intervention
+- ✅ **Security:** OIDC tokens prevent unauthorized invocations
+- ✅ **Reliability:** Retry logic handles temporary failures
+- ✅ **Observability:** Logs show `source: cloud_scheduler` for tracking
+- ✅ **Operational Flexibility:** Can pause/resume for maintenance
+- ✅ **Cost Optimization:** Only runs when needed (daily + retries)
+
+**Testing:**
+- Manual trigger: `gcloud scheduler jobs run broadcast-scheduler-daily --location=us-central1`
+- Logs confirm: `🎯 Broadcast execution triggered by: cloud_scheduler`
+- Logs confirm: `📋 Fetching due broadcasts...`
+- Result: No broadcasts due (expected, first run)
+
+**Future Considerations:**
+- Could add alerting if job fails 3 consecutive times
+- Could adjust schedule if different time zones needed
+- Could add Cloud Monitoring dashboard for scheduler metrics
+
+---
+
+### 2025-11-11 Session 116 (Phase 4): Broadcast Manager Deployment Configuration 🚀
+
+**Decision:** Deploy with allow-unauthenticated, use existing secrets, configure Cloud Run for serverless operation
+
+**Context:**
+- GCBroadcastScheduler-10-26 service ready for deployment
+- Cloud Scheduler needs to invoke service (automated broadcasts)
+- Website will invoke service via JWT-authenticated API (manual triggers)
+- Service needs access to Telegram bot, database, and configuration secrets
+
+**Problem:**
+How to configure Cloud Run authentication, environment variables, and resource allocation for optimal cost and performance?
+
+**Options Considered:**
+
+1. **Option A: Require authentication for all endpoints** ❌
+   - Use OIDC for Cloud Scheduler, JWT for website
+   - Pros: More secure
+   - Cons: Complicates health checks, adds complexity for scheduler, requires IAM setup
+
+2. **Option B: Allow unauthenticated with endpoint-level auth** ✅ **CHOSEN**
+   - Allow-unauthenticated at service level
+   - JWT auth only on manual trigger endpoints (/api/broadcast/trigger, /api/broadcast/status)
+   - Health check and scheduler execution open (no sensitive data)
+   - Pros: Simpler, health checks work, scheduler works without IAM
+   - Cons: Execution endpoint is public (but harmless - just triggers broadcasts)
+
+**Decision Rationale:**
+- **Authentication:** allow-unauthenticated at service level, JWT at endpoint level
+  - Reason: Simplifies deployment, health checks, and scheduler setup
+  - Risk mitigation: Manual trigger endpoints protected by JWT, execution endpoint is idempotent
+- **Secret Management:** Reuse existing secrets (TELEGRAM_BOT_SECRET_NAME, DATABASE_*_SECRET)
+  - Reason: Avoid duplication, consistent with other services
+  - Discovery: BOT_TOKEN secret doesn't exist → use TELEGRAM_BOT_SECRET_NAME instead
+- **Resource Allocation:**
+  - Memory: 512Mi (sufficient for Python + dependencies + database connections)
+  - CPU: 1 (single vCPU for sequential broadcast processing)
+  - Timeout: 300s (5 minutes for batch processing)
+  - Concurrency: 1 (prevent parallel execution, maintain order)
+  - Scaling: min=0 (cost optimization), max=1 (single instance sufficient)
+  - Reason: Service is not latency-critical, broadcasts can wait, cost optimization priority
+
+**Implementation:**
+```bash
+gcloud run deploy gcbroadcastscheduler-10-26 \
+    --source=./GCBroadcastScheduler-10-26 \
+    --region=us-central1 \
+    --allow-unauthenticated \
+    --min-instances=0 --max-instances=1 \
+    --memory=512Mi --cpu=1 --timeout=300s --concurrency=1 \
+    --set-env-vars="BROADCAST_AUTO_INTERVAL_SECRET=...,BROADCAST_MANUAL_INTERVAL_SECRET=...,BOT_TOKEN_SECRET=...,[7 more]"
+```
+
+**Results:**
+- ✅ Service deployed successfully
+- ✅ Health endpoint accessible: `GET /health` → 200 OK
+- ✅ Execution endpoint working: `POST /api/broadcast/execute` → "No broadcasts due"
+- ✅ Database connectivity verified
+- ✅ All secrets accessible from service
+
+**Related Files:**
+- GCBroadcastScheduler-10-26/main.py (service entry point)
+- GCBroadcastScheduler-10-26/broadcast_web_api.py (JWT auth)
+- TOOLS_SCRIPTS_TESTS/scripts/deploy_broadcast_scheduler.sh
+
+---
+
+### 2025-11-11 Session 116 (Phase 3): Broadcast Interval Secret Configuration ⏰
+
+**Decision:** Store broadcast intervals as Secret Manager secrets (not environment variables)
+
+**Context:**
+- Need to configure automated broadcast interval (24 hours)
+- Need to configure manual trigger rate limit (5 minutes)
+- Values may change over time (e.g., adjust rate limits based on usage)
+- ConfigManager already designed to fetch from Secret Manager
+
+**Problem:**
+Where to store broadcast interval configuration values?
+
+**Options Considered:**
+
+1. **Option A: Environment variables** ❌
+   - Set in Cloud Run deployment directly
+   - Pros: Simpler, no Secret Manager calls
+   - Cons: Requires redeployment to change, not consistent with other config
+
+2. **Option B: Secret Manager secrets** ✅ **CHOSEN**
+   - Create BROADCAST_AUTO_INTERVAL and BROADCAST_MANUAL_INTERVAL secrets
+   - Pros: Centralized config, can update without redeployment, consistent with architecture
+   - Cons: Slightly more complex, requires IAM permissions
+
+**Decision Rationale:**
+- **Storage:** Secret Manager
+  - Reason: Consistent with existing configuration pattern (all config in Secret Manager)
+  - Benefit: Can adjust intervals without redeployment
+  - Example: Change manual interval from 5 min to 10 min by updating secret
+- **Values:**
+  - BROADCAST_AUTO_INTERVAL = "24" (hours - daily broadcasts)
+  - BROADCAST_MANUAL_INTERVAL = "0.0833" (hours = 5 minutes)
+- **IAM:** Grant service account (291176869049-compute@developer.gserviceaccount.com) access
+  - Role: roles/secretmanager.secretAccessor
+  - Scope: Both secrets
+
+**Implementation:**
+```bash
+echo "24" | gcloud secrets create BROADCAST_AUTO_INTERVAL --replication-policy="automatic" --data-file=-
+echo "0.0833" | gcloud secrets create BROADCAST_MANUAL_INTERVAL --replication-policy="automatic" --data-file=-
+
+gcloud secrets add-iam-policy-binding BROADCAST_AUTO_INTERVAL \
+    --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+gcloud secrets add-iam-policy-binding BROADCAST_MANUAL_INTERVAL \
+    --member="serviceAccount:291176869049-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+```
+
+**Results:**
+- ✅ Secrets created successfully
+- ✅ IAM permissions granted
+- ✅ Secrets accessible via gcloud CLI
+- ✅ ConfigManager fetches values correctly
+
+**Related Files:**
+- GCBroadcastScheduler-10-26/config_manager.py (get_broadcast_auto_interval, get_broadcast_manual_interval)
+
+---
+
+### 2025-11-11 Session 115 (Phase 2): Broadcast Manager Service Architecture - Modular Component Design 🏗️
+
+**Decision:** Implement service as 7 independent, loosely-coupled modules with dependency injection
+
+**Context:**
+- Need scalable, testable, maintainable architecture for broadcast management
+- Multiple responsibilities: config, database, Telegram API, scheduling, execution, tracking, web API
+- System will be deployed to Cloud Run (stateless, auto-scaled)
+- Must support both automated (Cloud Scheduler) and manual (website) triggers
+
+**Problem:**
+Initial architecture spec outlined component roles but not implementation strategy.
+
+**Options Considered:**
+
+1. **Option A: Monolithic module** ❌
+   - Single broadcast_service.py file with all logic
+   - Pros: Simple to deploy
+   - Cons: Hard to test, high coupling, difficult to maintain
+
+2. **Option B: Flask blueprints with shared state** ❌
+   - Multiple Flask blueprints sharing global variables
+   - Pros: Flask-native approach
+   - Cons: Global state issues, testing challenges, hidden dependencies
+
+3. **Option C: Modular architecture with dependency injection** ✅ **CHOSEN**
+   - 7 independent modules, each with single responsibility
+   - Constructor-based dependency injection
+   - main.py orchestrates initialization
+   - Pros: Testable, maintainable, clear dependencies, SOLID principles
+   - Cons: More files (but well-organized)
+
+**Solution Implemented:**
+
+**Module Structure:**
+```
+GCBroadcastScheduler-10-26/
+├── config_manager.py          (Secret Manager, configuration)
+├── database_manager.py         (PostgreSQL queries, connections)
+├── telegram_client.py          (Telegram Bot API wrapper)
+├── broadcast_tracker.py        (State transitions, statistics)
+├── broadcast_scheduler.py      (Scheduling logic, rate limiting)
+├── broadcast_executor.py       (Broadcast execution)
+├── broadcast_web_api.py        (Flask blueprint for manual triggers)
+└── main.py                     (Flask app, dependency injection)
+```
+
+**Key Design Patterns:**
+
+1. **Dependency Injection (Constructor-Based)**
+```python
+# main.py
+config = ConfigManager()
+db = DatabaseManager(config)
+tracker = BroadcastTracker(db, config)
+scheduler = BroadcastScheduler(db, config)
+executor = BroadcastExecutor(telegram, tracker)
+```
+- No global state
+- Explicit dependencies
+- Easy to mock for testing
+
+2. **Context Managers (Database Connections)**
+```python
+@contextmanager
+def get_connection(self):
+    conn = None
+    try:
+        conn = psycopg2.connect(**params)
+        yield conn
+    finally:
+        if conn:
+            conn.close()
+```
+- Automatic cleanup
+- Transaction safety
+- Resource management
+
+3. **Single Responsibility Principle**
+- ConfigManager: ONLY fetches config
+- DatabaseManager: ONLY database operations
+- TelegramClient: ONLY sends messages
+- BroadcastTracker: ONLY tracks state
+- BroadcastScheduler: ONLY scheduling logic
+- BroadcastExecutor: ONLY executes broadcasts
+- BroadcastWebAPI: ONLY API endpoints
+
+4. **Type Hints & Docstrings**
+```python
+def fetch_due_broadcasts(self) -> List[Dict[str, Any]]:
+    """
+    Fetch all broadcast entries that are due to be sent.
+
+    Returns:
+        List of broadcast entries with full channel details
+    """
+```
+- Static type checking
+- IDE autocomplete
+- Self-documenting code
+
+**Benefits Realized:**
+- ✅ **Testability**: Each module can be tested in isolation
+- ✅ **Maintainability**: Changes localized to single module
+- ✅ **Readability**: Clear separation of concerns
+- ✅ **Reusability**: Components can be used independently
+- ✅ **Scalability**: Easy to add new features (new modules)
+
+**Trade-offs:**
+- More files to manage (13 files vs 1-2)
+- Slightly more boilerplate (imports, constructors)
+- But: Well worth it for long-term maintainability
+
+**Alternative Rejected: Shared Database Connection Pool**
+- Considered: Global connection pool shared across modules
+- Rejected: Context managers simpler, safer for Cloud Run's stateless model
+- Cloud Run may scale to 0, killing long-lived connections anyway
+
+---
+
+### 2025-11-11 Session 115 (Phase 1): Broadcast Manager Database Implementation - FK Constraint Decision 🗄️
+
+**Decision:** Remove foreign key constraint on `open_channel_id` → `main_clients_database.open_channel_id` due to lack of unique constraint
+
+**Context:**
+- Initial architecture specified FK constraint to ensure referential integrity
+- During migration execution, discovered `open_channel_id` in `main_clients_database` has NO unique constraint
+- PostgreSQL requires referenced column to have unique/primary key constraint
+- ERROR: "there is no unique constraint matching given keys for referenced table"
+
+**Problem:**
+```sql
+-- ATTEMPTED (failed):
+CONSTRAINT fk_broadcast_channels
+    FOREIGN KEY (open_channel_id)
+    REFERENCES main_clients_database(open_channel_id)  -- ❌ No unique constraint exists
+    ON DELETE CASCADE
+```
+
+**Analysis of Options:**
+1. **Option A: Add unique constraint to main_clients_database.open_channel_id**
+   - ❌ Risky - would break existing system if duplicates exist
+   - ❌ May not be intentional design (channels could be reused across entries)
+   - ❌ Requires checking for existing duplicate data first
+
+2. **Option B: Use composite FK on (open_channel_id, id) with main_clients_database**
+   - ❌ Doesn't solve the problem (still need unique constraint on referenced columns)
+   - ❌ Would require broadcast_manager to also store main_clients_database.id
+
+3. **Option C: Remove FK constraint, handle orphans in application logic** ✅ **CHOSEN**
+   - ✅ No risk to existing database structure
+   - ✅ Application can query and validate channel existence
+   - ✅ Can add constraint later if unique index is added
+   - ✅ Allows system to continue functioning even with orphaned broadcasts
+
+**Solution:**
+```sql
+-- IMPLEMENTED:
+-- No FK constraint on open_channel_id
+-- Comment explains reasoning
+
+-- Note: No FK on open_channel_id because main_clients_database doesn't have unique constraint
+-- Orphaned broadcasts will be handled by application logic
+```
+
+**Application-Level Handling:**
+- BroadcastScheduler will LEFT JOIN main_clients_database when fetching due broadcasts
+- Broadcasts with NULL main_clients_database entries will be skipped
+- Optional cleanup job can mark orphaned broadcasts as inactive
+- Still maintain FK on client_id → registered_users.user_id (this has unique constraint)
+
+**Schema Changes Made:**
+- Kept FK: `client_id` → `registered_users.user_id` (UUID, has unique constraint) ✅
+- Removed FK: `open_channel_id` → `main_clients_database.open_channel_id` ❌
+- Kept UNIQUE: (open_channel_id, closed_channel_id) ✅
+- Kept CHECK: broadcast_status IN (...) ✅
+
+**Impact:**
+- ✅ Migration completes successfully
+- ✅ Data integrity still maintained via unique constraint on channel pairs
+- ✅ User ownership still enforced via client_id FK
+- ⚠️ Orphaned broadcasts possible (rare edge case)
+- ✅ Can be handled in application logic (BroadcastScheduler.get_due_broadcasts)
+
+**Trade-offs:**
+- **Pros:** No risk to existing system, clean migration, flexible for future changes
+- **Cons:** Slightly weaker referential integrity (but still has unique constraint and client FK)
+
+**Rollback Plan:**
+If unique constraint is added to main_clients_database.open_channel_id in future:
+```sql
+ALTER TABLE broadcast_manager
+ADD CONSTRAINT fk_broadcast_channels
+    FOREIGN KEY (open_channel_id)
+    REFERENCES main_clients_database(open_channel_id)
+    ON DELETE CASCADE;
+```
+
+---
+
 ### 2025-11-11 Session 114: Broadcast Manager Architecture 📡
 
 **Decision:** Implement scheduled broadcast management system with database tracking, Cloud Scheduler automation, and website manual triggers

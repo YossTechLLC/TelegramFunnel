@@ -69,7 +69,12 @@
       "Bash(gcloud secrets versions list:*)",
       "Bash(gcloud run revisions describe:*)",
       "Bash(gcloud run revisions list:*)",
-      "Bash(gcloud run services update-traffic:*)"
+      "Bash(gcloud run services update-traffic:*)",
+      "Bash(/tmp/PROGRESS_new.md)",
+      "Bash(/tmp/PROGRESS_to_archive.md)",
+      "Bash(/tmp/DECISIONS_new.md)",
+      "Bash(/tmp/DECISIONS_to_archive.md)",
+      "Bash(/tmp/DECISIONS_ARCH_new.md)"
     ],
     "deny": [],
     "ask": []
