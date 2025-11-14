@@ -1,12 +1,49 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-01-14 Session - **Live-Time Broadcast Message Deletion** 🚀
+**Last Updated:** 2025-11-14 Session - **Bot Architecture Redundancy Analysis** 🔍
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: Bot Architecture Redundancy Analysis
+
+**Decision:** Documented extensive redundancy between `/bot` folder (new modular architecture) and root-level handlers (legacy monolithic)
+
+**Finding:**
+- 60-90% functional overlap in core features
+- Both `bot/conversations/donation_conversation.py` (350 lines) and `donation_input_handler.py` (654 lines) implement donation keypad
+- Both `bot/handlers/command_handler.py` and `menu_handlers.py` implement /start command
+- `bot/conversations/donation_conversation.py` is DEAD CODE (imported but never registered)
+
+**Critical Issue Identified:**
+- `menu_handlers.py` uses global state (`self.global_sub_value`, `self.global_open_channel_id`) shared across all users
+- Concurrency bug: Multiple users can overwrite each other's subscription values
+- **Risk Level:** HIGH - Can cause incorrect payment amounts
+
+**Validation Inconsistency:**
+- `donation_input_handler.py`: MIN_AMOUNT = $4.99
+- `bot/conversations/donation_conversation.py`: MIN = $4.99
+- `input_handlers.py`: MIN = $1.00 ← DIFFERENT!
+
+**Migration Status:** 25% complete
+- ✅ Command handlers migrated to bot/handlers/
+- ✅ Keyboard utilities migrated to bot/utils/
+- 🔄 Donation flow in progress (new handler created but not deployed)
+- ❌ Database configuration not started
+- ❌ Global state replacement not started
+
+**Recommendations:**
+1. **IMMEDIATE:** Fix global state bug by moving to `context.user_data`
+2. **SHORT-TERM:** Remove dead code (`bot/conversations/donation_conversation.py`)
+3. **SHORT-TERM:** Standardize validation constants across all handlers
+4. **LONG-TERM:** Complete migration to bot/ architecture or abandon it
+
+**Documentation:** Full analysis in `BOT_TELEPAY_REDUNDANCIES.md`
+
+---
 
 ## 2025-01-14: Live-Time Broadcast Message Deletion Architecture
 
