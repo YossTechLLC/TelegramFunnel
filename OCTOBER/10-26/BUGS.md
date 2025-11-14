@@ -1,10 +1,109 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-13 Session 143
+**Last Updated:** 2025-11-14 Session 153
 
 ---
 
 ## Recently Resolved
+
+### ✅ [FIXED] CLOUD_SQL_CONNECTION_NAME Secret Manager Path Not Fetched
+
+**Date Discovered:** 2025-11-14 Session 153
+**Date Resolved:** 2025-11-14 Session 153
+**File:** `TelePay10-26/database.py`
+**Severity:** 🔴 CRITICAL - All database operations failing on startup
+**Resolution Time:** Same session (15 minutes)
+
+**Issue:**
+Application failed to connect to Cloud SQL database on startup. All database operations failed with error:
+```
+Arg `instance_connection_string` must have format: PROJECT:REGION:INSTANCE,
+got projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+```
+
+**User Impact:**
+- 🔴 Subscription monitoring failed to fetch expired subscriptions
+- 🔴 Open channel queries failed during startup
+- 🔴 Payment gateway database access failed
+- 🔴 Donation flow database queries failed
+- 🔴 COMPLETE DATABASE FAILURE - Application non-functional
+
+**Root Cause:**
+The `CLOUD_SQL_CONNECTION_NAME` environment variable contained a Secret Manager path instead of the actual connection string value. Unlike other database secrets (DATABASE_HOST_SECRET, DATABASE_NAME_SECRET, etc.) which were correctly fetched using Secret Manager helper functions, `CLOUD_SQL_CONNECTION_NAME` was read directly via `os.getenv()` without fetching the secret value.
+
+**Code Flow (BEFORE FIX):**
+```python
+# database.py:118 - Direct os.getenv() call
+self.pool = init_connection_pool({
+    'instance_connection_name': os.getenv('CLOUD_SQL_CONNECTION_NAME', 'telepay-459221:us-central1:telepaypsql'),
+    # ❌ Gets: projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+    # ✅ Expected: telepay-459221:us-central1:telepaypsql
+})
+```
+
+**Fix Applied:**
+Added `fetch_cloud_sql_connection_name()` function following existing Secret Manager pattern:
+
+```python
+def fetch_cloud_sql_connection_name() -> str:
+    """Fetch Cloud SQL connection name from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_path:
+            print("⚠️ CLOUD_SQL_CONNECTION_NAME not set, using default")
+            return "telepay-459221:us-central1:telepaypsql"
+
+        # Check if already in correct format (PROJECT:REGION:INSTANCE)
+        if ':' in secret_path and not secret_path.startswith('projects/'):
+            return secret_path
+
+        # Fetch from Secret Manager
+        response = client.access_secret_version(request={"name": secret_path})
+        connection_name = response.payload.data.decode("UTF-8").strip()
+        print(f"✅ Fetched Cloud SQL connection name from Secret Manager: {connection_name}")
+        return connection_name
+    except Exception as e:
+        print(f"❌ Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
+        return "telepay-459221:us-central1:telepaypsql"
+
+# Module-level initialization
+DB_CLOUD_SQL_CONNECTION_NAME = fetch_cloud_sql_connection_name()
+```
+
+Updated DatabaseManager to use fetched value:
+```python
+self.pool = init_connection_pool({
+    'instance_connection_name': DB_CLOUD_SQL_CONNECTION_NAME,  # ✅ Now uses fetched value
+    ...
+})
+```
+
+**Files Changed:**
+- `TelePay10-26/database.py:64-87` - Added fetch_cloud_sql_connection_name() function
+- `TelePay10-26/database.py:95` - Added DB_CLOUD_SQL_CONNECTION_NAME module variable
+- `TelePay10-26/database.py:119` - Updated init_connection_pool() to use fetched value
+
+**Expected Behavior After Fix:**
+- ✅ Cloud SQL connection string properly fetched from Secret Manager
+- ✅ Connection pool initialized with correct format: `telepay-459221:us-central1:telepaypsql`
+- ✅ All database operations functional
+- ✅ Subscription monitoring works
+- ✅ Payment gateway database access restored
+
+**Verification Status:**
+- ⏳ Awaiting application restart to verify fix
+
+**Lessons Learned:**
+1. **Consistent Pattern Enforcement:** ALL Secret Manager secrets must use fetch functions, not direct `os.getenv()`
+2. **Environment Variable Naming:** Secret paths should end with `_SECRET` to indicate Secret Manager usage
+3. **Connection String Format:** Cloud SQL Connector requires `PROJECT:REGION:INSTANCE` format, not secret paths
+4. **Testing:** Need comprehensive checks for similar issues across codebase
+
+**Related Issues:**
+- Searching codebase for similar Secret Manager path issues (in progress)
+
+---
 
 ### ✅ [FIXED] Payment Button Confirmation Dialog - URL Buttons in Groups Show "Open this link?"
 

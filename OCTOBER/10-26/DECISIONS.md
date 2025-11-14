@@ -1,12 +1,116 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 152 - **Gradual Migration Strategy & Bot Polling Architecture** ✅
+**Last Updated:** 2025-11-14 Session 153 - **Secret Manager Fetch Pattern Enforcement** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 153: Enforce Secret Manager Fetch Pattern for All Secrets
+
+**Decision:** ALL Secret Manager secrets MUST use fetch functions, not direct `os.getenv()` calls
+
+**Problem Discovered:**
+- CLOUD_SQL_CONNECTION_NAME used direct `os.getenv()` instead of Secret Manager fetch
+- Environment variable contained secret PATH (`projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest`)
+- Application expected secret VALUE (`telepay-459221:us-central1:telepaypsql`)
+- Resulted in complete database connection failure (CRITICAL severity)
+
+**Inconsistency Identified:**
+```python
+# ✅ CORRECT PATTERN - Other database secrets
+DB_HOST = fetch_database_host()          # Fetches from Secret Manager
+DB_NAME = fetch_database_name()          # Fetches from Secret Manager
+DB_USER = fetch_database_user()          # Fetches from Secret Manager
+DB_PASSWORD = fetch_database_password()  # Fetches from Secret Manager
+
+# ❌ INCORRECT PATTERN - Cloud SQL connection (BEFORE FIX)
+self.pool = init_connection_pool({
+    'instance_connection_name': os.getenv('CLOUD_SQL_CONNECTION_NAME', 'default'),  # Direct getenv!
+})
+```
+
+**Root Cause:**
+- Environment variables contain Secret Manager PATHS (e.g., `projects/.../secrets/NAME/versions/latest`)
+- Secret Manager fetch functions retrieve the actual SECRET VALUES from those paths
+- Direct `os.getenv()` returns the PATH, not the VALUE
+- Cloud SQL Connector requires actual connection string format (`PROJECT:REGION:INSTANCE`)
+
+**Decision: Mandatory Fetch Pattern**
+```python
+def fetch_[secret_name]() -> str:
+    """Fetch [secret] from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("[ENV_VAR_NAME]")
+        if not secret_path:
+            # Return fallback or raise error
+            return "default_value"  # OR raise ValueError()
+
+        # Check if already in correct format (optimization)
+        if is_correct_format(secret_path):
+            return secret_path
+
+        # Fetch from Secret Manager
+        response = client.access_secret_version(request={"name": secret_path})
+        value = response.payload.data.decode("UTF-8").strip()
+        print(f"✅ Fetched [secret_name]: {value}")
+        return value
+    except Exception as e:
+        print(f"❌ Error fetching [secret_name]: {e}")
+        # Handle error: raise or return fallback
+        return "default_value"  # OR raise
+```
+
+**Implementation for CLOUD_SQL_CONNECTION_NAME:**
+```python
+# database.py:64-87
+def fetch_cloud_sql_connection_name() -> str:
+    """Fetch Cloud SQL connection name from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_path:
+            return "telepay-459221:us-central1:telepaypsql"
+
+        # Optimization: Check if already in correct format
+        if ':' in secret_path and not secret_path.startswith('projects/'):
+            return secret_path
+
+        # Fetch from Secret Manager
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8").strip()
+    except Exception as e:
+        print(f"❌ Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
+        return "telepay-459221:us-central1:telepaypsql"
+
+# Module-level initialization
+DB_CLOUD_SQL_CONNECTION_NAME = fetch_cloud_sql_connection_name()
+```
+
+**Environment Variable Naming Convention:**
+- Secrets ending in `_SECRET`: Fetch from Secret Manager (e.g., `DATABASE_HOST_SECRET`)
+- Secrets without `_SECRET` suffix: Should STILL fetch if env var contains `projects/...` path
+- Naming convention should be enforced: ALL Secret Manager refs should end in `_SECRET`
+
+**Action Items from This Decision:**
+1. ✅ Fixed CLOUD_SQL_CONNECTION_NAME fetch pattern
+2. 🔍 Search entire codebase for similar direct `os.getenv()` issues
+3. 📋 Verify all secret fetching patterns are consistent
+4. 📝 Document fetch pattern as mandatory in coding standards
+
+**Benefits:**
+- ✅ Consistent secret handling across codebase
+- ✅ Prevents similar bugs in future development
+- ✅ Clear pattern for adding new secrets
+- ✅ Easier to audit security practices
+- ✅ Reduces deployment configuration errors
+
+**Related Bug:** BUGS.md Session 153 - CLOUD_SQL_CONNECTION_NAME Secret Manager Path Not Fetched
+
+---
 
 ## 2025-11-14 Session 152: Maintain Legacy DonationKeypadHandler During Migration
 

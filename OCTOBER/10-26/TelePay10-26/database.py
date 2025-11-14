@@ -61,12 +61,38 @@ def fetch_database_password() -> str:
         print(f"❌ Error fetching DATABASE_PASSWORD_SECRET: {e}")
         return None  # No fallback for password - this should fail safely
 
+def fetch_cloud_sql_connection_name() -> str:
+    """Fetch Cloud SQL connection name from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_path:
+            # Fallback to default if not set
+            print("⚠️ CLOUD_SQL_CONNECTION_NAME not set, using default: telepay-459221:us-central1:telepaypsql")
+            return "telepay-459221:us-central1:telepaypsql"
+
+        # Check if it's already in correct format (PROJECT:REGION:INSTANCE)
+        if ':' in secret_path and not secret_path.startswith('projects/'):
+            print(f"✅ CLOUD_SQL_CONNECTION_NAME already in correct format: {secret_path}")
+            return secret_path
+
+        # Otherwise, fetch from Secret Manager
+        response = client.access_secret_version(request={"name": secret_path})
+        connection_name = response.payload.data.decode("UTF-8").strip()
+        print(f"✅ Fetched Cloud SQL connection name from Secret Manager: {connection_name}")
+        return connection_name
+    except Exception as e:
+        print(f"❌ Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
+        print("⚠️ Falling back to default: telepay-459221:us-central1:telepaypsql")
+        return "telepay-459221:us-central1:telepaypsql"
+
 # Database configuration - now using Secret Manager
 DB_HOST = fetch_database_host()
 DB_PORT = 5432  # This can remain hardcoded as it's not sensitive
 DB_NAME = fetch_database_name()
 DB_USER = fetch_database_user()
 DB_PASSWORD = fetch_database_password()
+DB_CLOUD_SQL_CONNECTION_NAME = fetch_cloud_sql_connection_name()
 
 class DatabaseManager:
     def __init__(self):
@@ -90,7 +116,7 @@ class DatabaseManager:
         # 🆕 NEW_ARCHITECTURE: Initialize connection pool
         try:
             self.pool = init_connection_pool({
-                'instance_connection_name': os.getenv('CLOUD_SQL_CONNECTION_NAME', 'telepay-459221:us-central1:telepaypsql'),
+                'instance_connection_name': DB_CLOUD_SQL_CONNECTION_NAME,
                 'database': self.dbname,
                 'user': self.user,
                 'password': self.password,

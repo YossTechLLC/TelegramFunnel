@@ -1,8 +1,89 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 152 - **DonationKeypadHandler Import Fix** ✅
+**Last Updated:** 2025-11-14 Session 153 - **CLOUD_SQL_CONNECTION_NAME Secret Manager Fix** ✅
 
 ## Recent Updates
+
+## 2025-11-14 Session 153: Cloud SQL Connection Name Secret Manager Fix ✅
+
+**Issue:** Application failed to connect to Cloud SQL database - all database operations non-functional
+
+**Error Message:**
+```
+Arg `instance_connection_string` must have format: PROJECT:REGION:INSTANCE,
+got projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+```
+
+**Root Cause:**
+- CLOUD_SQL_CONNECTION_NAME environment variable contained Secret Manager path (not the secret value)
+- Code used direct `os.getenv()` instead of Secret Manager fetch function
+- Inconsistent with other database secrets (DATABASE_HOST_SECRET, DATABASE_NAME_SECRET, etc.)
+
+**Affected Operations:**
+- ❌ Subscription monitoring (fetch_expired_subscriptions)
+- ❌ Open channel queries (fetch_open_channel_list)
+- ❌ Closed channel queries (fetch_closed_channel_id)
+- ❌ Payment gateway database access
+- ❌ Donation flow database operations
+
+**Fix Applied:**
+
+1. **Added Secret Manager Fetch Function** (`database.py:64-87`):
+```python
+def fetch_cloud_sql_connection_name() -> str:
+    """Fetch Cloud SQL connection name from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_path:
+            return "telepay-459221:us-central1:telepaypsql"
+
+        # Check if already in correct format
+        if ':' in secret_path and not secret_path.startswith('projects/'):
+            return secret_path
+
+        # Fetch from Secret Manager
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8").strip()
+    except Exception as e:
+        print(f"❌ Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
+        return "telepay-459221:us-central1:telepaypsql"
+```
+
+2. **Module-Level Variable** (`database.py:95`):
+```python
+DB_CLOUD_SQL_CONNECTION_NAME = fetch_cloud_sql_connection_name()
+```
+
+3. **Updated DatabaseManager** (`database.py:119`):
+```python
+self.pool = init_connection_pool({
+    'instance_connection_name': DB_CLOUD_SQL_CONNECTION_NAME,  # ✅ Now uses fetched value
+    'database': self.dbname,
+    'user': self.user,
+    'password': self.password,
+    ...
+})
+```
+
+**Files Modified:**
+- ✅ `TelePay10-26/database.py` - Added fetch function, module variable, updated init
+- ✅ `BUGS.md` - Added detailed bug report (Session 153)
+- ✅ `PROGRESS.md` - This entry
+- ✅ `DECISIONS.md` - Architectural decision logged
+
+**Expected Results:**
+- ✅ Cloud SQL connection string properly fetched: `telepay-459221:us-central1:telepaypsql`
+- ✅ Connection pool initializes successfully
+- ✅ All database operations functional
+- ✅ Subscription monitoring restored
+- ✅ Payment gateway database access restored
+
+**Next Steps:**
+- 🔍 Search codebase for similar Secret Manager path issues
+- ✅ Verify all secret fetching patterns are consistent
+
+---
 
 ## 2025-11-14 Session 152: DonationKeypadHandler Import Error Resolution ✅
 
