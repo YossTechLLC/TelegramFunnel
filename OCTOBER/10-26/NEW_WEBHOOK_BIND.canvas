@@ -1,0 +1,292 @@
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "text",
+      "text": "# TelePay10-26\n\n**Main Bot Service**\n\n## Endpoints\n- GET /health\n- POST /webhooks/notification (deprecated)\n\n## Responsibilities\n- User interaction\n- Invoice creation\n- Bot commands\n\n## Outbound Calls\n→ NowPayments API (invoice creation)\n→ Telegram Bot API (messages)",
+      "x": 0,
+      "y": 0,
+      "width": 580,
+      "height": 400
+    },
+    {
+      "id": "n2",
+      "type": "text",
+      "text": "# NowPayments API\n\n**External Payment Gateway**\n\n## Triggers\n← POST from TelePay (invoice creation)\n\n## Callbacks\n→ POST to np-webhook (IPN)\n\n## Data\n- Payment confirmation\n- payment_id\n- Transaction details\n- Crypto amounts",
+      "x": 680,
+      "y": 0,
+      "width": 540,
+      "height": 400
+    },
+    {
+      "id": "n3",
+      "type": "text",
+      "text": "# np-webhook-10-26\n\n**IPN Handler**\n\n## Endpoints\n- POST / (IPN callback)\n- GET /payment-processing\n- GET /api/payment-status/{order_id}\n\n## Responsibilities\n- HMAC-SHA512 signature verification\n- Database update (payment_id)\n- Trigger downstream services\n\n## Security\n- NOWPAYMENTS_IPN_SECRET validation\n\n## Outbound Calls\n→ GCNotificationService (HTTP POST)\n→ GCWebhook1 (Cloud Tasks)",
+      "x": 1320,
+      "y": 0,
+      "width": 660,
+      "height": 400
+    },
+    {
+      "id": "n4",
+      "type": "text",
+      "text": "# GCNotificationService-10-26\n\n**Payment Notification Service**\n\n## Endpoints\n- POST /send-notification\n- POST /test-notification\n- GET /health\n\n## Request Body\n```json\n{\n  \"open_channel_id\": \"-1003268562225\",\n  \"payment_type\": \"subscription\",\n  \"payment_data\": {\n    \"user_id\": 123456789,\n    \"amount_crypto\": \"0.00785\",\n    \"amount_usd\": \"29.99\",\n    \"tier\": 1,\n    \"duration_days\": 30\n  }\n}\n```\n\n## Responsibilities\n- Fetch notification settings\n- Format notification message\n- Send to channel owner\n\n## Outbound Calls\n→ Telegram Bot API (notification message)",
+      "x": 2080,
+      "y": 0,
+      "width": 740,
+      "height": 520
+    },
+    {
+      "id": "n5",
+      "type": "text",
+      "text": "# GCWebhook1-10-26\n\n**Payment Processor**\n\n## Endpoints\n- POST /process-validated-payment\n- GET / (legacy success URL)\n- GET /health\n\n## Responsibilities\n- Token verification\n- Calculate expiration\n- Record subscription\n- Trigger invite & split\n\n## Outbound Calls\n→ GCWebhook2 (Cloud Tasks - encrypted)\n→ GCSplit1 (Cloud Tasks)\n\n## Data Flow\n- Subscription to database\n- User invite queueing",
+      "x": 0,
+      "y": 500,
+      "width": 660,
+      "height": 440
+    },
+    {
+      "id": "n6",
+      "type": "text",
+      "text": "# GCWebhook2-10-26\n\n**Telegram Invite Service**\n\n## Endpoints\n- POST / (encrypted payload)\n- GET /health\n\n## Request\n```json\n{\n  \"encrypted_data\": \"base64...\"\n}\n```\n\n## Decrypted Payload\n```json\n{\n  \"user_id\": 123456789,\n  \"closed_channel_id\": -1001234567890\n}\n```\n\n## Responsibilities\n- AES-256 decryption\n- Generate invite link\n- Send invite to user\n\n## Security\n- Encrypted Cloud Tasks payload\n- Token-based authentication\n\n## Outbound Calls\n→ Telegram Bot API (invite link)",
+      "x": 760,
+      "y": 500,
+      "width": 680,
+      "height": 520
+    },
+    {
+      "id": "n7",
+      "type": "text",
+      "text": "# GCBroadcastService-10-26\n\n**Manual Broadcast API**\n\n## Endpoints\n- POST /api/broadcast/trigger (JWT)\n- GET /api/broadcast/status/{id} (JWT)\n- POST /api/broadcast/execute\n- GET /health\n\n## Authentication\n- JWT (HS256)\n- client_id from 'sub' claim\n\n## Rate Limiting\n- Default: 5 minutes between manual triggers\n\n## Responsibilities\n- Manual trigger validation\n- Ownership verification\n- Rate limit enforcement\n- Status queries\n\n## Outbound Calls\n→ Telegram Bot API (broadcast messages)\n\n## CORS\n- Origins: www.paygateprime.com\n- Methods: GET, POST, OPTIONS\n- Credentials: true",
+      "x": 1540,
+      "y": 500,
+      "width": 680,
+      "height": 560
+    },
+    {
+      "id": "n8",
+      "type": "text",
+      "text": "# GCBroadcastScheduler-10-26\n\n**Automated Broadcast Execution**\n\n## Endpoints\n- POST /api/broadcast/execute\n- POST /api/broadcast/trigger (JWT)\n- GET /api/broadcast/status/{id} (JWT)\n- GET /health\n\n## Trigger\n← Cloud Scheduler (daily cron)\n\n## Flow\n1. Fetch due broadcasts\n2. Execute batch\n3. Update statistics\n4. Calculate next send time\n\n## Response\n```json\n{\n  \"success\": true,\n  \"total_broadcasts\": 10,\n  \"successful\": 9,\n  \"failed\": 1,\n  \"execution_time_seconds\": 45.2\n}\n```\n\n## Outbound Calls\n→ Telegram Bot API (broadcast messages)",
+      "x": 2320,
+      "y": 500,
+      "width": 700,
+      "height": 560
+    },
+    {
+      "id": "n9",
+      "type": "text",
+      "text": "# www.paygateprime.com\n\n**Dashboard Website**\n\n## Authenticated Requests\n- POST /api/broadcast/trigger\n- GET /api/broadcast/status/{id}\n\n## Authentication\n- JWT token from login\n- Stored in browser\n- Sent in Authorization header\n\n## User Actions\n- View broadcast statistics\n- Trigger manual broadcasts\n- Configure notifications",
+      "x": 0,
+      "y": 1040,
+      "width": 620,
+      "height": 400
+    },
+    {
+      "id": "n10",
+      "type": "text",
+      "text": "# Cloud Scheduler\n\n**Automated Triggers**\n\n## Schedule\n- Daily cron job\n- Triggers broadcast execution\n\n## Target\n→ GCBroadcastScheduler\n\n## Payload\n```json\n{\n  \"source\": \"cloud_scheduler\"\n}\n```",
+      "x": 720,
+      "y": 1040,
+      "width": 540,
+      "height": 360
+    },
+    {
+      "id": "n11",
+      "type": "text",
+      "text": "# Database (client_table)\n\n**Primary Data Store**\n\n## Tables Used\n- client_table\n- private_channel_users_database\n- broadcast_manager\n\n## Operations\n\n### Payment Flow\n- UPDATE payment_id (np-webhook)\n- INSERT subscription (GCWebhook1)\n- SELECT notification settings (GCNotificationService)\n\n### Broadcast Flow\n- SELECT due broadcasts\n- UPDATE statistics\n- UPDATE next_send_time",
+      "x": 1360,
+      "y": 1040,
+      "width": 700,
+      "height": 440
+    },
+    {
+      "id": "n12",
+      "type": "text",
+      "text": "# Cloud Tasks Queues\n\n**Asynchronous Task Processing**\n\n## Queues\n\n### gcwebhook1-queue\n- Source: np-webhook\n- Target: GCWebhook1\n- Payload: Validated payment data\n\n### gcwebhook2-queue\n- Source: GCWebhook1\n- Target: GCWebhook2\n- Payload: Encrypted user/channel data\n\n### gcsplit1-queue\n- Source: GCWebhook1\n- Target: GCSplit1\n- Payload: Payment split data\n\n## Features\n- Automatic retry\n- Exponential backoff\n- Guaranteed delivery",
+      "x": 2160,
+      "y": 1040,
+      "width": 680,
+      "height": 520
+    },
+    {
+      "id": "n13",
+      "type": "text",
+      "text": "# Security Layers\n\n**Authentication & Authorization**\n\n## JWT (Broadcast APIs)\n- Algorithm: HS256\n- Claims: sub (client_id), exp\n- Leeway: 10 seconds\n- Secret: JWT_SECRET_KEY\n\n## HMAC (IPN Webhooks)\n- Algorithm: HMAC-SHA512\n- Header: x-nowpayments-sig\n- Secret: NOWPAYMENTS_IPN_SECRET\n\n## Token Signing (URLs)\n- Algorithm: HMAC-SHA256\n- Encoding: Base64 URL-safe\n- Components: Data + Signature\n\n## AES Encryption (Tasks)\n- Mode: AES-256-CBC\n- Key: From signing secret\n- IV: Random 16 bytes",
+      "x": 0,
+      "y": 1540,
+      "width": 700,
+      "height": 520
+    },
+    {
+      "id": "n14",
+      "type": "text",
+      "text": "# Payment Flow\n\n**Complete Transaction Path**\n\n1. User initiates subscription (TelePay)\n2. TelePay creates invoice (NowPayments API)\n3. User pays with crypto\n4. NowPayments sends IPN (np-webhook)\n5. np-webhook verifies signature\n6. np-webhook updates database (payment_id)\n7. np-webhook → GCNotificationService (HTTP)\n8. GCNotificationService → Channel owner (Telegram)\n9. np-webhook → GCWebhook1 (Cloud Tasks)\n10. GCWebhook1 records subscription\n11. GCWebhook1 → GCWebhook2 (Cloud Tasks)\n12. GCWebhook2 sends invite link\n13. User joins channel",
+      "x": 800,
+      "y": 1540,
+      "width": 720,
+      "height": 480
+    },
+    {
+      "id": "n15",
+      "type": "text",
+      "text": "# Broadcast Flow (Manual)\n\n**User-Triggered Broadcasts**\n\n1. User clicks \"Send Now\" (Dashboard)\n2. Dashboard → GCBroadcastService (JWT)\n3. Verify JWT and ownership\n4. Check rate limit (5 min)\n5. Queue broadcast\n6. Execute via Telegram API\n7. Update statistics\n8. Return status to dashboard\n\n## Rate Limiting\n- Per broadcast_id\n- Default: 5 minutes\n- Prevents spam",
+      "x": 1620,
+      "y": 1540,
+      "width": 660,
+      "height": 440
+    },
+    {
+      "id": "n16",
+      "type": "text",
+      "text": "# Broadcast Flow (Auto)\n\n**Scheduled Broadcasts**\n\n1. Cloud Scheduler triggers (daily)\n2. GCBroadcastScheduler receives request\n3. Fetch due broadcasts from database\n4. Execute batch via Telegram API\n5. Update statistics (success/fail)\n6. Calculate next_send_time\n7. Return execution summary\n\n## Scheduling\n- Based on last_sent_time\n- Interval from broadcast_manager\n- Skips if consecutive failures > 3",
+      "x": 2380,
+      "y": 1540,
+      "width": 680,
+      "height": 440
+    },
+    {
+      "id": "n17",
+      "type": "text",
+      "text": "# Telegram Bot API\n\n**Message Delivery**\n\n## Used By\n- TelePay (bot commands)\n- GCNotificationService (notifications)\n- GCWebhook2 (invite links)\n- GCBroadcastService (manual broadcasts)\n- GCBroadcastScheduler (auto broadcasts)\n\n## Operations\n- sendMessage\n- createChatInviteLink\n- banChatMember (subscription expiry)\n\n## Error Handling\n- Retry on network errors\n- Track failures\n- Update statistics",
+      "x": 0,
+      "y": 2160,
+      "width": 660,
+      "height": 460
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "n1",
+      "fromSide": "right",
+      "toNode": "n2",
+      "toSide": "left"
+    },
+    {
+      "id": "e2",
+      "fromNode": "n2",
+      "fromSide": "right",
+      "toNode": "n3",
+      "toSide": "left"
+    },
+    {
+      "id": "e3",
+      "fromNode": "n3",
+      "fromSide": "right",
+      "toNode": "n4",
+      "toSide": "left"
+    },
+    {
+      "id": "e4",
+      "fromNode": "n3",
+      "fromSide": "bottom",
+      "toNode": "n5",
+      "toSide": "top"
+    },
+    {
+      "id": "e5",
+      "fromNode": "n5",
+      "fromSide": "right",
+      "toNode": "n6",
+      "toSide": "left"
+    },
+    {
+      "id": "e6",
+      "fromNode": "n9",
+      "fromSide": "right",
+      "toNode": "n7",
+      "toSide": "bottom"
+    },
+    {
+      "id": "e7",
+      "fromNode": "n10",
+      "fromSide": "right",
+      "toNode": "n8",
+      "toSide": "bottom"
+    },
+    {
+      "id": "e8",
+      "fromNode": "n3",
+      "fromSide": "bottom",
+      "toNode": "n11",
+      "toSide": "top"
+    },
+    {
+      "id": "e9",
+      "fromNode": "n5",
+      "fromSide": "bottom",
+      "toNode": "n11",
+      "toSide": "top"
+    },
+    {
+      "id": "e10",
+      "fromNode": "n4",
+      "fromSide": "bottom",
+      "toNode": "n11",
+      "toSide": "top"
+    },
+    {
+      "id": "e11",
+      "fromNode": "n7",
+      "fromSide": "bottom",
+      "toNode": "n11",
+      "toSide": "top"
+    },
+    {
+      "id": "e12",
+      "fromNode": "n8",
+      "fromSide": "bottom",
+      "toNode": "n11",
+      "toSide": "top"
+    },
+    {
+      "id": "e13",
+      "fromNode": "n3",
+      "fromSide": "bottom",
+      "toNode": "n12",
+      "toSide": "top"
+    },
+    {
+      "id": "e14",
+      "fromNode": "n5",
+      "fromSide": "bottom",
+      "toNode": "n12",
+      "toSide": "top"
+    },
+    {
+      "id": "e15",
+      "fromNode": "n4",
+      "fromSide": "bottom",
+      "toNode": "n17",
+      "toSide": "top"
+    },
+    {
+      "id": "e16",
+      "fromNode": "n6",
+      "fromSide": "bottom",
+      "toNode": "n17",
+      "toSide": "top"
+    },
+    {
+      "id": "e17",
+      "fromNode": "n7",
+      "fromSide": "bottom",
+      "toNode": "n17",
+      "toSide": "top"
+    },
+    {
+      "id": "e18",
+      "fromNode": "n8",
+      "fromSide": "bottom",
+      "toNode": "n17",
+      "toSide": "top"
+    },
+    {
+      "id": "e19",
+      "fromNode": "n1",
+      "fromSide": "bottom",
+      "toNode": "n17",
+      "toSide": "top"
+    }
+  ]
+}

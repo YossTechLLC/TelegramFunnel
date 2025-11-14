@@ -143,3 +143,71 @@ class BroadcastTracker:
         except Exception as e:
             self.logger.error(f"❌ Error resetting failures: {e}")
             return False
+
+    def update_message_ids(
+        self,
+        broadcast_id: str,
+        open_message_id: Optional[int] = None,
+        closed_message_id: Optional[int] = None
+    ) -> bool:
+        """
+        Update the last sent message IDs for a broadcast.
+
+        This enables deletion of old messages when resending broadcasts.
+
+        Args:
+            broadcast_id: UUID of the broadcast entry
+            open_message_id: Telegram message ID sent to open channel
+            closed_message_id: Telegram message ID sent to closed channel
+
+        Returns:
+            True if successful, False otherwise
+
+        Note:
+            Only updates provided message IDs (supports partial updates)
+        """
+        try:
+            # Build dynamic update query
+            update_fields = []
+            params = []
+
+            if open_message_id is not None:
+                update_fields.append("last_open_message_id = %s")
+                update_fields.append("last_open_message_sent_at = NOW()")
+                params.append(open_message_id)
+
+            if closed_message_id is not None:
+                update_fields.append("last_closed_message_id = %s")
+                update_fields.append("last_closed_message_sent_at = NOW()")
+                params.append(closed_message_id)
+
+            if not update_fields:
+                self.logger.warning("⚠️ No message IDs provided to update")
+                return False
+
+            # Add broadcast_id to params
+            params.append(broadcast_id)
+
+            # Construct query
+            query = f"""
+                UPDATE broadcast_manager
+                SET {', '.join(update_fields)}
+                WHERE id = %s
+            """
+
+            with self.db.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, tuple(params))
+                    conn.commit()
+
+                    self.logger.info(
+                        f"📝 Updated message IDs for broadcast {str(broadcast_id)[:8]}... "
+                        f"(open={open_message_id}, closed={closed_message_id})"
+                    )
+
+                    return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to update message IDs: {e}")
+            # Don't raise - this is supplementary functionality
+            return False

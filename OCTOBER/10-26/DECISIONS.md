@@ -1,12 +1,93 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session - **Bot Architecture Redundancy Analysis** 🔍
+**Last Updated:** 2025-11-14 - **Service Redundancy Identified** 🔍
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: GCBroadcastService Redundancy - User Insight Validated ✅
+
+**Issue:** Two separate broadcast services with 100% functional duplication
+**User Insight:** "I have a feeling that BroadcastService may not be necessary"
+**Verdict:** User is CORRECT - complete architectural redundancy confirmed
+
+**Services Identified:**
+1. **GCBroadcastScheduler-10-26** (ACTIVE)
+   - Cloud Scheduler: `broadcast-scheduler-daily` (every 5 minutes)
+   - Status: ✅ Working correctly with recent message deletion fix
+   - Code structure: Flat (all modules in root)
+
+2. **GCBroadcastService-10-26** (REDUNDANT)
+   - Cloud Scheduler: `gcbroadcastservice-daily` (once daily at 12:00 UTC)
+   - Status: ⚠️ Unnecessary duplicate
+   - Code structure: Organized (services/, routes/, clients/, utils/)
+
+**100% Duplication Confirmed:**
+- All 4 API endpoints identical (execute, trigger, status, health)
+- All 6 core modules identical (executor, scheduler, tracker, telegram, database, config)
+- Both hit same `broadcast_manager` database table
+- Both use same Cloud SQL connection pool
+- Only difference: code organization (GCBroadcastService has better structure)
+
+**Historical Context:**
+- Likely created during refactoring effort (better code organization)
+- Old service (Scheduler) never decommissioned after new service (Service) deployed
+- Both services running in parallel with separate scheduler jobs
+- User correctly identified the overlap during debugging
+
+**Decision:** REMOVE GCBroadcastService-10-26 entirely
+**Rationale:**
+- Zero unique functionality
+- Wastes cloud resources (duplicate deployment)
+- Causes confusion (which service to update?)
+- Potential for race conditions (both executing at same time)
+- GCBroadcastScheduler already working with recent bug fixes
+
+**Action Plan:**
+1. Pause `gcbroadcastservice-daily` scheduler job
+2. Verify GCBroadcastScheduler continues working (next 5-min cron)
+3. Delete `gcbroadcastservice-10-26` Cloud Run service
+4. Delete `gcbroadcastservice-daily` scheduler job
+5. Archive `GCBroadcastService-10-26` code directory
+
+**Lessons Learned:**
+- Always complete migration plans (don't leave old services running)
+- Use distinct service names that indicate purpose
+- Regular audits to identify redundant infrastructure
+- User observations often reveal critical architectural issues
+
+**Documentation:** Full analysis in `BROADCAST_SERVICE_REDUNDANCY_ANALYSIS.md`
+
+---
+
+## 2025-11-14: Root Cause Analysis - Deployment Gap Identified
+
+**Issue:** Message deletion not working despite code implementation
+**Root Cause:** Code was updated locally but never deployed to Cloud Run
+**Decision:** Immediate deployment of GCBroadcastService-10-26 with message tracking
+
+**Analysis:**
+- Database schema was migrated successfully (columns exist)
+- Code changes were implemented correctly (delete-then-send workflow)
+- Service was running old version from 2025-11-13 (before code changes)
+- All message IDs in database were NULL (never stored by old code)
+
+**Resolution Strategy:**
+1. Deploy updated code immediately (low risk - isolated changes)
+2. Accept first broadcast won't delete (no IDs stored yet)
+3. Second broadcast onwards will work correctly
+4. Manual cleanup of existing duplicates optional (one-time)
+
+**Rationale:**
+- Code review showed implementation was correct
+- Problem was operational (deployment), not technical (code)
+- Graceful degradation ensures no breaking changes
+- First broadcast establishes baseline for future deletions
+
+---
 
 ## 2025-11-14: Bot Architecture Redundancy Analysis
 

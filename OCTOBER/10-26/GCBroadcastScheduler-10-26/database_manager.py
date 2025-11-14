@@ -131,6 +131,8 @@ class DatabaseManager:
                         bm.next_send_time,
                         bm.broadcast_status,
                         bm.consecutive_failures,
+                        bm.last_open_message_id,
+                        bm.last_closed_message_id,
                         mc.open_channel_title,
                         mc.open_channel_description,
                         mc.closed_channel_title,

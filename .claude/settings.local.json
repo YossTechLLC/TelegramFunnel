@@ -91,7 +91,8 @@
       "Bash(gcloud secrets describe:*)",
       "Bash(bash:*)",
       "Bash(./deploy_message_tracking_migration.sh:*)",
-      "Bash(dos2unix:*)"
+      "Bash(dos2unix:*)",
+      "Bash(gcloud sql databases list:*)"
     ],
     "deny": [],
     "ask": []

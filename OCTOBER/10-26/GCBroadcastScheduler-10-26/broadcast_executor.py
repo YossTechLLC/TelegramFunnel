@@ -43,7 +43,12 @@ class BroadcastExecutor:
         """
         Execute a single broadcast operation.
 
-        Sends both subscription and donation messages, then updates status.
+        NEW BEHAVIOR:
+        1. Delete old open channel message (if exists)
+        2. Send new subscription message to open channel
+        3. Delete old closed channel message (if exists)
+        4. Send new donation message to closed channel
+        5. Update message IDs in database
 
         Args:
             broadcast_entry: Broadcast entry from get_due_broadcasts()
@@ -53,12 +58,18 @@ class BroadcastExecutor:
                 'success': bool,
                 'open_channel_sent': bool,
                 'closed_channel_sent': bool,
-                'errors': List[str]
+                'errors': List[str],
+                'new_open_message_id': int or None,
+                'new_closed_message_id': int or None
             }
         """
         broadcast_id = broadcast_entry['id']
         open_channel_id = broadcast_entry['open_channel_id']
         closed_channel_id = broadcast_entry['closed_channel_id']
+
+        # Get old message IDs for deletion
+        old_open_msg_id = broadcast_entry.get('last_open_message_id')
+        old_closed_msg_id = broadcast_entry.get('last_closed_message_id')
 
         self.logger.info(f"🚀 Executing broadcast {str(broadcast_id)[:8]}...")
 
@@ -68,27 +79,69 @@ class BroadcastExecutor:
         errors = []
         open_sent = False
         closed_sent = False
+        new_open_msg_id = None
+        new_closed_msg_id = None
 
         try:
-            # Send subscription message to open channel
+            # STEP 1: Delete old open channel message (if exists)
+            if old_open_msg_id:
+                self.logger.info(
+                    f"🗑️ Deleting old open message {old_open_msg_id} from {open_channel_id}"
+                )
+                delete_result = self.telegram.delete_message(
+                    open_channel_id,
+                    old_open_msg_id
+                )
+                if not delete_result['success']:
+                    self.logger.warning(
+                        f"⚠️ Could not delete old open message: {delete_result['error']}"
+                    )
+                    # Continue anyway - not critical
+
+            # STEP 2: Send new subscription message to open channel
             self.logger.info(f"📤 Sending to open channel: {open_channel_id}")
             open_result = self._send_subscription_message(broadcast_entry)
             open_sent = open_result['success']
+            new_open_msg_id = open_result.get('message_id')
 
             if not open_sent:
                 error_msg = f"Open channel: {open_result['error']}"
                 errors.append(error_msg)
                 self.logger.error(f"❌ {error_msg}")
 
-            # Send donation message to closed channel
+            # STEP 3: Delete old closed channel message (if exists)
+            if old_closed_msg_id:
+                self.logger.info(
+                    f"🗑️ Deleting old closed message {old_closed_msg_id} from {closed_channel_id}"
+                )
+                delete_result = self.telegram.delete_message(
+                    closed_channel_id,
+                    old_closed_msg_id
+                )
+                if not delete_result['success']:
+                    self.logger.warning(
+                        f"⚠️ Could not delete old closed message: {delete_result['error']}"
+                    )
+                    # Continue anyway - not critical
+
+            # STEP 4: Send new donation message to closed channel
             self.logger.info(f"📤 Sending to closed channel: {closed_channel_id}")
             closed_result = self._send_donation_message(broadcast_entry)
             closed_sent = closed_result['success']
+            new_closed_msg_id = closed_result.get('message_id')
 
             if not closed_sent:
                 error_msg = f"Closed channel: {closed_result['error']}"
                 errors.append(error_msg)
                 self.logger.error(f"❌ {error_msg}")
+
+            # STEP 5: Update message IDs in database
+            if new_open_msg_id or new_closed_msg_id:
+                self.tracker.update_message_ids(
+                    broadcast_id,
+                    open_message_id=new_open_msg_id,
+                    closed_message_id=new_closed_msg_id
+                )
 
             # Determine overall success (both must succeed)
             success = open_sent and closed_sent
@@ -96,18 +149,24 @@ class BroadcastExecutor:
             # Update broadcast status
             if success:
                 self.tracker.mark_success(broadcast_id)
-                self.logger.info(f"✅ Broadcast {str(broadcast_id)[:8]}... completed successfully")
+                self.logger.info(
+                    f"✅ Broadcast {str(broadcast_id)[:8]}... completed successfully"
+                )
             else:
                 error_msg = '; '.join(errors)
                 self.tracker.mark_failure(broadcast_id, error_msg)
-                self.logger.error(f"❌ Broadcast {str(broadcast_id)[:8]}... failed: {error_msg}")
+                self.logger.error(
+                    f"❌ Broadcast {str(broadcast_id)[:8]}... failed: {error_msg}"
+                )
 
             return {
                 'success': success,
                 'open_channel_sent': open_sent,
                 'closed_channel_sent': closed_sent,
                 'errors': errors,
-                'broadcast_id': str(broadcast_id)
+                'broadcast_id': str(broadcast_id),
+                'new_open_message_id': new_open_msg_id,
+                'new_closed_message_id': new_closed_msg_id
             }
 
         except Exception as e:
@@ -121,7 +180,9 @@ class BroadcastExecutor:
                 'open_channel_sent': open_sent,
                 'closed_channel_sent': closed_sent,
                 'errors': errors,
-                'broadcast_id': str(broadcast_id)
+                'broadcast_id': str(broadcast_id),
+                'new_open_message_id': new_open_msg_id,
+                'new_closed_message_id': new_closed_msg_id
             }
 
     def _send_subscription_message(

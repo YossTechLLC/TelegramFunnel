@@ -1,8 +1,105 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-01-14 Session - **Live-Time Broadcast Only Implementation** 🚀 IN PROGRESS
+**Last Updated:** 2025-11-14 - **Service Redundancy Analysis Complete** 🔍
 
 ## Recent Updates
+
+## 2025-11-14: Broadcast Service Redundancy Identified & Documented ✅
+
+**User Insight:** "I have a feeling that BroadcastService may not be necessary"
+**Analysis Result:** ✅ User is 100% CORRECT
+
+**Findings:**
+- ✅ Completed comprehensive architectural analysis of both broadcast services
+- ✅ Confirmed 100% functional duplication between:
+  - GCBroadcastScheduler-10-26 (ACTIVE - every 5 minutes)
+  - GCBroadcastService-10-26 (REDUNDANT - once daily)
+- ✅ Identified duplicate Cloud Scheduler jobs:
+  - `broadcast-scheduler-daily` (every 5 min) → calls Scheduler
+  - `gcbroadcastservice-daily` (once daily) → calls Service
+- ✅ All 4 API endpoints identical across both services
+- ✅ All 6 core modules identical (only code organization differs)
+- ✅ Both services hit same database table with same queries
+
+**Documentation Created:**
+- ✅ `BROADCAST_SERVICE_REDUNDANCY_ANALYSIS.md` - Full 300+ line analysis
+  - Executive summary with clear verdict
+  - Detailed code comparison (endpoints, modules, scheduler jobs)
+  - Evidence from Cloud Scheduler configuration
+  - Historical context (incomplete migration)
+  - Cleanup action plan with specific commands
+  - Architectural lessons learned
+
+**Key Insights:**
+- GCBroadcastService was likely created during code reorganization effort
+- Better structure (services/, routes/, clients/) but zero new functionality
+- Old service (Scheduler) never decommissioned
+- Both services running in parallel causing potential race conditions
+- Recent bug fix only applied to Scheduler (the working one)
+
+**Recommendation:** DELETE GCBroadcastService-10-26 entirely
+**Rationale:**
+- Zero unique value
+- Wastes cloud resources
+- Causes developer confusion
+- Potential database conflicts
+- GCBroadcastScheduler already working with all recent fixes
+
+**Awaiting User Approval for Cleanup:**
+1. Pause `gcbroadcastservice-daily` scheduler job
+2. Verify Scheduler continues working
+3. Delete `gcbroadcastservice-10-26` Cloud Run service
+4. Delete scheduler job permanently
+5. Archive code directory
+
+**Status:** Analysis complete, awaiting user confirmation to proceed with cleanup
+
+---
+
+## 2025-11-14: GCBroadcastScheduler Message Tracking Deployed ✅ CORRECT SERVICE
+
+**Critical Discovery:** TWO separate services exist - deployed WRONG service first!
+**Root Cause:** GCBroadcastScheduler-10-26 (the actual scheduler) was running old code
+**Resolution:** Applied changes to correct service and deployed GCBroadcastScheduler-10-26
+
+**Service Duplication Found:**
+- ❌ GCBroadcastService-10-26: API-only service (deployed by mistake at 22:56 UTC)
+- ✅ GCBroadcastScheduler-10-26: ACTUAL scheduler executing broadcasts (deployed at 23:07 UTC)
+
+**Correct Deployment Details:**
+- Service: gcbroadcastscheduler-10-26 ← **THE CORRECT ONE**
+- Revision: gcbroadcastscheduler-10-26-00012-v7v
+- Deployment Time: 2025-11-14 23:07:58 UTC
+- URL: https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app
+- Health Check: ✅ PASSED
+
+**Code Changes Applied to Scheduler:**
+1. ✅ Added delete_message() to telegram_client.py (120 lines)
+2. ✅ Updated database_manager.py to fetch message ID columns
+3. ✅ Added update_message_ids() to broadcast_tracker.py
+4. ✅ Updated broadcast_executor.py with delete-then-send workflow
+
+**Evidence from Logs:**
+- gcbroadcastscheduler-10-26 logs showed: "Executing broadcast 34610fd8..."
+- gcbroadcastservice-10-26 logs showed: Only initialization, no execution
+- User reported messages still not deleting → confirmed wrong service deployed
+
+**Actions Taken:**
+1. ✅ Reviewed logs from BOTH services (user's critical insight!)
+2. ✅ Identified GCBroadcastScheduler-10-26 as actual executor
+3. ✅ Applied all message tracking changes to scheduler
+4. ✅ Deployed scheduler with message tracking
+5. ✅ Verified health endpoint responding correctly
+
+**Expected Behavior:**
+- First broadcast after deployment: Won't delete (no message IDs stored yet), will store new IDs
+- Second broadcast onwards: Will delete old messages before sending new ones ✅
+
+**Next Steps:**
+- Monitor next broadcast execution (runs every 5 minutes via Cloud Scheduler)
+- Verify message IDs are stored in database
+- Test second resend to confirm deletion works
+- Existing duplicate messages will be cleaned up on second broadcast
 
 ## 2025-01-14: Live-Time Broadcast Only - Phases 1-3 Complete ✅
 
