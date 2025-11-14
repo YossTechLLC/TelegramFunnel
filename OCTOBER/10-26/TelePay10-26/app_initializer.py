@@ -1,20 +1,34 @@
 #!/usr/bin/env python
 import logging
 import nest_asyncio
+import os
+
+# Core managers (keep these - no new versions yet)
 from config_manager import ConfigManager
-from database import DatabaseManager
 from secure_webhook import SecureWebhookManager
-from start_np_gateway import PaymentGatewayManager
 from broadcast_manager import BroadcastManager
-from input_handlers import InputHandlers
-from menu_handlers import MenuHandlers
-from bot_manager import BotManager
 from message_utils import MessageUtils
 from subscription_manager import SubscriptionManager
 from closed_channel_manager import ClosedChannelManager
-from donation_input_handler import DonationKeypadHandler
-from notification_service import NotificationService  # 🆕 NOTIFICATION_MANAGEMENT_ARCHITECTURE
-from telegram import Bot  # 🆕 For NotificationService
+
+# 🆕 NEW_ARCHITECTURE: Modular architecture imports
+from database import DatabaseManager  # Refactored to use ConnectionPool internally
+from services import init_payment_service, init_notification_service
+from bot.handlers import register_command_handlers
+from bot.conversations import create_donation_conversation_handler
+from bot.utils import keyboards as bot_keyboards
+
+# Keep old imports temporarily for gradual migration
+from input_handlers import InputHandlers
+from menu_handlers import MenuHandlers
+from bot_manager import BotManager
+
+# Legacy imports (will be removed after full migration)
+# from donation_input_handler import DonationKeypadHandler  # REPLACED by bot.conversations
+# from start_np_gateway import PaymentGatewayManager  # REPLACED by services.PaymentService
+# from notification_service import NotificationService  # REPLACED by services.NotificationService
+
+from telegram import Bot  # For bot initialization
 
 class AppInitializer:
     def __init__(self):
@@ -36,7 +50,7 @@ class AppInitializer:
         # Initialize managers
         self.db_manager = None
         self.webhook_manager = None
-        self.payment_manager = None
+        self.payment_manager = None  # Legacy (will use payment_service)
         self.broadcast_manager = None
         self.input_handlers = None
         self.menu_handlers = None
@@ -45,20 +59,41 @@ class AppInitializer:
         self.subscription_manager = None
         self.closed_channel_manager = None
         self.donation_handler = None
-        self.notification_service = None  # 🆕 NOTIFICATION_MANAGEMENT_ARCHITECTURE
+        self.notification_service = None  # Will use new modular version
+
+        # 🆕 NEW_ARCHITECTURE: New components
+        self.security_config = None
+        self.payment_service = None  # New modular payment service
+        self.flask_app = None  # Flask app with security
     
     def initialize(self):
         """Initialize all application components."""
         # Get configuration
         self.config = self.config_manager.initialize_config()
-        
+
         if not self.config['bot_token']:
             raise RuntimeError("Bot token is required to start the application")
-        
+
+        # 🆕 NEW_ARCHITECTURE: Initialize security configuration
+        self.security_config = self._initialize_security_config()
+        self.logger.info("✅ Security configuration loaded")
+
         # Initialize core managers
-        self.db_manager = DatabaseManager()
+        self.db_manager = DatabaseManager()  # Now uses ConnectionPool internally
         self.webhook_manager = SecureWebhookManager()
+
+        # 🆕 NEW_ARCHITECTURE: Initialize new services
+        self.logger.info("🆕 Initializing NEW_ARCHITECTURE services...")
+
+        # Initialize payment service (replaces PaymentGatewayManager)
+        self.payment_service = init_payment_service()
+        self.logger.info("✅ Payment Service initialized")
+
+        # Keep old payment_manager temporarily for backward compatibility
+        # TODO: Migrate all payment_manager usages to payment_service
+        from start_np_gateway import PaymentGatewayManager
         self.payment_manager = PaymentGatewayManager()
+        self.logger.info("⚠️ Legacy PaymentGatewayManager still active - migrate to PaymentService")
         self.input_handlers = InputHandlers(self.db_manager)
         self.message_utils = MessageUtils(self.config['bot_token'])
         
@@ -118,10 +153,13 @@ class AppInitializer:
             self.db_manager
         )
 
-        # 🆕 Initialize notification service (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+        # 🆕 NEW_ARCHITECTURE: Initialize notification service (modular version)
         bot_instance = Bot(token=self.config['bot_token'])
-        self.notification_service = NotificationService(bot_instance, self.db_manager)
-        self.logger.info("✅ Notification Service initialized")
+        self.notification_service = init_notification_service(
+            bot=bot_instance,
+            db_manager=self.db_manager
+        )
+        self.logger.info("✅ Notification Service initialized (NEW_ARCHITECTURE)")
 
         # Initialize broadcast data
         if self.broadcast_manager:
@@ -135,6 +173,90 @@ class AppInitializer:
             result = asyncio.run(self.closed_channel_manager.send_donation_message_to_closed_channels())
             self.logger.info(f"✅ Donation broadcast complete: {result['successful']}/{result['total_channels']} successful")
 
+        # 🆕 NEW_ARCHITECTURE: Initialize Flask server with security
+        self._initialize_flask_app()
+
+    def _initialize_security_config(self) -> dict:
+        """
+        Initialize security configuration for Flask server.
+
+        🆕 NEW_ARCHITECTURE: Loads security settings for HMAC, IP whitelist, rate limiting.
+
+        Returns:
+            Security configuration dictionary
+        """
+        from google.cloud import secretmanager
+        import secrets as python_secrets
+
+        # Fetch webhook signing secret from Secret Manager
+        try:
+            client = secretmanager.SecretManagerServiceClient()
+
+            # Try to fetch webhook signing secret
+            try:
+                secret_path = os.getenv("WEBHOOK_SIGNING_SECRET_NAME")
+                if secret_path:
+                    response = client.access_secret_version(request={"name": secret_path})
+                    webhook_signing_secret = response.payload.data.decode("UTF-8").strip()
+                    self.logger.info("✅ Webhook signing secret loaded from Secret Manager")
+                else:
+                    # Generate a temporary secret for development
+                    webhook_signing_secret = python_secrets.token_hex(32)
+                    self.logger.warning("⚠️ WEBHOOK_SIGNING_SECRET_NAME not set - using temporary secret (DEV ONLY)")
+            except Exception as e:
+                # Fallback: generate temporary secret
+                webhook_signing_secret = python_secrets.token_hex(32)
+                self.logger.warning(f"⚠️ Could not fetch webhook signing secret: {e}")
+                self.logger.warning("⚠️ Using temporary secret (DEV ONLY)")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error initializing security config: {e}")
+            # Use a temporary secret for development
+            webhook_signing_secret = python_secrets.token_hex(32)
+            self.logger.warning("⚠️ Using temporary webhook signing secret (DEV ONLY)")
+
+        # Get allowed IPs from environment or use defaults
+        allowed_ips_str = os.getenv('ALLOWED_IPS', '127.0.0.1,10.0.0.0/8')
+        allowed_ips = [ip.strip() for ip in allowed_ips_str.split(',')]
+
+        # Get rate limit config from environment
+        rate_limit_per_minute = int(os.getenv('RATE_LIMIT_PER_MINUTE', '10'))
+        rate_limit_burst = int(os.getenv('RATE_LIMIT_BURST', '20'))
+
+        config = {
+            'webhook_signing_secret': webhook_signing_secret,
+            'allowed_ips': allowed_ips,
+            'rate_limit_per_minute': rate_limit_per_minute,
+            'rate_limit_burst': rate_limit_burst
+        }
+
+        self.logger.info(f"🔒 [SECURITY] Configured:")
+        self.logger.info(f"   Allowed IPs: {len(allowed_ips)} ranges")
+        self.logger.info(f"   Rate limit: {rate_limit_per_minute} req/min, burst {rate_limit_burst}")
+
+        return config
+
+    def _initialize_flask_app(self):
+        """
+        Initialize Flask app with security config and services.
+
+        🆕 NEW_ARCHITECTURE: Creates Flask app with security layers active.
+        """
+        from server_manager import create_app
+
+        # Create Flask app with security config
+        self.flask_app = create_app(self.security_config)
+
+        # Store services in Flask app context for blueprint access
+        self.flask_app.config['notification_service'] = self.notification_service
+        self.flask_app.config['payment_service'] = self.payment_service
+        self.flask_app.config['database_manager'] = self.db_manager
+
+        self.logger.info("✅ Flask server initialized with security")
+        self.logger.info("   HMAC: enabled")
+        self.logger.info("   IP Whitelist: enabled")
+        self.logger.info("   Rate Limiting: enabled")
+
     async def run_bot(self):
         """Run the Telegram bot."""
         if not self.bot_manager:
@@ -146,15 +268,25 @@ class AppInitializer:
         )
     
     def get_managers(self):
-        """Get all initialized managers for external use."""
+        """
+        Get all initialized managers for external use.
+
+        🆕 NEW_ARCHITECTURE: Now includes new modular services and Flask app.
+        """
         return {
+            # Legacy managers (backward compatibility)
             'db_manager': self.db_manager,
             'webhook_manager': self.webhook_manager,
-            'payment_manager': self.payment_manager,
+            'payment_manager': self.payment_manager,  # OLD - for compatibility
             'broadcast_manager': self.broadcast_manager,
             'input_handlers': self.input_handlers,
             'menu_handlers': self.menu_handlers,
             'bot_manager': self.bot_manager,
             'message_utils': self.message_utils,
-            'notification_service': self.notification_service  # 🆕 NOTIFICATION_MANAGEMENT_ARCHITECTURE
+
+            # 🆕 NEW_ARCHITECTURE: New modular services
+            'payment_service': self.payment_service,  # NEW
+            'notification_service': self.notification_service,  # NEW modular version
+            'flask_app': self.flask_app,  # NEW
+            'security_config': self.security_config  # NEW
         }

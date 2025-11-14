@@ -74,7 +74,11 @@
       "Bash(/tmp/PROGRESS_to_archive.md)",
       "Bash(/tmp/DECISIONS_new.md)",
       "Bash(/tmp/DECISIONS_to_archive.md)",
-      "Bash(/tmp/DECISIONS_ARCH_new.md)"
+      "Bash(/tmp/DECISIONS_ARCH_new.md)",
+      "Bash(if [ -d \"$HOME/Desktop/2025/.venv\" ])",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)"
     ],
     "deny": [],
     "ask": []

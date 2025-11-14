@@ -6,6 +6,9 @@ from google.cloud import secretmanager
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
+# 🆕 NEW_ARCHITECTURE: Import ConnectionPool
+from models import init_connection_pool
+
 def fetch_database_host() -> str:
     """Fetch database host from Secret Manager."""
     try:
@@ -67,27 +70,106 @@ DB_PASSWORD = fetch_database_password()
 
 class DatabaseManager:
     def __init__(self):
+        """
+        Initialize DatabaseManager with connection pooling.
+
+        🆕 NEW_ARCHITECTURE: Now uses ConnectionPool for better performance and resource management.
+        """
         self.host = DB_HOST
         self.port = DB_PORT
         self.dbname = DB_NAME
         self.user = DB_USER
         self.password = DB_PASSWORD
-        
+
         # Validate that critical credentials are available
         if not self.password:
             raise RuntimeError("Database password not available from Secret Manager. Cannot initialize DatabaseManager.")
         if not self.host or not self.dbname or not self.user:
             raise RuntimeError("Critical database configuration missing from Secret Manager.")
-    
+
+        # 🆕 NEW_ARCHITECTURE: Initialize connection pool
+        try:
+            self.pool = init_connection_pool({
+                'instance_connection_name': os.getenv('CLOUD_SQL_CONNECTION_NAME', 'telepay-459221:us-central1:telepaypsql'),
+                'database': self.dbname,
+                'user': self.user,
+                'password': self.password,
+                'pool_size': int(os.getenv('DB_POOL_SIZE', '5')),
+                'max_overflow': int(os.getenv('DB_MAX_OVERFLOW', '10')),
+                'pool_timeout': int(os.getenv('DB_POOL_TIMEOUT', '30')),
+                'pool_recycle': int(os.getenv('DB_POOL_RECYCLE', '1800'))
+            })
+            print("✅ [DATABASE] Connection pool initialized")
+        except Exception as e:
+            print(f"❌ [DATABASE] Failed to initialize connection pool: {e}")
+            raise
+
     def get_connection(self):
-        """Create and return a database connection."""
-        return psycopg2.connect(
-            dbname=self.dbname,
-            user=self.user,
-            password=self.password,
-            host=self.host,
-            port=self.port
-        )
+        """
+        Get raw database connection from pool.
+
+        🆕 NEW_ARCHITECTURE: Now returns connection from pool instead of creating new connection.
+
+        ⚠️ DEPRECATED: Prefer using execute_query() or get_session() for better connection management.
+        This method is kept for backward compatibility with legacy code.
+
+        Returns:
+            psycopg2 connection object
+        """
+        # For backward compatibility, return a raw connection from the pool
+        # This will be managed by the pool but returned as raw connection
+        return self.pool.engine.raw_connection()
+
+    def execute_query(self, query: str, params: dict = None):
+        """
+        Execute SQL query using connection pool.
+
+        🆕 NEW_ARCHITECTURE: New method for executing queries with connection pooling.
+
+        Args:
+            query: SQL query with :param_name placeholders
+            params: Dictionary of parameters
+
+        Returns:
+            Query result
+        """
+        return self.pool.execute_query(query, params)
+
+    def get_session(self):
+        """
+        Get SQLAlchemy ORM session from pool.
+
+        🆕 NEW_ARCHITECTURE: New method for ORM operations.
+
+        Usage:
+            with db_manager.get_session() as session:
+                result = session.query(...)
+
+        Returns:
+            SQLAlchemy session
+        """
+        return self.pool.get_session()
+
+    def health_check(self) -> bool:
+        """
+        Check database connection health.
+
+        🆕 NEW_ARCHITECTURE: New method for health monitoring.
+
+        Returns:
+            True if database is accessible, False otherwise
+        """
+        return self.pool.health_check()
+
+    def close(self):
+        """
+        Close connection pool on shutdown.
+
+        🆕 NEW_ARCHITECTURE: New method for clean shutdown.
+        """
+        if hasattr(self, 'pool'):
+            self.pool.close()
+            print("✅ [DATABASE] Connection pool closed")
     
     def fetch_open_channel_list(self) -> Tuple[List[str], Dict[str, Dict[str, Any]]]:
         """
