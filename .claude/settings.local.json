@@ -79,7 +79,8 @@
       "Bash(then)",
       "Bash(else)",
       "Bash(fi)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

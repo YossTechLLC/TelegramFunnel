@@ -1,8 +1,78 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 154 - **Context Manager Pattern Fix for Database Operations** ✅
+**Last Updated:** 2025-11-14 Session 155 - **Broadcast Manager Auto-Creation Architecture Implemented** ✅
 
 ## Recent Updates
+
+## 2025-11-14 Session 155: Fixed Missing broadcast_manager Entries for New Channel Registrations ✅
+
+**Issue:** User UUID 7e1018e4-5644-4031-a05c-4166cc877264 (and all new users) saw "Not Configured" button instead of "Resend Notification" after registering channels
+
+**Root Cause:**
+- Channel registration flow (`GCRegisterAPI-10-26`) only created `main_clients_database` entry
+- NO `broadcast_manager` entry was created automatically
+- `populate_broadcast_manager.py` was a one-time migration tool, not automated
+- Frontend dashboard expects `broadcast_id` field to show "Resend Notification" button
+
+**Solution Implemented:**
+
+1. **Created BroadcastService Module** (`api/services/broadcast_service.py`)
+   - Separation of concerns (Channel logic vs Broadcast logic)
+   - `create_broadcast_entry()` method with SQL INSERT RETURNING
+   - `get_broadcast_by_channel_pair()` helper method
+   - Follows Flask best practices (Context7: service layer pattern)
+
+2. **Integrated into Channel Registration** (`api/routes/channels.py`)
+   - Updated `register_channel()` endpoint to call BroadcastService
+   - **Transactional safety**: Same DB connection for channel + broadcast creation
+   - Rollback on failure ensures data consistency
+   - Returns `broadcast_id` in success response
+
+3. **Created Backfill Script** (`TOOLS_SCRIPTS_TESTS/tools/backfill_missing_broadcast_entries.py`)
+   - Identifies channels without broadcast_manager entries
+   - Creates entries matching new registration flow
+   - Idempotent (safe to run multiple times with ON CONFLICT DO NOTHING)
+   - Verified target user 7e1018e4-5644-4031-a05c-4166cc877264 fixed
+
+4. **Created Integrity Verification SQL** (`TOOLS_SCRIPTS_TESTS/scripts/verify_broadcast_integrity.sql`)
+   - 8 comprehensive queries to detect orphaned entries
+   - Checks CASCADE delete constraints
+   - Verifies UNIQUE constraints
+   - Summary statistics for monitoring
+
+**Deployment:**
+- ✅ Deployed `gcregisterapi-10-26-00028-khd` to Cloud Run
+- ✅ Executed backfill script: 1 broadcast_manager entry created
+- ✅ Target user now has `broadcast_id=613acae7-a8a4-4d15-a046-4d6a1b6add49`
+- ✅ Verified user should see "Resend Notification" button on dashboard
+
+**Files Created:**
+- `GCRegisterAPI-10-26/api/services/broadcast_service.py` (NEW)
+- `TOOLS_SCRIPTS_TESTS/tools/backfill_missing_broadcast_entries.py` (NEW)
+- `TOOLS_SCRIPTS_TESTS/scripts/verify_broadcast_integrity.sql` (NEW)
+- `BROADCAST_MANAGER_UPDATED_CHECKLIST.md` (NEW)
+- `BROADCAST_MANAGER_UPDATED_CHECKLIST_PROGRESS.md` (NEW)
+
+**Files Modified:**
+- `GCRegisterAPI-10-26/api/routes/channels.py` (Import BroadcastService, updated register_channel endpoint)
+
+**Database Changes:**
+- 1 new row in `broadcast_manager` table for user 7e1018e4-5644-4031-a05c-4166cc877264
+- Fixed database name in backfill script: `client_table` (not `telepaydb`)
+
+**Testing Status:**
+- ✅ GCRegisterAPI health endpoint responding
+- ✅ Service deployed successfully (revision 00028)
+- ✅ Backfill script executed successfully
+- ⏳ End-to-end channel registration test (pending user testing)
+- ⏳ Manual broadcast trigger test (pending user testing)
+
+**Next Steps:**
+- User should test "Resend Notification" button functionality
+- Monitor for new channel registrations to verify auto-creation works
+- Consider adding unit tests for BroadcastService (Phase 1.3 from checklist)
+
+---
 
 ## 2025-11-14 Session 154: Fixed Incorrect Context Manager Pattern in Database Operations ✅
 

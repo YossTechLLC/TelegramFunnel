@@ -1,10 +1,35 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 154
+**Last Updated:** 2025-11-14 Session 155
 
 ---
 
 ## Recently Resolved
+
+## 2025-11-14 Session 155: ✅ RESOLVED - Missing broadcast_manager Entries for New Users
+
+**Severity:** 🔴 CRITICAL
+**Status:** ✅ RESOLVED (Deployed in gcregisterapi-10-26-00028-khd)
+**Reported By:** User UUID 7e1018e4-5644-4031-a05c-4166cc877264
+**Affected Users:** All newly registered users after 2025-10-26
+
+**Symptom:**
+User sees "Not Configured" button instead of "Resend Notification" after registering channel and restarting broadcast manager.
+
+**Root Cause:**
+Channel registration flow only created `main_clients_database` entry. NO `broadcast_manager` entry created. `populate_broadcast_manager.py` was one-time migration, not automated.
+
+**Fix:**
+1. Created `BroadcastService` module (`api/services/broadcast_service.py`)
+2. Integrated into channel registration with transactional safety
+3. Backfill script executed: 1 entry created for target user (broadcast_id=613acae7-a8a4-4d15-a046-4d6a1b6add49)
+4. Database integrity verification SQL created
+
+**Prevention:**
+- New registrations auto-create broadcast_manager entries
+- Verification queries available for monitoring
+
+---
 
 ### ✅ [FIXED] Incorrect Context Manager Pattern Causing "_ConnectionFairy' object does not support the context manager protocol" Error
 

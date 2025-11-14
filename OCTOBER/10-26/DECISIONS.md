@@ -1,12 +1,50 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 154 - **Standardized Database Connection Pattern** ✅
+**Last Updated:** 2025-11-14 Session 155 - **Broadcast Manager Auto-Creation Architecture** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 155: Broadcast Manager Auto-Creation Architecture
+
+**Decision:** Created separate `BroadcastService` module in GCRegisterAPI-10-26 to handle broadcast_manager entry creation during channel registration.
+
+**Rationale:**
+- **Separation of concerns**: Channel logic (`ChannelService`) vs Broadcast logic (`BroadcastService`)
+- **Transactional safety**: Using same DB connection for channel + broadcast creation ensures atomic operations with rollback on failure
+- **Follows Flask best practices**: Service layer pattern from Context7 documentation
+- **Reusability**: BroadcastService can be used for future broadcast operations beyond registration
+- **Maintainability**: Modular code structure prevents monolithic service files
+
+**Implementation Details:**
+- Service accepts database connection as parameter (no global state)
+- Methods return UUIDs for created entries (enables verification)
+- Error handling distinguishes duplicate keys vs FK violations
+- Emoji logging pattern (📢) for easy Cloud Logging queries
+
+**Impact:**
+- New channels automatically get broadcast_manager entries
+- Fixed "Not Configured" button issue for user 7e1018e4-5644-4031-a05c-4166cc877264
+- Frontend dashboard now receives `broadcast_id` field in API responses
+- CASCADE delete works automatically (broadcast_manager entries removed when channel deleted)
+
+**Trade-offs:**
+- Added complexity: Two database operations instead of one (mitigated by transaction safety)
+- Dependency on broadcast_manager table structure (acceptable for MVP)
+- No retry logic for transient failures (acceptable, user can retry registration)
+
+**Alternatives Considered:**
+1. ❌ **Database trigger**: Could auto-create broadcast_manager entries via PostgreSQL trigger
+   - Rejected: Less visibility, harder to test, complicates rollback scenarios
+2. ❌ **Background job**: Queue broadcast creation after channel registration
+   - Rejected: Introduces eventual consistency issues, user sees "Not Configured" briefly
+3. ✅ **Synchronous service call**: Create broadcast entry in same transaction
+   - Selected: Simple, reliable, maintains data consistency
+
+---
 
 ## 2025-11-14 Session 154: Standardize Database Connection Pattern Using SQLAlchemy
 
