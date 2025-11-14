@@ -42,14 +42,13 @@ def create_app():
         logger.error("❌ [INIT] Bot token not available")
         raise RuntimeError("Bot token not available from Secret Manager")
 
-    if not config['database_credentials']['host']:
+    if not config['database_credentials']['instance_connection_name']:
         logger.error("❌ [INIT] Database credentials not available")
         raise RuntimeError("Database credentials not available from Secret Manager")
 
-    # Initialize database manager
+    # Initialize database manager (NEW_ARCHITECTURE pattern with SQLAlchemy + Cloud SQL Connector)
     db_manager = DatabaseManager(
-        host=config['database_credentials']['host'],
-        port=config['database_credentials']['port'],
+        instance_connection_name=config['database_credentials']['instance_connection_name'],
         dbname=config['database_credentials']['dbname'],
         user=config['database_credentials']['user'],
         password=config['database_credentials']['password']

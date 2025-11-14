@@ -80,7 +80,8 @@
       "Bash(else)",
       "Bash(fi)",
       "WebSearch",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

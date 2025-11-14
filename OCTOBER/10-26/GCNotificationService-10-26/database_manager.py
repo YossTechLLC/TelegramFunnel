@@ -1,43 +1,31 @@
 #!/usr/bin/env python
 """
 🗄️ Database Manager for GCNotificationService
-Handles PostgreSQL connections and notification queries
+Handles PostgreSQL connections and notification queries using NEW_ARCHITECTURE pattern
 """
-import psycopg2
 import os
 from typing import Optional, Tuple, Dict, Any
 import logging
+from google.cloud.sql.connector import Connector
+from sqlalchemy import create_engine, pool, text
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Manages database connections and notification queries"""
+    """Manages database connections and notification queries using SQLAlchemy"""
 
-    def __init__(self, host: str, port: int, dbname: str, user: str, password: str):
+    def __init__(self, instance_connection_name: str, dbname: str, user: str, password: str):
         """
-        Initialize database manager
+        Initialize database manager with SQLAlchemy connection pool
 
         Args:
-            host: Database host (Cloud SQL Unix socket or IP)
-            port: Database port (default 5432)
+            instance_connection_name: Cloud SQL instance connection name (project:region:instance)
             dbname: Database name
             user: Database user
             password: Database password
         """
-        # Check if running in Cloud Run (use Unix socket) or locally (use TCP)
-        cloud_sql_connection = os.getenv("CLOUD_SQL_CONNECTION_NAME")
-
-        if cloud_sql_connection:
-            # Cloud Run mode - use Unix socket
-            self.host = f"/cloudsql/{cloud_sql_connection}"
-            logger.info(f"🔌 [DATABASE] Using Cloud SQL Unix socket: {self.host}")
-        else:
-            # Local/VM mode - use TCP connection
-            self.host = host
-            logger.info(f"🔌 [DATABASE] Using TCP connection to: {self.host}")
-
-        self.port = port
+        self.instance_connection_name = instance_connection_name
         self.dbname = dbname
         self.user = user
         self.password = password
@@ -45,34 +33,72 @@ class DatabaseManager:
         # Validate credentials
         if not self.password:
             raise RuntimeError("Database password not available. Cannot initialize DatabaseManager.")
-        if not all([self.host, self.dbname, self.user]):
+        if not all([self.instance_connection_name, self.dbname, self.user]):
             raise RuntimeError("Critical database configuration missing.")
 
-        logger.info(f"🗄️ [DATABASE] Initialized (host={self.host}, dbname={dbname})")
+        # Initialize connection pool
+        self.connector = None
+        self.engine = None
+        self._initialize_pool()
 
-    def get_connection(self):
+        logger.info(f"🗄️ [DATABASE] Initialized with connection pool")
+        logger.info(f"   Instance: {self.instance_connection_name}")
+        logger.info(f"   Database: {self.dbname}")
+
+    def _get_conn(self):
         """
-        Create and return a database connection
+        Get database connection using Cloud SQL Connector.
+        Called by SQLAlchemy when it needs a new connection.
 
         Returns:
-            psycopg2 connection object
+            Database connection object (pg8000 connection)
+        """
+        conn = self.connector.connect(
+            self.instance_connection_name,
+            "pg8000",
+            user=self.user,
+            password=self.password,
+            db=self.dbname
+        )
+        return conn
+
+    def _initialize_pool(self):
+        """
+        Initialize SQLAlchemy engine with connection pool (NEW_ARCHITECTURE pattern)
+
+        Creates:
+        - Cloud SQL Connector instance
+        - SQLAlchemy engine with QueuePool
+        - Automatic connection health checks and recycling
         """
         try:
-            conn = psycopg2.connect(
-                dbname=self.dbname,
-                user=self.user,
-                password=self.password,
-                host=self.host,
-                port=self.port
+            # Initialize Cloud SQL connector
+            self.connector = Connector()
+
+            logger.info("🔌 [DATABASE] Initializing Cloud SQL connector with SQLAlchemy...")
+
+            # Create SQLAlchemy engine with connection pool
+            self.engine = create_engine(
+                "postgresql+pg8000://",
+                creator=self._get_conn,
+                poolclass=pool.QueuePool,
+                pool_size=3,           # Smaller pool for notification service
+                max_overflow=2,        # Limited overflow
+                pool_timeout=30,       # 30 seconds
+                pool_recycle=1800,     # 30 minutes
+                pool_pre_ping=True,    # Health check before using connection
+                echo=False
             )
-            return conn
+
+            logger.info("✅ [DATABASE] Connection pool initialized (NEW_ARCHITECTURE)")
+
         except Exception as e:
-            logger.error(f"❌ [DATABASE] Connection error: {e}")
+            logger.error(f"❌ [DATABASE] Failed to initialize pool: {e}", exc_info=True)
             raise
 
     def get_notification_settings(self, open_channel_id: str) -> Optional[Tuple[bool, Optional[int]]]:
         """
-        Get notification settings for a channel
+        Get notification settings for a channel (NEW_ARCHITECTURE pattern)
 
         Args:
             open_channel_id: The open channel ID to look up
@@ -85,29 +111,28 @@ class DatabaseManager:
             (True, 123456789)
         """
         try:
-            conn = self.get_connection()
-            cur = conn.cursor()
-
-            cur.execute("""
-                SELECT notification_status, notification_id
-                FROM main_clients_database
-                WHERE open_channel_id = %s
-            """, (str(open_channel_id),))
-
-            result = cur.fetchone()
-            cur.close()
-            conn.close()
-
-            if result:
-                notification_status, notification_id = result
-                logger.info(
-                    f"✅ [DATABASE] Settings for {open_channel_id}: "
-                    f"enabled={notification_status}, id={notification_id}"
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT notification_status, notification_id
+                        FROM main_clients_database
+                        WHERE open_channel_id = :open_channel_id
+                    """),
+                    {"open_channel_id": str(open_channel_id)}
                 )
-                return notification_status, notification_id
-            else:
-                logger.warning(f"⚠️ [DATABASE] No settings found for {open_channel_id}")
-                return None
+
+                row = result.fetchone()
+
+                if row:
+                    notification_status, notification_id = row
+                    logger.info(
+                        f"✅ [DATABASE] Settings for {open_channel_id}: "
+                        f"enabled={notification_status}, id={notification_id}"
+                    )
+                    return notification_status, notification_id
+                else:
+                    logger.warning(f"⚠️ [DATABASE] No settings found for {open_channel_id}")
+                    return None
 
         except Exception as e:
             logger.error(f"❌ [DATABASE] Error fetching notification settings: {e}")
@@ -115,7 +140,7 @@ class DatabaseManager:
 
     def get_channel_details_by_open_id(self, open_channel_id: str) -> Optional[Dict[str, Any]]:
         """
-        Fetch channel details by open_channel_id for notification message formatting
+        Fetch channel details by open_channel_id for notification message formatting (NEW_ARCHITECTURE pattern)
 
         Args:
             open_channel_id: The open channel ID to fetch details for
@@ -135,32 +160,31 @@ class DatabaseManager:
             }
         """
         try:
-            conn = self.get_connection()
-            cur = conn.cursor()
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT
+                            closed_channel_title,
+                            closed_channel_description
+                        FROM main_clients_database
+                        WHERE open_channel_id = :open_channel_id
+                        LIMIT 1
+                    """),
+                    {"open_channel_id": str(open_channel_id)}
+                )
 
-            cur.execute("""
-                SELECT
-                    closed_channel_title,
-                    closed_channel_description
-                FROM main_clients_database
-                WHERE open_channel_id = %s
-                LIMIT 1
-            """, (str(open_channel_id),))
+                row = result.fetchone()
 
-            result = cur.fetchone()
-            cur.close()
-            conn.close()
-
-            if result:
-                channel_details = {
-                    "closed_channel_title": result[0] if result[0] else "Premium Channel",
-                    "closed_channel_description": result[1] if result[1] else "Exclusive content"
-                }
-                logger.info(f"✅ [DATABASE] Fetched channel details for {open_channel_id}")
-                return channel_details
-            else:
-                logger.warning(f"⚠️ [DATABASE] No channel details found for {open_channel_id}")
-                return None
+                if row:
+                    channel_details = {
+                        "closed_channel_title": row[0] if row[0] else "Premium Channel",
+                        "closed_channel_description": row[1] if row[1] else "Exclusive content"
+                    }
+                    logger.info(f"✅ [DATABASE] Fetched channel details for {open_channel_id}")
+                    return channel_details
+                else:
+                    logger.warning(f"⚠️ [DATABASE] No channel details found for {open_channel_id}")
+                    return None
 
         except Exception as e:
             logger.error(f"❌ [DATABASE] Error fetching channel details: {e}")

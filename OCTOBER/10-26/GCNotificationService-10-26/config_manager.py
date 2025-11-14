@@ -57,17 +57,21 @@ class ConfigManager:
 
     def fetch_database_credentials(self) -> Dict[str, Optional[str]]:
         """
-        Fetch all database credentials from Secret Manager
+        Fetch all database credentials from Secret Manager (NEW_ARCHITECTURE pattern)
 
         Returns:
-            Dictionary with keys: host, port, dbname, user, password
+            Dictionary with keys: instance_connection_name, dbname, user, password
         """
+        # Get Cloud SQL connection name from environment (required for Cloud SQL Connector)
+        instance_connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+
+        if not instance_connection_name:
+            logger.error("❌ [CONFIG] CLOUD_SQL_CONNECTION_NAME not set in environment")
+        else:
+            logger.info(f"✅ [CONFIG] Using Cloud SQL instance: {instance_connection_name}")
+
         return {
-            'host': self.fetch_secret(
-                env_var_name="DATABASE_HOST_SECRET",
-                secret_name="Database Host"
-            ),
-            'port': 5432,  # Standard PostgreSQL port
+            'instance_connection_name': instance_connection_name,
             'dbname': self.fetch_secret(
                 env_var_name="DATABASE_NAME_SECRET",
                 secret_name="Database Name"
@@ -102,7 +106,7 @@ class ConfigManager:
             logger.error("❌ [CONFIG] Bot token is missing")
 
         if not all([
-            self.database_credentials['host'],
+            self.database_credentials['instance_connection_name'],
             self.database_credentials['dbname'],
             self.database_credentials['user'],
             self.database_credentials['password']

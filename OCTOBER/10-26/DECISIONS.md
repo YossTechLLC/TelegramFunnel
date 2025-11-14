@@ -1,12 +1,151 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 155 - **Broadcast Manager Auto-Creation Architecture** ✅
+**Last Updated:** 2025-11-14 Session 156 - **GCNotificationService NEW_ARCHITECTURE Migration** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14 Session 156: Migrate GCNotificationService to NEW_ARCHITECTURE Pattern
+
+**Decision:** Refactored GCNotificationService database layer to use SQLAlchemy with Cloud SQL Connector, matching TelePay10-26 NEW_ARCHITECTURE pattern established in Session 154.
+
+**Context:**
+- GCNotificationService was using raw psycopg2 connections with manual connection management
+- TelePay10-26 established NEW_ARCHITECTURE pattern using SQLAlchemy `text()` with connection pooling
+- Inconsistent patterns across services increase maintenance burden
+- Notification workflow analysis (NOTIFICATION_WORKFLOW_REPORT.md) identified this as Priority 2 improvement
+
+**Rationale:**
+
+1. **Consistency Across Services**
+   - All services should follow same database connection pattern
+   - Reduces cognitive load when switching between codebases
+   - Easier onboarding for new developers
+
+2. **Connection Pooling Benefits**
+   - Reduces connection overhead (important for high-volume notifications)
+   - Automatic connection health checks prevent stale connections
+   - Pool recycling (30 min) prevents long-lived connection issues
+   - QueuePool manages concurrent requests efficiently
+
+3. **Cloud SQL Connector Integration**
+   - Handles authentication automatically via IAM
+   - Unix socket connection when running on Cloud Run
+   - No need to manage DATABASE_HOST_SECRET
+   - Simplifies deployment configuration
+
+4. **Named Parameters**
+   - `:param_name` syntax more readable than `%s` positional
+   - Better protection against SQL injection
+   - Self-documenting queries
+
+5. **Context Manager Pattern**
+   - `with self.engine.connect()` ensures automatic cleanup
+   - No risk of connection leaks from forgotten `close()` calls
+   - Exception-safe resource management
+
+**Implementation Pattern:**
+
+**✅ CORRECT PATTERN (NEW_ARCHITECTURE):**
+```python
+from sqlalchemy import text
+
+def get_notification_settings(self, open_channel_id: str):
+    with self.engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT notification_status, notification_id
+                FROM main_clients_database
+                WHERE open_channel_id = :open_channel_id
+            """),
+            {"open_channel_id": str(open_channel_id)}
+        )
+        row = result.fetchone()
+        return row if row else None
+```
+
+**❌ OLD PATTERN (psycopg2 raw):**
+```python
+def get_notification_settings(self, open_channel_id: str):
+    conn = self.get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT notification_status, notification_id
+        FROM main_clients_database
+        WHERE open_channel_id = %s
+    """, (str(open_channel_id),))
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+    return result if result else None
+```
+
+**Configuration Changes:**
+- Uses `CLOUD_SQL_CONNECTION_NAME` environment variable (e.g., `telepay-459221:us-central1:telepaypsql`)
+- Removes dependency on `DATABASE_HOST_SECRET` from Secret Manager
+- Connection string handled internally by Cloud SQL Connector
+
+**Pool Configuration:**
+```python
+pool_size=3,           # Smaller than TelePay (notification service has lower volume)
+max_overflow=2,        # Limited overflow
+pool_timeout=30,       # 30 seconds
+pool_recycle=1800,     # 30 minutes (prevents stale connections)
+pool_pre_ping=True     # Health check before using connection
+```
+
+**Impact:**
+- ✅ Consistent with Session 154 architectural decision
+- ✅ All database operations now use NEW_ARCHITECTURE pattern
+- ✅ Improved performance for concurrent notification requests
+- ✅ Simplified deployment (one less secret to manage)
+- ⚠️ Breaking change: Requires redeployment with new environment variable
+
+**Trade-offs:**
+- **Added dependencies**: SQLAlchemy + cloud-sql-python-connector (~5MB more)
+  - Acceptable: Performance and consistency benefits outweigh size increase
+- **Connection pool overhead**: Small memory footprint (3-5 connections)
+  - Acceptable: Notification service has low baseline memory usage
+- **Migration effort**: Required updating 5 files
+  - Acceptable: One-time refactor with clear long-term benefits
+
+**Alternatives Considered:**
+
+1. ❌ **Keep psycopg2 pattern, just add connection pooling**
+   - Rejected: Still inconsistent with NEW_ARCHITECTURE
+   - Would require custom pool implementation
+   - Doesn't leverage SQLAlchemy benefits
+
+2. ❌ **Migrate to full ORM (SQLAlchemy models)**
+   - Rejected: Overkill for simple query service
+   - Would require defining all database models
+   - Raw SQL with `text()` sufficient for read-only operations
+
+3. ✅ **SQLAlchemy Core with text() (selected)**
+   - Best balance of consistency, simplicity, and performance
+   - Matches TelePay10-26 pattern exactly
+   - Minimal learning curve for developers
+
+**Deployment Checklist:**
+- [ ] Set `CLOUD_SQL_CONNECTION_NAME` environment variable on Cloud Run
+- [ ] Remove `DATABASE_HOST_SECRET` environment variable (optional, will be ignored)
+- [ ] Deploy with updated `requirements.txt` dependencies
+- [ ] Verify connection pool initialization in logs: "✅ [DATABASE] Connection pool initialized (NEW_ARCHITECTURE)"
+- [ ] Test notification sending works correctly
+- [ ] Monitor Cloud Logging for any connection errors
+
+**Consistency Mandate:**
+ALL future services MUST use NEW_ARCHITECTURE pattern:
+- Use SQLAlchemy `create_engine()` with Cloud SQL Connector
+- Use `text()` wrapper for all SQL queries
+- Use named parameters (`:param_name`) not positional (`%s`)
+- Use `with engine.connect() as conn:` context manager
+- No raw psycopg2 connections except for migrations/scripts
+
+---
 
 ## 2025-11-14 Session 155: Broadcast Manager Auto-Creation Architecture
 
