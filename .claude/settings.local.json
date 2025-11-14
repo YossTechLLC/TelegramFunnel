@@ -78,7 +78,8 @@
       "Bash(if [ -d \"$HOME/Desktop/2025/.venv\" ])",
       "Bash(then)",
       "Bash(else)",
-      "Bash(fi)"
+      "Bash(fi)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
