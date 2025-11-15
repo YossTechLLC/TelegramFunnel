@@ -38,7 +38,7 @@ class TokenManager(BaseTokenManager):
         actual_eth_amount: float = 0.0  # ✅ NEW: Summed actual ETH from NowPayments
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit1 batch payout request.
+        Encrypt token for PGP_SPLIT1_v1 batch payout request.
 
         Args:
             batch_id: Batch UUID
@@ -53,7 +53,7 @@ class TokenManager(BaseTokenManager):
             Encrypted token string or None if failed
         """
         try:
-            print(f"🔐 [TOKEN] Encrypting batch token for GCSplit1")
+            print(f"🔐 [TOKEN] Encrypting batch token for PGP_SPLIT1_v1")
             print(f"🆔 [TOKEN] Batch ID: {batch_id}")
             print(f"🏢 [TOKEN] Client ID: {client_id}")
             print(f"💰 [TOKEN] USDT Amount: ${total_amount_usdt}")
@@ -67,7 +67,7 @@ class TokenManager(BaseTokenManager):
                 'payout_currency': payout_currency,
                 'payout_network': payout_network,
                 'amount_usdt': total_amount_usdt,
-                'actual_eth_amount': actual_eth_amount  # ✅ NEW: For GCHostPay1 payment
+                'actual_eth_amount': actual_eth_amount  # ✅ NEW: For PGP_HOSTPAY1_v1 payment
             }
 
             # Convert to JSON bytes

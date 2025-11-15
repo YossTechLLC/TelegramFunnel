@@ -29,7 +29,7 @@ class TokenManager(BaseTokenManager):
 
     def decode_and_verify_token(self, token: str) -> Tuple[int, int, str, str, str, int, str]:
         """
-        Decode and verify token from GCWebhook1.
+        Decode and verify token from PGP_ORCHESTRATOR_v1.
 
         Token format (same as NOWPayments token):
         - 6 bytes user_id (48-bit)
@@ -43,7 +43,7 @@ class TokenManager(BaseTokenManager):
         - 16 bytes truncated HMAC signature
 
         Args:
-            token: Base64-encoded token from GCWebhook1
+            token: Base64-encoded token from PGP_ORCHESTRATOR_v1
 
         Returns:
             Tuple of (user_id, closed_channel_id, wallet_address, payout_currency,
@@ -140,7 +140,7 @@ class TokenManager(BaseTokenManager):
         if closed_channel_id > 2**47 - 1:
             closed_channel_id -= 2**48
 
-        # Reconstruct timestamp (same logic as GCWebhook1)
+        # Reconstruct timestamp (same logic as PGP_ORCHESTRATOR_v1)
         current_time = int(time.time())
         current_minutes = current_time // 60
         minutes_in_current_cycle = current_minutes % 65536

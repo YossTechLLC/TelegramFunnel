@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Execute Database Migration: Add nowpayments_outcome_amount_usd Column
-Part of: NowPayments Outcome Amount - GCWebhook1 Architecture Implementation
+Part of: NowPayments Outcome Amount - PGP_ORCHESTRATOR_v1 Architecture Implementation
 """
 import os
 import sys

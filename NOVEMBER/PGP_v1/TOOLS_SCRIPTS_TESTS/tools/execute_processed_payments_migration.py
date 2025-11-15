@@ -102,7 +102,7 @@ def main():
         """)
 
         cursor.execute("""
-            COMMENT ON COLUMN processed_payments.gcwebhook1_processed IS 'Flag indicating if GCWebhook1 successfully processed this payment';
+            COMMENT ON COLUMN processed_payments.gcwebhook1_processed IS 'Flag indicating if PGP_ORCHESTRATOR_v1 successfully processed this payment';
         """)
 
         cursor.execute("""

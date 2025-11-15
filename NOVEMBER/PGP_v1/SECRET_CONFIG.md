@@ -103,10 +103,10 @@ CLOUD_SQL = "telepay-459221:us-central1:telepaypsql"
 ```
 
 ### Service URLs (Pattern: https://[SERVICE]-10-26-291176869049.us-central1.run.app)
-- PGP_ACCUMULATOR, PGP_BATCHPROCESSOR, GCHostPay1/2/3, GCSplit1/2/3, GCWebhook2
+- PGP_ACCUMULATOR, PGP_BATCHPROCESSOR, PGP_HOSTPAY1_v1/2/3, PGP_SPLIT1_v1/2/3, PGP_INVITE_v1
 
 ### Service URLs (Pattern: https://[SERVICE]-10-26-pjxwjsdktq-uc.a.run.app)
-- GCWebhook1, PGP_MICROBATCHPROCESSOR, np-webhook
+- PGP_ORCHESTRATOR_v1, PGP_MICROBATCHPROCESSOR, np-webhook
 
 ### VM-based (HTTP)
 - PGP_SERVER_v1: `http://34.58.80.152:8080`

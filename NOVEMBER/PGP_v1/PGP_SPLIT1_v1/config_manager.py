@@ -18,7 +18,7 @@ class ConfigManager(BaseConfigManager):
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCSplit1.
+        Initialize and return all configuration values for PGP_SPLIT1_v1.
 
         Returns:
             Dictionary containing all configuration values

@@ -244,11 +244,11 @@ try:
     print(f"🎯 [NEXT STEPS]")
     print(f"1. Next IPN retry from NowPayments will succeed ✅")
     print(f"2. Payment status API will return 'confirmed' ✅")
-    print(f"3. GCWebhook1 will process payment orchestration ✅")
+    print(f"3. PGP_ORCHESTRATOR_v1 will process payment orchestration ✅")
     print(f"4. User will receive Telegram invitation link ✅")
     print(f"")
     print(f"💡 [NOTE] If payment orchestration doesn't start automatically,")
-    print(f"   you may need to manually trigger GCWebhook1:/process-validated-payment")
+    print(f"   you may need to manually trigger PGP_ORCHESTRATOR_v1:/process-validated-payment")
     print(f"")
 
 except Exception as e:

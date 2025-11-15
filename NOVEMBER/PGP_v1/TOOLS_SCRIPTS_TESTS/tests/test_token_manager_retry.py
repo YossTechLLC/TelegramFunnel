@@ -8,9 +8,9 @@ import time
 
 
 def test_first_attempt_token():
-    """Test encrypting and decrypting a first-attempt token (from GCHostPay1)."""
+    """Test encrypting and decrypting a first-attempt token (from PGP_HOSTPAY1_v1)."""
     print("=" * 60)
-    print("TEST 1: First Attempt Token (GCHostPay1 → GCHostPay3)")
+    print("TEST 1: First Attempt Token (PGP_HOSTPAY1_v1 → PGP_HOSTPAY3_v1)")
     print("=" * 60)
 
     # Initialize token manager
@@ -59,7 +59,7 @@ def test_first_attempt_token():
 def test_retry_token():
     """Test creating a retry token after first failure."""
     print("\n" + "=" * 60)
-    print("TEST 2: Retry Token (GCHostPay3 → GCHostPay3)")
+    print("TEST 2: Retry Token (PGP_HOSTPAY3_v1 → PGP_HOSTPAY3_v1)")
     print("=" * 60)
 
     token_mgr, first_token_data = test_first_attempt_token()

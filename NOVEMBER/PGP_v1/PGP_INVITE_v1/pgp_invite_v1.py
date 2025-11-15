@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 PGP_INVITE_v1: Telegram Invite Sender Service
-Receives encrypted tokens from GCWebhook1 via Cloud Tasks,
+Receives encrypted tokens from PGP_ORCHESTRATOR_v1 via Cloud Tasks,
 sends Telegram one-time invitation links to users.
 Implements infinite retry via Cloud Tasks (60s fixed backoff, 24h max duration).
 
@@ -79,7 +79,7 @@ except Exception as e:
 
 
 # ============================================================================
-# MAIN ENDPOINT: POST / - Receives request from GCWebhook1 via Cloud Tasks
+# MAIN ENDPOINT: POST / - Receives request from PGP_ORCHESTRATOR_v1 via Cloud Tasks
 # ============================================================================
 
 @app.route("/", methods=["POST"])
@@ -88,7 +88,7 @@ def send_telegram_invite():
     Main endpoint for sending Telegram invites.
 
     Flow:
-    1. Decrypt token from GCWebhook1
+    1. Decrypt token from PGP_ORCHESTRATOR_v1
     2. Create fresh Bot instance for this request
     3. Use asyncio.run() to execute async telegram operations in isolated event loop
     4. Create Telegram invite link
@@ -100,7 +100,7 @@ def send_telegram_invite():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT] Telegram invite request received (from GCWebhook1)")
+        print(f"🎯 [ENDPOINT] Telegram invite request received (from PGP_ORCHESTRATOR_v1)")
 
         # Parse JSON payload
         try:

@@ -32,7 +32,7 @@ class ConfigManager(BaseConfigManager):
         # Fetch signing keys
         tps_hostpay_signing_key = self.fetch_secret(
             "TPS_HOSTPAY_SIGNING_KEY",
-            "TPS HostPay signing key (for GCSplit1 → GCHostPay1)"
+            "TPS HostPay signing key (for PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1)"
         )
 
         success_url_signing_key = self.fetch_secret(

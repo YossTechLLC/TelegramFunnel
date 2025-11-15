@@ -583,13 +583,13 @@ with engine.connect() as conn:
 - ❌ Separate deletion utility module: Over-engineering for current needs
 - ✅ Inline deletion logic: Simpler, fewer abstractions
 
-## 2025-11-14 Session 160 (Part 2): GCWebhook1 - Early Idempotency Check Pattern
+## 2025-11-14 Session 160 (Part 2): PGP_ORCHESTRATOR_v1 - Early Idempotency Check Pattern
 
 **Decision:** Add idempotency check at the BEGINNING of `/process-validated-payment` endpoint to prevent duplicate processing when called multiple times.
 
 **Problem:**
 - User received 3 different invitation links for 1 payment
-- GCWebhook1 only marked payments as processed at the END
+- PGP_ORCHESTRATOR_v1 only marked payments as processed at the END
 - No check at the BEGINNING to detect already-processed payments
 - Allowed duplicate Cloud Task creation if upstream services retried
 
@@ -601,8 +601,8 @@ def process_validated_payment():
     # Extract payment data
     # Validate payment
     # Create Cloud Tasks ❌ DUPLICATE PROCESSING
-    # Queue to GCSplit1
-    # Queue to GCWebhook2
+    # Queue to PGP_SPLIT1_v1
+    # Queue to PGP_INVITE_v1
     # Mark as processed ← TOO LATE!
 ```
 
@@ -641,15 +641,15 @@ def process_validated_payment():
 
     # Otherwise, proceed with normal processing
     # Create Cloud Tasks
-    # Queue to GCSplit1
-    # Queue to GCWebhook2
+    # Queue to PGP_SPLIT1_v1
+    # Queue to PGP_INVITE_v1
     # Mark as processed
 ```
 
 **Why Early Check is Critical:**
 - Prevents duplicate Cloud Tasks (expensive operations)
-- Prevents duplicate GCSplit1 processing (money movement)
-- Prevents duplicate GCWebhook2 invites (security issue)
+- Prevents duplicate PGP_SPLIT1_v1 processing (money movement)
+- Prevents duplicate PGP_INVITE_v1 invites (security issue)
 - Compatible with np-webhook retry behavior
 - Idempotent by definition (safe to call multiple times)
 
@@ -657,7 +657,7 @@ def process_validated_payment():
 - If database unavailable → log warning and proceed
 - Rationale: Better to risk duplicate than block legitimate payments
 - np-webhook will retry failed requests anyway
-- GCWebhook2 has its own idempotency protection
+- PGP_INVITE_v1 has its own idempotency protection
 
 **Security Consideration:**
 - Without this fix: Users could get multiple invite links per payment
@@ -672,7 +672,7 @@ def process_validated_payment():
 
 ---
 
-## 2025-11-14 Session 160: GCWebhook2 - Enhanced Confirmation Message Design
+## 2025-11-14 Session 160: PGP_INVITE_v1 - Enhanced Confirmation Message Design
 
 **Decision:** Implement database lookup for channel title and tier number to enhance invitation confirmation message, with graceful fallback to prevent blocking.
 
@@ -691,7 +691,7 @@ def process_validated_payment():
 
 2. **Token Embedding (REJECTED)**
    - Include channel title and tier in token payload
-   - Cons: Increases token size, requires coordinated changes across GCWebhook1/GCWebhook2
+   - Cons: Increases token size, requires coordinated changes across PGP_ORCHESTRATOR_v1/PGP_INVITE_v1
 
 3. **Static Message (REJECTED)**
    - Keep simple message without channel details

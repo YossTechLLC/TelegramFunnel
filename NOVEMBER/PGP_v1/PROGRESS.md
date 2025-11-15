@@ -498,15 +498,15 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 - Phase 6: Create unit and integration tests
 - Phase 7: Deploy and monitor in production
 
-## 2025-11-14 Session 160 (Part 2): GCWebhook1 - Critical Idempotency Fix ✅
+## 2025-11-14 Session 160 (Part 2): PGP_ORCHESTRATOR_v1 - Critical Idempotency Fix ✅
 
-**Context:** Fixed CRITICAL bug where users received 3 separate one-time invitation links for 1 payment. Root cause was missing idempotency protection in GCWebhook1, allowing duplicate processing when called multiple times by upstream services.
+**Context:** Fixed CRITICAL bug where users received 3 separate one-time invitation links for 1 payment. Root cause was missing idempotency protection in PGP_ORCHESTRATOR_v1, allowing duplicate processing when called multiple times by upstream services.
 
 **Issue Analysis:**
 - User completed 1 payment but received **3 different invitation links**
 - Investigation revealed **3 separate Cloud Tasks** with different payment_ids: `1763148537`, `1763147598`, `1763148344`
 - All tasks for same user (`6271402111`) and channel (`-1003111266231`)
-- GCWebhook1 had idempotency check **only at the END** (marking as processed) but **NOT at the BEGINNING** (checking if already processed)
+- PGP_ORCHESTRATOR_v1 had idempotency check **only at the END** (marking as processed) but **NOT at the BEGINNING** (checking if already processed)
 - This allowed duplicate processing if np-webhook or other services retried the request
 
 **Security Impact:** HIGH
@@ -575,7 +575,7 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 
 ---
 
-## 2025-11-14 Session 160: GCWebhook2 - Enhanced Confirmation Message ✅
+## 2025-11-14 Session 160: PGP_INVITE_v1 - Enhanced Confirmation Message ✅
 
 **Context:** Updated Telegram invitation confirmation message to include detailed subscription information with channel title, tier number, price, and duration. Added database lookup for channel details with graceful fallback.
 

@@ -38,7 +38,7 @@ class TokenManager(BaseTokenManager):
         adjusted_amount_usd: float
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit2 USDT conversion request.
+        Encrypt token for PGP_SPLIT2_v1 USDT conversion request.
 
         Args:
             user_id: Telegram user ID
@@ -52,7 +52,7 @@ class TokenManager(BaseTokenManager):
             Encrypted token string or None if failed
         """
         try:
-            print(f"🔐 [TOKEN] Encrypting token for GCSplit2")
+            print(f"🔐 [TOKEN] Encrypting token for PGP_SPLIT2_v1")
             print(f"👤 [TOKEN] User ID: {user_id}, Client ID: {client_id}")
             print(f"💰 [TOKEN] Amount: ${adjusted_amount_usd}")
 
@@ -127,7 +127,7 @@ class TokenManager(BaseTokenManager):
         return s_bytes.decode('utf-8'), offset
 
     # ========================================================================
-    # PGP_ACCUMULATOR → GCSplit3 Token Methods (for ETH→USDT swap creation)
+    # PGP_ACCUMULATOR → PGP_SPLIT3_v1 Token Methods (for ETH→USDT swap creation)
     # ========================================================================
 
     def encrypt_accumulator_to_gcsplit3_token(
@@ -138,7 +138,7 @@ class TokenManager(BaseTokenManager):
         usdt_wallet_address: str
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit3 ETH→USDT swap creation request.
+        Encrypt token for PGP_SPLIT3_v1 ETH→USDT swap creation request.
 
         Token Structure:
         - 8 bytes: accumulation_id (uint64)
@@ -152,7 +152,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] PGP_ACCUMULATOR→GCSplit3: Encrypting ETH→USDT swap request")
+            print(f"🔐 [TOKEN_ENC] PGP_ACCUMULATOR→PGP_SPLIT3_v1: Encrypting ETH→USDT swap request")
 
             payload = bytearray()
 
@@ -197,7 +197,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gcsplit3_to_accumulator_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCSplit3 with ETH→USDT swap details.
+        Decrypt token from PGP_SPLIT3_v1 with ETH→USDT swap details.
 
         Expected fields:
         - accumulation_id (int)
@@ -213,7 +213,7 @@ class TokenManager(BaseTokenManager):
             Dictionary with decrypted data or None if failed
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCSplit3→PGP_ACCUMULATOR: Decrypting swap response")
+            print(f"🔓 [TOKEN_DEC] PGP_SPLIT3_v1→PGP_ACCUMULATOR: Decrypting swap response")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
@@ -292,7 +292,7 @@ class TokenManager(BaseTokenManager):
             return None
 
     # ========================================================================
-    # PGP_ACCUMULATOR → GCHostPay1 Token Methods (for swap execution)
+    # PGP_ACCUMULATOR → PGP_HOSTPAY1_v1 Token Methods (for swap execution)
     # ========================================================================
 
     def encrypt_accumulator_to_gchostpay1_token(
@@ -306,7 +306,7 @@ class TokenManager(BaseTokenManager):
         context: str = 'threshold'
     ) -> Optional[str]:
         """
-        Encrypt token for GCHostPay1 swap execution request.
+        Encrypt token for PGP_HOSTPAY1_v1 swap execution request.
 
         Token Structure:
         - 8 bytes: accumulation_id (uint64)
@@ -326,7 +326,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] PGP_ACCUMULATOR→GCHostPay1: Encrypting execution request")
+            print(f"🔐 [TOKEN_ENC] PGP_ACCUMULATOR→PGP_HOSTPAY1_v1: Encrypting execution request")
             print(f"📋 [TOKEN_ENC] Context: {context}")
 
             payload = bytearray()
@@ -381,7 +381,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gchostpay1_to_accumulator_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCHostPay1 with swap execution completion details.
+        Decrypt token from PGP_HOSTPAY1_v1 with swap execution completion details.
 
         Expected fields:
         - accumulation_id (int)
@@ -394,7 +394,7 @@ class TokenManager(BaseTokenManager):
             Dictionary with decrypted data or None if failed
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCHostPay1→PGP_ACCUMULATOR: Decrypting execution response")
+            print(f"🔓 [TOKEN_DEC] PGP_HOSTPAY1_v1→PGP_ACCUMULATOR: Decrypting execution response")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0

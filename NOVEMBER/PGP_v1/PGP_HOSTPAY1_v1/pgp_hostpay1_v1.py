@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """
 PGP_HOSTPAY1_v1: Validator & Orchestrator Service
-Receives payment split requests from GCSplit1, validates, and orchestrates:
-1. ChangeNow status check via GCHostPay2
-2. ETH payment execution via GCHostPay3
+Receives payment split requests from PGP_SPLIT1_v1, validates, and orchestrates:
+1. ChangeNow status check via PGP_HOSTPAY2_v1
+2. ETH payment execution via PGP_HOSTPAY3_v1
 
 Endpoints:
-- POST / - Main webhook (from GCSplit1)
-- POST /status-verified - Status check response (from GCHostPay2)
-- POST /payment-completed - Payment execution response (from GCHostPay3)
+- POST / - Main webhook (from PGP_SPLIT1_v1)
+- POST /status-verified - Status check response (from PGP_HOSTPAY2_v1)
+- POST /payment-completed - Payment execution response (from PGP_HOSTPAY3_v1)
 """
 import time
 from flask import Flask, request, abort, jsonify
@@ -222,7 +222,7 @@ def _enqueue_delayed_callback_check(
         gchostpay1_url = config.get('gchostpay1_url')
 
         if not gchostpay1_response_queue or not gchostpay1_url:
-            print(f"❌ [RETRY_ENQUEUE] GCHostPay1 response queue config missing")
+            print(f"❌ [RETRY_ENQUEUE] PGP_HOSTPAY1_v1 response queue config missing")
             return False
 
         # Encrypt retry token
@@ -269,7 +269,7 @@ def _enqueue_delayed_callback_check(
 
 
 # ============================================================================
-# ENDPOINT 1: POST / - Main webhook (from GCSplit1)
+# ENDPOINT 1: POST / - Main webhook (from PGP_SPLIT1_v1)
 # ============================================================================
 
 @app.route("/", methods=["POST"])
@@ -278,15 +278,15 @@ def main_webhook():
     Main webhook endpoint for receiving payment split requests.
 
     Supports TWO token types:
-    1. GCSplit1 → GCHostPay1 (instant payouts with unique_id)
-    2. PGP_ACCUMULATOR → GCHostPay1 (threshold payouts with accumulation_id and context)
+    1. PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1 (instant payouts with unique_id)
+    2. PGP_ACCUMULATOR → PGP_HOSTPAY1_v1 (threshold payouts with accumulation_id and context)
 
     Flow:
-    1. Decode & verify token (try GCSplit1, fallback to PGP_ACCUMULATOR)
+    1. Decode & verify token (try PGP_SPLIT1_v1, fallback to PGP_ACCUMULATOR)
     2. Extract: unique_id/accumulation_id, cn_api_id, from_currency, from_network, from_amount, payin_address, context
     3. Check database for duplicate
-    4. Encrypt token for GCHostPay2 (status check)
-    5. Enqueue to GCHostPay2 via Cloud Tasks
+    4. Encrypt token for PGP_HOSTPAY2_v1 (status check)
+    5. Enqueue to PGP_HOSTPAY2_v1 via Cloud Tasks
 
     Returns:
         JSON response with status
@@ -313,7 +313,7 @@ def main_webhook():
             print(f"❌ [ENDPOINT_1] Token manager not available")
             abort(500, "Service configuration error")
 
-        # Try decrypting as GCSplit1 token first (instant payouts)
+        # Try decrypting as PGP_SPLIT1_v1 token first (instant payouts)
         decrypted_data = None
         token_source = None
         unique_id = None
@@ -327,11 +327,11 @@ def main_webhook():
                 token_source = 'gcsplit1'
                 unique_id = decrypted_data['unique_id']
                 context = 'instant'
-                print(f"✅ [ENDPOINT_1] GCSplit1 token decoded (instant payout)")
+                print(f"✅ [ENDPOINT_1] PGP_SPLIT1_v1 token decoded (instant payout)")
         except Exception as e:
-            print(f"⚠️ [ENDPOINT_1] Not a GCSplit1 token: {e}")
+            print(f"⚠️ [ENDPOINT_1] Not a PGP_SPLIT1_v1 token: {e}")
 
-        # If GCSplit1 decryption failed, try PGP_ACCUMULATOR token (threshold payouts)
+        # If PGP_SPLIT1_v1 decryption failed, try PGP_ACCUMULATOR token (threshold payouts)
         if not decrypted_data:
             try:
                 decrypted_data = token_manager.decrypt_accumulator_to_gchostpay1_token(token)
@@ -358,7 +358,7 @@ def main_webhook():
                     print(f"✅ [ENDPOINT_1] PGP_MICROBATCHPROCESSOR token decoded (batch conversion)")
             except Exception as e:
                 print(f"❌ [ENDPOINT_1] Not a PGP_MICROBATCHPROCESSOR token either: {e}")
-                abort(401, f"Invalid token: could not decrypt as GCSplit1, PGP_ACCUMULATOR, or PGP_MICROBATCHPROCESSOR token")
+                abort(401, f"Invalid token: could not decrypt as PGP_SPLIT1_v1, PGP_ACCUMULATOR, or PGP_MICROBATCHPROCESSOR token")
 
         # At this point, decrypted_data must be valid
         if not decrypted_data:
@@ -404,7 +404,7 @@ def main_webhook():
             print(f"❌ [ENDPOINT_1] Database error: {e}")
             # Continue anyway - duplicate check is non-critical
 
-        # Encrypt token for GCHostPay2 (with ALL payment details)
+        # Encrypt token for PGP_HOSTPAY2_v1 (with ALL payment details)
         encrypted_token = token_manager.encrypt_gchostpay1_to_gchostpay2_token(
             unique_id=unique_id,
             cn_api_id=cn_api_id,
@@ -415,10 +415,10 @@ def main_webhook():
         )
 
         if not encrypted_token:
-            print(f"❌ [ENDPOINT_1] Failed to encrypt token for GCHostPay2")
+            print(f"❌ [ENDPOINT_1] Failed to encrypt token for PGP_HOSTPAY2_v1")
             abort(500, "Token encryption failed")
 
-        # Enqueue status check to GCHostPay2
+        # Enqueue status check to PGP_HOSTPAY2_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT_1] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
@@ -427,7 +427,7 @@ def main_webhook():
         gchostpay2_url = config.get('gchostpay2_url')
 
         if not gchostpay2_queue or not gchostpay2_url:
-            print(f"❌ [ENDPOINT_1] GCHostPay2 configuration missing")
+            print(f"❌ [ENDPOINT_1] PGP_HOSTPAY2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay2_status_check(
@@ -437,16 +437,16 @@ def main_webhook():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT_1] Failed to enqueue status check to GCHostPay2")
+            print(f"❌ [ENDPOINT_1] Failed to enqueue status check to PGP_HOSTPAY2_v1")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_1] Enqueued status check to GCHostPay2")
+        print(f"✅ [ENDPOINT_1] Enqueued status check to PGP_HOSTPAY2_v1")
         print(f"🆔 [ENDPOINT_1] Task: {task_name}")
         print(f"🎉 [ENDPOINT_1] Payment split request orchestrated successfully")
 
         return jsonify({
             "status": "success",
-            "message": "Status check enqueued to GCHostPay2",
+            "message": "Status check enqueued to PGP_HOSTPAY2_v1",
             "unique_id": unique_id,
             "cn_api_id": cn_api_id,
             "task_id": task_name
@@ -461,25 +461,25 @@ def main_webhook():
 
 
 # ============================================================================
-# ENDPOINT 2: POST /status-verified - Status check response (from GCHostPay2)
+# ENDPOINT 2: POST /status-verified - Status check response (from PGP_HOSTPAY2_v1)
 # ============================================================================
 
 @app.route("/status-verified", methods=["POST"])
 def status_verified():
     """
-    Status check response endpoint (receives from GCHostPay2).
+    Status check response endpoint (receives from PGP_HOSTPAY2_v1).
 
     Flow:
-    1. Decrypt token from GCHostPay2
+    1. Decrypt token from PGP_HOSTPAY2_v1
     2. Validate status == "waiting"
-    3. Encrypt token for GCHostPay3 (payment execution)
-    4. Enqueue to GCHostPay3 via Cloud Tasks
+    3. Encrypt token for PGP_HOSTPAY3_v1 (payment execution)
+    4. Enqueue to PGP_HOSTPAY3_v1 via Cloud Tasks
 
     Returns:
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_2] Status check response received (from GCHostPay2)")
+        print(f"🎯 [ENDPOINT_2] Status check response received (from PGP_HOSTPAY2_v1)")
 
         # Parse JSON payload
         try:
@@ -536,11 +536,11 @@ def status_verified():
 
         # Determine context based on unique_id
         # If unique_id starts with "acc_", it's from PGP_ACCUMULATOR (threshold payout)
-        # Otherwise, it's from GCSplit1 (instant payout)
+        # Otherwise, it's from PGP_SPLIT1_v1 (instant payout)
         context = 'threshold' if unique_id.startswith('acc_') else 'instant'
         print(f"📋 [ENDPOINT_2] Detected context: {context}")
 
-        # Encrypt token for GCHostPay3 (payment execution) with context
+        # Encrypt token for PGP_HOSTPAY3_v1 (payment execution) with context
         encrypted_token_payment = token_manager.encrypt_gchostpay1_to_gchostpay3_token(
             unique_id=unique_id,
             cn_api_id=cn_api_id,
@@ -552,10 +552,10 @@ def status_verified():
         )
 
         if not encrypted_token_payment:
-            print(f"❌ [ENDPOINT_2] Failed to encrypt token for GCHostPay3")
+            print(f"❌ [ENDPOINT_2] Failed to encrypt token for PGP_HOSTPAY3_v1")
             abort(500, "Token encryption failed")
 
-        # Enqueue payment execution to GCHostPay3
+        # Enqueue payment execution to PGP_HOSTPAY3_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT_2] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
@@ -564,7 +564,7 @@ def status_verified():
         gchostpay3_url = config.get('gchostpay3_url')
 
         if not gchostpay3_queue or not gchostpay3_url:
-            print(f"❌ [ENDPOINT_2] GCHostPay3 configuration missing")
+            print(f"❌ [ENDPOINT_2] PGP_HOSTPAY3_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay3_payment_execution(
@@ -574,10 +574,10 @@ def status_verified():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT_2] Failed to enqueue payment execution to GCHostPay3")
+            print(f"❌ [ENDPOINT_2] Failed to enqueue payment execution to PGP_HOSTPAY3_v1")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_2] Enqueued payment execution to GCHostPay3")
+        print(f"✅ [ENDPOINT_2] Enqueued payment execution to PGP_HOSTPAY3_v1")
         print(f"🆔 [ENDPOINT_2] Task: {task_name}")
         print(f"🎉 [ENDPOINT_2] Status verified workflow completed successfully")
 
@@ -599,16 +599,16 @@ def status_verified():
 
 
 # ============================================================================
-# ENDPOINT 3: POST /payment-completed - Payment response (from GCHostPay3)
+# ENDPOINT 3: POST /payment-completed - Payment response (from PGP_HOSTPAY3_v1)
 # ============================================================================
 
 @app.route("/payment-completed", methods=["POST"])
 def payment_completed():
     """
-    Payment execution response endpoint (receives from GCHostPay3).
+    Payment execution response endpoint (receives from PGP_HOSTPAY3_v1).
 
     Flow:
-    1. Decrypt token from GCHostPay3
+    1. Decrypt token from PGP_HOSTPAY3_v1
     2. Extract: unique_id, cn_api_id, tx_hash, tx_status, gas_used, block_number
     3. Log final status
     4. Complete workflow
@@ -617,7 +617,7 @@ def payment_completed():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_3] Payment execution response received (from GCHostPay3)")
+        print(f"🎯 [ENDPOINT_3] Payment execution response received (from PGP_HOSTPAY3_v1)")
 
         # Parse JSON payload
         try:

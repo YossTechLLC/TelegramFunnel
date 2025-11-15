@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 PGP_SPLIT1_v1: Payment Splitting Orchestrator Service
-Coordinates payment splitting workflow across GCSplit2 and GCSplit3 using Cloud Tasks.
+Coordinates payment splitting workflow across PGP_SPLIT2_v1 and PGP_SPLIT3_v1 using Cloud Tasks.
 Handles database operations and integrates with GCHostPay for final ETH transfers.
 """
 import os
@@ -133,7 +133,7 @@ def build_hostpay_token(
     signing_key: str
 ) -> Optional[str]:
     """
-    Build a cryptographically signed token for GCHostPay10-26 webhook.
+    Build a cryptographically signed token for PGP_HOSTPAY1_v10-26 webhook.
 
     Token Format (binary packed):
     - 16 bytes: unique_id (fixed, padded)
@@ -262,14 +262,14 @@ def calculate_pure_market_conversion(
 @app.route("/", methods=["POST"])
 def initial_webhook():
     """
-    Main webhook endpoint for receiving payment split requests from GCWebhook10-26.
+    Main webhook endpoint for receiving payment split requests from PGP_ORCHESTRATOR_v10-26.
 
     Flow:
     1. Verify HMAC signature
     2. Extract data from webhook
     3. Calculate adjusted amount (remove TP fee)
-    4. Encrypt token for GCSplit2
-    5. Enqueue Cloud Task to GCSplit2
+    4. Encrypt token for PGP_SPLIT2_v1
+    5. Enqueue Cloud Task to PGP_SPLIT2_v1
 
     Returns:
         JSON response with status
@@ -360,7 +360,7 @@ def initial_webhook():
             original_amount, adjusted_amount = calculate_adjusted_amount(subscription_price, tp_flat_fee)
             print(f"🎯 [ENDPOINT_1] Threshold payout - calculated adjusted USDT: ${adjusted_amount}")
 
-        # Encrypt token for GCSplit2
+        # Encrypt token for PGP_SPLIT2_v1
         if not token_manager:
             print(f"❌ [ENDPOINT_1] Token manager not available")
             abort(500, "Service configuration error")
@@ -374,14 +374,14 @@ def initial_webhook():
             adjusted_amount=adjusted_amount,  # ✅ UPDATED: Now handles both ETH and USDT
             swap_currency=swap_currency,  # ✅ NEW: Pass swap_currency
             payout_mode=payout_mode,  # ✅ NEW: Pass payout_mode
-            actual_eth_amount=actual_eth_amount  # ✅ PASS: Pass ACTUAL ETH to GCSplit2
+            actual_eth_amount=actual_eth_amount  # ✅ PASS: Pass ACTUAL ETH to PGP_SPLIT2_v1
         )
 
         if not encrypted_token:
             print(f"❌ [ENDPOINT_1] Failed to encrypt token")
             abort(500, "Token encryption failed")
 
-        # Enqueue Cloud Task to GCSplit2
+        # Enqueue Cloud Task to PGP_SPLIT2_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT_1] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
@@ -390,7 +390,7 @@ def initial_webhook():
         gcsplit2_url = config.get('gcsplit2_url')
 
         if not gcsplit2_queue or not gcsplit2_url:
-            print(f"❌ [ENDPOINT_1] GCSplit2 configuration missing")
+            print(f"❌ [ENDPOINT_1] PGP_SPLIT2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
@@ -403,7 +403,7 @@ def initial_webhook():
             print(f"❌ [ENDPOINT_1] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_1] Successfully enqueued to GCSplit2")
+        print(f"✅ [ENDPOINT_1] Successfully enqueued to PGP_SPLIT2_v1")
         print(f"🆔 [ENDPOINT_1] Task: {task_name}")
 
         return jsonify({
@@ -421,26 +421,26 @@ def initial_webhook():
 
 
 # ============================================================================
-# ENDPOINT 2: POST /usdt-eth-estimate - Receives estimate from GCSplit2
+# ENDPOINT 2: POST /usdt-eth-estimate - Receives estimate from PGP_SPLIT2_v1
 # ============================================================================
 
 @app.route("/usdt-eth-estimate", methods=["POST"])
 def receive_usdt_eth_estimate():
     """
-    Endpoint for receiving USDT→ETH estimate response from GCSplit2.
+    Endpoint for receiving USDT→ETH estimate response from PGP_SPLIT2_v1.
 
     Flow:
-    1. Decrypt token from GCSplit2
+    1. Decrypt token from PGP_SPLIT2_v1
     2. Calculate pure market conversion value
     3. Insert into split_payout_request table
-    4. Encrypt token for GCSplit3
-    5. Enqueue Cloud Task to GCSplit3
+    4. Encrypt token for PGP_SPLIT3_v1
+    5. Enqueue Cloud Task to PGP_SPLIT3_v1
 
     Returns:
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_2] USDT→ETH estimate received (from GCSplit2)")
+        print(f"🎯 [ENDPOINT_2] USDT→ETH estimate received (from PGP_SPLIT2_v1)")
 
         # Parse JSON payload
         try:
@@ -524,7 +524,7 @@ def receive_usdt_eth_estimate():
         print(f"✅ [ENDPOINT_2] Database insertion successful")
         print(f"🆔 [ENDPOINT_2] Unique ID: {unique_id}")
 
-        # Encrypt token for GCSplit3
+        # Encrypt token for PGP_SPLIT3_v1
         encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
             unique_id=unique_id,
             user_id=user_id,
@@ -539,10 +539,10 @@ def receive_usdt_eth_estimate():
         )
 
         if not encrypted_token_for_split3:
-            print(f"❌ [ENDPOINT_2] Failed to encrypt token for GCSplit3")
+            print(f"❌ [ENDPOINT_2] Failed to encrypt token for PGP_SPLIT3_v1")
             abort(500, "Token encryption failed")
 
-        # Enqueue Cloud Task to GCSplit3
+        # Enqueue Cloud Task to PGP_SPLIT3_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT_2] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
@@ -551,7 +551,7 @@ def receive_usdt_eth_estimate():
         gcsplit3_url = config.get('gcsplit3_url')
 
         if not gcsplit3_queue or not gcsplit3_url:
-            print(f"❌ [ENDPOINT_2] GCSplit3 configuration missing")
+            print(f"❌ [ENDPOINT_2] PGP_SPLIT3_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split3_swap_request(
@@ -564,7 +564,7 @@ def receive_usdt_eth_estimate():
             print(f"❌ [ENDPOINT_2] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_2] Successfully enqueued to GCSplit3")
+        print(f"✅ [ENDPOINT_2] Successfully enqueued to PGP_SPLIT3_v1")
         print(f"🆔 [ENDPOINT_2] Task: {task_name}")
 
         return jsonify({
@@ -583,16 +583,16 @@ def receive_usdt_eth_estimate():
 
 
 # ============================================================================
-# ENDPOINT 3: POST /eth-client-swap - Receives swap result from GCSplit3
+# ENDPOINT 3: POST /eth-client-swap - Receives swap result from PGP_SPLIT3_v1
 # ============================================================================
 
 @app.route("/eth-client-swap", methods=["POST"])
 def receive_eth_client_swap():
     """
-    Endpoint for receiving ETH→ClientCurrency swap response from GCSplit3.
+    Endpoint for receiving ETH→ClientCurrency swap response from PGP_SPLIT3_v1.
 
     Flow:
-    1. Decrypt token from GCSplit3
+    1. Decrypt token from PGP_SPLIT3_v1
     2. Insert into split_payout_que table
     3. Build GCHostPay token
     4. Enqueue Cloud Task to GCHostPay
@@ -601,7 +601,7 @@ def receive_eth_client_swap():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_3] ETH→Client swap received (from GCSplit3)")
+        print(f"🎯 [ENDPOINT_3] ETH→Client swap received (from PGP_SPLIT3_v1)")
 
         # Parse JSON payload
         try:
@@ -849,8 +849,8 @@ def batch_payout():
     Flow:
     1. Decrypt batch token
     2. Extract batch data (batch_id, client_id, amount, etc.)
-    3. Encrypt token for GCSplit2 (USDT estimate request)
-    4. Enqueue Cloud Task to GCSplit2
+    3. Encrypt token for PGP_SPLIT2_v1 (USDT estimate request)
+    4. Enqueue Cloud Task to PGP_SPLIT2_v1
     5. Note: Use user_id=0 for batch payouts (not tied to single user)
 
     Returns:
@@ -923,7 +923,7 @@ def batch_payout():
 
         print(f"📝 [ENDPOINT_4] Using user_id={batch_user_id} for batch payout")
 
-        # Encrypt token for GCSplit2 (USDT estimate request)
+        # Encrypt token for PGP_SPLIT2_v1 (USDT estimate request)
         encrypted_token_for_split2 = token_manager.encrypt_gcsplit1_to_gcsplit2_token(
             user_id=batch_user_id,
             closed_channel_id=str(client_id),
@@ -937,10 +937,10 @@ def batch_payout():
         )
 
         if not encrypted_token_for_split2:
-            print(f"❌ [ENDPOINT_4] Failed to encrypt token for GCSplit2")
+            print(f"❌ [ENDPOINT_4] Failed to encrypt token for PGP_SPLIT2_v1")
             abort(500, "Token encryption failed")
 
-        # Enqueue Cloud Task to GCSplit2
+        # Enqueue Cloud Task to PGP_SPLIT2_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT_4] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
@@ -949,7 +949,7 @@ def batch_payout():
         gcsplit2_url = config.get('gcsplit2_url')
 
         if not gcsplit2_queue or not gcsplit2_url:
-            print(f"❌ [ENDPOINT_4] GCSplit2 configuration missing")
+            print(f"❌ [ENDPOINT_4] PGP_SPLIT2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
@@ -962,7 +962,7 @@ def batch_payout():
             print(f"❌ [ENDPOINT_4] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_4] Successfully enqueued batch payout to GCSplit2")
+        print(f"✅ [ENDPOINT_4] Successfully enqueued batch payout to PGP_SPLIT2_v1")
         print(f"🆔 [ENDPOINT_4] Task: {task_name}")
 
         return jsonify({

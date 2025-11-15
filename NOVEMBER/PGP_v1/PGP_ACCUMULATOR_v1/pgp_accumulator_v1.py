@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 PGP_ACCUMULATOR_v1: Payment Accumulation Service
-Receives payment data from GCWebhook1, converts to USDT immediately,
+Receives payment data from PGP_ORCHESTRATOR_v1, converts to USDT immediately,
 and stores in accumulation table to eliminate volatility risk.
 """
 import time
@@ -57,7 +57,7 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
     cloudtasks_client = None
 
-# ChangeNow client removed - conversion now handled by GCSplit2 via Cloud Tasks
+# ChangeNow client removed - conversion now handled by PGP_SPLIT2_v1 via Cloud Tasks
 
 
 @app.route("/", methods=["POST"])
@@ -66,10 +66,10 @@ def accumulate_payment():
     Main endpoint for accumulating payments.
 
     Flow:
-    1. Receive payment data from GCWebhook1
+    1. Receive payment data from PGP_ORCHESTRATOR_v1
     2. Calculate adjusted amount (after TP fee)
     3. Store payment with accumulated_eth (pending conversion)
-    4. Queue task to GCSplit2 for ETH→USDT conversion
+    4. Queue task to PGP_SPLIT2_v1 for ETH→USDT conversion
     5. Return success immediately (non-blocking)
 
     Returns:
@@ -114,7 +114,7 @@ def accumulate_payment():
         else:
             print(f"⚠️ [ENDPOINT] NowPayments payment_id not available (may arrive via IPN later)")
 
-        # Calculate adjusted amount (remove TP fee like GCSplit1 does)
+        # Calculate adjusted amount (remove TP fee like PGP_SPLIT1_v1 does)
         tp_flat_fee = Decimal(config.get('tp_flat_fee', '3'))
         fee_amount = payment_amount_usd * (tp_flat_fee / Decimal('100'))
         adjusted_amount_usd = payment_amount_usd - fee_amount
@@ -123,7 +123,7 @@ def accumulate_payment():
         print(f"✅ [ENDPOINT] Adjusted amount: ${adjusted_amount_usd}")
 
         # Store accumulated_eth (the adjusted USD amount pending conversion)
-        # Conversion will happen asynchronously via GCSplit2
+        # Conversion will happen asynchronously via PGP_SPLIT2_v1
         accumulated_eth = adjusted_amount_usd
         print(f"⏳ [ENDPOINT] Storing payment with accumulated_eth (pending conversion)")
         print(f"💰 [ENDPOINT] Accumulated ETH value: ${accumulated_eth}")

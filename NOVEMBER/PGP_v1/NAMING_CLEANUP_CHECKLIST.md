@@ -111,15 +111,15 @@
    - `PGP_WEBAPI` → `PGP_WEBAPI`
    - `PGP_NOTIFICATIONS` → `PGP_NOTIFICATIONS`
    - `PGP_MICROBATCHPROCESSOR` → `PGP_MICROBATCHPROCESSOR`
-   - `GCWebhook2` → `PGP_INVITE`
-   - `GCWebhook1` → `PGP_ORCHESTRATOR`
+   - `PGP_INVITE_v1` → `PGP_INVITE`
+   - `PGP_ORCHESTRATOR_v1` → `PGP_ORCHESTRATOR`
    - `PGP_BROADCAST` → `PGP_BROADCAST`
-   - `GCSplit3` → `PGP_SPLIT3`
-   - `GCSplit2` → `PGP_SPLIT2`
-   - `GCSplit1` → `PGP_SPLIT1`
-   - `GCHostPay3` → `PGP_HOSTPAY3`
-   - `GCHostPay2` → `PGP_HOSTPAY2`
-   - `GCHostPay1` → `PGP_HOSTPAY1`
+   - `PGP_SPLIT3_v1` → `PGP_SPLIT3`
+   - `PGP_SPLIT2_v1` → `PGP_SPLIT2`
+   - `PGP_SPLIT1_v1` → `PGP_SPLIT1`
+   - `PGP_HOSTPAY3_v1` → `PGP_HOSTPAY3`
+   - `PGP_HOSTPAY2_v1` → `PGP_HOSTPAY2`
+   - `PGP_HOSTPAY1_v1` → `PGP_HOSTPAY1`
    - `TelePay` → `PGP_SERVER`
 
 5. **Date Suffix Removal (standalone)**
@@ -225,7 +225,7 @@ Deploys the `pgp_accumulator_v1.py` accumulator service.
 - [ ] Run dry-run to see what would change
 - [ ] Review sample changes for correctness
 - [ ] Check for any unintended replacements
-- [ ] Verify edge cases (e.g., "GCWebhook1" vs "GCWebhook2")
+- [ ] Verify edge cases (e.g., "PGP_ORCHESTRATOR_v1" vs "PGP_INVITE_v1")
 
 ### Step 3: Execute Actual Replacements
 - [ ] Run script on Python files (*.py)

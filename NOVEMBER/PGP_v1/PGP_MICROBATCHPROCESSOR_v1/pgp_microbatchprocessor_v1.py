@@ -82,7 +82,7 @@ def check_threshold():
     3. If total >= threshold:
        a. Create ChangeNow ETH→USDT swap
        b. Update all pending records to 'swapping'
-       c. Enqueue to GCHostPay1 for execution
+       c. Enqueue to PGP_HOSTPAY1_v1 for execution
     4. Return summary
 
     Returns:
@@ -261,22 +261,22 @@ def check_threshold():
 
         print(f"✅ [ENDPOINT] Updated {len(pending_records)} record(s) to 'swapping' status")
 
-        # Enqueue to GCHostPay1 for execution
-        print(f"📤 [ENDPOINT] Enqueueing batch execution task to GCHostPay1")
+        # Enqueue to PGP_HOSTPAY1_v1 for execution
+        print(f"📤 [ENDPOINT] Enqueueing batch execution task to PGP_HOSTPAY1_v1")
 
         gchostpay1_batch_queue = config.get('gchostpay1_batch_queue')
         gchostpay1_url = config.get('gchostpay1_url')
 
         if not gchostpay1_batch_queue or not gchostpay1_url:
-            print(f"❌ [ENDPOINT] GCHostPay1 batch configuration missing")
+            print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 batch configuration missing")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Service configuration error"
             }), 500
 
-        # Encrypt token for GCHostPay1
-        print(f"🔐 [ENDPOINT] Encrypting token for GCHostPay1")
+        # Encrypt token for PGP_HOSTPAY1_v1
+        print(f"🔐 [ENDPOINT] Encrypting token for PGP_HOSTPAY1_v1")
         print(f"💰 [ENDPOINT] Passing ACTUAL ETH amount: {eth_for_swap} ETH")
 
         encrypted_token = token_manager.encrypt_microbatch_to_gchostpay1_token(
@@ -340,10 +340,10 @@ def check_threshold():
 @app.route("/swap-executed", methods=["POST"])
 def swap_executed():
     """
-    Callback endpoint from GCHostPay1 after ETH payment executed.
+    Callback endpoint from PGP_HOSTPAY1_v1 after ETH payment executed.
 
     Flow:
-    1. Decrypt token from GCHostPay1
+    1. Decrypt token from PGP_HOSTPAY1_v1
     2. Fetch all pending records for batch_conversion_id
     3. Calculate proportional USDT distribution
     4. Update each record with usdt_share
@@ -391,7 +391,7 @@ def swap_executed():
                 "message": "Missing token"
             }), 400
 
-        print(f"🔐 [ENDPOINT] Decrypting token from GCHostPay1")
+        print(f"🔐 [ENDPOINT] Decrypting token from PGP_HOSTPAY1_v1")
         decrypted_data = token_manager.decrypt_gchostpay1_to_microbatch_token(encrypted_token)
 
         if not decrypted_data:

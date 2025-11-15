@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
 PGP_HOSTPAY2_v1: ChangeNow Status Checker Service
-Receives status check requests from GCHostPay1, checks ChangeNow API status
-with INFINITE RETRY logic, and returns response back to GCHostPay1.
+Receives status check requests from PGP_HOSTPAY1_v1, checks ChangeNow API status
+with INFINITE RETRY logic, and returns response back to PGP_HOSTPAY1_v1.
 
 Implements infinite retry via Cloud Tasks (60s fixed backoff, 24h max duration).
 """
@@ -24,7 +24,7 @@ config = config_manager.initialize_config()
 
 # Initialize token manager
 try:
-    # Note: GCHostPay2 only needs internal signing key
+    # Note: PGP_HOSTPAY2_v1 only needs internal signing key
     tps_hostpay_key = config.get('success_url_signing_key')  # Use same key for both
     internal_key = config.get('success_url_signing_key')
 
@@ -65,7 +65,7 @@ except Exception as e:
 
 
 # ============================================================================
-# MAIN ENDPOINT: POST / - Receives request from GCHostPay1
+# MAIN ENDPOINT: POST / - Receives request from PGP_HOSTPAY1_v1
 # ============================================================================
 
 @app.route("/", methods=["POST"])
@@ -74,18 +74,18 @@ def check_changenow_status():
     Main endpoint for checking ChangeNow status with infinite retry.
 
     Flow:
-    1. Decrypt token from GCHostPay1
+    1. Decrypt token from PGP_HOSTPAY1_v1
     2. Extract unique_id and cn_api_id
     3. Call ChangeNow API with INFINITE RETRY (60s backoff, 24h max)
     4. Extract status field
     5. Encrypt response token
-    6. Enqueue back to GCHostPay1 /status-verified
+    6. Enqueue back to PGP_HOSTPAY1_v1 /status-verified
 
     Returns:
         JSON response with status (or 500 to trigger Cloud Tasks retry)
     """
     try:
-        print(f"🎯 [ENDPOINT] Status check request received (from GCHostPay1)")
+        print(f"🎯 [ENDPOINT] Status check request received (from PGP_HOSTPAY1_v1)")
 
         # Parse JSON payload
         try:
@@ -160,7 +160,7 @@ def check_changenow_status():
             print(f"❌ [ENDPOINT] Failed to encrypt response token")
             abort(500, "Token encryption failed")
 
-        # Enqueue response back to GCHostPay1
+        # Enqueue response back to PGP_HOSTPAY1_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
@@ -169,7 +169,7 @@ def check_changenow_status():
         gchostpay1_url = config.get('gchostpay1_url')
 
         if not gchostpay1_response_queue or not gchostpay1_url:
-            print(f"❌ [ENDPOINT] GCHostPay1 configuration missing")
+            print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
             abort(500, "Service configuration error")
 
         # Target the /status-verified endpoint
@@ -185,7 +185,7 @@ def check_changenow_status():
             print(f"❌ [ENDPOINT] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT] Successfully enqueued response to GCHostPay1")
+        print(f"✅ [ENDPOINT] Successfully enqueued response to PGP_HOSTPAY1_v1")
         print(f"🆔 [ENDPOINT] Task: {task_name}")
 
         return jsonify({

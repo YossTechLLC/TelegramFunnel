@@ -205,7 +205,7 @@ class WalletManager:
         Send ETH payment with SINGLE ATTEMPT (NEW: No infinite retry).
 
         UPDATED: Removed infinite retry loop. Now raises exceptions on failure.
-        Retry logic handled by GCHostPay3 main service (3-attempt limit).
+        Retry logic handled by PGP_HOSTPAY3_v1 main service (3-attempt limit).
 
         Args:
             to_address: Destination address (ChangeNow payin address)
@@ -367,7 +367,7 @@ class WalletManager:
         """
         Send ERC-20 token (USDT, USDC, DAI, etc.) to address.
 
-        SINGLE ATTEMPT - No infinite retry (handled by GCHostPay3 3-attempt logic).
+        SINGLE ATTEMPT - No infinite retry (handled by PGP_HOSTPAY3_v1 3-attempt logic).
 
         Args:
             token_contract_address: ERC-20 token contract address

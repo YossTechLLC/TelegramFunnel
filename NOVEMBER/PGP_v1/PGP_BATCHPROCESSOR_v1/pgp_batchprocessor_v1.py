@@ -2,7 +2,7 @@
 """
 PGP_BATCHPROCESSOR_v1: Batch Payout Processor Service
 Triggered by Cloud Scheduler every 5 minutes.
-Detects clients over threshold and triggers batch payouts via GCSplit1.
+Detects clients over threshold and triggers batch payouts via PGP_SPLIT1_v1.
 """
 import time
 import uuid
@@ -66,7 +66,7 @@ def process_batches():
     1. Query payout_accumulation for clients >= threshold
     2. For each client:
        a. Create batch record
-       b. Enqueue to GCSplit1 for USDT→XMR swap
+       b. Enqueue to PGP_SPLIT1_v1 for USDT→XMR swap
        c. Mark accumulations as paid_out after batch creation
     3. Return summary
 
@@ -116,7 +116,7 @@ def process_batches():
                 print(f"📊 [ENDPOINT] Payment count: {payment_count}")
                 print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
-                # Get summed ACTUAL ETH for this client (for GCHostPay1 payment)
+                # Get summed ACTUAL ETH for this client (for PGP_HOSTPAY1_v1 payment)
                 actual_eth_total = db_manager.get_accumulated_actual_eth(client_id)
                 print(f"💎 [ENDPOINT] ACTUAL ETH accumulated: {actual_eth_total} ETH")
 
@@ -147,7 +147,7 @@ def process_batches():
                 # Update batch status to processing
                 db_manager.update_batch_status(batch_id, 'processing')
 
-                # Encrypt token for GCSplit1
+                # Encrypt token for PGP_SPLIT1_v1
                 batch_token = token_manager.encrypt_batch_token(
                     batch_id=batch_id,
                     client_id=client_id,
@@ -164,17 +164,17 @@ def process_batches():
                     errors.append(f"Client {client_id}: token encryption failed")
                     continue
 
-                # Enqueue to GCSplit1 for batch payout
+                # Enqueue to PGP_SPLIT1_v1 for batch payout
                 gcsplit1_queue = config.get('gcsplit1_batch_queue')
                 gcsplit1_url = config.get('gcsplit1_url')
 
                 if not gcsplit1_queue or not gcsplit1_url:
-                    print(f"❌ [ENDPOINT] GCSplit1 configuration missing")
+                    print(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
                     db_manager.update_batch_status(batch_id, 'failed')
-                    errors.append(f"Client {client_id}: GCSplit1 config missing")
+                    errors.append(f"Client {client_id}: PGP_SPLIT1_v1 config missing")
                     continue
 
-                print(f"🚀 [ENDPOINT] Enqueueing to GCSplit1")
+                print(f"🚀 [ENDPOINT] Enqueueing to PGP_SPLIT1_v1")
 
                 task_payload = {
                     'token': batch_token,

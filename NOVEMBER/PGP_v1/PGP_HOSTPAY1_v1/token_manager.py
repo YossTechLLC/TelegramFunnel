@@ -18,7 +18,7 @@ class TokenManager(BaseTokenManager):
         Initialize TokenManager with signing keys.
 
         Args:
-            tps_hostpay_signing_key: TPS HostPay signing key (for GCSplit1 → GCHostPay1)
+            tps_hostpay_signing_key: TPS HostPay signing key (for PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1)
             success_url_signing_key: Success URL signing key (for internal PGP HostPay communication)
         """
         # Use success_url_signing_key as the primary signing key for base class
@@ -31,15 +31,15 @@ class TokenManager(BaseTokenManager):
         return str_val, offset
 
     # ========================================================================
-    # TOKEN 1: GCSplit1 → GCHostPay1 (Incoming from external service)
+    # TOKEN 1: PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1 (Incoming from external service)
     # ========================================================================
 
     def decrypt_gcsplit1_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCSplit1 → GCHostPay1.
+        Decrypt token from PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1.
         Token is valid for 60 seconds from creation (1-minute window).
 
-        Token Format (from GCSplit1 build_hostpay_token):
+        Token Format (from PGP_SPLIT1_v1 build_hostpay_token):
         - 16 bytes: unique_id (UTF-8, fixed length, padded with nulls)
         - 1 byte: cn_api_id length + variable bytes for cn_api_id
         - 1 byte: from_currency length + variable bytes for from_currency
@@ -50,7 +50,7 @@ class TokenManager(BaseTokenManager):
         - 16 bytes: HMAC-SHA256 signature (truncated)
 
         Args:
-            token: Base64 URL-safe encoded token from GCSplit1
+            token: Base64 URL-safe encoded token from PGP_SPLIT1_v1
 
         Returns:
             Dictionary with decrypted data or None if invalid
@@ -190,7 +190,7 @@ class TokenManager(BaseTokenManager):
             time_diff = current_time - timestamp
             raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 7200 seconds)")
 
-        print(f"🔓 [TOKEN_DEC] GCSplit1→GCHostPay1: Token validated successfully")
+        print(f"🔓 [TOKEN_DEC] PGP_SPLIT1_v1→PGP_HOSTPAY1_v1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
 
         return {
@@ -207,7 +207,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_accumulator_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from PGP_ACCUMULATOR → GCHostPay1.
+        Decrypt token from PGP_ACCUMULATOR → PGP_HOSTPAY1_v1.
         Token is valid for 300 seconds from creation (5-minute window).
 
         Token Format (from PGP_ACCUMULATOR encrypt_accumulator_to_gchostpay1_token):
@@ -296,7 +296,7 @@ class TokenManager(BaseTokenManager):
             time_diff = current_time - timestamp
             raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 7200 seconds)")
 
-        print(f"🔓 [TOKEN_DEC] PGP_ACCUMULATOR→GCHostPay1: Token validated successfully")
+        print(f"🔓 [TOKEN_DEC] PGP_ACCUMULATOR→PGP_HOSTPAY1_v1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
         print(f"📋 [TOKEN_DEC] Context: {context}")
         print(f"🆔 [TOKEN_DEC] Accumulation ID: {accumulation_id}")
@@ -313,7 +313,7 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 2: GCHostPay1 → GCHostPay2 (Status check request)
+    # TOKEN 2: PGP_HOSTPAY1_v1 → PGP_HOSTPAY2_v1 (Status check request)
     # ========================================================================
 
     def encrypt_gchostpay1_to_gchostpay2_token(
@@ -326,10 +326,10 @@ class TokenManager(BaseTokenManager):
         payin_address: str
     ) -> Optional[str]:
         """
-        Encrypt token for GCHostPay1 → GCHostPay2 (Status check request).
+        Encrypt token for PGP_HOSTPAY1_v1 → PGP_HOSTPAY2_v1 (Status check request).
 
-        **CRITICAL FIX**: Includes ALL payment details so GCHostPay2 can pass them back
-        in the response, enabling GCHostPay1 to create the GCHostPay3 payment request.
+        **CRITICAL FIX**: Includes ALL payment details so PGP_HOSTPAY2_v1 can pass them back
+        in the response, enabling PGP_HOSTPAY1_v1 to create the PGP_HOSTPAY3_v1 payment request.
 
         Token Structure:
         - 16 bytes: unique_id (fixed)
@@ -353,7 +353,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay2: Encrypting status check request")
+            print(f"🔐 [TOKEN_ENC] PGP_HOSTPAY1_v1→PGP_HOSTPAY2_v1: Encrypting status check request")
 
             packed_data = bytearray()
             packed_data.extend(self.pack_string(unique_id))
@@ -386,7 +386,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gchostpay1_to_gchostpay2_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCHostPay1 → GCHostPay2.
+        Decrypt token from PGP_HOSTPAY1_v1 → PGP_HOSTPAY2_v1.
         Token valid for 300 seconds (5 minutes).
 
         Returns:
@@ -448,7 +448,7 @@ class TokenManager(BaseTokenManager):
         if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
-        print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay2: Token validated")
+        print(f"🔓 [TOKEN_DEC] PGP_HOSTPAY1_v1→PGP_HOSTPAY2_v1: Token validated")
 
         return {
             "unique_id": unique_id,
@@ -461,7 +461,7 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 3: GCHostPay2 → GCHostPay1 (Status check response)
+    # TOKEN 3: PGP_HOSTPAY2_v1 → PGP_HOSTPAY1_v1 (Status check response)
     # ========================================================================
 
     def encrypt_gchostpay2_to_gchostpay1_token(
@@ -475,10 +475,10 @@ class TokenManager(BaseTokenManager):
         payin_address: str
     ) -> Optional[str]:
         """
-        Encrypt response token for GCHostPay2 → GCHostPay1 (status check response).
+        Encrypt response token for PGP_HOSTPAY2_v1 → PGP_HOSTPAY1_v1 (status check response).
 
-        **CRITICAL FIX**: Includes ALL payment details so GCHostPay1 can create
-        the GCHostPay3 payment execution request.
+        **CRITICAL FIX**: Includes ALL payment details so PGP_HOSTPAY1_v1 can create
+        the PGP_HOSTPAY3_v1 payment execution request.
 
         Token Structure:
         - 16 bytes: unique_id (fixed)
@@ -504,7 +504,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCHostPay2→GCHostPay1: Encrypting status response")
+            print(f"🔐 [TOKEN_ENC] PGP_HOSTPAY2_v1→PGP_HOSTPAY1_v1: Encrypting status response")
 
             packed_data = bytearray()
             packed_data.extend(self.pack_string(unique_id))
@@ -538,7 +538,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gchostpay2_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt response token from GCHostPay2 → GCHostPay1.
+        Decrypt response token from PGP_HOSTPAY2_v1 → PGP_HOSTPAY1_v1.
         Token valid for 300 seconds (5 minutes).
 
         Returns:
@@ -603,7 +603,7 @@ class TokenManager(BaseTokenManager):
         if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
-        print(f"🔓 [TOKEN_DEC] GCHostPay2→GCHostPay1: Token validated")
+        print(f"🔓 [TOKEN_DEC] PGP_HOSTPAY2_v1→PGP_HOSTPAY1_v1: Token validated")
 
         return {
             "unique_id": unique_id,
@@ -617,7 +617,7 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 4: GCHostPay1 → GCHostPay3 (Payment execution request)
+    # TOKEN 4: PGP_HOSTPAY1_v1 → PGP_HOSTPAY3_v1 (Payment execution request)
     # ========================================================================
 
     def encrypt_gchostpay1_to_gchostpay3_token(
@@ -631,7 +631,7 @@ class TokenManager(BaseTokenManager):
         context: str = 'instant'
     ) -> Optional[str]:
         """
-        Encrypt token for GCHostPay1 → GCHostPay3 (ETH payment execution request).
+        Encrypt token for PGP_HOSTPAY1_v1 → PGP_HOSTPAY3_v1 (ETH payment execution request).
 
         Token Structure:
         - 16 bytes: unique_id (fixed)
@@ -651,7 +651,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay3: Encrypting payment request")
+            print(f"🔐 [TOKEN_ENC] PGP_HOSTPAY1_v1→PGP_HOSTPAY3_v1: Encrypting payment request")
             print(f"📋 [TOKEN_ENC] Context: {context}")
 
             packed_data = bytearray()
@@ -686,7 +686,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gchostpay1_to_gchostpay3_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCHostPay1 → GCHostPay3.
+        Decrypt token from PGP_HOSTPAY1_v1 → PGP_HOSTPAY3_v1.
         Token valid for 300 seconds (5 minutes).
 
         Returns:
@@ -748,7 +748,7 @@ class TokenManager(BaseTokenManager):
         if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
-        print(f"🔓 [TOKEN_DEC] GCHostPay1→GCHostPay3: Token validated")
+        print(f"🔓 [TOKEN_DEC] PGP_HOSTPAY1_v1→PGP_HOSTPAY3_v1: Token validated")
 
         return {
             "unique_id": unique_id,
@@ -761,7 +761,7 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 5: GCHostPay3 → GCHostPay1 (Payment execution response)
+    # TOKEN 5: PGP_HOSTPAY3_v1 → PGP_HOSTPAY1_v1 (Payment execution response)
     # ========================================================================
 
     def encrypt_gchostpay3_to_gchostpay1_token(
@@ -774,7 +774,7 @@ class TokenManager(BaseTokenManager):
         block_number: int
     ) -> Optional[str]:
         """
-        Encrypt response token for GCHostPay3 → GCHostPay1 (payment execution response).
+        Encrypt response token for PGP_HOSTPAY3_v1 → PGP_HOSTPAY1_v1 (payment execution response).
 
         Token Structure:
         - 16 bytes: unique_id (fixed)
@@ -790,7 +790,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCHostPay3→GCHostPay1: Encrypting payment response")
+            print(f"🔐 [TOKEN_ENC] PGP_HOSTPAY3_v1→PGP_HOSTPAY1_v1: Encrypting payment response")
 
             packed_data = bytearray()
             packed_data.extend(self.pack_string(unique_id))
@@ -823,7 +823,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gchostpay3_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt response token from GCHostPay3 → GCHostPay1.
+        Decrypt response token from PGP_HOSTPAY3_v1 → PGP_HOSTPAY1_v1.
         Token valid for 300 seconds (5 minutes).
 
         Returns:
@@ -892,7 +892,7 @@ class TokenManager(BaseTokenManager):
         if not (current_time - 7200 <= timestamp <= current_time + 5):
             raise ValueError(f"Token expired")
 
-        print(f"🔓 [TOKEN_DEC] GCHostPay3→GCHostPay1: Token validated")
+        print(f"🔓 [TOKEN_DEC] PGP_HOSTPAY3_v1→PGP_HOSTPAY1_v1: Token validated")
 
         return {
             "unique_id": unique_id,
@@ -905,12 +905,12 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 7: PGP_MICROBATCHPROCESSOR → GCHostPay1 (Batch execution request)
+    # TOKEN 7: PGP_MICROBATCHPROCESSOR → PGP_HOSTPAY1_v1 (Batch execution request)
     # ========================================================================
 
     def decrypt_microbatch_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from PGP_MICROBATCHPROCESSOR → GCHostPay1.
+        Decrypt token from PGP_MICROBATCHPROCESSOR → PGP_HOSTPAY1_v1.
         Token is valid for 300 seconds from creation (5-minute window).
 
         Token Format (from PGP_MICROBATCHPROCESSOR encrypt_microbatch_to_gchostpay1_token):
@@ -996,7 +996,7 @@ class TokenManager(BaseTokenManager):
             time_diff = current_time - timestamp
             raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 300 seconds)")
 
-        print(f"🔓 [TOKEN_DEC] PGP_MICROBATCHPROCESSOR→GCHostPay1: Token validated successfully")
+        print(f"🔓 [TOKEN_DEC] PGP_MICROBATCHPROCESSOR→PGP_HOSTPAY1_v1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
         print(f"📋 [TOKEN_DEC] Context: {context}")
         print(f"🆔 [TOKEN_DEC] Batch Conversion ID: {batch_conversion_id}")
@@ -1013,7 +1013,7 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 8: GCHostPay1 → PGP_MICROBATCHPROCESSOR (Batch execution response)
+    # TOKEN 8: PGP_HOSTPAY1_v1 → PGP_MICROBATCHPROCESSOR (Batch execution response)
     # ========================================================================
 
     def encrypt_gchostpay1_to_microbatch_response_token(
@@ -1024,7 +1024,7 @@ class TokenManager(BaseTokenManager):
         actual_usdt_received: float
     ) -> Optional[str]:
         """
-        Encrypt token for GCHostPay1 → PGP_MICROBATCHPROCESSOR (Batch execution response).
+        Encrypt token for PGP_HOSTPAY1_v1 → PGP_MICROBATCHPROCESSOR (Batch execution response).
 
         Token Structure:
         - 1 byte: batch_conversion_id length + variable bytes (UUID string)
@@ -1044,7 +1044,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCHostPay1→PGP_MICROBATCHPROCESSOR: Encrypting batch response")
+            print(f"🔐 [TOKEN_ENC] PGP_HOSTPAY1_v1→PGP_MICROBATCHPROCESSOR: Encrypting batch response")
 
             payload = bytearray()
 
@@ -1085,7 +1085,7 @@ class TokenManager(BaseTokenManager):
             return None
 
     # ========================================================================
-    # TOKEN 9: GCHostPay1 Retry Token (Internal delayed callback check)
+    # TOKEN 9: PGP_HOSTPAY1_v1 Retry Token (Internal delayed callback check)
     # ========================================================================
 
     def encrypt_gchostpay1_retry_token(
@@ -1119,7 +1119,7 @@ class TokenManager(BaseTokenManager):
             Base64-encoded encrypted token, or None if encryption fails
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCHostPay1 Retry: Encrypting retry token")
+            print(f"🔐 [TOKEN_ENC] PGP_HOSTPAY1_v1 Retry: Encrypting retry token")
 
             packed_data = bytearray()
 
@@ -1170,7 +1170,7 @@ class TokenManager(BaseTokenManager):
             Dictionary with decrypted data or None if invalid
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCHostPay1 Retry: Decrypting retry token")
+            print(f"🔓 [TOKEN_DEC] PGP_HOSTPAY1_v1 Retry: Decrypting retry token")
 
             # Decode
             padding = '=' * (-len(token) % 4)

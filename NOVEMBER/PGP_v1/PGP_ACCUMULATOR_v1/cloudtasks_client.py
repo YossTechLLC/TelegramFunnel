@@ -30,7 +30,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         )
 
     # ========================================================================
-    # PGP_ACCUMULATOR → GCSplit2 (ETH→USDT Conversion Estimate)
+    # PGP_ACCUMULATOR → PGP_SPLIT2_v1 (ETH→USDT Conversion Estimate)
     # ========================================================================
 
     def enqueue_pgp_split2_conversion(
@@ -42,11 +42,11 @@ class CloudTasksClient(BaseCloudTasksClient):
         accumulated_eth: float
     ) -> Optional[str]:
         """
-        Enqueue ETH→USDT conversion task to GCSplit2.
+        Enqueue ETH→USDT conversion task to PGP_SPLIT2_v1.
 
         Args:
-            queue_name: GCSplit2 queue name
-            target_url: GCSplit2 /estimate-and-update endpoint URL
+            queue_name: PGP_SPLIT2_v1 queue name
+            target_url: PGP_SPLIT2_v1 /estimate-and-update endpoint URL
             accumulation_id: Database accumulation record ID
             client_id: Client's closed_channel_id
             accumulated_eth: ETH value to convert (USD equivalent)
@@ -54,7 +54,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         Returns:
             Task name if successful, None if failed
         """
-        print(f"📤 [CLOUDTASKS] Enqueueing GCSplit2 conversion task")
+        print(f"📤 [CLOUDTASKS] Enqueueing PGP_SPLIT2_v1 conversion task")
         print(f"🆔 [CLOUDTASKS] Accumulation ID: {accumulation_id}")
         print(f"💰 [CLOUDTASKS] Accumulated ETH: ${accumulated_eth}")
 
@@ -71,7 +71,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         )
 
     # ========================================================================
-    # PGP_ACCUMULATOR → GCSplit3 (ETH→USDT Swap Creation)
+    # PGP_ACCUMULATOR → PGP_SPLIT3_v1 (ETH→USDT Swap Creation)
     # ========================================================================
 
     def enqueue_pgp_split3_eth_to_usdt_swap(
@@ -81,17 +81,17 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue ETH→USDT swap creation task to GCSplit3.
+        Enqueue ETH→USDT swap creation task to PGP_SPLIT3_v1.
 
         Args:
-            queue_name: GCSplit3 queue name
-            target_url: GCSplit3 /eth-to-usdt endpoint URL
+            queue_name: PGP_SPLIT3_v1 queue name
+            target_url: PGP_SPLIT3_v1 /eth-to-usdt endpoint URL
             encrypted_token: Encrypted token with swap request data
 
         Returns:
             Task name if successful, None if failed
         """
-        print(f"💱 [CLOUDTASKS] Enqueueing GCSplit3 ETH→USDT swap task")
+        print(f"💱 [CLOUDTASKS] Enqueueing PGP_SPLIT3_v1 ETH→USDT swap task")
 
         payload = {"token": encrypted_token}
 
@@ -102,7 +102,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         )
 
     # ========================================================================
-    # PGP_ACCUMULATOR → GCHostPay1 (Swap Execution)
+    # PGP_ACCUMULATOR → PGP_HOSTPAY1_v1 (Swap Execution)
     # ========================================================================
 
     def enqueue_pgp_hostpay1_execution(
@@ -112,17 +112,17 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue swap execution task to GCHostPay1.
+        Enqueue swap execution task to PGP_HOSTPAY1_v1.
 
         Args:
-            queue_name: GCHostPay1 queue name
-            target_url: GCHostPay1 endpoint URL
+            queue_name: PGP_HOSTPAY1_v1 queue name
+            target_url: PGP_HOSTPAY1_v1 endpoint URL
             encrypted_token: Encrypted token with execution request data
 
         Returns:
             Task name if successful, None if failed
         """
-        print(f"🚀 [CLOUDTASKS] Enqueueing GCHostPay1 execution task")
+        print(f"🚀 [CLOUDTASKS] Enqueueing PGP_HOSTPAY1_v1 execution task")
 
         payload = {"token": encrypted_token}
 

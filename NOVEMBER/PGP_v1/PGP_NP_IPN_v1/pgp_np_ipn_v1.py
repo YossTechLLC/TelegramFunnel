@@ -141,10 +141,10 @@ if all([CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION]):
         print(f"✅ [CLOUDTASKS] Client initialized successfully")
     except Exception as e:
         print(f"❌ [CLOUDTASKS] Failed to initialize client: {e}")
-        print(f"⚠️ [CLOUDTASKS] GCWebhook1 triggering will not work!")
+        print(f"⚠️ [CLOUDTASKS] PGP_ORCHESTRATOR_v1 triggering will not work!")
 else:
     print(f"⚠️ [CLOUDTASKS] Skipping initialization - missing configuration")
-    print(f"⚠️ [CLOUDTASKS] GCWebhook1 will NOT be triggered after IPN validation!")
+    print(f"⚠️ [CLOUDTASKS] PGP_ORCHESTRATOR_v1 will NOT be triggered after IPN validation!")
 
 print(f"")
 
@@ -658,7 +658,7 @@ def handle_ipn():
         print(f"=" * 80)
 
         # Return 200 OK to acknowledge receipt to NowPayments
-        # But DO NOT trigger GCWebhook1 or any downstream processing
+        # But DO NOT trigger PGP_ORCHESTRATOR_v1 or any downstream processing
         return jsonify({
             "status": "acknowledged",
             "message": f"IPN received but not processed. Waiting for status 'finished' (current: {payment_status})",
@@ -785,7 +785,7 @@ def handle_ipn():
                         conn.commit()
                         print(f"✅ [DATABASE] Updated nowpayments_outcome_amount_usd: ${outcome_amount_usd:.2f}")
 
-                        # Now fetch subscription details for GCWebhook1 triggering
+                        # Now fetch subscription details for PGP_ORCHESTRATOR_v1 triggering
                         # JOIN with main_clients_database to get wallet/payout info
                         cur.execute("""
                             SELECT
@@ -836,7 +836,7 @@ def handle_ipn():
 
                                 if existing_payment and existing_payment[0]:  # gcwebhook1_processed = TRUE
                                     print(f"✅ [IDEMPOTENCY] Payment {nowpayments_payment_id} already processed")
-                                    print(f"   GCWebhook1 processed: TRUE")
+                                    print(f"   PGP_ORCHESTRATOR_v1 processed: TRUE")
                                     print(f"   Telegram invite sent: {existing_payment[1]}")
                                     if existing_payment[2]:
                                         print(f"   Invite sent at: {existing_payment[2]}")
@@ -854,7 +854,7 @@ def handle_ipn():
                                 elif existing_payment:
                                     # Record exists but not fully processed
                                     print(f"⚠️ [IDEMPOTENCY] Payment {nowpayments_payment_id} record exists but processing incomplete")
-                                    print(f"   GCWebhook1 processed: {existing_payment[0]}")
+                                    print(f"   PGP_ORCHESTRATOR_v1 processed: {existing_payment[0]}")
                                     print(f"   Will allow re-processing to complete")
                                 else:
                                     # No existing record - first time processing
@@ -890,10 +890,10 @@ def handle_ipn():
                             print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
 
                         print(f"")
-                        print(f"🚀 [ORCHESTRATION] Proceeding to enqueue payment to GCWebhook1...")
+                        print(f"🚀 [ORCHESTRATION] Proceeding to enqueue payment to PGP_ORCHESTRATOR_v1...")
 
                         # ============================================================================
-                        # NEW: Trigger GCWebhook1 for Payment Orchestration
+                        # NEW: Trigger PGP_ORCHESTRATOR_v1 for Payment Orchestration
                         # ============================================================================
                         if sub_data:
                             wallet_address = sub_data[0]
@@ -927,11 +927,11 @@ def handle_ipn():
                                         nowpayments_payment_id=payment_data['payment_id'],
                                         nowpayments_pay_address=ipn_data.get('pay_address'),
                                         nowpayments_outcome_amount=outcome_amount,
-                                        payment_status=payment_status  # ✅ NEW: Pass validated status to GCWebhook1
+                                        payment_status=payment_status  # ✅ NEW: Pass validated status to PGP_ORCHESTRATOR_v1
                                     )
 
                                     if task_name:
-                                        print(f"✅ [ORCHESTRATION] Successfully enqueued to GCWebhook1")
+                                        print(f"✅ [ORCHESTRATION] Successfully enqueued to PGP_ORCHESTRATOR_v1")
                                         print(f"🆔 [ORCHESTRATION] Task: {task_name}")
 
                                         # 🆕 Trigger notification service via PGP_NOTIFICATIONS (PGP_NOTIFICATIONS_REFACTORING_ARCHITECTURE)
@@ -1043,15 +1043,15 @@ def handle_ipn():
                                         print(f"")
 
                                     else:
-                                        print(f"❌ [ORCHESTRATION] Failed to enqueue to GCWebhook1")
+                                        print(f"❌ [ORCHESTRATION] Failed to enqueue to PGP_ORCHESTRATOR_v1")
                                         print(f"⚠️ [ORCHESTRATION] Payment validated but not queued for processing!")
 
                                 except Exception as e:
-                                    print(f"❌ [ORCHESTRATION] Error queuing to GCWebhook1: {e}")
+                                    print(f"❌ [ORCHESTRATION] Error queuing to PGP_ORCHESTRATOR_v1: {e}")
                                     import traceback
                                     traceback.print_exc()
                         else:
-                            print(f"⚠️ [ORCHESTRATION] Could not fetch subscription data for GCWebhook1 triggering")
+                            print(f"⚠️ [ORCHESTRATION] Could not fetch subscription data for PGP_ORCHESTRATOR_v1 triggering")
 
         except Exception as e:
             print(f"❌ [DATABASE] Failed to update outcome_amount_usd: {e}")

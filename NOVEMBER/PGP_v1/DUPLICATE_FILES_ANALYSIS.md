@@ -385,7 +385,7 @@ from typing import Optional, Dict, Any, Tuple
 **Differences:**
 
 1. **Token Formats**: Each service pair has different token structures
-   - PGP_ORCHESTRATOR_v1: Decodes NOWPayments tokens, encrypts for GCWebhook2
+   - PGP_ORCHESTRATOR_v1: Decodes NOWPayments tokens, encrypts for PGP_INVITE_v1
    - PGP_SPLIT1_v1: Complex multi-directional encryption (to/from Split2, Split3)
    - PGP_ACCUMULATOR_v1: Accumulator-specific tokens (to/from Split3, HostPay1)
 

@@ -30,7 +30,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         )
 
     # ========================================================================
-    # PGP_MICROBATCHPROCESSOR → GCHostPay1 (Batch Execution)
+    # PGP_MICROBATCHPROCESSOR → PGP_HOSTPAY1_v1 (Batch Execution)
     # ========================================================================
 
     def enqueue_pgp_hostpay1_batch_execution(
@@ -40,17 +40,17 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue batch execution task to GCHostPay1.
+        Enqueue batch execution task to PGP_HOSTPAY1_v1.
 
         Args:
-            queue_name: GCHostPay1 batch queue name
-            target_url: GCHostPay1 service URL
+            queue_name: PGP_HOSTPAY1_v1 batch queue name
+            target_url: PGP_HOSTPAY1_v1 service URL
             encrypted_token: Encrypted token with batch details
 
         Returns:
             Task name if successful, None if failed
         """
-        print(f"📤 [CLOUDTASKS] Enqueueing batch execution task to GCHostPay1")
+        print(f"📤 [CLOUDTASKS] Enqueueing batch execution task to PGP_HOSTPAY1_v1")
         print(f"🎯 [CLOUDTASKS] Queue: {queue_name}")
         print(f"🌐 [CLOUDTASKS] Target: {target_url}")
 

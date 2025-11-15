@@ -817,7 +817,7 @@ onPaste={(e) => {
 
 ---
 
-### ✅ RESOLVED: GCSplit1 Endpoint_2 Dictionary Key Naming Mismatch
+### ✅ RESOLVED: PGP_SPLIT1_v1 Endpoint_2 Dictionary Key Naming Mismatch
 
 **Date Discovered:** 2025-11-07 Session 67
 **Date Resolved:** 2025-11-07 Session 67 (same day)
@@ -839,8 +839,8 @@ After fixing token decryption field ordering (Session 66), discovered that endpo
 
 **Root Cause:**
 **Dictionary key naming inconsistency**:
-- GCSplit1 decrypt method returns: `"to_amount_post_fee"` (generic dual-currency name) ✅
-- GCSplit1 endpoint_2 code expected: `"to_amount_eth_post_fee"` (legacy ETH-only name) ❌
+- PGP_SPLIT1_v1 decrypt method returns: `"to_amount_post_fee"` (generic dual-currency name) ✅
+- PGP_SPLIT1_v1 endpoint_2 code expected: `"to_amount_eth_post_fee"` (legacy ETH-only name) ❌
 - Result: KeyError on line 476 when accessing non-existent dictionary key
 
 **Why It Happened:**
@@ -866,7 +866,7 @@ After fixing token decryption field ordering (Session 66), discovered that endpo
 
 **Impact:**
 - ✅ Both instant (ETH) and threshold (USDT) payouts now unblocked
-- ✅ No changes needed to GCSplit2 or GCSplit3
+- ✅ No changes needed to PGP_SPLIT2_v1 or PGP_SPLIT3_v1
 - ✅ Maintains dual-currency architecture naming consistency
 - ✅ System ready for end-to-end testing
 
@@ -879,21 +879,21 @@ When updating data structures (token fields), verify ALL code paths that access 
 
 ---
 
-### ✅ RESOLVED: GCSplit1 Token Decryption Field Ordering Mismatch
+### ✅ RESOLVED: PGP_SPLIT1_v1 Token Decryption Field Ordering Mismatch
 
 **Date Discovered:** 2025-11-07 Session 66
 **Date Resolved:** 2025-11-07 Session 66 (same day)
-**Service:** PGP_SPLIT1_v1 (affects GCSplit2 token decryption)
+**Service:** PGP_SPLIT1_v1 (affects PGP_SPLIT2_v1 token decryption)
 **Severity:** CRITICAL - BLOCKING PRODUCTION (instant AND threshold payouts)
 **Status:** ✅ **FIXED - DEPLOYED TO PRODUCTION**
 
 **Context:**
-Dual-currency implementation (instant payouts via ETH, threshold payouts via USDT) is completely blocked due to token field ordering mismatch between GCSplit2's encryption and GCSplit1's decryption.
+Dual-currency implementation (instant payouts via ETH, threshold payouts via USDT) is completely blocked due to token field ordering mismatch between PGP_SPLIT2_v1's encryption and PGP_SPLIT1_v1's decryption.
 
 **Error Log Evidence:**
 ```
 2025-11-07 10:40:46.084 EST
-🔓 [TOKEN_DEC] GCSplit2→GCSplit1: Decrypting estimate response
+🔓 [TOKEN_DEC] PGP_SPLIT2_v1→PGP_SPLIT1_v1: Decrypting estimate response
 ⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')
 ⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')
 💰 [TOKEN_DEC] ACTUAL ETH extracted: 2.6874284797920923e-292  ❌ CORRUPTED
@@ -903,18 +903,18 @@ Dual-currency implementation (instant payouts via ETH, threshold payouts via USD
 ```
 
 **Root Cause:**
-**Binary struct unpacking order mismatch** between GCSplit2's packing and GCSplit1's unpacking:
+**Binary struct unpacking order mismatch** between PGP_SPLIT2_v1's packing and PGP_SPLIT1_v1's unpacking:
 
-- **GCSplit2 packs (CORRECT):**
+- **PGP_SPLIT2_v1 packs (CORRECT):**
   `[user_id][closed_channel_id][strings...][from_amount][to_amount][deposit_fee][withdrawal_fee][swap_currency][payout_mode][actual_eth_amount][timestamp]`
 
-- **GCSplit1 unpacks (WRONG):**
+- **PGP_SPLIT1_v1 unpacks (WRONG):**
   `[user_id][closed_channel_id][strings...][from_amount][swap_currency][payout_mode][to_amount][deposit_fee][withdrawal_fee][actual_eth_amount][timestamp]`
 
 **The Problem:**
-GCSplit1 tries to read `swap_currency` and `payout_mode` IMMEDIATELY after `from_amount`, but GCSplit2 packs them AFTER `withdrawal_fee`. This causes:
-1. GCSplit1 reads `to_amount` bytes as `swap_currency` string → fails to parse
-2. GCSplit1 reads `deposit_fee` bytes as `payout_mode` string → fails to parse
+PGP_SPLIT1_v1 tries to read `swap_currency` and `payout_mode` IMMEDIATELY after `from_amount`, but PGP_SPLIT2_v1 packs them AFTER `withdrawal_fee`. This causes:
+1. PGP_SPLIT1_v1 reads `to_amount` bytes as `swap_currency` string → fails to parse
+2. PGP_SPLIT1_v1 reads `deposit_fee` bytes as `payout_mode` string → fails to parse
 3. All subsequent fields offset by ~20+ bytes → complete data corruption
 4. `actual_eth_amount` reads random bytes → produces `2.687e-292` instead of `0.0009853`
 5. Timestamp validation fails → "Token expired" error
@@ -930,7 +930,7 @@ GCSplit1 tries to read `swap_currency` and `payout_mode` IMMEDIATELY after `from
 - `PGP_SPLIT2_v1/token_manager.py` (encrypt_gcsplit2_to_gcsplit1_token, lines 266-338) ✅ CORRECT
 
 **Fix Required:**
-Reorder GCSplit1's unpacking to match GCSplit2's packing:
+Reorder PGP_SPLIT1_v1's unpacking to match PGP_SPLIT2_v1's packing:
 ```python
 # BEFORE (WRONG):
 from_amount → swap_currency → payout_mode → to_amount → deposit_fee → withdrawal_fee
@@ -940,7 +940,7 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 ```
 
 **Resolution Applied:**
-1. ✅ Applied ordering fix to GCSplit1 token_manager.py (lines 399-432)
+1. ✅ Applied ordering fix to PGP_SPLIT1_v1 token_manager.py (lines 399-432)
 2. ✅ Built Docker image: Build ID 35f8cdc1-16ec-47ba-a764-5dfa94ae7129
 3. ✅ Deployed to Cloud Run: Revision gcsplit1-10-26-00019-dw4
 4. ✅ Health check passed: All components healthy
@@ -948,7 +948,7 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 
 **Fix Details:**
 - Reordered unpacking: `from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency → payout_mode`
-- Now matches GCSplit2 packing order exactly
+- Now matches PGP_SPLIT2_v1 packing order exactly
 - Backward compatibility preserved with try/except blocks
 - Deployment time: 2025-11-07 15:57:58 UTC
 - Total fix time: ~8 minutes from code change to production
@@ -959,20 +959,20 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 
 **Why This Bug Occurred:**
 1. New fields (`swap_currency`, `payout_mode`, `actual_eth_amount`) added in Session 65
-2. GCSplit2 placed new fields AFTER fee fields (correct position)
-3. GCSplit1 placed new fields IMMEDIATELY after from_amount (wrong position)
+2. PGP_SPLIT2_v1 placed new fields AFTER fee fields (correct position)
+3. PGP_SPLIT1_v1 placed new fields IMMEDIATELY after from_amount (wrong position)
 4. No end-to-end token serialization test caught the mismatch
 5. Separate file updates without cross-service validation
 
 **Prevention for Future:**
 1. Add unit tests for encrypt/decrypt roundtrip
-2. Test full token flow GCSplit1→GCSplit2→GCSplit1 locally before deployment
+2. Test full token flow PGP_SPLIT1_v1→PGP_SPLIT2_v1→PGP_SPLIT1_v1 locally before deployment
 3. Use token versioning to detect format changes
 4. Document exact byte structure in both encrypt and decrypt methods
 
 **Related Issues:**
 - Session 65: Dual-currency implementation (added the new fields)
-- Session 50-51: Previous similar token ordering bugs with GCSplit3
+- Session 50-51: Previous similar token ordering bugs with PGP_SPLIT3_v1
 
 ---
 
@@ -980,7 +980,7 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 
 ## Recently Resolved
 
-### ✅ RESOLVED: GCSplit2 Token Manager Already Had Dual-Currency Support
+### ✅ RESOLVED: PGP_SPLIT2_v1 Token Manager Already Had Dual-Currency Support
 
 **Date Discovered:** 2025-11-07 Session 65
 **Date Resolved:** 2025-11-07 Session 65
@@ -989,7 +989,7 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 **Status:** ✅ **VERIFIED & DEPLOYED**
 
 **Context:**
-- Dual-currency implementation verification revealed GCSplit2 token manager already had all necessary updates
+- Dual-currency implementation verification revealed PGP_SPLIT2_v1 token manager already had all necessary updates
 - All 3 token methods contained swap_currency, payout_mode, actual_eth_amount fields
 - Backward compatibility was already implemented
 - Variable names were already changed from `*_usdt` to generic names
@@ -1017,7 +1017,7 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 
 ---
 
-### ✅ RESOLVED: GCHostPay3 ETH/USDT Token Type Confusion - Payment Execution Fixed
+### ✅ RESOLVED: PGP_HOSTPAY3_v1 ETH/USDT Token Type Confusion - Payment Execution Fixed
 
 **Date Discovered:** 2025-11-04 Session 60
 **Date Resolved:** 2025-11-04 Session 60
@@ -1026,7 +1026,7 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 **Status:** ✅ **RESOLVED** - ERC-20 support deployed to production (revision 00016-l6l)
 
 **Root Cause:**
-GCHostPay3 is attempting to send **native ETH** to ChangeNow payin addresses when it should be sending **USDT (ERC-20 tokens)**. The system treats all payment amounts as ETH regardless of the `from_currency` field.
+PGP_HOSTPAY3_v1 is attempting to send **native ETH** to ChangeNow payin addresses when it should be sending **USDT (ERC-20 tokens)**. The system treats all payment amounts as ETH regardless of the `from_currency` field.
 
 **Evidence:**
 ```
@@ -1068,7 +1068,7 @@ What System Tries:
    - Implement `send_erc20_token()` method
    - Add ERC-20 ABI (transfer, balanceOf, decimals)
    - Add token contract addresses (USDT, USDC, DAI)
-2. Update GCHostPay3 payment routing
+2. Update PGP_HOSTPAY3_v1 payment routing
    - Detect currency type from `from_currency` field
    - Route to ETH method for native transfers
    - Route to ERC-20 method for token transfers
@@ -1084,10 +1084,10 @@ What System Tries:
 - Rollback plan
 
 **Affected Services:**
-- ✅ GCHostPay1: No changes needed (passes currency correctly)
-- ✅ GCHostPay2: No changes needed (status checker only)
-- ❌ GCHostPay3: CRITICAL CHANGES REQUIRED
-- ✅ GCSplit1: No changes needed (creates correct exchanges)
+- ✅ PGP_HOSTPAY1_v1: No changes needed (passes currency correctly)
+- ✅ PGP_HOSTPAY2_v1: No changes needed (status checker only)
+- ❌ PGP_HOSTPAY3_v1: CRITICAL CHANGES REQUIRED
+- ✅ PGP_SPLIT1_v1: No changes needed (creates correct exchanges)
 
 **Resolution Implemented:**
 1. ✅ Added `send_erc20_token()` method to wallet_manager.py
@@ -1096,7 +1096,7 @@ What System Tries:
    - 100,000 gas limit for contract calls
 2. ✅ Added ERC-20 ABI (transfer, balanceOf, decimals)
 3. ✅ Added TOKEN_CONFIGS for USDT, USDC, DAI mainnet contracts
-4. ✅ Implemented currency type detection in GCHostPay3
+4. ✅ Implemented currency type detection in PGP_HOSTPAY3_v1
 5. ✅ Added payment routing logic (ETH vs ERC-20)
 6. ✅ Fixed all logging to show dynamic currency
 7. ✅ Deployed to production: revision 00016-l6l
@@ -1134,16 +1134,16 @@ What System Tries:
 
 ## Recently Fixed
 
-### 2025-11-04 Session 58: GCSplit3 USDT Amount Multiplication - ChangeNOW Receiving Wrong Amounts ✅
+### 2025-11-04 Session 58: PGP_SPLIT3_v1 USDT Amount Multiplication - ChangeNOW Receiving Wrong Amounts ✅
 
 **Service:** PGP_SPLIT1_v1 (affects PGP_SPLIT3_v1)
 **Severity:** CRITICAL - Payment workflow completely broken
 **Status:** FIXED ✅ (Code deployed)
 
 **Root Cause:**
-1. **Variable Confusion**: GCSplit1 passes `pure_market_eth_value` to GCSplit3
+1. **Variable Confusion**: PGP_SPLIT1_v1 passes `pure_market_eth_value` to PGP_SPLIT3_v1
 2. **Semantic Mismatch**: `pure_market_eth_value` contains token quantity (596,726 SHIB), not USDT amount
-3. **Wrong Usage**: GCSplit3 uses this as USDT input for ChangeNOW API
+3. **Wrong Usage**: PGP_SPLIT3_v1 uses this as USDT input for ChangeNOW API
 4. **Result**: ChangeNOW receives request to swap 596,726 USDT instead of 5.48 USDT
 5. **Multiplier Error**: 108,703x amplification (596,726 / 5.48 ≈ 108,703)
 
@@ -1211,7 +1211,7 @@ encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
 
 ---
 
-### 2025-11-04 Session 57: Numeric Precision Overflow - GCSplit1 Cannot Store SHIB Transactions ✅
+### 2025-11-04 Session 57: Numeric Precision Overflow - PGP_SPLIT1_v1 Cannot Store SHIB Transactions ✅
 
 **Service:** PGP_SPLIT1_v1
 **Database:** client_table
@@ -1219,7 +1219,7 @@ encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
 **Status:** FIXED ✅ (Database migration applied)
 
 **Symptom:**
-GCSplit1 failing to insert split_payout_request records for low-value tokens (SHIB):
+PGP_SPLIT1_v1 failing to insert split_payout_request records for low-value tokens (SHIB):
 
 ```
 🔑 [UNIQUE_ID] Generated: ZH4ITXGMFC8XV88Z
@@ -1255,7 +1255,7 @@ Token Quantity Examples:
 ```
 
 **Impact:**
-- **Payment Flow Blocked**: Client deposits succeed but payout workflow stops at GCSplit1
+- **Payment Flow Blocked**: Client deposits succeed but payout workflow stops at PGP_SPLIT1_v1
 - **Affected Tokens**: SHIB, PEPE, and other micro-value tokens with large quantities
 - **User Experience**: Payment appears to succeed but never reaches client wallet
 - **No Rollback**: Funds received by platform but cannot be processed
@@ -1301,12 +1301,12 @@ INSERT INTO split_payout_request (to_amount) VALUES (596726.7004304786);
 **Status:** FIXED ✅ (Deployed revision 00013-5zw)
 
 **Symptom:**
-PGP_MICROBATCHPROCESSOR rejecting valid callback tokens from GCHostPay1:
+PGP_MICROBATCHPROCESSOR rejecting valid callback tokens from PGP_HOSTPAY1_v1:
 
 ```
 🎯 [ENDPOINT] Swap execution callback received
 ⏰ [ENDPOINT] Timestamp: 1762206594
-🔐 [ENDPOINT] Decrypting token from GCHostPay1
+🔐 [ENDPOINT] Decrypting token from PGP_HOSTPAY1_v1
 ❌ [TOKEN_DEC] Decryption error: Token expired
 ❌ [ENDPOINT] Token decryption failed
 ❌ [ENDPOINT] Unexpected error: 401 Unauthorized: Invalid token
@@ -1316,7 +1316,7 @@ PGP_MICROBATCHPROCESSOR rejecting valid callback tokens from GCHostPay1:
 5-minute token expiration window insufficient for asynchronous batch conversion workflow:
 
 1. **ChangeNow Swap Processing**: 5-30 minutes to complete exchange
-2. **GCHostPay1 Retry Mechanism**: Up to 3 retries × 5 minutes = 15 minutes
+2. **PGP_HOSTPAY1_v1 Retry Mechanism**: Up to 3 retries × 5 minutes = 15 minutes
 3. **Cloud Tasks Queue Delays**: 30 seconds - 5 minutes
 4. **Total Workflow Delay**: 15-20 minutes in normal operation
 5. **Current Expiration**: 5 minutes ❌
@@ -1324,7 +1324,7 @@ PGP_MICROBATCHPROCESSOR rejecting valid callback tokens from GCHostPay1:
 
 **Workflow Timeline:**
 ```
-T0: Alchemy webhook → GCHostPay1 receives ETH payment
+T0: Alchemy webhook → PGP_HOSTPAY1_v1 receives ETH payment
 T0+2s: Query ChangeNow → status='exchanging' (not finished)
 T0+2s: Enqueue retry task (delay: 5 minutes)
 ---
@@ -1403,7 +1403,7 @@ print(f"✅ [TOKEN_DEC] Token age: {token_age_seconds}s ({token_age_seconds/60:.
 3. Document expected workflow delays in token manager comments
 
 **Related Issues:**
-- Similar 5-minute windows identified in GCHostPay2, GCSplit3, PGP_ACCUMULATOR
+- Similar 5-minute windows identified in PGP_HOSTPAY2_v1, PGP_SPLIT3_v1, PGP_ACCUMULATOR
 - Phase 2: Review these services for potential similar issues
 
 ---
@@ -1412,7 +1412,7 @@ print(f"✅ [TOKEN_DEC] Token age: {token_age_seconds}s ({token_age_seconds/60:.
 
 **Services:** PGP_HOSTPAY3_v1, PGP_HOSTPAY1_v1
 **Severity:** CRITICAL - Batch conversion flow completely broken
-**Status:** FIXED ✅ (Phase 1 deployed: GCHostPay3 revision 00015-d79, GCHostPay1 revision 00019-9r5)
+**Status:** FIXED ✅ (Phase 1 deployed: PGP_HOSTPAY3_v1 revision 00015-d79, PGP_HOSTPAY1_v1 revision 00019-9r5)
 
 **Symptom:**
 PGP_MICROBATCHPROCESSOR failing with PostgreSQL UUID validation error:
@@ -1427,12 +1427,12 @@ PGP_MICROBATCHPROCESSOR failing with PostgreSQL UUID validation error:
 ```
 
 **Root Cause:**
-Fixed 16-byte encoding in GCHostPay3 token encryption **systematically truncates UUIDs**:
+Fixed 16-byte encoding in PGP_HOSTPAY3_v1 token encryption **systematically truncates UUIDs**:
 
 1. **Full batch_conversion_id**: `"batch_f577abaa-1234-5678-9012-abcdef123456"` (43 characters)
 2. **After `.encode('utf-8')[:16]` truncation**: `"batch_f577abaa-1"` (16 bytes)
 3. **After padding with nulls**: `"batch_f577abaa-1\x00\x00\x00\x00\x00"` (16 bytes)
-4. **After GCHostPay1 decrypt** (rstrip nulls): `"batch_f577abaa-1"` (16 chars)
+4. **After PGP_HOSTPAY1_v1 decrypt** (rstrip nulls): `"batch_f577abaa-1"` (16 chars)
 5. **After `.replace('batch_', '')`**: `"f577abaa-1"` (10 chars)
 6. **PostgreSQL UUID validation**: ❌ REJECTS (expected format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
 
@@ -1440,11 +1440,11 @@ Fixed 16-byte encoding in GCHostPay3 token encryption **systematically truncates
 ```
 PGP_MICROBATCHPROCESSOR
   └─> Creates batch UUID: "f577abaa-1234-5678-9012-abcdef123456"
-  └─> Sends to GCHostPay1 with unique_id: "batch_f577abaa-1234-5678-9012..."
-      └─> GCHostPay1 → GCHostPay2 → GCHostPay3 (payout execution)
-          └─> GCHostPay3 encrypts response token
+  └─> Sends to PGP_HOSTPAY1_v1 with unique_id: "batch_f577abaa-1234-5678-9012..."
+      └─> PGP_HOSTPAY1_v1 → PGP_HOSTPAY2_v1 → PGP_HOSTPAY3_v1 (payout execution)
+          └─> PGP_HOSTPAY3_v1 encrypts response token
               ❌ Line 764: unique_id.encode('utf-8')[:16] TRUNCATES to "batch_f577abaa-1"
-          └─> GCHostPay1 receives truncated token
+          └─> PGP_HOSTPAY1_v1 receives truncated token
               └─> Extracts: "f577abaa-1" (after removing "batch_" prefix)
           └─> Sends callback to PGP_MICROBATCHPROCESSOR
       └─> PGP_MICROBATCHPROCESSOR tries database query
@@ -1478,14 +1478,14 @@ PGP_MICROBATCHPROCESSOR
 - ✅ Updated minimum token size check (Line 886): 52 → 43 bytes (accommodates variable-length unique_id)
 
 **Deployment Details:**
-- ✅ GCHostPay3 Build ID: **115e4976-bf8c-402b-b7fc-977086d0e01b**
-- ✅ GCHostPay3 Revision: **gchostpay3-10-26-00015-d79** (serving 100% traffic)
-- ✅ GCHostPay1 Build ID: **914fd171-5ff0-4e1f-bea0-bcb10e57b796**
-- ✅ GCHostPay1 Revision: **gchostpay1-10-26-00019-9r5** (serving 100% traffic)
+- ✅ PGP_HOSTPAY3_v1 Build ID: **115e4976-bf8c-402b-b7fc-977086d0e01b**
+- ✅ PGP_HOSTPAY3_v1 Revision: **gchostpay3-10-26-00015-d79** (serving 100% traffic)
+- ✅ PGP_HOSTPAY1_v1 Build ID: **914fd171-5ff0-4e1f-bea0-bcb10e57b796**
+- ✅ PGP_HOSTPAY1_v1 Revision: **gchostpay1-10-26-00019-9r5** (serving 100% traffic)
 
 **Verification Checklist:**
-- ⏳ Monitor GCHostPay3 logs: Verify token encryption includes full UUID
-- ⏳ Monitor GCHostPay1 logs: Verify decryption shows full UUID (not truncated)
+- ⏳ Monitor PGP_HOSTPAY3_v1 logs: Verify token encryption includes full UUID
+- ⏳ Monitor PGP_HOSTPAY1_v1 logs: Verify decryption shows full UUID (not truncated)
 - ⏳ Monitor PGP_MICROBATCHPROCESSOR logs: Verify NO "invalid input syntax for type uuid" errors
 - ⏳ Trigger test batch conversion to validate end-to-end flow
 
@@ -1501,8 +1501,8 @@ PGP_MICROBATCHPROCESSOR
    - Phase 2 planned to address remaining instances
 
 3. **Token format changes require coordinated deployment**
-   - Deploy sender (GCHostPay3) first with new format
-   - Deploy receiver (GCHostPay1) second to handle new format
+   - Deploy sender (PGP_HOSTPAY3_v1) first with new format
+   - Deploy receiver (PGP_HOSTPAY1_v1) second to handle new format
    - Order matters for backward compatibility
 
 **Prevention Measures:**
@@ -1512,7 +1512,7 @@ PGP_MICROBATCHPROCESSOR
 - Add UUID format validation at token creation time
 
 **Related Issues:**
-- ⚠️ **Phase 2 Pending**: 18 remaining truncation instances across GCHostPay1, GCHostPay2, GCHostPay3, GCSplit1
+- ⚠️ **Phase 2 Pending**: 18 remaining truncation instances across PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1, PGP_SPLIT1_v1
 - ⚠️ **Investigation Needed**: `closed_channel_id` truncation safety assessment
 
 **Documentation:**
@@ -1525,7 +1525,7 @@ PGP_MICROBATCHPROCESSOR
 
 **Services:** PGP_SPLIT2_v1, PGP_SPLIT3_v1
 **Severity:** CRITICAL - Batch payouts completely broken
-**Status:** FIXED ✅ (Deployed GCSplit2 revision 00012-575, GCSplit3 revision 00009-2jt)
+**Status:** FIXED ✅ (Deployed PGP_SPLIT2_v1 revision 00012-575, PGP_SPLIT3_v1 revision 00009-2jt)
 
 **Symptom:**
 Second ChangeNow swap in batch payouts using **ETH→ClientCurrency** instead of **USDT→ClientCurrency**:
@@ -1569,7 +1569,7 @@ Two hardcoded currency bugs in batch payout flow:
        type_="direct"
    )
    ```
-   - Service receives `payout_currency` and `payout_network` from GCSplit1 token
+   - Service receives `payout_currency` and `payout_network` from PGP_SPLIT1_v1 token
    - But IGNORES these values and uses hardcoded "eth"
    - Result: Estimate calculated for USDT→ETH instead of USDT→ClientCurrency
 
@@ -1598,7 +1598,7 @@ Two hardcoded currency bugs in batch payout flow:
 - ✅ Instant conversion flow UNAFFECTED (uses different code path with NowPayments ETH)
 
 **Timeline:**
-- Unknown origin: Hardcoded values existed since GCSplit2/3 creation
+- Unknown origin: Hardcoded values existed since PGP_SPLIT2_v1/3 creation
 - 2025-11-03 ~18:00 UTC: User reported batch payout failure
 - 2025-11-03 18:30 UTC: Root cause analysis completed (Session 53)
 - 2025-11-03 19:15 UTC: Fixes deployed to production
@@ -1652,26 +1652,26 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 ```
 
 **Code Changes Summary:**
-- **GCSplit2**: 3 edits (lines 127, 131-132, 154)
-- **GCSplit3**: 4 edits (lines 112, 118, 127, 130, 132, 162)
+- **PGP_SPLIT2_v1**: 3 edits (lines 127, 131-132, 154)
+- **PGP_SPLIT3_v1**: 4 edits (lines 112, 118, 127, 130, 132, 162)
 - **Total**: 2 services, 7 line changes
 
 **Deployment:**
-- ✅ GCSplit2 Build ID: a23bc7d5-b8c5-4aaf-b83a-641ee7d74daf
-- ✅ GCSplit2 Deployed: Revision **gcsplit2-10-26-00012-575** (100% traffic)
-- ✅ GCSplit3 Build ID: a23bc7d5-b8c5-4aaf-b83a-641ee7d74daf
-- ✅ GCSplit3 Deployed: Revision **gcsplit3-10-26-00009-2jt** (100% traffic)
+- ✅ PGP_SPLIT2_v1 Build ID: a23bc7d5-b8c5-4aaf-b83a-641ee7d74daf
+- ✅ PGP_SPLIT2_v1 Deployed: Revision **gcsplit2-10-26-00012-575** (100% traffic)
+- ✅ PGP_SPLIT3_v1 Build ID: a23bc7d5-b8c5-4aaf-b83a-641ee7d74daf
+- ✅ PGP_SPLIT3_v1 Deployed: Revision **gcsplit3-10-26-00009-2jt** (100% traffic)
 - ✅ Health checks: All components healthy
 - ⏳ End-to-end validation: Pending test batch payout
 
 **Verification Required:**
-- [ ] Monitor GCSplit2 logs: Should show `To: X.XX SHIB (post-fee)` not ETH
-- [ ] Monitor GCSplit3 logs: Should show `From: X.XX USDT` not ETH
+- [ ] Monitor PGP_SPLIT2_v1 logs: Should show `To: X.XX SHIB (post-fee)` not ETH
+- [ ] Monitor PGP_SPLIT3_v1 logs: Should show `From: X.XX USDT` not ETH
 - [ ] Check ChangeNow transaction: Should have `fromCurrency: "usdt"`
 - [ ] Verify client receives payout in correct currency and amount
 
 **Cross-Service Verification:**
-- ✅ GCSplit1: No changes needed (already passes correct parameters)
+- ✅ PGP_SPLIT1_v1: No changes needed (already passes correct parameters)
 - ✅ Instant conversion flow: Unaffected (different code path)
 - ✅ Threshold accumulation: Uses separate `/eth-to-usdt` endpoint (correct)
 
@@ -1687,7 +1687,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 - Code review checklist: Flag all hardcoded currency/network values
 - Add logging to show actual API parameters before calling ChangeNow
 - Rename misleading variables (`eth_amount` → `usdt_amount`)
-- Consider renaming GCSplit2 service description for accuracy
+- Consider renaming PGP_SPLIT2_v1 service description for accuracy
 
 **Related Documentation:**
 - Analysis: `/10-26/GCSPLIT_USDT_TO_CLIENT_CURRENCY_BUG_ANALYSIS.md`
@@ -1696,7 +1696,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 
 ---
 
-### 2025-11-03 Session 54: GCHostPay1 enqueue_task() Method Not Found ✅
+### 2025-11-03 Session 54: PGP_HOSTPAY1_v1 enqueue_task() Method Not Found ✅
 
 **Services:** PGP_HOSTPAY1_v1
 **Severity:** CRITICAL - Batch conversion callbacks completely broken
@@ -1758,7 +1758,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 
 ---
 
-### 2025-11-03 Session 53: GCHostPay1 Retry Queue Config Missing ✅
+### 2025-11-03 Session 53: PGP_HOSTPAY1_v1 Retry Queue Config Missing ✅
 
 **Services:** PGP_HOSTPAY1_v1
 **Severity:** CRITICAL - Phase 2 retry logic completely broken
@@ -1769,7 +1769,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 🔄 [RETRY_ENQUEUE] Scheduling retry #1 in 300s
 🆔 [RETRY_ENQUEUE] Unique ID: batch_bfd941e7-b
 🆔 [RETRY_ENQUEUE] CN API ID: 90f68b408285a6
-❌ [RETRY_ENQUEUE] GCHostPay1 response queue config missing
+❌ [RETRY_ENQUEUE] PGP_HOSTPAY1_v1 response queue config missing
 ⚠️ [ENDPOINT_3] No callback sent (context=batch, actual_usdt_received=None)
 ```
 
@@ -1800,17 +1800,17 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 
 **Verification:**
 ```
-✅ [CONFIG] Successfully loaded GCHostPay1 response queue name (for retry callbacks)
-   GCHostPay1 URL: ✅
-   GCHostPay1 Response Queue: ✅
+✅ [CONFIG] Successfully loaded PGP_HOSTPAY1_v1 response queue name (for retry callbacks)
+   PGP_HOSTPAY1_v1 URL: ✅
+   PGP_HOSTPAY1_v1 Response Queue: ✅
 ```
 
 **Files Fixed:**
 - `/10-26/PGP_HOSTPAY1_v1/config_manager.py` (added missing config loading)
 
 **Cross-Service Check:**
-- ✅ GCHostPay3 already loads its own URL/retry queue correctly
-- ✅ GCHostPay2 doesn't need self-callback config (no retry logic)
+- ✅ PGP_HOSTPAY3_v1 already loads its own URL/retry queue correctly
+- ✅ PGP_HOSTPAY2_v1 doesn't need self-callback config (no retry logic)
 
 **Lessons Learned:**
 1. When adding self-callback/retry logic, update config_manager.py immediately
@@ -1823,7 +1823,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 
 ---
 
-### 2025-11-03 Session 52: GCHostPay1 decimal.ConversionSyntax on Null ChangeNow Amounts ✅
+### 2025-11-03 Session 52: PGP_HOSTPAY1_v1 decimal.ConversionSyntax on Null ChangeNow Amounts ✅
 
 **Services:** PGP_HOSTPAY1_v1
 **Severity:** HIGH - Breaks micro-batch conversion feedback loop
@@ -1837,8 +1837,8 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 ```
 
 **Root Cause:**
-1. GCHostPay3 completes ETH payment and sends callback to GCHostPay1
-2. GCHostPay1 queries ChangeNow API immediately (TOO EARLY)
+1. PGP_HOSTPAY3_v1 completes ETH payment and sends callback to PGP_HOSTPAY1_v1
+2. PGP_HOSTPAY1_v1 queries ChangeNow API immediately (TOO EARLY)
 3. ChangeNow swap still in progress (takes 5-10 minutes)
 4. ChangeNow returns `amountTo=null` (not available yet)
 5. Code attempts: `Decimal(str(None))` → `Decimal("None")` → ❌ ConversionSyntax
@@ -1873,11 +1873,11 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 
 ---
 
-### 2025-11-03 Session 51: GCSplit1 Token Decryption Order Mismatch (Follow-up Fix) ✅
+### 2025-11-03 Session 51: PGP_SPLIT1_v1 Token Decryption Order Mismatch (Follow-up Fix) ✅
 
 **Services:** PGP_SPLIT1_v1
 **Severity:** CRITICAL - Session 50 fix incomplete, token decryption still failing
-**Status:** FIXED ✅ (Deployed GCSplit1 revision 00016-dnm at 18:57:36 UTC)
+**Status:** FIXED ✅ (Deployed PGP_SPLIT1_v1 revision 00016-dnm at 18:57:36 UTC)
 
 **Description:**
 ```python
@@ -1887,12 +1887,12 @@ ValueError: Token expired (timestamp=0)
 ```
 
 **Root Cause:**
-- **Session 50 Fixed**: GCSplit1 ENCRYPTION method to include `actual_eth_amount` field
-- **Session 51 Found**: GCSplit1 DECRYPTION method still unpacking in WRONG order
+- **Session 50 Fixed**: PGP_SPLIT1_v1 ENCRYPTION method to include `actual_eth_amount` field
+- **Session 51 Found**: PGP_SPLIT1_v1 DECRYPTION method still unpacking in WRONG order
 - **Binary Unpacking Order Mismatch**:
-  - GCSplit3 packs: `[...fields][actual_eth:8][timestamp:4][signature:16]`
-  - GCSplit1 decryption was reading: `[...fields][timestamp:4][actual_eth:8][signature:16]`
-  - GCSplit1 read 8 bytes of `actual_eth_amount` (0.0 = `0x0000000000000000`) but interpreted first 4 bytes as timestamp
+  - PGP_SPLIT3_v1 packs: `[...fields][actual_eth:8][timestamp:4][signature:16]`
+  - PGP_SPLIT1_v1 decryption was reading: `[...fields][timestamp:4][actual_eth:8][signature:16]`
+  - PGP_SPLIT1_v1 read 8 bytes of `actual_eth_amount` (0.0 = `0x0000000000000000`) but interpreted first 4 bytes as timestamp
 - **Result**: Timestamp = 0 (Unix epoch 1970-01-01) → validation failed
 - **Corrupted actual_eth_amount**: Reading timestamp bytes + signature bytes as double → `8.706401155e-315`
 
@@ -1906,7 +1906,7 @@ User saw errors at 13:45:12 EST (18:45:12 UTC) and suspected TTL window was only
 - Continued 100% token decryption failure even after Session 50 fix
 - Cloud Tasks retrying same token every ~60 seconds from 18:40:12 to 18:49:13 UTC
 - Old failing tasks eventually exhausted retry limit and were dropped from queue
-- No new payments could complete GCSplit3→GCSplit1 handoff
+- No new payments could complete PGP_SPLIT3_v1→PGP_SPLIT1_v1 handoff
 
 **Fix Implemented:**
 ```python
@@ -1934,7 +1934,7 @@ offset += 4
 **Code Changes:**
 - File: `/10-26/PGP_SPLIT1_v1/token_manager.py`
 - Lines modified: 649-662
-- Swapped unpacking order to match GCSplit3's packing order
+- Swapped unpacking order to match PGP_SPLIT3_v1's packing order
 - Added defensive validation for buffer size
 - Enhanced error handling for extraction failures
 
@@ -1965,11 +1965,11 @@ offset += 4
 
 ---
 
-### 2025-11-03 Session 50: GCSplit3→GCSplit1 Token Version Mismatch Causing "Token Expired" Error ✅
+### 2025-11-03 Session 50: PGP_SPLIT3_v1→PGP_SPLIT1_v1 Token Version Mismatch Causing "Token Expired" Error ✅
 
 **Services:** PGP_SPLIT3_v1, PGP_SPLIT1_v1
 **Severity:** CRITICAL - 100% token decryption failure, payment flow completely blocked
-**Status:** FIXED ✅ (Deployed GCSplit1 revision 00015-jpz)
+**Status:** FIXED ✅ (Deployed PGP_SPLIT1_v1 revision 00015-jpz)
 
 **Description:**
 ```python
@@ -1979,17 +1979,17 @@ File "/app/token_manager.py", line 658
 ```
 
 **Root Cause:**
-- **Version Mismatch**: GCSplit3 TokenManager included `actual_eth_amount` field (8 bytes), GCSplit1 didn't
+- **Version Mismatch**: PGP_SPLIT3_v1 TokenManager included `actual_eth_amount` field (8 bytes), PGP_SPLIT1_v1 didn't
 - **Binary Structure Misalignment**:
-  - GCSplit3 packed: `[...fields][actual_eth:8][timestamp:4][signature:16]`
-  - GCSplit1 expected: `[...fields][timestamp:4][signature:16]`
-  - GCSplit1 read the first 4 bytes of `actual_eth_amount` (0.0 = `0x00000000`) as the timestamp
+  - PGP_SPLIT3_v1 packed: `[...fields][actual_eth:8][timestamp:4][signature:16]`
+  - PGP_SPLIT1_v1 expected: `[...fields][timestamp:4][signature:16]`
+  - PGP_SPLIT1_v1 read the first 4 bytes of `actual_eth_amount` (0.0 = `0x00000000`) as the timestamp
 - **Validation Failure**: Timestamp of 0 (Unix epoch 1970-01-01) failed validation check `now - 86400 <= timestamp <= now + 300`
-- **Corrupted Reading**: When GCSplit1 tried to extract actual_eth_amount for backward compat, it read from wrong position (timestamp + signature bytes) as float, producing corrupted value `8.70638631e-315`
+- **Corrupted Reading**: When PGP_SPLIT1_v1 tried to extract actual_eth_amount for backward compat, it read from wrong position (timestamp + signature bytes) as float, producing corrupted value `8.70638631e-315`
 
 **Impact:**
-- GCSplit3→GCSplit1 handoff: 100% failure rate
-- Payment confirmations never reached GCHostPay1
+- PGP_SPLIT3_v1→PGP_SPLIT1_v1 handoff: 100% failure rate
+- Payment confirmations never reached PGP_HOSTPAY1_v1
 - All payments stuck at ETH→Client swap response stage
 - Cloud Tasks retrying failed tasks every ~60 seconds for 24 hours
 
@@ -2009,7 +2009,7 @@ def encrypt_gcsplit3_to_gcsplit1_token(
 ```
 
 **Validation:**
-- ✅ Token structure now matches GCSplit3's format
+- ✅ Token structure now matches PGP_SPLIT3_v1's format
 - ✅ Decryption method already had backward compatibility code (no changes needed)
 - ✅ Deployed as `gcsplit1-10-26-00015-jpz`
 - ⏳ Awaiting new payment to validate end-to-end
@@ -2024,7 +2024,7 @@ def encrypt_gcsplit3_to_gcsplit1_token(
 
 ---
 
-### 2025-11-02: GCWebhook1 TypeError on subscription_price Subtraction ✅
+### 2025-11-02: PGP_ORCHESTRATOR_v1 TypeError on subscription_price Subtraction ✅
 
 **Service:** PGP_ORCHESTRATOR_v1
 **Severity:** HIGH - Caused 500 errors on /process-validated-payment endpoint
@@ -2042,7 +2042,7 @@ File "/app/pgp_orchestrator_v1.py", line 437
 - Code attempted to subtract string from float
 
 **Fix Applied:**
-- Fixed in deployment of GCWebhook1 revision 00021-2pp (2025-11-02 20:23 UTC)
+- Fixed in deployment of PGP_ORCHESTRATOR_v1 revision 00021-2pp (2025-11-02 20:23 UTC)
 - Previous revision (00017-cpz) had multiple errors
 - New revision has ZERO errors since deployment
 
@@ -2139,7 +2139,7 @@ const API_BASE_URL = 'https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app';
 **Status:** FIXED ✅
 
 **Description:**
-- GCWebhook1 and GCWebhook2 crashing when trying to mark payments/invites in idempotency system
+- PGP_ORCHESTRATOR_v1 and PGP_INVITE_v1 crashing when trying to mark payments/invites in idempotency system
 - Error: `'DatabaseManager' object has no attribute 'execute_query'`
 - Result: Idempotency tracking failed, allowing duplicate payments and duplicate Telegram invites
 
@@ -2237,8 +2237,8 @@ if result and result[0]:  # Tuple access ✅ (pg8000 returns tuples)
 
 **Verification:**
 - ✅ Syntax verified: `python3 -m py_compile` passed for both services
-- ✅ GCWebhook2 deployed: `gcwebhook2-10-26-00017-hfq` (32s build)
-- ✅ GCWebhook1 deployed: `gcwebhook1-10-26-00020-lq8` (38s build)
+- ✅ PGP_INVITE_v1 deployed: `gcwebhook2-10-26-00017-hfq` (32s build)
+- ✅ PGP_ORCHESTRATOR_v1 deployed: `gcwebhook1-10-26-00020-lq8` (38s build)
 - ✅ Both services healthy (status: True)
 
 **Files Modified:**
@@ -2433,16 +2433,16 @@ secure_success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe=''
 
 ---
 
-### 2025-11-02: GCSplit1 Missing HostPay Configuration ✅
+### 2025-11-02: PGP_SPLIT1_v1 Missing HostPay Configuration ✅
 
 **Service:** PGP_SPLIT1_v1 (Payment Split Orchestrator)
 **Severity:** MEDIUM - Service runs but cannot trigger GCHostPay
 **Status:** FIXED ✅ (Deployed revision 00012-j7w)
 
 **Description:**
-- GCSplit1 missing HOSTPAY_WEBHOOK_URL and HOSTPAY_QUEUE environment variables
+- PGP_SPLIT1_v1 missing HOSTPAY_WEBHOOK_URL and HOSTPAY_QUEUE environment variables
 - Service started successfully but could not trigger GCHostPay for final ETH transfers
-- Payment workflow incomplete - stopped at GCSplit3
+- Payment workflow incomplete - stopped at PGP_SPLIT3_v1
 - Host payouts would fail silently
 
 **Root Cause:**
@@ -2483,19 +2483,19 @@ gcloud run services update gcsplit1-10-26 \
 
 **Prevention:**
 - Created comprehensive checklist: `GCSPLIT1_MISSING_HOSTPAY_CONFIG_FIX.md`
-- Verified no other services affected (GCSplit2, GCSplit3 don't need these secrets)
+- Verified no other services affected (PGP_SPLIT2_v1, PGP_SPLIT3_v1 don't need these secrets)
 
 ---
 
-### 2025-11-02: GCSplit1 NoneType AttributeError on .strip() ✅
+### 2025-11-02: PGP_SPLIT1_v1 NoneType AttributeError on .strip() ✅
 
 **Service:** PGP_SPLIT1_v1 (Payment Split Orchestrator)
 **Severity:** CRITICAL - Service crash on every payment
 **Status:** FIXED ✅ (Deployed revision 00011-xn4)
 
 **Description:**
-- GCSplit1 crashed with `'NoneType' object has no attribute 'strip'` error
-- Occurred when processing payment split requests from GCWebhook1
+- PGP_SPLIT1_v1 crashed with `'NoneType' object has no attribute 'strip'` error
+- Occurred when processing payment split requests from PGP_ORCHESTRATOR_v1
 - Caused complete service failure for payment processing
 
 **Root Cause:**
@@ -2762,7 +2762,7 @@ Currency type mismatch in validation logic:
 **Testing:**
 - ✅ Migration executed successfully
 - ✅ IPN webhook deployed and capturing price_amount
-- ✅ GCWebhook2 deployed with new validation logic
+- ✅ PGP_INVITE_v1 deployed with new validation logic
 - ⏳ Pending: End-to-end test with real payment
 
 **Files Modified:**
@@ -3003,11 +3003,11 @@ gcloud run deploy pgp_microbatchprocessor-10-26 --source . --region us-central1 
 - ✅ New revision 00010-6dg serving 100% traffic
 - ✅ Health check passing
 - ✅ Service correctly converts USD→ETH before creating swaps
-- ✅ No other services have this USD/ETH confusion (checked PGP_BATCHPROCESSOR, GCSplit3, PGP_ACCUMULATOR)
+- ✅ No other services have this USD/ETH confusion (checked PGP_BATCHPROCESSOR, PGP_SPLIT3_v1, PGP_ACCUMULATOR)
 
 **Cross-Service Check:**
 - ✅ PGP_BATCHPROCESSOR: Uses `total_usdt` correctly (no ETH confusion)
-- ✅ GCSplit3: Receives actual `eth_amount` from GCSplit1 (correct)
+- ✅ PGP_SPLIT3_v1: Receives actual `eth_amount` from PGP_SPLIT1_v1 (correct)
 - ✅ PGP_ACCUMULATOR: Stores USD values in `accumulated_amount_usdt` (correct naming)
 - ✅ **Issue isolated to PGP_MICROBATCHPROCESSOR only**
 
@@ -3099,7 +3099,7 @@ gcloud run deploy pgp_microbatchprocessor-10-26 --source . --region us-central1 
 
 ## Recently Fixed (Session 18)
 
-### 🟢 RESOLVED: GCHostPay3 Token Expiration (ETH Payment Execution Blocked)
+### 🟢 RESOLVED: PGP_HOSTPAY3_v1 Token Expiration (ETH Payment Execution Blocked)
 - **Date Discovered:** November 1, 2025
 - **Date Fixed:** November 1, 2025 (Session 18)
 - **Severity:** CRITICAL - Blocking ALL ETH payment execution for stuck transactions
@@ -3147,7 +3147,7 @@ gcloud run deploy gchostpay3-10-26 --source . --region us-central1
 
 **Verification (06:43:30 UTC):**
 - ✅ New revision deployed successfully
-- ✅ Token validation passing: `🔓 [TOKEN_DEC] GCHostPay1→GCHostPay3: Token validated`
+- ✅ Token validation passing: `🔓 [TOKEN_DEC] PGP_HOSTPAY1_v1→PGP_HOSTPAY3_v1: Token validated`
 - ✅ ETH payment executing: `💰 [ETH_PAYMENT] Starting ETH payment with infinite retry`
 - ✅ Transaction broadcasted: `🆔 [ETH_PAYMENT_RETRY] TX Hash: 0x627f8e9...`
 - ✅ NO MORE "Token expired" errors on new revision
@@ -3586,11 +3586,11 @@ Comment says "Using accumulated_amount_usdt as eth value" but code correctly use
 **Reported:** 2025-10-31 Session 11
 
 **Issue:**
-Comment references GCSplit2 but architecture uses PGP_MICROBATCHPROCESSOR for batch conversions.
+Comment references PGP_SPLIT2_v1 but architecture uses PGP_MICROBATCHPROCESSOR for batch conversions.
 
 **Current Code:**
 ```python
-# Conversion will happen asynchronously via GCSplit2
+# Conversion will happen asynchronously via PGP_SPLIT2_v1
 accumulated_eth = adjusted_amount_usd
 ```
 
@@ -3654,7 +3654,7 @@ No validation for zero amount before ChangeNow swap creation. Could occur in rac
 
 ## Resolved Bugs
 
-### 🟢 RESOLVED: GCHostPay1 Callback Implementation (HIGH PRIORITY #2)
+### 🟢 RESOLVED: PGP_HOSTPAY1_v1 Callback Implementation (HIGH PRIORITY #2)
 - **Date Discovered:** October 31, 2025
 - **Date Fixed:** October 31, 2025
 - **Severity:** HIGH - Batch conversion flow was incomplete
@@ -3750,7 +3750,7 @@ PGP_ACCUMULATOR's `/swap-executed` endpoint was removed in Phase 4.2.4, but it w
 1. ✅ Are threshold payouts now also batched via MicroBatchProcessor? **YES**
 2. ✅ Or is there a separate flow for individual threshold-triggered swaps? **NO - single flow for all**
 3. ✅ If separate, PGP_ACCUMULATOR `/swap-executed` needs to be re-implemented? **NOT NEEDED**
-4. ✅ If batched, GCHostPay1 needs to route all to MicroBatchProcessor? **CORRECT APPROACH**
+4. ✅ If batched, PGP_HOSTPAY1_v1 needs to route all to MicroBatchProcessor? **CORRECT APPROACH**
 
 **Resolution:**
 **Decision:** Threshold payouts use micro-batch flow (same as regular instant payments)
@@ -3765,7 +3765,7 @@ PGP_ACCUMULATOR's `/swap-executed` endpoint was removed in Phase 4.2.4, but it w
 - No code changes needed - system already implements this approach
 - PGP_ACCUMULATOR stores ALL payments with `conversion_status='pending'`
 - PGP_MICROBATCHPROCESSOR batches ALL pending payments when global $20 threshold reached
-- GCHostPay1's threshold callback TODO (lines 620-623) can be removed or raise NotImplementedError
+- PGP_HOSTPAY1_v1's threshold callback TODO (lines 620-623) can be removed or raise NotImplementedError
 
 **Documentation:**
 - Architectural decision documented in DECISIONS.md (Decision 25)
@@ -3840,7 +3840,7 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
     ```
   - Deployed new revision: `pgp_microbatchprocessor-10-26-00004-hbp`
   - Verified service health endpoint: `{"service":"PGP_MICROBATCHPROCESSOR_v1","status":"healthy","timestamp":1761924798}`
-  - Verified all 10 other critical services (GCWebhook1, GCWebhook2, GCSplit1-3, PGP_ACCUMULATOR, PGP_BATCHPROCESSOR, GCHostPay1-3) all have proper environment variable configuration
+  - Verified all 10 other critical services (PGP_ORCHESTRATOR_v1, PGP_INVITE_v1, PGP_SPLIT1_v1-3, PGP_ACCUMULATOR, PGP_BATCHPROCESSOR, PGP_HOSTPAY1_v1-3) all have proper environment variable configuration
 - **Prevention:**
   - Always use `--set-secrets` flag during Cloud Run deployment
   - Add deployment checklist step: "Verify environment variables are configured"
@@ -3852,7 +3852,7 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - ✅ Health endpoint returns: `{"service":"PGP_MICROBATCHPROCESSOR_v1","status":"healthy","timestamp":1761924181}`
   - ✅ No initialization errors in logs
   - ✅ Cloud Scheduler job can now invoke service successfully
-  - ✅ All other critical services verified healthy (GCWebhook1, PGP_ACCUMULATOR, GCHostPay1)
+  - ✅ All other critical services verified healthy (PGP_ORCHESTRATOR_v1, PGP_ACCUMULATOR, PGP_HOSTPAY1_v1)
 - **Prevention:**
   - Future deployments must include `--set-secrets` flag in deployment scripts
   - Consider creating deployment checklist that verifies environment variables
@@ -3866,11 +3866,11 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
 ### 🐛 Token Expiration Too Short for Cloud Tasks Retry Timing
 - **Date Fixed:** October 29, 2025
 - **Severity:** CRITICAL
-- **Description:** GCHostPay services (GCHostPay1, GCHostPay2, GCHostPay3) using 60-second token expiration window, causing "Token expired" errors when Cloud Tasks retries exceeded this window
+- **Description:** GCHostPay services (PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1) using 60-second token expiration window, causing "Token expired" errors when Cloud Tasks retries exceeded this window
 - **Example Error:**
   ```
   2025-10-29 11:18:34.747 EDT
-  🎯 [ENDPOINT] Payment execution request received (from GCHostPay1)
+  🎯 [ENDPOINT] Payment execution request received (from PGP_HOSTPAY1_v1)
   ❌ [ENDPOINT] Token validation error: Token expired
   ❌ [ENDPOINT] Unexpected error: 400 Bad Request: Token error: Token expired
   ```
@@ -3896,30 +3896,30 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - Accommodates: Initial delivery (30s) + Multiple retries (60s each) + Buffer (30s)
 - **Files Modified:**
   - `PGP_HOSTPAY1_v1/token_manager.py` - Updated 5 token validation methods
-  - `PGP_HOSTPAY2_v1/token_manager.py` - Copied from GCHostPay1
-  - `PGP_HOSTPAY3_v1/token_manager.py` - Copied from GCHostPay1
+  - `PGP_HOSTPAY2_v1/token_manager.py` - Copied from PGP_HOSTPAY1_v1
+  - `PGP_HOSTPAY3_v1/token_manager.py` - Copied from PGP_HOSTPAY1_v1
 - **Deployment:**
-  - GCHostPay1: revision `gchostpay1-10-26-00005-htc`
-  - GCHostPay2: revision `gchostpay2-10-26-00005-hb9`
-  - GCHostPay3: revision `gchostpay3-10-26-00006-ndl`
+  - PGP_HOSTPAY1_v1: revision `gchostpay1-10-26-00005-htc`
+  - PGP_HOSTPAY2_v1: revision `gchostpay2-10-26-00005-hb9`
+  - PGP_HOSTPAY3_v1: revision `gchostpay3-10-26-00006-ndl`
 - **Verification:**
   - All services deployed successfully (status: True)
   - Token validation now allows 5-minute window
   - Cloud Tasks retries no longer fail with "Token expired"
 - **Status:** ✅ FIXED and deployed, payment retries now working correctly
 
-### 🐛 GCSplit1 Missing /batch-payout Endpoint Causing 404 Errors
+### 🐛 PGP_SPLIT1_v1 Missing /batch-payout Endpoint Causing 404 Errors
 - **Date Fixed:** October 29, 2025
 - **Severity:** CRITICAL
-- **Description:** GCSplit1 did not have a `/batch-payout` endpoint to handle batch payout requests from PGP_BATCHPROCESSOR, resulting in 404 errors
+- **Description:** PGP_SPLIT1_v1 did not have a `/batch-payout` endpoint to handle batch payout requests from PGP_BATCHPROCESSOR, resulting in 404 errors
 - **Root Causes:**
-  1. **Missing endpoint implementation** - GCSplit1 only had endpoints for instant payouts (/, /usdt-eth-estimate, /eth-client-swap)
+  1. **Missing endpoint implementation** - PGP_SPLIT1_v1 only had endpoints for instant payouts (/, /usdt-eth-estimate, /eth-client-swap)
   2. **Missing token decryption method** - TokenManager lacked `decrypt_batch_token()` method to handle batch tokens
-  3. **Incorrect signing key** - GCSplit1 TokenManager initialized with SUCCESS_URL_SIGNING_KEY but batch tokens encrypted with TPS_HOSTPAY_SIGNING_KEY
+  3. **Incorrect signing key** - PGP_SPLIT1_v1 TokenManager initialized with SUCCESS_URL_SIGNING_KEY but batch tokens encrypted with TPS_HOSTPAY_SIGNING_KEY
 - **Example Error:**
   - PGP_BATCHPROCESSOR successfully created batch and enqueued task to `gcsplit1-batch-queue`
   - Cloud Tasks sent POST to `https://gcsplit1-10-26.../batch-payout`
-  - GCSplit1 returned 404 - endpoint not found
+  - PGP_SPLIT1_v1 returned 404 - endpoint not found
   - Cloud Tasks retried with exponential backoff
 - **Impact:**
   - Batch payouts could not be processed
@@ -3927,18 +3927,18 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - Clients over threshold had batches created but never executed
   - Split workflow broken for batch payouts
 - **Solution:**
-  1. **Added `/batch-payout` endpoint** to GCSplit1 (pgp_split1_v1.py lines 700-833)
+  1. **Added `/batch-payout` endpoint** to PGP_SPLIT1_v1 (pgp_split1_v1.py lines 700-833)
   2. **Implemented `decrypt_batch_token()`** in TokenManager (token_manager.py lines 637-686)
   3. **Updated TokenManager constructor** to accept separate `batch_signing_key` parameter
-  4. **Modified GCSplit1 initialization** to pass TPS_HOSTPAY_SIGNING_KEY for batch token decryption
-  5. **Deployed GCSplit1 revision 00009-krs** with all fixes
+  4. **Modified PGP_SPLIT1_v1 initialization** to pass TPS_HOSTPAY_SIGNING_KEY for batch token decryption
+  5. **Deployed PGP_SPLIT1_v1 revision 00009-krs** with all fixes
 - **Files Modified:**
   - `PGP_SPLIT1_v1/pgp_split1_v1.py` - Added /batch-payout endpoint
   - `PGP_SPLIT1_v1/token_manager.py` - Added decrypt_batch_token() method, updated constructor
 - **Verification:**
   - Endpoint now exists and returns proper responses
   - Token decryption uses correct signing key
-  - Batch payout flow: PGP_BATCHPROCESSOR → GCSplit1 /batch-payout → GCSplit2 → GCSplit3 → GCHostPay
+  - Batch payout flow: PGP_BATCHPROCESSOR → PGP_SPLIT1_v1 /batch-payout → PGP_SPLIT2_v1 → PGP_SPLIT3_v1 → GCHostPay
 - **Status:** ✅ FIXED and deployed (revision gcsplit1-10-26-00009-krs)
 
 ### 🐛 Batch Payout System Not Processing Due to Secret Newlines and Query Bug
@@ -3995,7 +3995,7 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - When `config_manager.py` loaded these via `os.getenv()`, it included the `\n`
   - Cloud Tasks queue creation failed validation
 - **Impact:**
-  - GCWebhook1 could NOT route threshold payments to PGP_ACCUMULATOR (fell back to instant payout)
+  - PGP_ORCHESTRATOR_v1 could NOT route threshold payments to PGP_ACCUMULATOR (fell back to instant payout)
   - All threshold payout functionality broken
   - Payments that should accumulate were processed instantly
 - **Solution (Two-Pronged):**
@@ -4008,21 +4008,21 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - `PGP_HOSTPAY3_v1/config_manager.py:40` - Added `.strip()`
 - **Verification:**
   - All secrets verified with `cat -A` (no `$` at end = no newline)
-  - GCWebhook1 revision `00012-9pb` logs show successful queue name loading
+  - PGP_ORCHESTRATOR_v1 revision `00012-9pb` logs show successful queue name loading
   - Health check shows all components healthy
 - **Status:** ✅ FIXED and deployed, threshold routing now works correctly
 
-### 🐛 Threshold Payout Strategy Defaulting to Instant (GCWebhook1 Secret Configuration)
+### 🐛 Threshold Payout Strategy Defaulting to Instant (PGP_ORCHESTRATOR_v1 Secret Configuration)
 - **Date Fixed:** October 29, 2025
 - **Severity:** CRITICAL
 - **Description:** Channels configured with `payout_strategy='threshold'` were being processed as instant payouts instead of accumulating funds
 - **Example:** Channel `-1003296084379` with $2.00 threshold and $1.35 payment was processed instantly instead of accumulating
 - **Root Cause:**
-  - GCWebhook1's Cloud Run deployment used environment variables with secret PATHS (e.g., `DATABASE_NAME_SECRET=projects/.../secrets/DATABASE_NAME_SECRET/versions/latest`)
+  - PGP_ORCHESTRATOR_v1's Cloud Run deployment used environment variables with secret PATHS (e.g., `DATABASE_NAME_SECRET=projects/.../secrets/DATABASE_NAME_SECRET/versions/latest`)
   - config_manager.py uses `os.getenv()` expecting secret VALUES
   - When `get_payout_strategy()` queried database, it received the PATH as the value
   - Database query failed silently, defaulting to `('instant', 0)`
-  - All threshold payments processed as instant via GCSplit1 instead of accumulating via PGP_ACCUMULATOR
+  - All threshold payments processed as instant via PGP_SPLIT1_v1 instead of accumulating via PGP_ACCUMULATOR
 - **Impact:**
   - ALL threshold-based channels broken since deployment
   - Payments not accumulating, processed instantly regardless of threshold
@@ -4030,7 +4030,7 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - No entries in `payout_accumulation` table
   - Threshold payout architecture completely bypassed
 - **Solution:**
-  - Changed GCWebhook1 deployment to use `--set-secrets` flag instead of environment variables
+  - Changed PGP_ORCHESTRATOR_v1 deployment to use `--set-secrets` flag instead of environment variables
   - Cloud Run now injects secret VALUES directly, compatible with `os.getenv()`
   - Removed old environment variables with `--clear-env-vars`
   - Rebuilt service from source to ensure latest code deployed
@@ -4045,16 +4045,16 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
 - **Reference Document:** `THRESHOLD_PAYOUT_BUG_FIX_CHECKLIST.md`
 - **Status:** ✅ FIXED and deployed (revision 00011-npq), ready to process threshold payouts correctly
 
-### 🐛 Database Credentials Not Loading in GCHostPay1 and GCHostPay3
+### 🐛 Database Credentials Not Loading in PGP_HOSTPAY1_v1 and PGP_HOSTPAY3_v1
 - **Date Discovered:** October 29, 2025
 - **Severity:** CRITICAL
-- **Description:** GCHostPay1 and GCHostPay3 showing "❌ [DATABASE] Missing required database credentials" on startup
+- **Description:** PGP_HOSTPAY1_v1 and PGP_HOSTPAY3_v1 showing "❌ [DATABASE] Missing required database credentials" on startup
 - **Root Cause:**
   - database_manager.py used its own `_fetch_secret()` method that called Secret Manager API
   - Expected environment variables to contain secret PATHS instead of VALUES
   - Cloud Run `--set-secrets` injects secret VALUES directly via environment variables
   - Inconsistency: config_manager.py used `os.getenv()` (correct), database_manager.py used `access_secret_version()` (incorrect)
-- **Impact:** GCHostPay1 and GCHostPay3 could not connect to database, payment processing completely broken
+- **Impact:** PGP_HOSTPAY1_v1 and PGP_HOSTPAY3_v1 could not connect to database, payment processing completely broken
 - **Solution:**
   - Removed `_fetch_secret()` and `_initialize_credentials()` methods from database_manager.py
   - Changed DatabaseManager to accept credentials via constructor parameters (like other services)
@@ -4072,10 +4072,10 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
 
 ## Recently Fixed
 
-### 🐛 GCWebhook2 Event Loop Closure Error
+### 🐛 PGP_INVITE_v1 Event Loop Closure Error
 - **Date Fixed:** October 26, 2025
 - **Severity:** High
-- **Description:** GCWebhook2 was encountering "Event loop is closed" errors when running as async Flask route in Cloud Run
+- **Description:** PGP_INVITE_v1 was encountering "Event loop is closed" errors when running as async Flask route in Cloud Run
 - **Root Cause:**
   - Async Flask route reused event loop between requests
   - Bot instance created at module level shared httpx connection pool
@@ -4130,7 +4130,7 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
 
 ### ⚠️ Webhook Signature Verification Incomplete
 - **Severity:** Low
-- **Description:** Not all services verify webhook signatures (only GCSplit1 currently does)
+- **Description:** Not all services verify webhook signatures (only PGP_SPLIT1_v1 currently does)
 - **Impact:** Relying on Cloud Tasks internal network security
 - **Plan:** Implement signature verification across all webhook endpoints
 - **Files Affected:**
@@ -4189,7 +4189,7 @@ When reporting bugs, please include:
 ### ✅ Pure Market Value Calculation Missing
 - **Date Fixed:** October 20, 2025
 - **Description:** split_payout_request was storing post-fee amounts instead of pure market value
-- **Solution:** Implemented calculate_pure_market_conversion() in GCSplit1
+- **Solution:** Implemented calculate_pure_market_conversion() in PGP_SPLIT1_v1
 - **Status:** ✅ Resolved
 
 ---

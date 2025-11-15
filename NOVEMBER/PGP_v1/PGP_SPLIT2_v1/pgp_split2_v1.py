@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
 PGP_SPLIT2_v1: USDT→ETH Estimator Service
-Receives encrypted tokens from GCSplit1, calls ChangeNow API for USDT→ETH estimates,
-and returns encrypted responses back to GCSplit1 via Cloud Tasks.
+Receives encrypted tokens from PGP_SPLIT1_v1, calls ChangeNow API for USDT→ETH estimates,
+and returns encrypted responses back to PGP_SPLIT1_v1 via Cloud Tasks.
 Implements infinite retry logic for resilience against API failures.
 """
 import time
@@ -60,25 +60,25 @@ except Exception as e:
 
 
 # ============================================================================
-# MAIN ENDPOINT: POST / - Receives request from GCSplit1
+# MAIN ENDPOINT: POST / - Receives request from PGP_SPLIT1_v1
 # ============================================================================
 
 @app.route("/", methods=["POST"])
 def process_usdt_eth_estimate():
     """
-    Main endpoint for processing USDT→ETH estimate requests from GCSplit1.
+    Main endpoint for processing USDT→ETH estimate requests from PGP_SPLIT1_v1.
 
     Flow:
-    1. Decrypt token from GCSplit1
+    1. Decrypt token from PGP_SPLIT1_v1
     2. Call ChangeNow API v2 for USDT→ETH estimate (with infinite retry)
     3. Encrypt response token
-    4. Enqueue Cloud Task back to GCSplit1
+    4. Enqueue Cloud Task back to PGP_SPLIT1_v1
 
     Returns:
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT] USDT→ETH estimate request received (from GCSplit1)")
+        print(f"🎯 [ENDPOINT] USDT→ETH estimate request received (from PGP_SPLIT1_v1)")
 
         # Parse JSON payload
         try:
@@ -159,7 +159,7 @@ def process_usdt_eth_estimate():
         print(f"📊 [ENDPOINT] Deposit fee: {deposit_fee}")
         print(f"📊 [ENDPOINT] Withdrawal fee: {withdrawal_fee}")
 
-        # Encrypt response token for GCSplit1
+        # Encrypt response token for PGP_SPLIT1_v1
         encrypted_response_token = token_manager.encrypt_gcsplit2_to_gcsplit1_token(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
@@ -179,7 +179,7 @@ def process_usdt_eth_estimate():
             print(f"❌ [ENDPOINT] Failed to encrypt response token")
             abort(500, "Token encryption failed")
 
-        # Enqueue Cloud Task back to GCSplit1
+        # Enqueue Cloud Task back to PGP_SPLIT1_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
@@ -188,7 +188,7 @@ def process_usdt_eth_estimate():
         gcsplit1_url = config.get('gcsplit1_url')
 
         if not gcsplit1_response_queue or not gcsplit1_url:
-            print(f"❌ [ENDPOINT] GCSplit1 configuration missing")
+            print(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split1_estimate_response(
@@ -201,7 +201,7 @@ def process_usdt_eth_estimate():
             print(f"❌ [ENDPOINT] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT] Successfully enqueued response to GCSplit1")
+        print(f"✅ [ENDPOINT] Successfully enqueued response to PGP_SPLIT1_v1")
         print(f"🆔 [ENDPOINT] Task: {task_name}")
 
         return jsonify({

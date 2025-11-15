@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
 PGP_HOSTPAY3_v1: ETH Payment Executor Service
-Receives payment execution requests from GCHostPay1, executes ETH payments
-with 3-ATTEMPT RETRY logic, and returns response back to GCHostPay1.
+Receives payment execution requests from PGP_HOSTPAY1_v1, executes ETH payments
+with 3-ATTEMPT RETRY logic, and returns response back to PGP_HOSTPAY1_v1.
 
 NEW: Implements 3-attempt retry limit with error classification and failed transaction storage.
 - Attempt 1-2: Retry with 60s delay via Cloud Tasks
@@ -29,7 +29,7 @@ config = config_manager.initialize_config()
 
 # Initialize token manager
 try:
-    # Note: GCHostPay3 only needs internal signing key
+    # Note: PGP_HOSTPAY3_v1 only needs internal signing key
     tps_hostpay_key = config.get('success_url_signing_key')  # Use same key for both
     internal_key = config.get('success_url_signing_key')
 
@@ -105,7 +105,7 @@ except Exception as e:
 
 
 # ============================================================================
-# MAIN ENDPOINT: POST / - Receives request from GCHostPay1
+# MAIN ENDPOINT: POST / - Receives request from PGP_HOSTPAY1_v1
 # ============================================================================
 
 @app.route("/", methods=["POST"])
@@ -114,11 +114,11 @@ def execute_eth_payment():
     Main endpoint for executing ETH payments with 3-ATTEMPT RETRY LIMIT.
 
     NEW FLOW:
-    1. Decrypt token from GCHostPay1 (or self-retry)
+    1. Decrypt token from PGP_HOSTPAY1_v1 (or self-retry)
     2. Extract payment details + attempt_count
     3. Check attempt limit (>3 = skip duplicate Cloud Tasks retry)
     4. Execute ETH payment (SINGLE ATTEMPT - no infinite retry)
-    5. On success: Log to database, encrypt response, send to GCHostPay1
+    5. On success: Log to database, encrypt response, send to PGP_HOSTPAY1_v1
     6. On failure:
        a. Classify error (retryable vs permanent)
        b. If attempt < 3: Re-encrypt with incremented count, enqueue self-retry
@@ -373,14 +373,14 @@ def execute_eth_payment():
                 print(f"📤 [ENDPOINT] Routing to: {target_url}")
 
             else:
-                # Route to GCHostPay1 for instant payouts (existing behavior)
-                print(f"🎯 [ENDPOINT] Context: instant → Routing to GCHostPay1")
+                # Route to PGP_HOSTPAY1_v1 for instant payouts (existing behavior)
+                print(f"🎯 [ENDPOINT] Context: instant → Routing to PGP_HOSTPAY1_v1")
 
                 gchostpay1_response_queue = config.get('gchostpay1_response_queue')
                 gchostpay1_url = config.get('gchostpay1_url')
 
                 if not gchostpay1_response_queue or not gchostpay1_url:
-                    print(f"❌ [ENDPOINT] GCHostPay1 configuration missing")
+                    print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
                     abort(500, "Service configuration error")
 
                 # Target the /payment-completed endpoint
@@ -463,7 +463,7 @@ def execute_eth_payment():
                 gchostpay3_url = config.get('gchostpay3_url')
 
                 if not gchostpay3_retry_queue or not gchostpay3_url:
-                    print(f"❌ [ENDPOINT] GCHostPay3 retry configuration missing")
+                    print(f"❌ [ENDPOINT] PGP_HOSTPAY3_v1 retry configuration missing")
                     return jsonify({
                         "status": "error",
                         "message": "Retry configuration incomplete",

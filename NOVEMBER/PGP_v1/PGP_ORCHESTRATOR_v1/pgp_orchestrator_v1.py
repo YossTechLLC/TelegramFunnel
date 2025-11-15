@@ -2,8 +2,8 @@
 """
 PGP_ORCHESTRATOR_v1: Payment Processor Service
 Receives success_url from NOWPayments API, processes payment confirmation,
-writes to database, and enqueues tasks to GCWebhook2 (Telegram invite)
-and GCSplit1 (payment split).
+writes to database, and enqueues tasks to PGP_INVITE_v1 (Telegram invite)
+and PGP_SPLIT1_v1 (payment split).
 """
 import time
 from datetime import datetime, timedelta
@@ -110,8 +110,8 @@ def process_payment():
     1. Decode and verify token from URL parameter
     2. Calculate expiration time/date
     3. Write to database (private_channel_users_database)
-    4. Encrypt and enqueue to GCWebhook2 (Telegram invite)
-    5. Enqueue to GCSplit1 (payment split)
+    4. Encrypt and enqueue to PGP_INVITE_v1 (Telegram invite)
+    5. Enqueue to PGP_SPLIT1_v1 (payment split)
     6. Return 200 to NOWPayments
 
     Returns:
@@ -210,8 +210,8 @@ def process_validated_payment():
     1. Receive validated payment data from np-webhook
     2. Extract outcome_amount_usd (ACTUAL USD value)
     3. Lookup payout strategy (instant vs threshold)
-    4. Route to GCSplit1 (instant) or PGP_ACCUMULATOR (threshold) with REAL amount
-    5. Queue Telegram invite to GCWebhook2
+    4. Route to PGP_SPLIT1_v1 (instant) or PGP_ACCUMULATOR (threshold) with REAL amount
+    5. Queue Telegram invite to PGP_INVITE_v1
 
     CRITICAL: This endpoint ensures all payments are processed with
     the ACTUAL crypto outcome value in USD, not the declared subscription price.
@@ -435,19 +435,19 @@ def process_validated_payment():
 
         else:  # instant payout
             print(f"⚡ [VALIDATED] Instant payout mode - processing immediately")
-            print(f"📊 [VALIDATED] Routing to GCSplit1 for payment split")
+            print(f"📊 [VALIDATED] Routing to PGP_SPLIT1_v1 for payment split")
 
-            # Get GCSplit1 configuration
+            # Get PGP_SPLIT1_v1 configuration
             gcsplit1_queue = config.get('gcsplit1_queue')
             gcsplit1_url = config.get('gcsplit1_url')
 
             if not gcsplit1_queue or not gcsplit1_url:
-                print(f"❌ [VALIDATED] GCSplit1 configuration missing")
-                abort(500, "GCSplit1 configuration error")
+                print(f"❌ [VALIDATED] PGP_SPLIT1_v1 configuration missing")
+                abort(500, "PGP_SPLIT1_v1 configuration error")
 
-            # Queue to GCSplit1 with ACTUAL outcome amount
+            # Queue to PGP_SPLIT1_v1 with ACTUAL outcome amount
             print(f"")
-            print(f"🚀 [VALIDATED] Queuing to GCSplit1...")
+            print(f"🚀 [VALIDATED] Queuing to PGP_SPLIT1_v1...")
             print(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
 
             task_name = cloudtasks_client.enqueue_pgp_split1_payment_split(
@@ -460,21 +460,21 @@ def process_validated_payment():
                 payout_network=payout_network,
                 subscription_price=outcome_amount_usd,  # ✅ ACTUAL USD amount
                 actual_eth_amount=float(nowpayments_outcome_amount) if nowpayments_outcome_amount else 0.0,  # ✅ ADD ACTUAL ETH
-                payout_mode='instant'  # ✅ NEW: Pass instant mode to GCSplit1
+                payout_mode='instant'  # ✅ NEW: Pass instant mode to PGP_SPLIT1_v1
             )
 
             if task_name:
-                print(f"✅ [VALIDATED] Successfully enqueued to GCSplit1")
+                print(f"✅ [VALIDATED] Successfully enqueued to PGP_SPLIT1_v1")
                 print(f"🆔 [VALIDATED] Task: {task_name}")
             else:
-                print(f"❌ [VALIDATED] Failed to enqueue to GCSplit1")
-                abort(500, "Failed to enqueue to GCSplit1")
+                print(f"❌ [VALIDATED] Failed to enqueue to PGP_SPLIT1_v1")
+                abort(500, "Failed to enqueue to PGP_SPLIT1_v1")
 
         # ========================================================================
         # TELEGRAM INVITE
         # ========================================================================
         print(f"")
-        print(f"📱 [VALIDATED] Queuing Telegram invite to GCWebhook2")
+        print(f"📱 [VALIDATED] Queuing Telegram invite to PGP_INVITE_v1")
 
         if not token_manager:
             print(f"❌ [VALIDATED] Token manager not available")
@@ -507,14 +507,14 @@ def process_validated_payment():
         )
 
         if not encrypted_token:
-            print(f"❌ [VALIDATED] Failed to encrypt token for GCWebhook2")
+            print(f"❌ [VALIDATED] Failed to encrypt token for PGP_INVITE_v1")
             abort(500, "Token encryption failed")
 
         gcwebhook2_queue = config.get('gcwebhook2_queue')
         gcwebhook2_url = config.get('gcwebhook2_url')
 
         if not gcwebhook2_queue or not gcwebhook2_url:
-            print(f"⚠️ [VALIDATED] GCWebhook2 configuration missing - skipping invite")
+            print(f"⚠️ [VALIDATED] PGP_INVITE_v1 configuration missing - skipping invite")
         else:
             task_name_gcwebhook2 = cloudtasks_client.enqueue_pgp_invite_telegram_invite(
                 queue_name=gcwebhook2_queue,
@@ -524,7 +524,7 @@ def process_validated_payment():
             )
 
             if task_name_gcwebhook2:
-                print(f"✅ [VALIDATED] Enqueued Telegram invite to GCWebhook2")
+                print(f"✅ [VALIDATED] Enqueued Telegram invite to PGP_INVITE_v1")
                 print(f"🆔 [VALIDATED] Task: {task_name_gcwebhook2}")
             else:
                 print(f"⚠️ [VALIDATED] Failed to enqueue Telegram invite")

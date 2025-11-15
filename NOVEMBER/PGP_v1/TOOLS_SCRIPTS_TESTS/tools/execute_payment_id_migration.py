@@ -279,7 +279,7 @@ def execute_migration():
         print("=" * 80)
         print()
         print("Next steps:")
-        print("1. Deploy GCWebhook1 with IPN endpoint")
+        print("1. Deploy PGP_ORCHESTRATOR_v1 with IPN endpoint")
         print("2. Configure NOWPAYMENTS_IPN_SECRET in Secret Manager")
         print("3. Update TelePay bot with ipn_callback_url")
         print()

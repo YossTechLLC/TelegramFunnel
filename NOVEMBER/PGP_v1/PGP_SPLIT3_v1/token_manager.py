@@ -63,7 +63,7 @@ class TokenManager(BaseTokenManager):
         adjusted_amount_usdt: float
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit1 → GCSplit2 (USDT estimate request).
+        Encrypt token for PGP_SPLIT1_v1 → PGP_SPLIT2_v1 (USDT estimate request).
 
         Token Structure:
         - 8 bytes: user_id (uint64)
@@ -79,7 +79,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCSplit1→GCSplit2: Encrypting token")
+            print(f"🔐 [TOKEN_ENC] PGP_SPLIT1_v1→PGP_SPLIT2_v1: Encrypting token")
 
             # Fixed 16-byte closed_channel_id
             closed_channel_id_bytes = closed_channel_id.encode('utf-8')[:16].ljust(16, b'\x00')
@@ -126,13 +126,13 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gcsplit1_to_gcsplit2_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCSplit1 → GCSplit2.
+        Decrypt token from PGP_SPLIT1_v1 → PGP_SPLIT2_v1.
 
         Returns:
             Dictionary with decrypted fields or None if failed
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCSplit1→GCSplit2: Decrypting token")
+            print(f"🔓 [TOKEN_DEC] PGP_SPLIT1_v1→PGP_SPLIT2_v1: Decrypting token")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
@@ -215,7 +215,7 @@ class TokenManager(BaseTokenManager):
         withdrawal_fee: float
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit2 → GCSplit1 (USDT estimate response).
+        Encrypt token for PGP_SPLIT2_v1 → PGP_SPLIT1_v1 (USDT estimate response).
 
         Token Structure:
         - 4 bytes: user_id
@@ -229,7 +229,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCSplit2→GCSplit1: Encrypting estimate response")
+            print(f"🔐 [TOKEN_ENC] PGP_SPLIT2_v1→PGP_SPLIT1_v1: Encrypting estimate response")
 
             closed_channel_id_bytes = closed_channel_id.encode('utf-8')[:16].ljust(16, b'\x00')
 
@@ -265,9 +265,9 @@ class TokenManager(BaseTokenManager):
             return None
 
     def decrypt_gcsplit2_to_gcsplit1_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """Decrypt token from GCSplit2 → GCSplit1."""
+        """Decrypt token from PGP_SPLIT2_v1 → PGP_SPLIT1_v1."""
         try:
-            print(f"🔓 [TOKEN_DEC] GCSplit2→GCSplit1: Decrypting estimate response")
+            print(f"🔓 [TOKEN_DEC] PGP_SPLIT2_v1→PGP_SPLIT1_v1: Decrypting estimate response")
 
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
             token_padded = token + ('=' * padding)
@@ -346,7 +346,7 @@ class TokenManager(BaseTokenManager):
         eth_amount: float
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit1 → GCSplit3 (ETH→Client swap request).
+        Encrypt token for PGP_SPLIT1_v1 → PGP_SPLIT3_v1 (ETH→Client swap request).
 
         Token Structure:
         - 16 bytes: unique_id (fixed)
@@ -361,7 +361,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCSplit1→GCSplit3: Encrypting swap request")
+            print(f"🔐 [TOKEN_ENC] PGP_SPLIT1_v1→PGP_SPLIT3_v1: Encrypting swap request")
 
             unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
             closed_channel_id_bytes = closed_channel_id.encode('utf-8')[:16].ljust(16, b'\x00')
@@ -396,9 +396,9 @@ class TokenManager(BaseTokenManager):
             return None
 
     def decrypt_gcsplit1_to_gcsplit3_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """Decrypt token from GCSplit1 → GCSplit3."""
+        """Decrypt token from PGP_SPLIT1_v1 → PGP_SPLIT3_v1."""
         try:
-            print(f"🔓 [TOKEN_DEC] GCSplit1→GCSplit3: Decrypting swap request")
+            print(f"🔓 [TOKEN_DEC] PGP_SPLIT1_v1→PGP_SPLIT3_v1: Decrypting swap request")
 
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
             token_padded = token + ('=' * padding)
@@ -440,7 +440,7 @@ class TokenManager(BaseTokenManager):
             offset += 8
 
             # ✅ NEW: swap_currency with backward compatibility
-            swap_currency = 'usdt'  # Default for old tokens (this won't be used in GCSplit3)
+            swap_currency = 'usdt'  # Default for old tokens (this won't be used in PGP_SPLIT3_v1)
             if offset + 1 <= len(payload) - 4:  # Check if there's room before timestamp
                 try:
                     swap_currency, offset = self.unpack_string(payload, offset)
@@ -526,7 +526,7 @@ class TokenManager(BaseTokenManager):
         actual_eth_amount: float = 0.0  # ✅ ADD THIS
     ) -> Optional[str]:
         """
-        Encrypt token for GCSplit3 → GCSplit1 (ETH→Client swap response).
+        Encrypt token for PGP_SPLIT3_v1 → PGP_SPLIT1_v1 (ETH→Client swap response).
 
         Token Structure:
         - 16 bytes: unique_id
@@ -542,7 +542,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCSplit3→GCSplit1: Encrypting swap response")
+            print(f"🔐 [TOKEN_ENC] PGP_SPLIT3_v1→PGP_SPLIT1_v1: Encrypting swap response")
             print(f"💰 [TOKEN_ENC] ACTUAL ETH: {actual_eth_amount}")  # ✅ ADD LOG
 
             unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
@@ -587,9 +587,9 @@ class TokenManager(BaseTokenManager):
             return None
 
     def decrypt_gcsplit3_to_gcsplit1_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """Decrypt token from GCSplit3 → GCSplit1."""
+        """Decrypt token from PGP_SPLIT3_v1 → PGP_SPLIT1_v1."""
         try:
-            print(f"🔓 [TOKEN_DEC] GCSplit3→GCSplit1: Decrypting swap response")
+            print(f"🔓 [TOKEN_DEC] PGP_SPLIT3_v1→PGP_SPLIT1_v1: Decrypting swap response")
 
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
             token_padded = token + ('=' * padding)
@@ -687,7 +687,7 @@ class TokenManager(BaseTokenManager):
             return None
 
     # ========================================================================
-    # PGP_ACCUMULATOR ↔ GCSplit3 Token Methods (for ETH→USDT swaps)
+    # PGP_ACCUMULATOR ↔ PGP_SPLIT3_v1 Token Methods (for ETH→USDT swaps)
     # ========================================================================
 
     def decrypt_accumulator_to_gcsplit3_token(self, token: str) -> Optional[Dict[str, Any]]:
@@ -702,7 +702,7 @@ class TokenManager(BaseTokenManager):
         - timestamp (int)
         """
         try:
-            print(f"🔓 [TOKEN_DEC] PGP_ACCUMULATOR→GCSplit3: Decrypting ETH→USDT swap request")
+            print(f"🔓 [TOKEN_DEC] PGP_ACCUMULATOR→PGP_SPLIT3_v1: Decrypting ETH→USDT swap request")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
@@ -782,7 +782,7 @@ class TokenManager(BaseTokenManager):
         Returns encrypted token or None if encryption fails.
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCSplit3→PGP_ACCUMULATOR: Encrypting swap response")
+            print(f"🔐 [TOKEN_ENC] PGP_SPLIT3_v1→PGP_ACCUMULATOR: Encrypting swap response")
 
             payload = bytearray()
 

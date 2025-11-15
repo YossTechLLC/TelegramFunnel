@@ -36,11 +36,11 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue a USDT→ETH estimate request to GCSplit2.
+        Enqueue a USDT→ETH estimate request to PGP_SPLIT2_v1.
 
         Args:
             queue_name: Queue name (e.g., "gcsplit-usdt-eth-estimate-queue")
-            target_url: GCSplit2 service URL
+            target_url: PGP_SPLIT2_v1 service URL
             encrypted_token: Encrypted token with request data
 
         Returns:
@@ -70,18 +70,18 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue a USDT→ETH estimate response back to GCSplit1.
+        Enqueue a USDT→ETH estimate response back to PGP_SPLIT1_v1.
 
         Args:
             queue_name: Queue name (e.g., "gcsplit-usdt-eth-response-queue")
-            target_url: GCSplit1 /usdt-eth-estimate endpoint URL
+            target_url: PGP_SPLIT1_v1 /usdt-eth-estimate endpoint URL
             encrypted_token: Encrypted token with estimate data
 
         Returns:
             Task name if successful, None if failed
         """
         try:
-            print(f"📨 [CLOUD_TASKS] Enqueueing estimate response to GCSplit1")
+            print(f"📨 [CLOUD_TASKS] Enqueueing estimate response to PGP_SPLIT1_v1")
 
             payload = {
                 "token": encrypted_token
@@ -104,11 +104,11 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue an ETH→ClientCurrency swap request to GCSplit3.
+        Enqueue an ETH→ClientCurrency swap request to PGP_SPLIT3_v1.
 
         Args:
             queue_name: Queue name (e.g., "gcsplit-eth-client-swap-queue")
-            target_url: GCSplit3 service URL
+            target_url: PGP_SPLIT3_v1 service URL
             encrypted_token: Encrypted token with swap request data
 
         Returns:
@@ -138,18 +138,18 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue an ETH→ClientCurrency swap response back to GCSplit1.
+        Enqueue an ETH→ClientCurrency swap response back to PGP_SPLIT1_v1.
 
         Args:
             queue_name: Queue name (e.g., "gcsplit-eth-client-response-queue")
-            target_url: GCSplit1 /eth-client-swap endpoint URL
+            target_url: PGP_SPLIT1_v1 /eth-client-swap endpoint URL
             encrypted_token: Encrypted token with swap transaction data
 
         Returns:
             Task name if successful, None if failed
         """
         try:
-            print(f"📨 [CLOUD_TASKS] Enqueueing swap response to GCSplit1")
+            print(f"📨 [CLOUD_TASKS] Enqueueing swap response to PGP_SPLIT1_v1")
 
             payload = {
                 "token": encrypted_token

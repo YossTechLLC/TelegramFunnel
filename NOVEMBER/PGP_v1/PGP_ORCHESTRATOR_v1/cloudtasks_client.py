@@ -40,7 +40,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         payment_id: int
     ) -> Optional[str]:
         """
-        Enqueue a Telegram invite request to PGP_INVITE (formerly GCWebhook2).
+        Enqueue a Telegram invite request to PGP_INVITE (formerly PGP_INVITE_v1).
 
         Args:
             queue_name: Queue name (e.g., "pgp-invite-queue")
@@ -84,7 +84,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         payout_mode: str = 'instant'
     ) -> Optional[str]:
         """
-        Enqueue a payment split request to PGP_SPLIT1 (formerly GCSplit1).
+        Enqueue a payment split request to PGP_SPLIT1 (formerly PGP_SPLIT1_v1).
 
         Args:
             queue_name: Queue name (e.g., "pgp-split1-queue")

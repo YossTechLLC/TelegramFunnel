@@ -53,7 +53,7 @@ class TokenManager(BaseTokenManager):
         payin_address: str
     ) -> Optional[str]:
         """
-        Encrypt token for GCHostPay1 batch execution request.
+        Encrypt token for PGP_HOSTPAY1_v1 batch execution request.
 
         Returns:
             Base64 URL-safe encoded token or None if failed
@@ -107,7 +107,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_gchostpay1_to_microbatch_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCHostPay1 with batch execution completion details.
+        Decrypt token from PGP_HOSTPAY1_v1 with batch execution completion details.
 
         Returns:
             Dictionary with decrypted data or None if failed

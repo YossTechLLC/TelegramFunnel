@@ -117,7 +117,7 @@ class TokenManager(BaseTokenManager):
         subscription_price: str
     ) -> Optional[str]:
         """
-        Encrypt token to send to PGP_INVITE (formerly GCWebhook2) - Telegram invite sender.
+        Encrypt token to send to PGP_INVITE (formerly PGP_INVITE_v1) - Telegram invite sender.
 
         Token format (same as NOWPayments token, but freshly encrypted):
         - 6 bytes user_id (48-bit)
