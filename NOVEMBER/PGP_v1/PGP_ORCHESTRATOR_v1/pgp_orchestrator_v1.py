@@ -252,8 +252,8 @@ def process_validated_payment():
                     cur = conn.cursor()
                     cur.execute("""
                         SELECT
-                            gcwebhook1_processed,
-                            gcwebhook1_processed_at
+                            pgp_orchestrator_processed,
+                            pgp_orchestrator_processed_at
                         FROM processed_payments
                         WHERE payment_id = %s
                     """, (nowpayments_payment_id,))
@@ -263,10 +263,10 @@ def process_validated_payment():
                 else:
                     existing = None
 
-                if existing and existing[0]:  # gcwebhook1_processed is index 0
+                if existing and existing[0]:  # pgp_orchestrator_processed is index 0
                     # Payment already processed - return success without re-processing
-                    # Tuple indexes: 0=gcwebhook1_processed, 1=gcwebhook1_processed_at
-                    gcwebhook1_processed = existing[0]
+                    # Tuple indexes: 0=pgp_orchestrator_processed, 1=pgp_orchestrator_processed_at
+                    pgp_orchestrator_processed = existing[0]
                     processed_at = existing[1]
 
                     print(f"✅ [IDEMPOTENCY] Payment already processed")
@@ -540,8 +540,8 @@ def process_validated_payment():
                 cur.execute("""
                     UPDATE processed_payments
                     SET
-                        gcwebhook1_processed = TRUE,
-                        gcwebhook1_processed_at = CURRENT_TIMESTAMP,
+                        pgp_orchestrator_processed = TRUE,
+                        pgp_orchestrator_processed_at = CURRENT_TIMESTAMP,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE payment_id = %s
                 """, (nowpayments_payment_id,))

@@ -822,7 +822,7 @@ def handle_ipn():
 
                                 cur_check.execute("""
                                     SELECT
-                                        gcwebhook1_processed,
+                                        pgp_orchestrator_processed,
                                         telegram_invite_sent,
                                         telegram_invite_sent_at
                                     FROM processed_payments
@@ -834,7 +834,7 @@ def handle_ipn():
                                 cur_check.close()
                                 conn_check.close()
 
-                                if existing_payment and existing_payment[0]:  # gcwebhook1_processed = TRUE
+                                if existing_payment and existing_payment[0]:  # pgp_orchestrator_processed = TRUE
                                     print(f"✅ [IDEMPOTENCY] Payment {nowpayments_payment_id} already processed")
                                     print(f"   PGP_ORCHESTRATOR_v1 processed: TRUE")
                                     print(f"   Telegram invite sent: {existing_payment[1]}")
