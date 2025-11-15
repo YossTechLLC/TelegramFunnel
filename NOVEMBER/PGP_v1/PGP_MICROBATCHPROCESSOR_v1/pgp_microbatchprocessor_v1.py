@@ -279,7 +279,7 @@ def check_threshold():
         print(f"🔐 [ENDPOINT] Encrypting token for PGP_HOSTPAY1_v1")
         print(f"💰 [ENDPOINT] Passing ACTUAL ETH amount: {eth_for_swap} ETH")
 
-        encrypted_token = token_manager.encrypt_microbatch_to_gchostpay1_token(
+        encrypted_token = token_manager.encrypt_microbatch_to_pgp_hostpay1_token(
             batch_conversion_id=batch_conversion_id,
             cn_api_id=cn_api_id,
             from_currency='eth',

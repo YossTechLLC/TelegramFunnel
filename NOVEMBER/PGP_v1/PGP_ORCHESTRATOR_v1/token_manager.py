@@ -106,7 +106,7 @@ class TokenManager(BaseTokenManager):
 
         return user_id, closed_channel_id, wallet_address, payout_currency, payout_network, subscription_time_days, subscription_price
 
-    def encrypt_token_for_gcwebhook2(
+    def encrypt_token_for_pgp_invite(
         self,
         user_id: int,
         closed_channel_id: int,

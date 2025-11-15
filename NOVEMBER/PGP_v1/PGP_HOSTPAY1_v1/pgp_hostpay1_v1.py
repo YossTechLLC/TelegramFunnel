@@ -322,7 +322,7 @@ def main_webhook():
         context = 'instant'  # Default context
 
         try:
-            decrypted_data = token_manager.decrypt_gcsplit1_to_gchostpay1_token(token)
+            decrypted_data = token_manager.decrypt_pgp_split1_to_pgp_hostpay1_token(token)
             if decrypted_data:
                 token_source = 'gcsplit1'
                 unique_id = decrypted_data['unique_id']
@@ -334,7 +334,7 @@ def main_webhook():
         # If PGP_SPLIT1_v1 decryption failed, try PGP_ACCUMULATOR token (threshold payouts)
         if not decrypted_data:
             try:
-                decrypted_data = token_manager.decrypt_accumulator_to_gchostpay1_token(token)
+                decrypted_data = token_manager.decrypt_accumulator_to_pgp_hostpay1_token(token)
                 if decrypted_data:
                     token_source = 'pgp_accumulator'
                     accumulation_id = decrypted_data['accumulation_id']
@@ -348,7 +348,7 @@ def main_webhook():
         # If still no match, try PGP_MICROBATCHPROCESSOR token (batch conversions)
         if not decrypted_data:
             try:
-                decrypted_data = token_manager.decrypt_microbatch_to_gchostpay1_token(token)
+                decrypted_data = token_manager.decrypt_microbatch_to_pgp_hostpay1_token(token)
                 if decrypted_data:
                     token_source = 'pgp_microbatchprocessor'
                     batch_conversion_id = decrypted_data['batch_conversion_id']
@@ -405,7 +405,7 @@ def main_webhook():
             # Continue anyway - duplicate check is non-critical
 
         # Encrypt token for PGP_HOSTPAY2_v1 (with ALL payment details)
-        encrypted_token = token_manager.encrypt_gchostpay1_to_gchostpay2_token(
+        encrypted_token = token_manager.encrypt_pgp_hostpay1_to_pgp_hostpay2_token(
             unique_id=unique_id,
             cn_api_id=cn_api_id,
             from_currency=from_currency,
@@ -501,7 +501,7 @@ def status_verified():
             abort(500, "Service configuration error")
 
         try:
-            decrypted_data = token_manager.decrypt_gchostpay2_to_gchostpay1_token(token)
+            decrypted_data = token_manager.decrypt_pgp_hostpay2_to_pgp_hostpay1_token(token)
             if not decrypted_data:
                 print(f"❌ [ENDPOINT_2] Failed to decrypt token")
                 abort(401, "Invalid token")
@@ -541,7 +541,7 @@ def status_verified():
         print(f"📋 [ENDPOINT_2] Detected context: {context}")
 
         # Encrypt token for PGP_HOSTPAY3_v1 (payment execution) with context
-        encrypted_token_payment = token_manager.encrypt_gchostpay1_to_gchostpay3_token(
+        encrypted_token_payment = token_manager.encrypt_pgp_hostpay1_to_pgp_hostpay3_token(
             unique_id=unique_id,
             cn_api_id=cn_api_id,
             from_currency=from_currency,
@@ -639,7 +639,7 @@ def payment_completed():
             abort(500, "Service configuration error")
 
         try:
-            decrypted_data = token_manager.decrypt_gchostpay3_to_gchostpay1_token(token)
+            decrypted_data = token_manager.decrypt_pgp_hostpay3_to_pgp_hostpay1_token(token)
             if not decrypted_data:
                 print(f"❌ [ENDPOINT_3] Failed to decrypt token")
                 abort(401, "Invalid token")

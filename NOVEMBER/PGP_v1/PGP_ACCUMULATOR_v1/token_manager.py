@@ -28,7 +28,7 @@ class TokenManager(BaseTokenManager):
         super().__init__(signing_key=signing_key, service_name="PGP_ACCUMULATOR_v1")
 
 
-    def encrypt_token_for_gcsplit2(
+    def encrypt_token_for_pgp_split2(
         self,
         user_id: int,
         client_id: str,
@@ -130,7 +130,7 @@ class TokenManager(BaseTokenManager):
     # PGP_ACCUMULATOR → PGP_SPLIT3_v1 Token Methods (for ETH→USDT swap creation)
     # ========================================================================
 
-    def encrypt_accumulator_to_gcsplit3_token(
+    def encrypt_accumulator_to_pgp_split3_token(
         self,
         accumulation_id: int,
         client_id: str,
@@ -295,7 +295,7 @@ class TokenManager(BaseTokenManager):
     # PGP_ACCUMULATOR → PGP_HOSTPAY1_v1 Token Methods (for swap execution)
     # ========================================================================
 
-    def encrypt_accumulator_to_gchostpay1_token(
+    def encrypt_accumulator_to_pgp_hostpay1_token(
         self,
         accumulation_id: int,
         cn_api_id: str,

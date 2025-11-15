@@ -43,7 +43,7 @@ class TokenManager(BaseTokenManager):
         offset += length
         return s_bytes.decode('utf-8'), offset
 
-    def encrypt_microbatch_to_gchostpay1_token(
+    def encrypt_microbatch_to_pgp_hostpay1_token(
         self,
         batch_conversion_id: str,
         cn_api_id: str,

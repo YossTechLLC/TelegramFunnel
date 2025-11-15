@@ -496,7 +496,7 @@ def process_validated_payment():
             print(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
             abort(400, "Invalid subscription_price type")
 
-        encrypted_token = token_manager.encrypt_token_for_gcwebhook2(
+        encrypted_token = token_manager.encrypt_token_for_pgp_invite(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
             wallet_address=wallet_address,

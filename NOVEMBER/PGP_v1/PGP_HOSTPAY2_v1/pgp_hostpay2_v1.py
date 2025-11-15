@@ -107,7 +107,7 @@ def check_changenow_status():
             abort(500, "Service configuration error")
 
         try:
-            decrypted_data = token_manager.decrypt_gchostpay1_to_gchostpay2_token(token)
+            decrypted_data = token_manager.decrypt_pgp_hostpay1_to_pgp_hostpay2_token(token)
             if not decrypted_data:
                 print(f"❌ [ENDPOINT] Failed to decrypt token")
                 abort(401, "Invalid token")
@@ -146,7 +146,7 @@ def check_changenow_status():
         print(f"✅ [ENDPOINT] ChangeNow status retrieved: {status}")
 
         # Encrypt response token (with ALL payment details)
-        encrypted_response_token = token_manager.encrypt_gchostpay2_to_gchostpay1_token(
+        encrypted_response_token = token_manager.encrypt_pgp_hostpay2_to_pgp_hostpay1_token(
             unique_id=unique_id,
             cn_api_id=cn_api_id,
             status=status,

@@ -31,7 +31,7 @@ class TokenManager(BaseTokenManager):
     # TOKEN 1: PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1 (Incoming from external service)
     # ========================================================================
 
-    def decrypt_gcsplit1_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_split1_to_pgp_hostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1.
         Token is valid for 60 seconds from creation (1-minute window).
@@ -165,7 +165,7 @@ class TokenManager(BaseTokenManager):
     # TOKEN 2: PGP_HOSTPAY1_v1 → PGP_HOSTPAY2_v1 (Status check request)
     # ========================================================================
 
-    def encrypt_gchostpay1_to_gchostpay2_token(
+    def encrypt_pgp_hostpay1_to_pgp_hostpay2_token(
         self,
         unique_id: str,
         cn_api_id: str,
@@ -233,7 +233,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gchostpay1_to_gchostpay2_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_hostpay1_to_pgp_hostpay2_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from PGP_HOSTPAY1_v1 → PGP_HOSTPAY2_v1.
         Token valid for 300 seconds (5 minutes).
@@ -313,7 +313,7 @@ class TokenManager(BaseTokenManager):
     # TOKEN 3: PGP_HOSTPAY2_v1 → PGP_HOSTPAY1_v1 (Status check response)
     # ========================================================================
 
-    def encrypt_gchostpay2_to_gchostpay1_token(
+    def encrypt_pgp_hostpay2_to_pgp_hostpay1_token(
         self,
         unique_id: str,
         cn_api_id: str,
@@ -385,7 +385,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gchostpay2_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_hostpay2_to_pgp_hostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt response token from PGP_HOSTPAY2_v1 → PGP_HOSTPAY1_v1.
         Token valid for 300 seconds (5 minutes).
@@ -469,7 +469,7 @@ class TokenManager(BaseTokenManager):
     # TOKEN 4: PGP_HOSTPAY1_v1 → PGP_HOSTPAY3_v1 (Payment execution request)
     # ========================================================================
 
-    def encrypt_gchostpay1_to_gchostpay3_token(
+    def encrypt_pgp_hostpay1_to_pgp_hostpay3_token(
         self,
         unique_id: str,
         cn_api_id: str,
@@ -526,7 +526,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gchostpay1_to_gchostpay3_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_hostpay1_to_pgp_hostpay3_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from PGP_HOSTPAY1_v1 → PGP_HOSTPAY3_v1.
         Token valid for 300 seconds (5 minutes).
@@ -606,7 +606,7 @@ class TokenManager(BaseTokenManager):
     # TOKEN 5: PGP_HOSTPAY3_v1 → PGP_HOSTPAY1_v1 (Payment execution response)
     # ========================================================================
 
-    def encrypt_gchostpay3_to_gchostpay1_token(
+    def encrypt_pgp_hostpay3_to_pgp_hostpay1_token(
         self,
         unique_id: str,
         cn_api_id: str,
@@ -663,7 +663,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gchostpay3_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_hostpay3_to_pgp_hostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt response token from PGP_HOSTPAY3_v1 → PGP_HOSTPAY1_v1.
         Token valid for 300 seconds (5 minutes).

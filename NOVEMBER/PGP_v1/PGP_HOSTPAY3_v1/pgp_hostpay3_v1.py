@@ -150,7 +150,7 @@ def execute_eth_payment():
             abort(500, "Service configuration error")
 
         try:
-            decrypted_data = token_manager.decrypt_gchostpay1_to_gchostpay3_token(token)
+            decrypted_data = token_manager.decrypt_pgp_hostpay1_to_pgp_hostpay3_token(token)
             if not decrypted_data:
                 print(f"❌ [ENDPOINT] Failed to decrypt token")
                 abort(401, "Invalid token")
@@ -336,7 +336,7 @@ def execute_eth_payment():
                     print(f"❌ [ENDPOINT] Database error: {e} (non-fatal)")
 
             # Encrypt response token
-            encrypted_response_token = token_manager.encrypt_gchostpay3_to_gchostpay1_token(
+            encrypted_response_token = token_manager.encrypt_pgp_hostpay3_to_pgp_hostpay1_token(
                 unique_id=unique_id,
                 cn_api_id=cn_api_id,
                 tx_hash=tx_result['tx_hash'],
@@ -445,7 +445,7 @@ def execute_eth_payment():
                     }), 500
 
                 # Re-encrypt token with incremented attempt count
-                retry_token = token_manager.encrypt_gchostpay3_retry_token(
+                retry_token = token_manager.encrypt_pgp_hostpay3_retry_token(
                     token_data=decrypted_data,
                     error_code=error_code
                 )
