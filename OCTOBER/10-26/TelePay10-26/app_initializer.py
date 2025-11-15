@@ -144,7 +144,8 @@ class AppInitializer:
             payment_gateway_wrapper,
             self.menu_handlers,
             self.db_manager,
-            self.donation_handler
+            self.donation_handler,
+            self.payment_service  # NEW: Pass payment_service for donation message feature
         )
         
         # Initialize subscription manager with configurable check interval

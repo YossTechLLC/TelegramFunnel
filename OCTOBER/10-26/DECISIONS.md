@@ -1,12 +1,78 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Donation Handler Registration Strategy** ✅
+**Last Updated:** 2025-11-14 - **Payment Service Bot Data Registration** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: Payment Service Bot Data Registration ✅
+
+**Decision:** Register payment_service in application.bot_data for access by conversation handlers
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- Donation conversation handler needs to create payment invoices with encrypted messages
+- payment_service.create_donation_invoice() is the method that handles message encryption
+- ConversationHandler functions don't have direct access to AppInitializer instances
+- Need a way to pass payment_service to conversation handler functions
+
+**Problem:**
+- donation_conversation.py attempts to get payment_service from context.application.bot_data
+- bot_manager.py only registered menu_handlers, payment_gateway_handler, and db_manager
+- payment_service was initialized in app_initializer.py but never made available to handlers
+- Result: finalize_payment() failed silently when payment_service was None
+
+**Options Considered:**
+
+1. **Global Variable** ❌
+   - Cons: Anti-pattern, hard to test, not thread-safe, tight coupling
+
+2. **Pass Through Context User Data** ❌
+   - Cons: User data is per-user, not app-wide; would need to set for every user
+
+3. **Dependency Injection via bot_data** ✅ CHOSEN
+   - Pros:
+     - Centralized storage for application-wide services
+     - Accessible from any handler via context.application.bot_data
+     - Thread-safe (managed by python-telegram-bot)
+     - Clean separation: initialization in app_initializer, usage in handlers
+     - Consistent with existing pattern (menu_handlers, db_manager already use this)
+   - Cons:
+     - Requires passing through BotManager constructor
+     - Not type-safe (dictionary access)
+
+**Implementation:**
+```python
+# app_initializer.py - Initialize and pass to BotManager
+self.payment_service = init_payment_service()
+self.bot_manager = BotManager(..., payment_service=self.payment_service)
+
+# bot_manager.py - Store and register in bot_data
+def __init__(self, ..., payment_service=None):
+    self.payment_service = payment_service
+
+application.bot_data['payment_service'] = self.payment_service
+
+# donation_conversation.py - Access in handler
+payment_service = context.application.bot_data.get('payment_service')
+if payment_service:
+    result = await payment_service.create_donation_invoice(...)
+```
+
+**Rationale:**
+1. **Consistency**: Matches existing pattern for menu_handlers and db_manager
+2. **Accessibility**: Available to all handlers without parameter passing
+3. **Lifecycle**: Lives as long as the Application instance (entire bot runtime)
+4. **Testing**: Easy to mock by setting test values in bot_data
+
+**Impact:**
+- ✅ Donation message feature now functional
+- ✅ No need to refactor existing handler signatures
+- ✅ Easy to add more services to bot_data in future (notification_service, etc.)
+- ✅ Clear initialization flow: app_initializer → bot_manager → bot_data → handlers
 
 ## 2025-11-14: Donation Handler Registration Strategy ✅
 

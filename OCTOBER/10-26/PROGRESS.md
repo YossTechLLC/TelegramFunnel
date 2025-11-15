@@ -1,8 +1,47 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Donation Message Handler Registration Fixed** ✅
+**Last Updated:** 2025-11-14 - **Donation Message Text Input Fixed** ✅
 
 ## Recent Updates
+
+## 2025-11-14: Fixed Donation Message Text Input (payment_service Registration) ✅
+
+**Action:** Fixed missing payment_service registration in bot_data causing message text input to be ignored
+**Status:** ✅ **READY FOR VM DEPLOYMENT**
+
+**Problem Identified:**
+- Users could click "Add Message" button but typing message text had no effect
+- Root cause: `payment_service` not registered in `application.bot_data`
+- `finalize_payment()` in donation_conversation.py couldn't find payment_service and exited early
+- No error shown to user - conversation just hung silently
+
+**Log Evidence:**
+```
+💝 [DONATION] User 6271402111 adding message
+[USER TYPES: "Hello this is a test !"]
+[NO RESPONSE - handle_message_text() never completes because payment_service=None]
+```
+
+**Fix Applied:**
+1. ✅ `bot_manager.py` Line 16: Added `payment_service=None` parameter to constructor
+2. ✅ `bot_manager.py` Line 24: Store as instance variable: `self.payment_service = payment_service`
+3. ✅ `bot_manager.py` Line 104: Register in bot_data: `application.bot_data['payment_service'] = self.payment_service`
+4. ✅ `bot_manager.py` Line 105: Updated debug log to show payment_service status
+5. ✅ `app_initializer.py` Line 148: Pass `self.payment_service` to BotManager constructor
+
+**Files Modified:**
+- `TelePay10-26/bot_manager.py` - Added payment_service parameter, registration, logging
+- `TelePay10-26/app_initializer.py` - Pass payment_service to BotManager
+- `DONATION_MESSAGE_TEXT_INPUT_FIX_CHECKLIST.md` - Created diagnostic checklist
+
+**Verification:**
+After restart, startup log should show: `payment_service=True` in bot data setup message
+
+**Next Steps:**
+1. ⏳ User to push changes to GitHub
+2. ⏳ Deploy to VM and restart service
+3. ⏳ Test message input: Type message → Payment link created
+4. ⏳ Verify encrypted message delivered to channel owner
 
 ## 2025-11-14: Fixed Donation Message Handler Registration ✅
 

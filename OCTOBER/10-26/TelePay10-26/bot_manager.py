@@ -13,7 +13,7 @@ from input_handlers import InputHandlers, OPEN_CHANNEL_INPUT, CLOSED_CHANNEL_INP
 from bot.conversations.donation_conversation import create_donation_conversation_handler
 
 class BotManager:
-    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None, donation_handler=None):
+    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None, donation_handler=None, payment_service=None):
         self.input_handlers = input_handlers
         self.menu_callback_handler = menu_callback_handler
         self.start_bot_handler = start_bot_handler
@@ -21,6 +21,7 @@ class BotManager:
         self.menu_handlers = menu_handlers
         self.db_manager = db_manager
         self.donation_handler = donation_handler
+        self.payment_service = payment_service
     
     def setup_handlers(self, application: Application):
         """Set up all bot handlers"""
@@ -96,11 +97,12 @@ class BotManager:
 
         application = Application.builder().token(telegram_token).build()
         
-        # Store references in bot_data for donation flow  
+        # Store references in bot_data for donation flow
         application.bot_data['menu_handlers'] = self.menu_handlers
         application.bot_data['payment_gateway_handler'] = self.payment_gateway_handler
         application.bot_data['db_manager'] = self.db_manager
-        print(f"⚙️ [DEBUG] Bot data setup: menu_handlers={self.menu_handlers is not None}, payment_handler={self.payment_gateway_handler is not None}, db_manager={self.db_manager is not None}")
+        application.bot_data['payment_service'] = self.payment_service
+        print(f"⚙️ [DEBUG] Bot data setup: menu_handlers={self.menu_handlers is not None}, payment_handler={self.payment_gateway_handler is not None}, db_manager={self.db_manager is not None}, payment_service={self.payment_service is not None}")
         
         # Setup all handlers
         self.setup_handlers(application)
