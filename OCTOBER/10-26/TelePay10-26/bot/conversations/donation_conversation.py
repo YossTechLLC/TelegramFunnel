@@ -249,6 +249,8 @@ async def handle_message_choice(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data == "donation_add_message":
         # User wants to add a message
         logger.info(f"💝 [DONATION] User {update.effective_user.id} adding message")
+        logger.info(f"🔍 [DEBUG] Returning MESSAGE_INPUT state (value: {MESSAGE_INPUT})")
+        logger.info(f"🔍 [DEBUG] ConversationHandler should now accept text messages")
 
         await query.edit_message_text(
             "💬 <b>Enter Your Message</b>\n\n"
@@ -272,8 +274,16 @@ async def handle_message_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     Returns:
         MESSAGE_INPUT state or calls finalize_payment
     """
+    # DEBUG: Log function entry
+    logger.info(f"🔍 [DEBUG] handle_message_text() CALLED")
+    logger.info(f"🔍 [DEBUG] update object: {update}")
+    logger.info(f"🔍 [DEBUG] update.message exists: {update.message is not None}")
+
     user = update.effective_user
-    message_text = update.message.text
+    logger.info(f"🔍 [DEBUG] user: {user.id if user else 'None'}")
+
+    message_text = update.message.text if update.message else None
+    logger.info(f"🔍 [DEBUG] message_text: '{message_text}'")
 
     # Validate length
     if len(message_text) > 256:
@@ -482,6 +492,10 @@ def create_donation_conversation_handler() -> ConversationHandler:
         donation_handler = create_donation_conversation_handler()
         application.add_handler(donation_handler)
     """
+    logger.info(f"🔍 [DEBUG] Creating donation ConversationHandler")
+    logger.info(f"🔍 [DEBUG] MESSAGE_INPUT state value: {MESSAGE_INPUT}")
+    logger.info(f"🔍 [DEBUG] MESSAGE_INPUT handlers: CallbackQueryHandler + MessageHandler(TEXT & ~COMMAND)")
+
     return ConversationHandler(
         entry_points=[
             CallbackQueryHandler(start_donation, pattern=r'^donate_start_')
