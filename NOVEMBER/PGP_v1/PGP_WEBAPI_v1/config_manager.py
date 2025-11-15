@@ -1,25 +1,31 @@
 #!/usr/bin/env python
 """
-🔐 Configuration Manager for GCRegisterAPI-10-26
+🔐 Configuration Manager for PGP_WEBAPI_v1
 Handles Secret Manager integration for all sensitive configuration
+Inherits from BaseConfigManager for common functionality
 """
 import os
-from google.cloud import secretmanager
+from PGP_COMMON.config import BaseConfigManager
 
 
-class ConfigManager:
-    """Manages configuration from Google Secret Manager"""
+class ConfigManager(BaseConfigManager):
+    """
+    Manages configuration from Google Secret Manager.
+    Inherits common secret fetching from BaseConfigManager.
+    """
 
     def __init__(self):
+        # Initialize base class
+        super().__init__(service_name="PGP_WEBAPI_v1")
+
         # 🔐 SECURITY FIX: Use environment variable for project ID instead of hardcoding
         self.project_id = os.getenv("GCP_PROJECT_ID", "telepay-459221")
         if os.getenv("GCP_PROJECT_ID") is None:
             print("⚠️ GCP_PROJECT_ID not set, using default: telepay-459221")
-        self.client = secretmanager.SecretManagerServiceClient()
 
     def access_secret(self, secret_name: str) -> str:
         """
-        Access a secret from Google Secret Manager
+        Access a secret from Google Secret Manager.
 
         Args:
             secret_name: Name of the secret (e.g., 'JWT_SECRET_KEY')
@@ -39,7 +45,7 @@ class ConfigManager:
 
     def get_config(self):
         """
-        Load all configuration from Secret Manager
+        Load all configuration from Secret Manager.
 
         Returns:
             dict: Configuration dictionary
@@ -74,7 +80,15 @@ class ConfigManager:
         return config
 
     def _secret_exists(self, secret_name: str) -> bool:
-        """Check if a secret exists in Secret Manager"""
+        """
+        Check if a secret exists in Secret Manager.
+
+        Args:
+            secret_name: Name of the secret
+
+        Returns:
+            True if secret exists, False otherwise
+        """
         try:
             secret_path = f"projects/{self.project_id}/secrets/{secret_name}"
             self.client.get_secret(request={"name": secret_path})

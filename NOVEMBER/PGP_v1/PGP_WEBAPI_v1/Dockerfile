@@ -16,6 +16,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install PGP_COMMON shared library
+COPY ../PGP_COMMON /tmp/PGP_COMMON
+RUN pip install -e /tmp/PGP_COMMON
+
 # Copy application code
 COPY . .
 
