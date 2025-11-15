@@ -1,27 +1,32 @@
 #!/usr/bin/env python
 """
-🔐 Configuration Manager for GCNotificationService
+🔐 Configuration Manager for PGP_NOTIFICATIONS_v1
 Fetches secrets from Google Secret Manager
+Inherits from BaseConfigManager for common functionality
 """
 import os
-from google.cloud import secretmanager
 from typing import Optional, Dict
 import logging
+from PGP_COMMON.config import BaseConfigManager
 
 logger = logging.getLogger(__name__)
 
 
-class ConfigManager:
-    """Manages configuration and secrets for notification service"""
+class ConfigManager(BaseConfigManager):
+    """
+    Manages configuration and secrets for notification service.
+    Inherits common secret fetching from BaseConfigManager.
+    """
 
     def __init__(self):
         """Initialize configuration manager"""
+        super().__init__(service_name="PGP_NOTIFICATIONS_v1")
         self.bot_token = None
         self.database_credentials = {}
 
     def fetch_secret(self, env_var_name: str, secret_name: str) -> Optional[str]:
         """
-        Fetch a secret from Google Secret Manager
+        Fetch a secret from Google Secret Manager.
 
         Args:
             env_var_name: Name of environment variable containing secret path
@@ -31,14 +36,14 @@ class ConfigManager:
             Secret value or None if error
         """
         try:
-            client = secretmanager.SecretManagerServiceClient()
             secret_path = os.getenv(env_var_name)
 
             if not secret_path:
                 logger.error(f"❌ [CONFIG] Environment variable {env_var_name} is not set")
                 return None
 
-            response = client.access_secret_version(request={"name": secret_path})
+            # Use base class method to fetch secret by path
+            response = self.client.access_secret_version(request={"name": secret_path})
             secret_value = response.payload.data.decode("UTF-8").strip()
 
             logger.info(f"✅ [CONFIG] Successfully fetched {secret_name}")
@@ -57,7 +62,7 @@ class ConfigManager:
 
     def fetch_database_credentials(self) -> Dict[str, Optional[str]]:
         """
-        Fetch all database credentials from Secret Manager (NEW_ARCHITECTURE pattern)
+        Fetch all database credentials from Secret Manager (NEW_ARCHITECTURE pattern).
 
         Returns:
             Dictionary with keys: instance_connection_name, dbname, user, password
@@ -88,7 +93,7 @@ class ConfigManager:
 
     def initialize_config(self) -> Dict:
         """
-        Initialize and return all configuration values
+        Initialize and return all configuration values.
 
         Returns:
             Dictionary containing all config values

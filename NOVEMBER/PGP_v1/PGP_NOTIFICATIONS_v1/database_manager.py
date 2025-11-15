@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """
-🗄️ Database Manager for GCNotificationService
+🗄️ Database Manager for PGP_NOTIFICATIONS_v1
 Handles PostgreSQL connections and notification queries using NEW_ARCHITECTURE pattern
+Inherits from BaseDatabaseManager for common connection pooling
 """
 import os
 from typing import Optional, Tuple, Dict, Any
@@ -9,16 +10,20 @@ from decimal import Decimal
 import logging
 from google.cloud.sql.connector import Connector
 from sqlalchemy import create_engine, pool, text
+from PGP_COMMON.database import BaseDatabaseManager
 
 logger = logging.getLogger(__name__)
 
 
-class DatabaseManager:
-    """Manages database connections and notification queries using SQLAlchemy"""
+class DatabaseManager(BaseDatabaseManager):
+    """
+    Manages database connections and notification queries using SQLAlchemy.
+    Inherits common connection pooling from BaseDatabaseManager.
+    """
 
     def __init__(self, instance_connection_name: str, dbname: str, user: str, password: str):
         """
-        Initialize database manager with SQLAlchemy connection pool
+        Initialize database manager with SQLAlchemy connection pool.
 
         Args:
             instance_connection_name: Cloud SQL instance connection name (project:region:instance)
@@ -26,25 +31,29 @@ class DatabaseManager:
             user: Database user
             password: Database password
         """
-        self.instance_connection_name = instance_connection_name
-        self.dbname = dbname
-        self.user = user
-        self.password = password
+        # Call base class constructor
+        super().__init__(
+            instance_connection_name=instance_connection_name,
+            dbname=dbname,
+            user=user,
+            password=password,
+            service_name="PGP_NOTIFICATIONS_v1"
+        )
 
         # Validate credentials
-        if not self.password:
+        if not password:
             raise RuntimeError("Database password not available. Cannot initialize DatabaseManager.")
-        if not all([self.instance_connection_name, self.dbname, self.user]):
+        if not all([instance_connection_name, dbname, user]):
             raise RuntimeError("Critical database configuration missing.")
 
-        # Initialize connection pool
+        # Initialize connection pool with notification service settings
         self.connector = None
         self.engine = None
         self._initialize_pool()
 
         logger.info(f"🗄️ [DATABASE] Initialized with connection pool")
-        logger.info(f"   Instance: {self.instance_connection_name}")
-        logger.info(f"   Database: {self.dbname}")
+        logger.info(f"   Instance: {instance_connection_name}")
+        logger.info(f"   Database: {dbname}")
 
     def _get_conn(self):
         """
@@ -65,7 +74,7 @@ class DatabaseManager:
 
     def _initialize_pool(self):
         """
-        Initialize SQLAlchemy engine with connection pool (NEW_ARCHITECTURE pattern)
+        Initialize SQLAlchemy engine with connection pool (NEW_ARCHITECTURE pattern).
 
         Creates:
         - Cloud SQL Connector instance
@@ -97,9 +106,13 @@ class DatabaseManager:
             logger.error(f"❌ [DATABASE] Failed to initialize pool: {e}", exc_info=True)
             raise
 
+    # ========================================================================
+    # Service-Specific Methods
+    # ========================================================================
+
     def get_notification_settings(self, open_channel_id: str) -> Optional[Tuple[bool, Optional[int]]]:
         """
-        Get notification settings for a channel (NEW_ARCHITECTURE pattern)
+        Get notification settings for a channel (NEW_ARCHITECTURE pattern).
 
         Args:
             open_channel_id: The open channel ID to look up
@@ -141,7 +154,7 @@ class DatabaseManager:
 
     def get_channel_details_by_open_id(self, open_channel_id: str) -> Optional[Dict[str, Any]]:
         """
-        Fetch channel details by open_channel_id for notification message formatting (NEW_ARCHITECTURE pattern)
+        Fetch channel details by open_channel_id for notification message formatting (NEW_ARCHITECTURE pattern).
 
         Args:
             open_channel_id: The open channel ID to fetch details for
@@ -193,7 +206,7 @@ class DatabaseManager:
 
     def get_payout_configuration(self, open_channel_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get payout configuration for notification message (NEW_ARCHITECTURE pattern)
+        Get payout configuration for notification message (NEW_ARCHITECTURE pattern).
 
         Args:
             open_channel_id: The open channel ID to fetch payout configuration for
@@ -261,7 +274,7 @@ class DatabaseManager:
 
     def get_threshold_progress(self, open_channel_id: str) -> Optional[Decimal]:
         """
-        Get current accumulated amount for threshold payout mode (NEW_ARCHITECTURE pattern)
+        Get current accumulated amount for threshold payout mode (NEW_ARCHITECTURE pattern).
 
         Calculates the sum of all unpaid payment amounts for a client channel.
         Used to display live progress towards payout threshold.
