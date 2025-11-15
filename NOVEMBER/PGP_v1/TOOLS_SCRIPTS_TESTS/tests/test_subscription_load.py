@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta
 
 # Add parent directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', '..', 'OCTOBER', '10-26', 'TelePay10-26'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', '..', 'OCTOBER', '10-26', 'PGP_SERVER_v1'))
 
 def load_test_100_subscriptions():
     """Test processing 100 expired subscriptions."""

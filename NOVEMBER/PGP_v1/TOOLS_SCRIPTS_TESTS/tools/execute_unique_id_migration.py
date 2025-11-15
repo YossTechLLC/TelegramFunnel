@@ -8,7 +8,7 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.insert(0, '/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCHostPay1-10-26')
+sys.path.insert(0, '/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_HOSTPAY1_v1')
 
 try:
     from google.cloud.sql.connector import Connector
@@ -173,7 +173,7 @@ if __name__ == "__main__":
         print("=" * 80)
         print("NEXT STEPS:")
         print("=" * 80)
-        print("1. Redeploy GCHostPay1-10-26 with updated validation code")
+        print("1. Redeploy PGP_HOSTPAY1_v1 with updated validation code")
         print("2. Test batch conversion end-to-end")
         print("3. Monitor logs for full 42-character unique_id values")
         print("=" * 80)

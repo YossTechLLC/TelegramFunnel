@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-⏱️ Rate Limiting Middleware for GCRegisterAPI-10-26
+⏱️ Rate Limiting Middleware for PGP_WEBAPI_v1
 Configures Flask-Limiter with Redis backend for production
 """
 from flask import Flask

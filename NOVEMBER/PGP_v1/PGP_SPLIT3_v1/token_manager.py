@@ -687,12 +687,12 @@ class TokenManager(BaseTokenManager):
             return None
 
     # ========================================================================
-    # GCAccumulator ↔ GCSplit3 Token Methods (for ETH→USDT swaps)
+    # PGP_ACCUMULATOR ↔ GCSplit3 Token Methods (for ETH→USDT swaps)
     # ========================================================================
 
     def decrypt_accumulator_to_gcsplit3_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCAccumulator for ETH→USDT swap creation.
+        Decrypt token from PGP_ACCUMULATOR for ETH→USDT swap creation.
 
         Expected fields:
         - accumulation_id (int)
@@ -702,7 +702,7 @@ class TokenManager(BaseTokenManager):
         - timestamp (int)
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCAccumulator→GCSplit3: Decrypting ETH→USDT swap request")
+            print(f"🔓 [TOKEN_DEC] PGP_ACCUMULATOR→GCSplit3: Decrypting ETH→USDT swap request")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
@@ -777,12 +777,12 @@ class TokenManager(BaseTokenManager):
         payout_address: str
     ) -> Optional[str]:
         """
-        Encrypt token for GCAccumulator with ETH→USDT swap details.
+        Encrypt token for PGP_ACCUMULATOR with ETH→USDT swap details.
 
         Returns encrypted token or None if encryption fails.
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCSplit3→GCAccumulator: Encrypting swap response")
+            print(f"🔐 [TOKEN_ENC] GCSplit3→PGP_ACCUMULATOR: Encrypting swap response")
 
             payload = bytearray()
 

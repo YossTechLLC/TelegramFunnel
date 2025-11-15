@@ -207,10 +207,10 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_accumulator_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCAccumulator → GCHostPay1.
+        Decrypt token from PGP_ACCUMULATOR → GCHostPay1.
         Token is valid for 300 seconds from creation (5-minute window).
 
-        Token Format (from GCAccumulator encrypt_accumulator_to_gchostpay1_token):
+        Token Format (from PGP_ACCUMULATOR encrypt_accumulator_to_gchostpay1_token):
         - 8 bytes: accumulation_id (uint64)
         - 1 byte: cn_api_id length + variable bytes for cn_api_id
         - 1 byte: from_currency length + variable bytes for from_currency
@@ -222,7 +222,7 @@ class TokenManager(BaseTokenManager):
         - 16 bytes: HMAC-SHA256 signature (truncated)
 
         Args:
-            token: Base64 URL-safe encoded token from GCAccumulator
+            token: Base64 URL-safe encoded token from PGP_ACCUMULATOR
 
         Returns:
             Dictionary with decrypted data or None if invalid
@@ -296,7 +296,7 @@ class TokenManager(BaseTokenManager):
             time_diff = current_time - timestamp
             raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 7200 seconds)")
 
-        print(f"🔓 [TOKEN_DEC] GCAccumulator→GCHostPay1: Token validated successfully")
+        print(f"🔓 [TOKEN_DEC] PGP_ACCUMULATOR→GCHostPay1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
         print(f"📋 [TOKEN_DEC] Context: {context}")
         print(f"🆔 [TOKEN_DEC] Accumulation ID: {accumulation_id}")
@@ -905,15 +905,15 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 7: GCMicroBatchProcessor → GCHostPay1 (Batch execution request)
+    # TOKEN 7: PGP_MICROBATCHPROCESSOR → GCHostPay1 (Batch execution request)
     # ========================================================================
 
     def decrypt_microbatch_to_gchostpay1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt token from GCMicroBatchProcessor → GCHostPay1.
+        Decrypt token from PGP_MICROBATCHPROCESSOR → GCHostPay1.
         Token is valid for 300 seconds from creation (5-minute window).
 
-        Token Format (from GCMicroBatchProcessor encrypt_microbatch_to_gchostpay1_token):
+        Token Format (from PGP_MICROBATCHPROCESSOR encrypt_microbatch_to_gchostpay1_token):
         - 1 byte: context length + variable bytes ('batch')
         - 1 byte: batch_conversion_id length + variable bytes (UUID string)
         - 1 byte: cn_api_id length + variable bytes
@@ -925,7 +925,7 @@ class TokenManager(BaseTokenManager):
         - 16 bytes: HMAC-SHA256 signature (truncated)
 
         Args:
-            token: Base64 URL-safe encoded token from GCMicroBatchProcessor
+            token: Base64 URL-safe encoded token from PGP_MICROBATCHPROCESSOR
 
         Returns:
             Dictionary with decrypted data or None if invalid
@@ -996,7 +996,7 @@ class TokenManager(BaseTokenManager):
             time_diff = current_time - timestamp
             raise ValueError(f"Token expired (created {abs(time_diff)} seconds ago, max 300 seconds)")
 
-        print(f"🔓 [TOKEN_DEC] GCMicroBatchProcessor→GCHostPay1: Token validated successfully")
+        print(f"🔓 [TOKEN_DEC] PGP_MICROBATCHPROCESSOR→GCHostPay1: Token validated successfully")
         print(f"⏰ [TOKEN_DEC] Token age: {current_time - timestamp} seconds")
         print(f"📋 [TOKEN_DEC] Context: {context}")
         print(f"🆔 [TOKEN_DEC] Batch Conversion ID: {batch_conversion_id}")
@@ -1013,7 +1013,7 @@ class TokenManager(BaseTokenManager):
         }
 
     # ========================================================================
-    # TOKEN 8: GCHostPay1 → GCMicroBatchProcessor (Batch execution response)
+    # TOKEN 8: GCHostPay1 → PGP_MICROBATCHPROCESSOR (Batch execution response)
     # ========================================================================
 
     def encrypt_gchostpay1_to_microbatch_response_token(
@@ -1024,7 +1024,7 @@ class TokenManager(BaseTokenManager):
         actual_usdt_received: float
     ) -> Optional[str]:
         """
-        Encrypt token for GCHostPay1 → GCMicroBatchProcessor (Batch execution response).
+        Encrypt token for GCHostPay1 → PGP_MICROBATCHPROCESSOR (Batch execution response).
 
         Token Structure:
         - 1 byte: batch_conversion_id length + variable bytes (UUID string)
@@ -1044,7 +1044,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCHostPay1→GCMicroBatchProcessor: Encrypting batch response")
+            print(f"🔐 [TOKEN_ENC] GCHostPay1→PGP_MICROBATCHPROCESSOR: Encrypting batch response")
 
             payload = bytearray()
 

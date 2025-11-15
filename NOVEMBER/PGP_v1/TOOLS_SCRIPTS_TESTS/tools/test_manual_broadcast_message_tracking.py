@@ -11,7 +11,7 @@ from datetime import datetime
 import time
 
 # Configuration
-GCBROADCASTSERVICE_URL = "https://gcbroadcastservice-10-26-291176869049.us-central1.run.app"
+GCBROADCASTSERVICE_URL = "https://pgp_broadcastservice-10-26-291176869049.us-central1.run.app"
 CLOUD_SQL_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
 DATABASE_NAME = "client_table"
 DATABASE_USER = "postgres"

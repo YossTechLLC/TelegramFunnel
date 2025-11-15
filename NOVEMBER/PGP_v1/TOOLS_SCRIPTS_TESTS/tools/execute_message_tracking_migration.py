@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "TelePay10-26"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "PGP_SERVER_v1"))
 
 from sqlalchemy import create_engine, text
 from google.cloud.sql.connector import Connector

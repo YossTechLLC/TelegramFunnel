@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-🔧 Account Management Routes for GCRegisterAPI-10-26
+🔧 Account Management Routes for PGP_WEBAPI_v1
 Handles email changes and password changes (requires verified email)
 """
 from flask import Blueprint, request, jsonify, current_app

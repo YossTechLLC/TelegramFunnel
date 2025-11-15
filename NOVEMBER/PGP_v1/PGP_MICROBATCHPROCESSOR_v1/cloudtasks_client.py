@@ -30,7 +30,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         )
 
     # ========================================================================
-    # GCMicroBatchProcessor → GCHostPay1 (Batch Execution)
+    # PGP_MICROBATCHPROCESSOR → GCHostPay1 (Batch Execution)
     # ========================================================================
 
     def enqueue_pgp_hostpay1_batch_execution(

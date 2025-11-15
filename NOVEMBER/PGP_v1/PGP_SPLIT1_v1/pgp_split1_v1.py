@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCSplit1-10-26: Payment Splitting Orchestrator Service
+PGP_SPLIT1_v1: Payment Splitting Orchestrator Service
 Coordinates payment splitting workflow across GCSplit2 and GCSplit3 using Cloud Tasks.
 Handles database operations and integrates with GCHostPay for final ETH transfers.
 """
@@ -24,7 +24,7 @@ from cloudtasks_client import CloudTasksClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCSplit1-10-26 Orchestrator Service")
+print(f"🚀 [APP] Initializing PGP_SPLIT1_v1 Orchestrator Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -838,13 +838,13 @@ def receive_eth_client_swap():
 
 
 # ============================================================================
-# ENDPOINT 4: POST /batch-payout - Batch payout from GCBatchProcessor
+# ENDPOINT 4: POST /batch-payout - Batch payout from PGP_BATCHPROCESSOR
 # ============================================================================
 
 @app.route("/batch-payout", methods=["POST"])
 def batch_payout():
     """
-    Endpoint for receiving batch payout requests from GCBatchProcessor.
+    Endpoint for receiving batch payout requests from PGP_BATCHPROCESSOR.
 
     Flow:
     1. Decrypt batch token
@@ -857,7 +857,7 @@ def batch_payout():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_4] Batch payout request received (from GCBatchProcessor)")
+        print(f"🎯 [ENDPOINT_4] Batch payout request received (from PGP_BATCHPROCESSOR)")
 
         # Parse JSON payload
         try:
@@ -1001,7 +1001,7 @@ def health_check():
 
         return jsonify({
             "status": "healthy" if db_healthy else "degraded",
-            "service": "GCSplit1-10-26 Orchestrator",
+            "service": "PGP_SPLIT1_v1 Orchestrator",
             "timestamp": int(time.time()),
             "components": {
                 "database": "healthy" if db_healthy else "unhealthy",
@@ -1014,7 +1014,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCSplit1-10-26 Orchestrator",
+            "service": "PGP_SPLIT1_v1 Orchestrator",
             "error": str(e)
         }), 503
 
@@ -1024,5 +1024,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCSplit1-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_SPLIT1_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

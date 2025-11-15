@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Services package for TelePay10-26.
+Services package for PGP_SERVER_v1.
 Contains business logic services for payment, notification, broadcast, etc.
 """
 from .payment_service import PaymentService, init_payment_service

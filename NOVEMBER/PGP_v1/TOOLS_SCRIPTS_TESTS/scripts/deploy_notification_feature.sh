@@ -123,7 +123,7 @@ if ! log_and_execute "deploy_frontend.sh" "Step 3: Deploying Frontend (pgp-web-v
 fi
 
 # Step 4: Server Bot
-if ! log_and_execute "deploy_telepay_bot.sh" "Step 4: Deploying Server Bot (pgp-server-v1)"; then
+if ! log_and_execute "deploy_pgp_server_bot.sh" "Step 4: Deploying Server Bot (pgp-server-v1)"; then
     DEPLOYMENT_FAILED=true
     echo "❌ Server Bot deployment failed!"
     prompt_continue "Continue with remaining deployments?"

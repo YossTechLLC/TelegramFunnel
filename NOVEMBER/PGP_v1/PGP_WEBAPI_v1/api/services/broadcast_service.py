@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📢 Broadcast Service for GCRegisterAPI-10-26
+📢 Broadcast Service for PGP_WEBAPI_v1
 Handles broadcast_manager table operations
 """
 from typing import Optional

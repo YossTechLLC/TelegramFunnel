@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Error Classification Module for GCHostPay3-10-26.
+Error Classification Module for PGP_HOSTPAY3_v1.
 Classifies ETH payment exceptions into actionable error codes for targeted resolution.
 """
 from typing import Tuple

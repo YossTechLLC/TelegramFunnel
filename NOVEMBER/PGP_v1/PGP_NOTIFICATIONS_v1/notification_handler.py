@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📬 Notification Handler for GCNotificationService
+📬 Notification Handler for PGP_NOTIFICATIONS
 Handles notification formatting and delivery logic
 """
 from typing import Optional, Dict, Any

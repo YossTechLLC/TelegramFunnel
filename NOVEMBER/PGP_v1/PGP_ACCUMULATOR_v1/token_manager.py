@@ -127,7 +127,7 @@ class TokenManager(BaseTokenManager):
         return s_bytes.decode('utf-8'), offset
 
     # ========================================================================
-    # GCAccumulator → GCSplit3 Token Methods (for ETH→USDT swap creation)
+    # PGP_ACCUMULATOR → GCSplit3 Token Methods (for ETH→USDT swap creation)
     # ========================================================================
 
     def encrypt_accumulator_to_gcsplit3_token(
@@ -152,7 +152,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCAccumulator→GCSplit3: Encrypting ETH→USDT swap request")
+            print(f"🔐 [TOKEN_ENC] PGP_ACCUMULATOR→GCSplit3: Encrypting ETH→USDT swap request")
 
             payload = bytearray()
 
@@ -213,7 +213,7 @@ class TokenManager(BaseTokenManager):
             Dictionary with decrypted data or None if failed
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCSplit3→GCAccumulator: Decrypting swap response")
+            print(f"🔓 [TOKEN_DEC] GCSplit3→PGP_ACCUMULATOR: Decrypting swap response")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0
@@ -292,7 +292,7 @@ class TokenManager(BaseTokenManager):
             return None
 
     # ========================================================================
-    # GCAccumulator → GCHostPay1 Token Methods (for swap execution)
+    # PGP_ACCUMULATOR → GCHostPay1 Token Methods (for swap execution)
     # ========================================================================
 
     def encrypt_accumulator_to_gchostpay1_token(
@@ -326,7 +326,7 @@ class TokenManager(BaseTokenManager):
             Base64 URL-safe encoded token or None if failed
         """
         try:
-            print(f"🔐 [TOKEN_ENC] GCAccumulator→GCHostPay1: Encrypting execution request")
+            print(f"🔐 [TOKEN_ENC] PGP_ACCUMULATOR→GCHostPay1: Encrypting execution request")
             print(f"📋 [TOKEN_ENC] Context: {context}")
 
             payload = bytearray()
@@ -394,7 +394,7 @@ class TokenManager(BaseTokenManager):
             Dictionary with decrypted data or None if failed
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCHostPay1→GCAccumulator: Decrypting execution response")
+            print(f"🔓 [TOKEN_DEC] GCHostPay1→PGP_ACCUMULATOR: Decrypting execution response")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0

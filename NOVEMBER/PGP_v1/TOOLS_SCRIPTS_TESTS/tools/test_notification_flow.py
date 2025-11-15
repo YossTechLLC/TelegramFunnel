@@ -25,7 +25,7 @@ DB_NAME = "client_table"
 TEST_CHANNEL_ID = "-1003202734748"
 
 # Service URLs
-NP_WEBHOOK_URL = "https://np-webhook-10-26-291176869049.us-central1.run.app"
+NP_WEBHOOK_URL = "https://PGP_NP_IPN_v1-291176869049.us-central1.run.app"
 
 def get_database_connection():
     """Initialize database connection with SQLAlchemy"""
@@ -249,9 +249,9 @@ def main():
             print(f"\n✅ [SUCCESS] IPN sent successfully!")
             print(f"\n📬 [NEXT STEPS]")
             print(f"   1. Check np-webhook logs:")
-            print(f"      gcloud logging read 'resource.labels.service_name=\"np-webhook-10-26\"' --limit 20")
-            print(f"   2. Check GCNotificationService logs:")
-            print(f"      gcloud logging read 'resource.labels.service_name=\"gcnotificationservice-10-26\"' --limit 20")
+            print(f"      gcloud logging read 'resource.labels.service_name=\"PGP_NP_IPN_v1\"' --limit 20")
+            print(f"   2. Check PGP_NOTIFICATIONS logs:")
+            print(f"      gcloud logging read 'resource.labels.service_name=\"pgp_notificationservice-10-26\"' --limit 20")
             print(f"   3. Check if notification was sent to Telegram user {channel_data['notification_id']}")
         else:
             print(f"\n❌ [FAILED] IPN request failed")

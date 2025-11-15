@@ -7,8 +7,8 @@ PROBLEM:
 - conversion_timestamp is NOT NULL but should be NULL for pending conversions
 
 ARCHITECTURE:
-1. GCAccumulator stores payments in "pending" state WITHOUT conversion data
-2. GCMicroBatchProcessor later fills in conversion data when processing
+1. PGP_ACCUMULATOR stores payments in "pending" state WITHOUT conversion data
+2. PGP_MICROBATCHPROCESSOR later fills in conversion data when processing
 
 SOLUTION:
 Make both fields NULLABLE since they're only populated during conversion.

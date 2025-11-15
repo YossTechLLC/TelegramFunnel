@@ -16,14 +16,14 @@ BASE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26"
 # Service order (downstream first for backward compatibility)
 # Format: "directory:service-name"
 SERVICES=(
-    "GCHostPay3-10-26:gchostpay3-10-26"
-    "GCHostPay1-10-26:gchostpay1-10-26"
-    "GCSplit3-10-26:gcsplit3-10-26"
-    "GCSplit2-10-26:gcsplit2-10-26"
-    "GCSplit1-10-26:gcsplit1-10-26"
-    "GCWebhook1-10-26:gcwebhook1-10-26"
-    "GCBatchProcessor-10-26:gcbatchprocessor-10-26"
-    "GCMicroBatchProcessor-10-26:gcmicrobatchprocessor-10-26"
+    "PGP_HOSTPAY3_v1:gchostpay3-10-26"
+    "PGP_HOSTPAY1_v1:gchostpay1-10-26"
+    "PGP_SPLIT3_v1:gcsplit3-10-26"
+    "PGP_SPLIT2_v1:gcsplit2-10-26"
+    "PGP_SPLIT1_v1:gcsplit1-10-26"
+    "PGP_ORCHESTRATOR_v1:gcwebhook1-10-26"
+    "PGP_BATCHPROCESSOR_v1:pgp_batchprocessor-10-26"
+    "PGP_MICROBATCHPROCESSOR_v1:pgp_microbatchprocessor-10-26"
 )
 
 # Track deployment progress

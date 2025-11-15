@@ -1,7 +1,7 @@
 # Event Loop Closure Bug - Fix Checklist
 
 **Issue:** `RuntimeError('Event loop is closed')` on second notification request
-**Service:** GCNotificationService-10-26
+**Service:** PGP_NOTIFICATIONS_v1
 **Root Cause:** Event loop is created, used, and closed for each request, causing failure on subsequent requests
 **Date:** 2025-11-14
 
@@ -60,8 +60,8 @@ loop.close()                         # CLOSES loop (BUG!)
 
 - [ ] Create backup of `telegram_client.py`
   ```bash
-  cp /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py \
-     /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py.backup-$(date +%Y%m%d-%H%M%S)
+  cp /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/telegram_client.py \
+     /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/telegram_client.py.backup-$(date +%Y%m%d-%H%M%S)
   ```
 
 ### Phase 2: Fix TelegramClient Class ✅
@@ -83,7 +83,7 @@ loop.close()                         # CLOSES loop (BUG!)
 
 ### Phase 3: Update Service Initialization ✅
 
-- [ ] **No changes needed to `service.py`**
+- [ ] **No changes needed to `pgp_notifications_v1.py`**
   - TelegramClient interface remains the same
   - Flask app will automatically handle lifecycle
 
@@ -195,7 +195,7 @@ class TelegramClient:
 ### 1. Update Code
 ```bash
 # Navigate to service directory
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1
 
 # Apply fix to telegram_client.py
 # (Claude Code will do this in next step)
@@ -204,9 +204,9 @@ cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificatio
 ### 2. Deploy to Cloud Run
 ```bash
 # Build and deploy
-gcloud builds submit --tag gcr.io/telepay-459221/gcnotificationservice-10-26 && \
-gcloud run deploy gcnotificationservice-10-26 \
-  --image gcr.io/telepay-459221/gcnotificationservice-10-26 \
+gcloud builds submit --tag gcr.io/telepay-459221/pgp_notificationservice-10-26 && \
+gcloud run deploy pgp_notificationservice-10-26 \
+  --image gcr.io/telepay-459221/pgp_notificationservice-10-26 \
   --region us-central1 \
   --platform managed \
   --allow-unauthenticated \
@@ -217,15 +217,15 @@ gcloud run deploy gcnotificationservice-10-26 \
 ### 3. Verify Deployment
 ```bash
 # Check service health
-curl https://gcnotificationservice-10-26-291176869049.us-central1.run.app/health
+curl https://pgp_notificationservice-10-26-291176869049.us-central1.run.app/health
 
-# Expected: {"status":"healthy","service":"GCNotificationService","version":"1.0"}
+# Expected: {"status":"healthy","service":"PGP_NOTIFICATIONS","version":"1.0"}
 ```
 
 ### 4. Test Consecutive Notifications
 ```bash
 # Send first notification
-curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.app/send-notification \
+curl -X POST https://pgp_notificationservice-10-26-291176869049.us-central1.run.app/send-notification \
   -H "Content-Type: application/json" \
   -d '{
     "open_channel_id": "-1003202734748",
@@ -245,7 +245,7 @@ curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.ap
 # Expected: {"status":"success","message":"Notification sent successfully"}
 
 # Send second notification (THIS SHOULD NOW WORK)
-curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.app/send-notification \
+curl -X POST https://pgp_notificationservice-10-26-291176869049.us-central1.run.app/send-notification \
   -H "Content-Type: application/json" \
   -d '{
     "open_channel_id": "-1003202734748",
@@ -266,7 +266,7 @@ curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.ap
 ### 5. Monitor Logs
 ```bash
 # Watch Cloud Run logs
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=gcnotificationservice-10-26" \
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=pgp_notificationservice-10-26" \
   --limit 50 \
   --format "table(timestamp, textPayload)" \
   --freshness=10m
@@ -295,13 +295,13 @@ If fix causes issues:
 
 ```bash
 # Restore backup
-cp /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py.backup-* \
-   /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py
+cp /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/telegram_client.py.backup-* \
+   /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/telegram_client.py
 
 # Redeploy old version
-gcloud builds submit --tag gcr.io/telepay-459221/gcnotificationservice-10-26 && \
-gcloud run deploy gcnotificationservice-10-26 \
-  --image gcr.io/telepay-459221/gcnotificationservice-10-26 \
+gcloud builds submit --tag gcr.io/telepay-459221/pgp_notificationservice-10-26 && \
+gcloud run deploy pgp_notificationservice-10-26 \
+  --image gcr.io/telepay-459221/pgp_notificationservice-10-26 \
   --region us-central1
 ```
 

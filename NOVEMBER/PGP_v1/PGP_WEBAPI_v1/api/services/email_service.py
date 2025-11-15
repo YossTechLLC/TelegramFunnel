@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📧 Email Service for GCRegisterAPI-10-26
+📧 Email Service for PGP_WEBAPI_v1
 Handles sending verification and password reset emails via SendGrid
 
 This service sends professional, responsive HTML emails for:
@@ -30,16 +30,16 @@ class EmailService:
 
         Loads configuration from environment variables:
         - SENDGRID_API_KEY: SendGrid API key (required for production)
-        - FROM_EMAIL: Sender email address (default: noreply@telepay.com)
+        - FROM_EMAIL: Sender email address (default: noreply@pgp_server.com)
         - FROM_NAME: Sender display name (default: TelePay)
-        - BASE_URL: Base URL for email links (default: https://app.telepay.com)
+        - BASE_URL: Base URL for email links (default: https://app.pgp_server.com)
 
         If SENDGRID_API_KEY is not set, service operates in dev mode (console only).
         """
         self.sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
-        self.from_email = os.getenv('FROM_EMAIL', 'noreply@telepay.com')
+        self.from_email = os.getenv('FROM_EMAIL', 'noreply@pgp_server.com')
         self.from_name = os.getenv('FROM_NAME', 'TelePay')
-        self.base_url = os.getenv('BASE_URL', 'https://app.telepay.com')
+        self.base_url = os.getenv('BASE_URL', 'https://app.pgp_server.com')
 
         if not self.sendgrid_api_key:
             print("⚠️  SENDGRID_API_KEY not set - email sending disabled (DEV MODE)")

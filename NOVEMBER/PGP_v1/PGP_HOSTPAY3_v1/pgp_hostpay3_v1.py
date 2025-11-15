@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCHostPay3-10-26: ETH Payment Executor Service
+PGP_HOSTPAY3_v1: ETH Payment Executor Service
 Receives payment execution requests from GCHostPay1, executes ETH payments
 with 3-ATTEMPT RETRY logic, and returns response back to GCHostPay1.
 
@@ -23,7 +23,7 @@ from alerting import AlertingService
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCHostPay3-10-26 ETH Payment Executor Service")
+print(f"🚀 [APP] Initializing PGP_HOSTPAY3_v1 ETH Payment Executor Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -356,19 +356,19 @@ def execute_eth_payment():
 
             # Determine routing based on context
             if context == 'threshold':
-                # Route to GCAccumulator for threshold payouts
-                print(f"🎯 [ENDPOINT] Context: threshold → Routing to GCAccumulator")
+                # Route to PGP_ACCUMULATOR for threshold payouts
+                print(f"🎯 [ENDPOINT] Context: threshold → Routing to PGP_ACCUMULATOR")
 
-                gcaccumulator_response_queue = config.get('gcaccumulator_response_queue')
-                gcaccumulator_url = config.get('gcaccumulator_url')
+                pgp_accumulator_response_queue = config.get('pgp_accumulator_response_queue')
+                pgp_accumulator_url = config.get('pgp_accumulator_url')
 
-                if not gcaccumulator_response_queue or not gcaccumulator_url:
-                    print(f"❌ [ENDPOINT] GCAccumulator configuration missing")
+                if not pgp_accumulator_response_queue or not pgp_accumulator_url:
+                    print(f"❌ [ENDPOINT] PGP_ACCUMULATOR configuration missing")
                     abort(500, "Service configuration error")
 
                 # Target the /swap-executed endpoint
-                target_url = f"{gcaccumulator_url}/swap-executed"
-                queue_name = gcaccumulator_response_queue
+                target_url = f"{pgp_accumulator_url}/swap-executed"
+                queue_name = pgp_accumulator_response_queue
 
                 print(f"📤 [ENDPOINT] Routing to: {target_url}")
 
@@ -601,7 +601,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCHostPay3-10-26 ETH Payment Executor",
+            "service": "PGP_HOSTPAY3_v1 ETH Payment Executor",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
@@ -615,7 +615,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCHostPay3-10-26 ETH Payment Executor",
+            "service": "PGP_HOSTPAY3_v1 ETH Payment Executor",
             "error": str(e)
         }), 503
 
@@ -625,5 +625,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCHostPay3-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_HOSTPAY3_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

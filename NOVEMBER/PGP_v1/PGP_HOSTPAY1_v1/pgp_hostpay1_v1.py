@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCHostPay1-10-26: Validator & Orchestrator Service
+PGP_HOSTPAY1_v1: Validator & Orchestrator Service
 Receives payment split requests from GCSplit1, validates, and orchestrates:
 1. ChangeNow status check via GCHostPay2
 2. ETH payment execution via GCHostPay3
@@ -23,7 +23,7 @@ from changenow_client import ChangeNowClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCHostPay1-10-26 Validator & Orchestrator Service")
+print(f"🚀 [APP] Initializing PGP_HOSTPAY1_v1 Validator & Orchestrator Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -96,7 +96,7 @@ def _route_batch_callback(
     actual_usdt_received: float
 ) -> bool:
     """
-    Route batch conversion callback to GCMicroBatchProcessor.
+    Route batch conversion callback to PGP_MICROBATCHPROCESSOR.
 
     This function:
     1. Encrypts response token with batch data
@@ -112,7 +112,7 @@ def _route_batch_callback(
         True if callback enqueued successfully, False otherwise
     """
     try:
-        print(f"📤 [BATCH_CALLBACK] Preparing callback to GCMicroBatchProcessor")
+        print(f"📤 [BATCH_CALLBACK] Preparing callback to PGP_MICROBATCHPROCESSOR")
         print(f"🆔 [BATCH_CALLBACK] Batch ID: {batch_conversion_id}")
         print(f"💰 [BATCH_CALLBACK] Actual USDT: ${actual_usdt_received}")
 
@@ -279,10 +279,10 @@ def main_webhook():
 
     Supports TWO token types:
     1. GCSplit1 → GCHostPay1 (instant payouts with unique_id)
-    2. GCAccumulator → GCHostPay1 (threshold payouts with accumulation_id and context)
+    2. PGP_ACCUMULATOR → GCHostPay1 (threshold payouts with accumulation_id and context)
 
     Flow:
-    1. Decode & verify token (try GCSplit1, fallback to GCAccumulator)
+    1. Decode & verify token (try GCSplit1, fallback to PGP_ACCUMULATOR)
     2. Extract: unique_id/accumulation_id, cn_api_id, from_currency, from_network, from_amount, payin_address, context
     3. Check database for duplicate
     4. Encrypt token for GCHostPay2 (status check)
@@ -331,34 +331,34 @@ def main_webhook():
         except Exception as e:
             print(f"⚠️ [ENDPOINT_1] Not a GCSplit1 token: {e}")
 
-        # If GCSplit1 decryption failed, try GCAccumulator token (threshold payouts)
+        # If GCSplit1 decryption failed, try PGP_ACCUMULATOR token (threshold payouts)
         if not decrypted_data:
             try:
                 decrypted_data = token_manager.decrypt_accumulator_to_gchostpay1_token(token)
                 if decrypted_data:
-                    token_source = 'gcaccumulator'
+                    token_source = 'pgp_accumulator'
                     accumulation_id = decrypted_data['accumulation_id']
                     context = decrypted_data.get('context', 'threshold')
                     # Create a unique_id for database tracking (use accumulation_id)
                     unique_id = f"acc_{accumulation_id}"
-                    print(f"✅ [ENDPOINT_1] GCAccumulator token decoded (threshold payout)")
+                    print(f"✅ [ENDPOINT_1] PGP_ACCUMULATOR token decoded (threshold payout)")
             except Exception as e:
-                print(f"⚠️ [ENDPOINT_1] Not a GCAccumulator token: {e}")
+                print(f"⚠️ [ENDPOINT_1] Not a PGP_ACCUMULATOR token: {e}")
 
-        # If still no match, try GCMicroBatchProcessor token (batch conversions)
+        # If still no match, try PGP_MICROBATCHPROCESSOR token (batch conversions)
         if not decrypted_data:
             try:
                 decrypted_data = token_manager.decrypt_microbatch_to_gchostpay1_token(token)
                 if decrypted_data:
-                    token_source = 'gcmicrobatchprocessor'
+                    token_source = 'pgp_microbatchprocessor'
                     batch_conversion_id = decrypted_data['batch_conversion_id']
                     context = decrypted_data.get('context', 'batch')
                     # Create a unique_id for database tracking (use batch_conversion_id)
                     unique_id = f"batch_{batch_conversion_id}"
-                    print(f"✅ [ENDPOINT_1] GCMicroBatchProcessor token decoded (batch conversion)")
+                    print(f"✅ [ENDPOINT_1] PGP_MICROBATCHPROCESSOR token decoded (batch conversion)")
             except Exception as e:
-                print(f"❌ [ENDPOINT_1] Not a GCMicroBatchProcessor token either: {e}")
-                abort(401, f"Invalid token: could not decrypt as GCSplit1, GCAccumulator, or GCMicroBatchProcessor token")
+                print(f"❌ [ENDPOINT_1] Not a PGP_MICROBATCHPROCESSOR token either: {e}")
+                abort(401, f"Invalid token: could not decrypt as GCSplit1, PGP_ACCUMULATOR, or PGP_MICROBATCHPROCESSOR token")
 
         # At this point, decrypted_data must be valid
         if not decrypted_data:
@@ -535,7 +535,7 @@ def status_verified():
             }), 400
 
         # Determine context based on unique_id
-        # If unique_id starts with "acc_", it's from GCAccumulator (threshold payout)
+        # If unique_id starts with "acc_", it's from PGP_ACCUMULATOR (threshold payout)
         # Otherwise, it's from GCSplit1 (instant payout)
         context = 'threshold' if unique_id.startswith('acc_') else 'instant'
         print(f"📋 [ENDPOINT_2] Detected context: {context}")
@@ -738,7 +738,7 @@ def payment_completed():
         if context == 'batch' and actual_usdt_received is not None:
             # Extract batch_conversion_id from unique_id (format: batch_{uuid})
             batch_conversion_id = unique_id.replace('batch_', '')
-            print(f"🎯 [ENDPOINT_3] Routing batch callback to GCMicroBatchProcessor")
+            print(f"🎯 [ENDPOINT_3] Routing batch callback to PGP_MICROBATCHPROCESSOR")
             print(f"🆔 [ENDPOINT_3] Batch conversion ID: {batch_conversion_id}")
 
             # Route batch callback
@@ -750,7 +750,7 @@ def payment_completed():
             )
 
         elif context == 'threshold' and actual_usdt_received is not None:
-            print(f"🎯 [ENDPOINT_3] Routing threshold callback to GCAccumulator")
+            print(f"🎯 [ENDPOINT_3] Routing threshold callback to PGP_ACCUMULATOR")
             # TODO: Implement threshold callback routing when needed
             print(f"⚠️ [ENDPOINT_3] Threshold callback not yet implemented")
 
@@ -922,7 +922,7 @@ def retry_callback_check():
             if context == 'batch':
                 # Extract batch_conversion_id from unique_id
                 batch_conversion_id = unique_id.replace('batch_', '')
-                print(f"🎯 [ENDPOINT_4] Routing batch callback to GCMicroBatchProcessor")
+                print(f"🎯 [ENDPOINT_4] Routing batch callback to PGP_MICROBATCHPROCESSOR")
 
                 callback_success = _route_batch_callback(
                     batch_conversion_id=batch_conversion_id,
@@ -947,7 +947,7 @@ def retry_callback_check():
                     }), 500
 
             elif context == 'threshold':
-                print(f"🎯 [ENDPOINT_4] Routing threshold callback to GCAccumulator")
+                print(f"🎯 [ENDPOINT_4] Routing threshold callback to PGP_ACCUMULATOR")
                 # TODO: Implement threshold callback
                 print(f"⚠️ [ENDPOINT_4] Threshold callback not yet implemented")
                 return jsonify({
@@ -981,7 +981,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCHostPay1-10-26 Validator & Orchestrator",
+            "service": "PGP_HOSTPAY1_v1 Validator & Orchestrator",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
@@ -994,7 +994,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCHostPay1-10-26 Validator & Orchestrator",
+            "service": "PGP_HOSTPAY1_v1 Validator & Orchestrator",
             "error": str(e)
         }), 503
 
@@ -1004,5 +1004,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCHostPay1-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_HOSTPAY1_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

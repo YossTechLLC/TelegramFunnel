@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """
-🚀 GCRegisterAPI-10-26: REST API for Channel Registration
+🚀 PGP_WEBAPI_v1: REST API for Channel Registration
 Flask REST API (no templates, JSON-only responses)
 
 Architecture:
-- TypeScript + React SPA frontend (GCRegisterWeb-10-26)
+- TypeScript + React SPA frontend (PGP_WEB_v1)
 - Flask REST API backend (this service)
 - PostgreSQL database (Cloud SQL)
 - JWT authentication (stateless)
@@ -125,7 +125,7 @@ def health():
     """Health check endpoint for Cloud Run"""
     return jsonify({
         'status': 'healthy',
-        'service': 'GCRegisterAPI-10-26 REST API',
+        'service': 'PGP_WEBAPI_v1 REST API',
         'version': '1.0',
         'architecture': 'TypeScript + React SPA → Flask REST API',
         'database': 'PostgreSQL (Cloud SQL)',
@@ -138,7 +138,7 @@ def health():
 def root():
     """Root endpoint providing API information"""
     return jsonify({
-        'service': 'GCRegisterAPI-10-26',
+        'service': 'PGP_WEBAPI_v1',
         'description': 'REST API for Telegram Channel Registration',
         'version': '1.0',
         'endpoints': {
@@ -163,7 +163,7 @@ def root():
             }
         },
         'documentation': 'See GCREGISTER_MODERNIZATION_ARCHITECTURE.md',
-        'frontend': 'GCRegisterWeb-10-26 (Cloud Storage + CDN)',
+        'frontend': 'PGP_WEB_v1 (Cloud Storage + CDN)',
         'cors': 'Enabled for www.paygateprime.com'
     }), 200
 
@@ -222,7 +222,7 @@ def unauthorized_callback(error):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     print("=" * 80)
-    print("🚀 GCRegisterAPI-10-26 Starting")
+    print("🚀 PGP_WEBAPI_v1 Starting")
     print("=" * 80)
     print(f"📍 Port: {port}")
     print(f"🔐 JWT Authentication: Enabled")

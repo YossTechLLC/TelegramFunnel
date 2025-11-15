@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Wallet Manager for GCHostPay3-10-26 (ETH Payment Executor Service).
+Wallet Manager for PGP_HOSTPAY3_v1 (ETH Payment Executor Service).
 Handles Web3 wallet operations with INFINITE RETRY logic.
 
 Implements resilience against:

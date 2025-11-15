@@ -1,3 +1,3 @@
 """
-Tests for TelePay10-26 application.
+Tests for PGP_SERVER_v1 application.
 """

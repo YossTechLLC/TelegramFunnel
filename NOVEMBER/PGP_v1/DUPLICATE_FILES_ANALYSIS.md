@@ -200,7 +200,7 @@ import datetime
 **Differences:**
 
 1. **Enqueue Methods**: Each service has different helper methods
-   - PGP_ORCHESTRATOR_v1: `enqueue_gcwebhook2_telegram_invite()`, `enqueue_gcsplit1_payment_split()`, `enqueue_gcaccumulator_payment()`
+   - PGP_ORCHESTRATOR_v1: `enqueue_gcwebhook2_telegram_invite()`, `enqueue_gcsplit1_payment_split()`, `enqueue_pgp_accumulator_payment()`
    - PGP_ACCUMULATOR_v1: `enqueue_gcsplit2_conversion()`, `enqueue_gcsplit3_eth_to_usdt_swap()`, `enqueue_gchostpay1_execution()`
    - PGP_SPLIT1_v1: `enqueue_gcsplit2_estimate_request()`, `enqueue_gcsplit3_swap_request()`, `enqueue_hostpay_trigger()`
 

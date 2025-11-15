@@ -804,7 +804,7 @@ class TokenManager(BaseTokenManager):
 
     def decrypt_batch_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
-        Decrypt batch token from GCBatchProcessor.
+        Decrypt batch token from PGP_BATCHPROCESSOR.
 
         Token Structure:
         - JSON payload with: batch_id, client_id, wallet_address, payout_currency, payout_network, amount_usdt
@@ -815,7 +815,7 @@ class TokenManager(BaseTokenManager):
             Dictionary with decrypted fields or None if failed
         """
         try:
-            print(f"🔓 [TOKEN_DEC] GCBatchProcessor→GCSplit1: Decrypting batch token")
+            print(f"🔓 [TOKEN_DEC] PGP_BATCHPROCESSOR→GCSplit1: Decrypting batch token")
 
             # Decode base64
             padding = 4 - (len(token) % 4) if len(token) % 4 != 0 else 0

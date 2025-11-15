@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📺 Channel Service for GCRegisterAPI-10-26
+📺 Channel Service for PGP_WEBAPI_v1
 Handles channel CRUD operations
 """
 from typing import List, Optional, Dict

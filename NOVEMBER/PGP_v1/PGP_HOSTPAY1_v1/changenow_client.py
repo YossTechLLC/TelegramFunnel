@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-ChangeNow API Client for GCHostPay1-10-26.
+ChangeNow API Client for PGP_HOSTPAY1_v1.
 Handles ChangeNow transaction status queries to get actual USDT received.
 """
 import requests

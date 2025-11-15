@@ -10,7 +10,7 @@
 
 | Component | Old Service Name | New Service Name | Purpose |
 |-----------|------------------|------------------|---------|
-| Server | `telepay-10-26` | `pgp-server-v1` | Main Telegram bot server |
+| Server | `pgp_server-10-26` | `pgp-server-v1` | Main Telegram bot server |
 | Orchestrator | `gcwebhook1-10-26` | `pgp-orchestrator-v1` | Payment orchestration webhook |
 | Invite | `gcwebhook2-10-26` | `pgp-invite-v1` | Invitation handling webhook |
 | HostPay1 | `gchostpay1-10-26` | `pgp-hostpay1-v1` | Host payment processor 1 |
@@ -19,12 +19,12 @@
 | Split1 | `gcsplit1-10-26` | `pgp-split1-v1` | Payment splitter 1 |
 | Split2 | `gcsplit2-10-26` | `pgp-split2-v1` | Payment splitter 2 |
 | Split3 | `gcsplit3-10-26` | `pgp-split3-v1` | Payment splitter 3 |
-| Accumulator | `gcaccumulator-10-26` | `pgp-accumulator-v1` | Payment accumulator |
-| BatchProcessor | `gcbatchprocessor-10-26` | `pgp-batchprocessor-v1` | Batch payment processor |
-| MicroBatch | `gcmicrobatchprocessor-10-26` | `pgp-microbatch-v1` | Micro batch processor |
-| Broadcast | `gcbroadcastscheduler-10-26` | `pgp-broadcast-v1` | Broadcast scheduler |
-| Notifications | `gcnotificationservice-10-26` | `pgp-notifications-v1` | Notification service |
-| NP IPN | `np-webhook-10-26` | `pgp-np-ipn-v1` | NowPayments IPN webhook |
+| Accumulator | `pgp_accumulator-10-26` | `pgp-accumulator-v1` | Payment accumulator |
+| BatchProcessor | `pgp_batchprocessor-10-26` | `pgp-batchprocessor-v1` | Batch payment processor |
+| MicroBatch | `pgp_microbatchprocessor-10-26` | `pgp-microbatch-v1` | Micro batch processor |
+| Broadcast | `pgp_broadcastscheduler-10-26` | `pgp-broadcast-v1` | Broadcast scheduler |
+| Notifications | `pgp_notificationservice-10-26` | `pgp-notifications-v1` | Notification service |
+| NP IPN | `PGP_NP_IPN_v1` | `pgp-np-ipn-v1` | NowPayments IPN webhook |
 | Web API | `gcregisterapi-10-26` | `pgp-webapi-v1` | Backend REST API |
 | Web Frontend | `gcregisterweb-10-26` | `pgp-web-v1` | Frontend static site |
 
@@ -177,7 +177,7 @@ QUEUE_NAME = f"pgp-orchestrator-queue-v1"
 ## 🔙 **Rollback Plan**
 
 If issues occur:
-1. Old services (`telepay-10-26`, etc.) remain untouched
+1. Old services (`pgp_server-10-26`, etc.) remain untouched
 2. Can switch back by updating:
    - NowPayments IPN URL
    - Telegram webhook URL

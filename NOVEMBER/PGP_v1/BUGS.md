@@ -9,8 +9,8 @@
 ## 2025-11-14 Session 157: ✅ RESOLVED - Flask JSON Parsing Errors (415 & 400)
 
 **Severity:** 🔴 CRITICAL - Production service errors blocking Cloud Scheduler
-**Status:** ✅ RESOLVED (Deployed in gcbroadcastscheduler-10-26-00020-j6n)
-**Service:** GCBroadcastScheduler-10-26
+**Status:** ✅ RESOLVED (Deployed in pgp_broadcastscheduler-10-26-00020-j6n)
+**Service:** PGP_BROADCAST_v1
 **Endpoint:** `POST /api/broadcast/execute`
 
 **Error 1: 415 Unsupported Media Type**
@@ -18,7 +18,7 @@
 2025-11-14 23:46:36,016 - main - ERROR - ❌ Error executing broadcasts: 415 Unsupported Media Type: Did not attempt to load JSON data because the request Content-Type was not 'application/json'.
 
 Traceback (most recent call last):
-  File "/app/main.py", line 143, in execute_broadcasts
+  File "/app/pgp_broadcast_v1.py", line 143, in execute_broadcasts
     data = request.get_json() or {}
   File "/usr/local/lib/python3.11/site-packages/werkzeug/wrappers/request.py", line 604, in get_json
     return self.on_json_loading_failed(None)
@@ -52,7 +52,7 @@ json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 - Cloud Scheduler was configured correctly, but endpoint couldn't handle edge cases
 
 **Affected Code:**
-- File: `GCBroadcastScheduler-10-26/main.py`
+- File: `PGP_BROADCAST_v1/pgp_broadcast_v1.py`
 - Location: Line 143 in `execute_broadcasts()` function
 
 **Before (Problematic):**
@@ -122,7 +122,7 @@ try:
 **Prevention for Future:**
 - Apply `request.get_json(force=True, silent=True)` pattern to ALL API endpoints
 - Document pattern in DECISIONS.md for team reference
-- Review other services: GCNotificationService, GCHostPay, TelePay webhooks
+- Review other services: PGP_NOTIFICATIONS, GCHostPay, TelePay webhooks
 
 **Related Documentation:**
 - ✅ `DECISIONS.md`: Added Flask JSON handling best practice decision
@@ -134,8 +134,8 @@ try:
 ## 2025-11-14 Session 156: ✅ RESOLVED - Missing Environment Variables (3 Total)
 
 **Severity:** 🟡 HIGH - Service initialization errors and warnings
-**Status:** ✅ RESOLVED (Deployed in gcbroadcastscheduler-10-26-00019-nzk)
-**Service:** GCBroadcastScheduler-10-26
+**Status:** ✅ RESOLVED (Deployed in pgp_broadcastscheduler-10-26-00019-nzk)
+**Service:** PGP_BROADCAST_v1
 **Errors:**
 1. `Environment variable BOT_USERNAME_SECRET not set and no default provided`
 2. `Environment variable BROADCAST_MANUAL_INTERVAL_SECRET not set, using default`
@@ -182,11 +182,11 @@ BROADCAST_MANUAL_INTERVAL_SECRET=projects/telepay-459221/secrets/BROADCAST_MANUA
 
 ---
 
-## 2025-11-14 Session 156: ✅ RESOLVED - GCBroadcastScheduler Cursor Context Manager Error
+## 2025-11-14 Session 156: ✅ RESOLVED - PGP_BROADCAST Cursor Context Manager Error
 
 **Severity:** 🔴 CRITICAL - Production service error
-**Status:** ✅ RESOLVED (Deployed in gcbroadcastscheduler-10-26-00018-fgq)
-**Service:** GCBroadcastScheduler-10-26
+**Status:** ✅ RESOLVED (Deployed in pgp_broadcastscheduler-10-26-00018-fgq)
+**Service:** PGP_BROADCAST_v1
 **Error:** `'Cursor' object does not support the context manager protocol`
 
 **Symptom:**
@@ -254,8 +254,8 @@ with engine.connect() as conn:
 - ✅ Database operations healthy
 
 **Deployment:**
-- Build: `gcr.io/telepay-459221/gcbroadcastscheduler-10-26:latest`
-- Revision: `gcbroadcastscheduler-10-26-00013-snr`
+- Build: `gcr.io/telepay-459221/pgp_broadcastscheduler-10-26:latest`
+- Revision: `pgp_broadcastscheduler-10-26-00013-snr`
 - Deployment time: 2025-11-14 23:25:37 UTC
 - Status: LIVE and OPERATIONAL
 
@@ -284,7 +284,7 @@ User sees "Not Configured" button instead of "Resend Notification" after registe
 Channel registration flow only created `main_clients_database` entry. NO `broadcast_manager` entry created. `populate_broadcast_manager.py` was one-time migration, not automated.
 
 **Fix:**
-1. Created `BroadcastService` module (`api/services/broadcast_service.py`)
+1. Created `BroadcastService` module (`api/services/broadcast_pgp_notifications_v1.py`)
 2. Integrated into channel registration with transactional safety
 3. Backfill script executed: 1 entry created for target user (broadcast_id=613acae7-a8a4-4d15-a046-4d6a1b6add49)
 4. Database integrity verification SQL created
@@ -299,7 +299,7 @@ Channel registration flow only created `main_clients_database` entry. NO `broadc
 
 **Date Discovered:** 2025-11-14 Session 154
 **Date Resolved:** 2025-11-14 Session 154
-**Files:** `TelePay10-26/database.py`, `TelePay10-26/subscription_manager.py`
+**Files:** `PGP_SERVER_v1/database.py`, `PGP_SERVER_v1/subscription_manager.py`
 **Severity:** 🔴 CRITICAL - Database queries failing on startup
 **Resolution Time:** Same session (30 minutes)
 
@@ -364,8 +364,8 @@ with self.pool.engine.connect() as conn:
 - All return values unchanged (backward compatible)
 
 **Files Modified:**
-- `TelePay10-26/database.py` - 6 methods fixed
-- `TelePay10-26/subscription_manager.py` - 2 methods fixed
+- `PGP_SERVER_v1/database.py` - 6 methods fixed
+- `PGP_SERVER_v1/subscription_manager.py` - 2 methods fixed
 
 **Expected Behavior After Fix:**
 - ✅ Open channel list fetches successfully on startup
@@ -389,7 +389,7 @@ This complements the Session 153 fix for `CLOUD_SQL_CONNECTION_NAME` - both were
 
 **Date Discovered:** 2025-11-14 Session 153
 **Date Resolved:** 2025-11-14 Session 153
-**File:** `TelePay10-26/database.py`
+**File:** `PGP_SERVER_v1/database.py`
 **Severity:** 🔴 CRITICAL - All database operations failing on startup
 **Resolution Time:** Same session (15 minutes)
 
@@ -459,9 +459,9 @@ self.pool = init_connection_pool({
 ```
 
 **Files Changed:**
-- `TelePay10-26/database.py:64-87` - Added fetch_cloud_sql_connection_name() function
-- `TelePay10-26/database.py:95` - Added DB_CLOUD_SQL_CONNECTION_NAME module variable
-- `TelePay10-26/database.py:119` - Updated init_connection_pool() to use fetched value
+- `PGP_SERVER_v1/database.py:64-87` - Added fetch_cloud_sql_connection_name() function
+- `PGP_SERVER_v1/database.py:95` - Added DB_CLOUD_SQL_CONNECTION_NAME module variable
+- `PGP_SERVER_v1/database.py:119` - Updated init_connection_pool() to use fetched value
 
 **Expected Behavior After Fix:**
 - ✅ Cloud SQL connection string properly fetched from Secret Manager

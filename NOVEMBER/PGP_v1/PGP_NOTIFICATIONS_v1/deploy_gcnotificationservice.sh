@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deploy GCNotificationService to Cloud Run
+# Deploy PGP_NOTIFICATIONS to Cloud Run
 # This script deploys the notification webhook service with all required configurations
 
 set -e  # Exit on error
@@ -10,11 +10,11 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}📬 Deploying GCNotificationService to Cloud Run...${NC}"
+echo -e "${GREEN}📬 Deploying PGP_NOTIFICATIONS to Cloud Run...${NC}"
 
 # Configuration variables
 PROJECT_ID="telepay-459221"
-SERVICE_NAME="gcnotificationservice-10-26"
+SERVICE_NAME="pgp_notificationservice-10-26"
 REGION="us-central1"
 SERVICE_ACCOUNT="291176869049-compute@developer.gserviceaccount.com"
 
@@ -76,4 +76,4 @@ echo "    curl -X POST ${SERVICE_URL}/test-notification \\"
 echo "      -H \"Content-Type: application/json\" \\"
 echo "      -d '{\"chat_id\": YOUR_CHAT_ID, \"channel_title\": \"Test Channel\"}'"
 echo ""
-echo -e "${GREEN}📬 GCNotificationService is ready!${NC}"
+echo -e "${GREEN}📬 PGP_NOTIFICATIONS is ready!${NC}"

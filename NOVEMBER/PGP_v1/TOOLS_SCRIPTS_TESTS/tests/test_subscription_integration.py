@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 
 # Add parent directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', '..', 'OCTOBER', '10-26', 'TelePay10-26'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', '..', 'OCTOBER', '10-26', 'PGP_SERVER_v1'))
 
 def test_subscription_expiration_workflow():
     """Test complete subscription expiration workflow with database."""

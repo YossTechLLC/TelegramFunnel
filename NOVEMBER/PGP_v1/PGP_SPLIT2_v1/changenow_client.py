@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-ChangeNow API Client with Infinite Retry Logic for GCSplit2-10-26.
+ChangeNow API Client with Infinite Retry Logic for PGP_SPLIT2_v1.
 Handles USDT→ETH estimate requests with automatic retry on failures.
 """
 import requests

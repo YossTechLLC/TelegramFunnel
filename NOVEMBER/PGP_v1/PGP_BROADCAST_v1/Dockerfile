@@ -1,4 +1,4 @@
-# GCBroadcastScheduler-10-26 Dockerfile
+# PGP_BROADCAST_v1 Dockerfile
 # Optimized for Cloud Run deployment
 # Python 3.11 slim base image
 

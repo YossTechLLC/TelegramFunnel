@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCSplit3-10-26: ETH→ClientCurrency Swapper Service
+PGP_SPLIT3_v1: ETH→ClientCurrency Swapper Service
 Receives encrypted tokens from GCSplit1, creates ChangeNow fixed-rate transactions (ETH→ClientCurrency),
 and returns encrypted responses back to GCSplit1 via Cloud Tasks.
 Implements infinite retry logic for resilience against API failures.
@@ -18,7 +18,7 @@ from changenow_client import ChangeNowClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCSplit3-10-26 ETH→Client Swapper Service")
+print(f"🚀 [APP] Initializing PGP_SPLIT3_v1 ETH→Client Swapper Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -241,10 +241,10 @@ def process_eth_to_usdt_swap():
     New endpoint for creating ETH→USDT swaps (threshold payout accumulation).
 
     Flow:
-    1. Decrypt token from GCAccumulator
+    1. Decrypt token from PGP_ACCUMULATOR
     2. Create ChangeNow fixed-rate transaction (ETH→USDT)
     3. Encrypt response token with transaction details
-    4. Enqueue Cloud Task back to GCAccumulator
+    4. Enqueue Cloud Task back to PGP_ACCUMULATOR
 
     This endpoint mirrors the existing `/` endpoint but for USDT target currency.
 
@@ -252,7 +252,7 @@ def process_eth_to_usdt_swap():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT] ETH→USDT swap request received (from GCAccumulator)")
+        print(f"🎯 [ENDPOINT] ETH→USDT swap request received (from PGP_ACCUMULATOR)")
 
         # Parse JSON payload
         try:
@@ -324,7 +324,7 @@ def process_eth_to_usdt_swap():
         print(f"💰 [ENDPOINT] From: ${api_from_amount} ETH (USD equivalent)")
         print(f"💰 [ENDPOINT] To: ${api_to_amount} USDT")
 
-        # Encrypt response token for GCAccumulator
+        # Encrypt response token for PGP_ACCUMULATOR
         encrypted_response_token = token_manager.encrypt_gcsplit3_to_accumulator_token(
             accumulation_id=accumulation_id,
             client_id=client_id,
@@ -339,21 +339,21 @@ def process_eth_to_usdt_swap():
             print(f"❌ [ENDPOINT] Failed to encrypt response token")
             abort(500, "Token encryption failed")
 
-        # Enqueue Cloud Task back to GCAccumulator
+        # Enqueue Cloud Task back to PGP_ACCUMULATOR
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        gcaccumulator_response_queue = config.get('gcaccumulator_response_queue')
-        gcaccumulator_url = config.get('gcaccumulator_url')
+        pgp_accumulator_response_queue = config.get('pgp_accumulator_response_queue')
+        pgp_accumulator_url = config.get('pgp_accumulator_url')
 
-        if not gcaccumulator_response_queue or not gcaccumulator_url:
-            print(f"❌ [ENDPOINT] GCAccumulator configuration missing")
+        if not pgp_accumulator_response_queue or not pgp_accumulator_url:
+            print(f"❌ [ENDPOINT] PGP_ACCUMULATOR configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_accumulator_swap_response(
-            queue_name=gcaccumulator_response_queue,
-            target_url=f"{gcaccumulator_url}/swap-created",
+            queue_name=pgp_accumulator_response_queue,
+            target_url=f"{pgp_accumulator_url}/swap-created",
             encrypted_token=encrypted_response_token
         )
 
@@ -361,7 +361,7 @@ def process_eth_to_usdt_swap():
             print(f"❌ [ENDPOINT] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT] Successfully enqueued response to GCAccumulator")
+        print(f"✅ [ENDPOINT] Successfully enqueued response to PGP_ACCUMULATOR")
         print(f"🆔 [ENDPOINT] Task: {task_name}")
 
         return jsonify({
@@ -392,7 +392,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCSplit3-10-26 ETH→Client Swapper",
+            "service": "PGP_SPLIT3_v1 ETH→Client Swapper",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
@@ -405,7 +405,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCSplit3-10-26 ETH→Client Swapper",
+            "service": "PGP_SPLIT3_v1 ETH→Client Swapper",
             "error": str(e)
         }), 503
 
@@ -415,5 +415,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCSplit3-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_SPLIT3_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

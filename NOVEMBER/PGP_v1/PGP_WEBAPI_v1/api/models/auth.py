@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-🔐 Authentication Models for GCRegisterAPI-10-26
+🔐 Authentication Models for PGP_WEBAPI_v1
 Pydantic models for authentication requests and responses
 """
 from pydantic import BaseModel, EmailStr, field_validator

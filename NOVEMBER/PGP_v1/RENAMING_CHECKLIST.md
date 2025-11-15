@@ -12,23 +12,23 @@
 
 | Old Name | New Name | Main File Old | Main File New |
 |----------|----------|---------------|---------------|
-| GCAccumulator-10-26 | PGP_ACCUMULATOR_v1 | acc10-26.py | pgp_accumulator_v1.py |
-| GCBatchProcessor-10-26 | PGP_BATCHPROCESSOR_v1 | batch10-26.py | pgp_batchprocessor_v1.py |
-| GCRegisterWeb-10-26 | PGP_WEB_v1 | (static files) | (static files) |
-| GCRegisterAPI-10-26 | PGP_WEBAPI_v1 | app.py | pgp_webapi_v1.py |
-| np-webhook-10-26 | PGP_NP_IPN_v1 | app.py | pgp_np_ipn_v1.py |
-| GCNotificationService-10-26 | PGP_NOTIFICATIONS_v1 | service.py | pgp_notifications_v1.py |
-| GCMicroBatchProcessor-10-26 | PGP_MICROBATCHPROCESSOR_v1 | microbatch10-26.py | pgp_microbatchprocessor_v1.py |
-| GCWebhook2-10-26 | PGP_INVITE_v1 | tph2-10-26.py | pgp_invite_v1.py |
-| GCWebhook1-10-26 | PGP_ORCHESTRATOR_v1 | tph1-10-26.py | pgp_orchestrator_v1.py |
-| GCBroadcastScheduler-10-26 | PGP_BROADCAST_v1 | main.py | pgp_broadcast_v1.py |
-| GCSplit3-10-26 | PGP_SPLIT3_v1 | tps3-10-26.py | pgp_split3_v1.py |
-| GCSplit2-10-26 | PGP_SPLIT2_v1 | tps2-10-26.py | pgp_split2_v1.py |
-| GCSplit1-10-26 | PGP_SPLIT1_v1 | tps1-10-26.py | pgp_split1_v1.py |
-| GCHostPay3-10-26 | PGP_HOSTPAY3_v1 | tphp3-10-26.py | pgp_hostpay3_v1.py |
-| GCHostPay2-10-26 | PGP_HOSTPAY2_v1 | tphp2-10-26.py | pgp_hostpay2_v1.py |
-| GCHostPay1-10-26 | PGP_HOSTPAY1_v1 | tphp1-10-26.py | pgp_hostpay1_v1.py |
-| TelePay10-26 | PGP_SERVER_v1 | telepay10-26.py | pgp_server_v1.py |
+| PGP_ACCUMULATOR_v1 | PGP_ACCUMULATOR_v1 | pgp_accumulator_v1.py | pgp_accumulator_v1.py |
+| PGP_BATCHPROCESSOR_v1 | PGP_BATCHPROCESSOR_v1 | pgp_batchprocessor_v1.py | pgp_batchprocessor_v1.py |
+| PGP_WEB_v1 | PGP_WEB_v1 | (static files) | (static files) |
+| PGP_WEBAPI_v1 | PGP_WEBAPI_v1 | app.py | pgp_webapi_v1.py |
+| PGP_NP_IPN_v1 | PGP_NP_IPN_v1 | app.py | pgp_np_ipn_v1.py |
+| PGP_NOTIFICATIONS_v1 | PGP_NOTIFICATIONS_v1 | pgp_notifications_v1.py | pgp_notifications_v1.py |
+| PGP_MICROBATCHPROCESSOR_v1 | PGP_MICROBATCHPROCESSOR_v1 | micropgp_batchprocessor_v1.py | pgp_microbatchprocessor_v1.py |
+| PGP_INVITE_v1 | PGP_INVITE_v1 | pgp_invite_v1.py | pgp_invite_v1.py |
+| PGP_ORCHESTRATOR_v1 | PGP_ORCHESTRATOR_v1 | pgp_orchestrator_v1.py | pgp_orchestrator_v1.py |
+| PGP_BROADCAST_v1 | PGP_BROADCAST_v1 | pgp_broadcast_v1.py | pgp_broadcast_v1.py |
+| PGP_SPLIT3_v1 | PGP_SPLIT3_v1 | pgp_split3_v1.py | pgp_split3_v1.py |
+| PGP_SPLIT2_v1 | PGP_SPLIT2_v1 | pgp_split2_v1.py | pgp_split2_v1.py |
+| PGP_SPLIT1_v1 | PGP_SPLIT1_v1 | pgp_split1_v1.py | pgp_split1_v1.py |
+| PGP_HOSTPAY3_v1 | PGP_HOSTPAY3_v1 | pgp_hostpay3_v1.py | pgp_hostpay3_v1.py |
+| PGP_HOSTPAY2_v1 | PGP_HOSTPAY2_v1 | pgp_hostpay2_v1.py | pgp_hostpay2_v1.py |
+| PGP_HOSTPAY1_v1 | PGP_HOSTPAY1_v1 | pgp_hostpay1_v1.py | pgp_hostpay1_v1.py |
+| PGP_SERVER_v1 | PGP_SERVER_v1 | pgp_server_v1.py | pgp_server_v1.py |
 
 ---
 
@@ -37,60 +37,60 @@
 ### 1.1 Dockerfile Updates (17 services)
 
 #### ☐ PGP_ACCUMULATOR_v1
-- [ ] Update `COPY acc10-26.py .` → `COPY pgp_accumulator_v1.py .`
-- [ ] Update `CMD ["python", "acc10-26.py"]` → `CMD ["python", "pgp_accumulator_v1.py"]`
+- [ ] Update `COPY pgp_accumulator_v1.py .` → `COPY pgp_accumulator_v1.py .`
+- [ ] Update `CMD ["python", "pgp_accumulator_v1.py"]` → `CMD ["python", "pgp_accumulator_v1.py"]`
 
 #### ☐ PGP_BATCHPROCESSOR_v1
-- [ ] Update `COPY batch10-26.py .` → `COPY pgp_batchprocessor_v1.py .`
-- [ ] Update `CMD ["python", "batch10-26.py"]` → `CMD ["python", "pgp_batchprocessor_v1.py"]`
+- [ ] Update `COPY pgp_batchprocessor_v1.py .` → `COPY pgp_batchprocessor_v1.py .`
+- [ ] Update `CMD ["python", "pgp_batchprocessor_v1.py"]` → `CMD ["python", "pgp_batchprocessor_v1.py"]`
 
 #### ☐ PGP_ORCHESTRATOR_v1
-- [ ] Update `COPY tph1-10-26.py .` → `COPY pgp_orchestrator_v1.py .`
-- [ ] Update `CMD ["python", "tph1-10-26.py"]` → `CMD ["python", "pgp_orchestrator_v1.py"]`
+- [ ] Update `COPY pgp_orchestrator_v1.py .` → `COPY pgp_orchestrator_v1.py .`
+- [ ] Update `CMD ["python", "pgp_orchestrator_v1.py"]` → `CMD ["python", "pgp_orchestrator_v1.py"]`
 
 #### ☐ PGP_INVITE_v1
-- [ ] Update `COPY tph2-10-26.py .` → `COPY pgp_invite_v1.py .`
-- [ ] Update `CMD ["python", "tph2-10-26.py"]` → `CMD ["python", "pgp_invite_v1.py"]`
+- [ ] Update `COPY pgp_invite_v1.py .` → `COPY pgp_invite_v1.py .`
+- [ ] Update `CMD ["python", "pgp_invite_v1.py"]` → `CMD ["python", "pgp_invite_v1.py"]`
 
 #### ☐ PGP_HOSTPAY1_v1
-- [ ] Update `COPY tphp1-10-26.py .` → `COPY pgp_hostpay1_v1.py .`
-- [ ] Update `CMD ["python", "tphp1-10-26.py"]` → `CMD ["python", "pgp_hostpay1_v1.py"]`
+- [ ] Update `COPY pgp_hostpay1_v1.py .` → `COPY pgp_hostpay1_v1.py .`
+- [ ] Update `CMD ["python", "pgp_hostpay1_v1.py"]` → `CMD ["python", "pgp_hostpay1_v1.py"]`
 
 #### ☐ PGP_HOSTPAY2_v1
-- [ ] Update `COPY tphp2-10-26.py .` → `COPY pgp_hostpay2_v1.py .`
-- [ ] Update `CMD ["python", "tphp2-10-26.py"]` → `CMD ["python", "pgp_hostpay2_v1.py"]`
+- [ ] Update `COPY pgp_hostpay2_v1.py .` → `COPY pgp_hostpay2_v1.py .`
+- [ ] Update `CMD ["python", "pgp_hostpay2_v1.py"]` → `CMD ["python", "pgp_hostpay2_v1.py"]`
 
 #### ☐ PGP_HOSTPAY3_v1
-- [ ] Update `COPY tphp3-10-26.py .` → `COPY pgp_hostpay3_v1.py .`
-- [ ] Update `CMD ["python", "tphp3-10-26.py"]` → `CMD ["python", "pgp_hostpay3_v1.py"]`
+- [ ] Update `COPY pgp_hostpay3_v1.py .` → `COPY pgp_hostpay3_v1.py .`
+- [ ] Update `CMD ["python", "pgp_hostpay3_v1.py"]` → `CMD ["python", "pgp_hostpay3_v1.py"]`
 
 #### ☐ PGP_SPLIT1_v1
-- [ ] Update `COPY tps1-10-26.py .` → `COPY pgp_split1_v1.py .`
-- [ ] Update `CMD ["python", "tps1-10-26.py"]` → `CMD ["python", "pgp_split1_v1.py"]`
+- [ ] Update `COPY pgp_split1_v1.py .` → `COPY pgp_split1_v1.py .`
+- [ ] Update `CMD ["python", "pgp_split1_v1.py"]` → `CMD ["python", "pgp_split1_v1.py"]`
 
 #### ☐ PGP_SPLIT2_v1
-- [ ] Update `COPY tps2-10-26.py .` → `COPY pgp_split2_v1.py .`
-- [ ] Update `CMD ["python", "tps2-10-26.py"]` → `CMD ["python", "pgp_split2_v1.py"]`
+- [ ] Update `COPY pgp_split2_v1.py .` → `COPY pgp_split2_v1.py .`
+- [ ] Update `CMD ["python", "pgp_split2_v1.py"]` → `CMD ["python", "pgp_split2_v1.py"]`
 
 #### ☐ PGP_SPLIT3_v1
-- [ ] Update `COPY tps3-10-26.py .` → `COPY pgp_split3_v1.py .`
-- [ ] Update `CMD ["python", "tps3-10-26.py"]` → `CMD ["python", "pgp_split3_v1.py"]`
+- [ ] Update `COPY pgp_split3_v1.py .` → `COPY pgp_split3_v1.py .`
+- [ ] Update `CMD ["python", "pgp_split3_v1.py"]` → `CMD ["python", "pgp_split3_v1.py"]`
 
 #### ☐ PGP_MICROBATCHPROCESSOR_v1
-- [ ] Update `COPY microbatch10-26.py .` → `COPY pgp_microbatchprocessor_v1.py .`
-- [ ] Update `CMD ["python", "microbatch10-26.py"]` → `CMD ["python", "pgp_microbatchprocessor_v1.py"]`
+- [ ] Update `COPY micropgp_batchprocessor_v1.py .` → `COPY pgp_microbatchprocessor_v1.py .`
+- [ ] Update `CMD ["python", "micropgp_batchprocessor_v1.py"]` → `CMD ["python", "pgp_microbatchprocessor_v1.py"]`
 
 #### ☐ PGP_SERVER_v1
-- [ ] Update `COPY telepay10-26.py .` → `COPY pgp_server_v1.py .`
-- [ ] Update `CMD ["python", "telepay10-26.py"]` → `CMD ["python", "pgp_server_v1.py"]`
+- [ ] Update `COPY pgp_server_v1.py .` → `COPY pgp_server_v1.py .`
+- [ ] Update `CMD ["python", "pgp_server_v1.py"]` → `CMD ["python", "pgp_server_v1.py"]`
 
 #### ☐ PGP_BROADCAST_v1
-- [ ] Update `COPY main.py .` → `COPY pgp_broadcast_v1.py .`
-- [ ] Update `CMD ["python", "main.py"]` → `CMD ["python", "pgp_broadcast_v1.py"]`
+- [ ] Update `COPY pgp_broadcast_v1.py .` → `COPY pgp_broadcast_v1.py .`
+- [ ] Update `CMD ["python", "pgp_broadcast_v1.py"]` → `CMD ["python", "pgp_broadcast_v1.py"]`
 
 #### ☐ PGP_NOTIFICATIONS_v1
-- [ ] Update `COPY service.py .` → `COPY pgp_notifications_v1.py .`
-- [ ] Update `CMD ["python", "service.py"]` → `CMD ["python", "pgp_notifications_v1.py"]`
+- [ ] Update `COPY pgp_notifications_v1.py .` → `COPY pgp_notifications_v1.py .`
+- [ ] Update `CMD ["python", "pgp_notifications_v1.py"]` → `CMD ["python", "pgp_notifications_v1.py"]`
 
 #### ☐ PGP_NP_IPN_v1
 - [ ] Update `COPY app.py .` → `COPY pgp_np_ipn_v1.py .`
@@ -119,7 +119,7 @@
 - [ ] Search for `from tps2-10-26 import`
 - [ ] Search for `from tps3-10-26 import`
 - [ ] Search for `from microbatch10-26 import`
-- [ ] Search for `from telepay10-26 import`
+- [ ] Search for `from pgp_server10-26 import`
 - [ ] Search for `from service import` (in notifications context)
 - [ ] Search for `from main import` (in broadcast context)
 - [ ] Search for `from app import` (in webapi/np_ipn context)
@@ -131,11 +131,11 @@
 ### 2.1 Service URL References
 
 #### ☐ Update Google Cloud Run Service Names
-**Old naming pattern:** `telepay-10-26`, `gcwebhook1-10-26`, etc.
+**Old naming pattern:** `pgp_server-10-26`, `gcwebhook1-10-26`, etc.
 **New naming pattern:** TBD - Need to define
 
 Potential new service names:
-- [ ] `telepay-10-26` → `pgp-server-v1` or `telepay-server-v1`?
+- [ ] `pgp_server-10-26` → `pgp-server-v1` or `pgp_server-server-v1`?
 - [ ] `gcwebhook1-10-26` → `pgp-orchestrator-v1`?
 - [ ] `gcwebhook2-10-26` → `pgp-invite-v1`?
 - [ ] `gchostpay1-10-26` → `pgp-hostpay1-v1`?
@@ -144,12 +144,12 @@ Potential new service names:
 - [ ] `gcsplit1-10-26` → `pgp-split1-v1`?
 - [ ] `gcsplit2-10-26` → `pgp-split2-v1`?
 - [ ] `gcsplit3-10-26` → `pgp-split3-v1`?
-- [ ] `gcbatchprocessor-10-26` → `pgp-batchprocessor-v1`?
-- [ ] `gcaccumulator-10-26` → `pgp-accumulator-v1`?
-- [ ] `gcmicrobatchprocessor-10-26` → `pgp-microbatchprocessor-v1`?
-- [ ] `gcbroadcastscheduler-10-26` → `pgp-broadcast-v1`?
-- [ ] `gcnotificationservice-10-26` → `pgp-notifications-v1`?
-- [ ] `np-webhook-10-26` → `pgp-np-ipn-v1`?
+- [ ] `pgp_batchprocessor-10-26` → `pgp-batchprocessor-v1`?
+- [ ] `pgp_accumulator-10-26` → `pgp-accumulator-v1`?
+- [ ] `pgp_microbatchprocessor-10-26` → `pgp-microbatchprocessor-v1`?
+- [ ] `pgp_broadcastscheduler-10-26` → `pgp-broadcast-v1`?
+- [ ] `pgp_notificationservice-10-26` → `pgp-notifications-v1`?
+- [ ] `PGP_NP_IPN_v1` → `pgp-np-ipn-v1`?
 - [ ] `gcregisterapi-10-26` → `pgp-webapi-v1`?
 - [ ] `gcregisterweb-10-26` → `pgp-web-v1`?
 
@@ -188,10 +188,10 @@ Potential new service names:
 
 ### 3.1 Shell Script Updates
 
-#### ☐ deploy_telepay_bot.sh
-- [ ] Update `SERVICE_NAME="telepay-10-26"` → `SERVICE_NAME="pgp-server-v1"`
+#### ☐ deploy_pgp_server_bot.sh
+- [ ] Update `SERVICE_NAME="pgp_server-10-26"` → `SERVICE_NAME="pgp-server-v1"`
 - [ ] Update `SOURCE_DIR` path to `NOVEMBER/PGP_v1/PGP_SERVER_v1`
-- [ ] Update file existence checks (notification_service.py, server_manager.py)
+- [ ] Update file existence checks (notification_pgp_notifications_v1.py, server_manager.py)
 
 #### ☐ deploy_np_webhook.sh
 - [ ] Update service name references
@@ -229,7 +229,7 @@ Potential new service names:
 - [ ] Update notifications service name
 - [ ] Update SOURCE_DIR path to `NOVEMBER/PGP_v1/PGP_NOTIFICATIONS_v1`
 
-#### ☐ deploy_gcbroadcastservice_message_tracking.sh
+#### ☐ deploy_pgp_broadcastservice_message_tracking.sh
 - [ ] Update broadcast service name
 - [ ] Update SOURCE_DIR path
 
@@ -353,7 +353,7 @@ Potential new service names:
 
 **Options:**
 - A) `pgp-server-v1`, `pgp-orchestrator-v1`, etc. (matches folder names)
-- B) `telepay-server-v1`, `telepay-orchestrator-v1`, etc. (keeps telepay prefix)
+- B) `pgp_server-server-v1`, `pgp_server-orchestrator-v1`, etc. (keeps pgp_server prefix)
 - C) Something else?
 
 **Current Status:** ⏳ AWAITING DECISION

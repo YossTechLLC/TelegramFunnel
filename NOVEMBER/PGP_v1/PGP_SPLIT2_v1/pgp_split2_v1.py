@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCSplit2-10-26: USDT→ETH Estimator Service
+PGP_SPLIT2_v1: USDT→ETH Estimator Service
 Receives encrypted tokens from GCSplit1, calls ChangeNow API for USDT→ETH estimates,
 and returns encrypted responses back to GCSplit1 via Cloud Tasks.
 Implements infinite retry logic for resilience against API failures.
@@ -20,7 +20,7 @@ from changenow_client import ChangeNowClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCSplit2-10-26 USDT→ETH Estimator Service")
+print(f"🚀 [APP] Initializing PGP_SPLIT2_v1 USDT→ETH Estimator Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -228,7 +228,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCSplit2-10-26 USDT→ETH Estimator",
+            "service": "PGP_SPLIT2_v1 USDT→ETH Estimator",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
@@ -241,7 +241,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCSplit2-10-26 USDT→ETH Estimator",
+            "service": "PGP_SPLIT2_v1 USDT→ETH Estimator",
             "error": str(e)
         }), 503
 
@@ -251,5 +251,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCSplit2-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_SPLIT2_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

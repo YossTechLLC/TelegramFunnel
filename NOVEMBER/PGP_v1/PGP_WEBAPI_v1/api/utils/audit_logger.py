@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📋 Audit Logger for GCRegisterAPI-10-26
+📋 Audit Logger for PGP_WEBAPI_v1
 Security event logging for authentication and verification flows
 """
 from datetime import datetime

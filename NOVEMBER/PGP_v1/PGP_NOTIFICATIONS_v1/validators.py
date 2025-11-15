@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-✅ Validators for GCNotificationService
+✅ Validators for PGP_NOTIFICATIONS
 Input validation utilities
 """
 from typing import Dict, Any, List

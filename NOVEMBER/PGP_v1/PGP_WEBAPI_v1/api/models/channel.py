@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📺 Channel Models for GCRegisterAPI-10-26
+📺 Channel Models for PGP_WEBAPI_v1
 Pydantic models for channel registration and management
 """
 from pydantic import BaseModel, field_validator

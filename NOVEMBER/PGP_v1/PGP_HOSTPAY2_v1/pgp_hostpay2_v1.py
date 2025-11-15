@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCHostPay2-10-26: ChangeNow Status Checker Service
+PGP_HOSTPAY2_v1: ChangeNow Status Checker Service
 Receives status check requests from GCHostPay1, checks ChangeNow API status
 with INFINITE RETRY logic, and returns response back to GCHostPay1.
 
@@ -18,7 +18,7 @@ from changenow_client import ChangeNowClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCHostPay2-10-26 ChangeNow Status Checker Service")
+print(f"🚀 [APP] Initializing PGP_HOSTPAY2_v1 ChangeNow Status Checker Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -215,7 +215,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCHostPay2-10-26 ChangeNow Status Checker",
+            "service": "PGP_HOSTPAY2_v1 ChangeNow Status Checker",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
@@ -228,7 +228,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCHostPay2-10-26 ChangeNow Status Checker",
+            "service": "PGP_HOSTPAY2_v1 ChangeNow Status Checker",
             "error": str(e)
         }), 503
 
@@ -238,5 +238,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCHostPay2-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_HOSTPAY2_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

@@ -132,7 +132,7 @@ class CloudTasksClient(BaseCloudTasksClient):
             print(f"❌ [CLOUD_TASKS] Error enqueueing payment split: {e}")
             return None
 
-    def enqueue_gcaccumulator_payment(
+    def enqueue_pgp_accumulator_payment(
         self,
         queue_name: str,
         target_url: str,
@@ -148,7 +148,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         nowpayments_outcome_amount: str = None
     ) -> Optional[str]:
         """
-        Enqueue a payment accumulation request to PGP_ACCUMULATOR (formerly GCAccumulator).
+        Enqueue a payment accumulation request to PGP_ACCUMULATOR (formerly PGP_ACCUMULATOR).
 
         Args:
             queue_name: Queue name (e.g., "pgp-accumulator-queue")

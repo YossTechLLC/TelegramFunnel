@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-💳 Payment Service for TelePay10-26
+💳 Payment Service for PGP_SERVER_v1
 Handles NowPayments integration for invoice creation and payment tracking.
 Extracted from start_np_gateway.py for better modularity.
 

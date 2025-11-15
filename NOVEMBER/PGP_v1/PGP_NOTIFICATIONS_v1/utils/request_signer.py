@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Request signing utility for outbound requests to TelePay10-26.
+Request signing utility for outbound requests to PGP_SERVER_v1.
 Uses HMAC-SHA256 for cryptographic signing of webhook requests.
 """
 import hmac

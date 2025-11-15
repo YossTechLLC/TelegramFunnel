@@ -1,7 +1,7 @@
 # Event Loop Fix - Implementation Summary
 
 **Date:** 2025-11-14
-**Service:** GCNotificationService-10-26
+**Service:** PGP_NOTIFICATIONS_v1
 **Issue:** `RuntimeError('Event loop is closed')` on second notification
 **Status:** ✅ FIXED - Ready for deployment
 
@@ -92,19 +92,19 @@ def close(self):
 ## Backup Created
 
 **Backup File:** `telegram_client.py.backup-20251114-HHMMSS`
-**Location:** `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26/`
+**Location:** `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/`
 
 ---
 
 ## Deployment Command
 
 ```bash
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1
 
 # Build and deploy in one command
-gcloud builds submit --tag gcr.io/telepay-459221/gcnotificationservice-10-26 && \
-gcloud run deploy gcnotificationservice-10-26 \
-  --image gcr.io/telepay-459221/gcnotificationservice-10-26 \
+gcloud builds submit --tag gcr.io/telepay-459221/pgp_notificationservice-10-26 && \
+gcloud run deploy pgp_notificationservice-10-26 \
+  --image gcr.io/telepay-459221/pgp_notificationservice-10-26 \
   --region us-central1 \
   --platform managed \
   --allow-unauthenticated \
@@ -118,14 +118,14 @@ gcloud run deploy gcnotificationservice-10-26 \
 
 ### 1. Health Check
 ```bash
-curl https://gcnotificationservice-10-26-291176869049.us-central1.run.app/health
+curl https://pgp_notificationservice-10-26-291176869049.us-central1.run.app/health
 ```
 
-**Expected:** `{"status":"healthy","service":"GCNotificationService","version":"1.0"}`
+**Expected:** `{"status":"healthy","service":"PGP_NOTIFICATIONS","version":"1.0"}`
 
 ### 2. First Notification (Should Work)
 ```bash
-curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.app/send-notification \
+curl -X POST https://pgp_notificationservice-10-26-291176869049.us-central1.run.app/send-notification \
   -H "Content-Type: application/json" \
   -d '{
     "open_channel_id": "-1003202734748",
@@ -147,7 +147,7 @@ curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.ap
 
 ### 3. Second Notification (THIS IS THE FIX TEST)
 ```bash
-curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.app/send-notification \
+curl -X POST https://pgp_notificationservice-10-26-291176869049.us-central1.run.app/send-notification \
   -H "Content-Type: application/json" \
   -d '{
     "open_channel_id": "-1003202734748",
@@ -167,7 +167,7 @@ curl -X POST https://gcnotificationservice-10-26-291176869049.us-central1.run.ap
 
 ### 4. Monitor Logs
 ```bash
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=gcnotificationservice-10-26" \
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=pgp_notificationservice-10-26" \
   --limit 50 \
   --format "table(timestamp, textPayload)" \
   --freshness=10m
@@ -195,14 +195,14 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 
 ```bash
 # Restore backup
-cp /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py.backup-* \
-   /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py
+cp /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/telegram_client.py.backup-* \
+   /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/telegram_client.py
 
 # Redeploy
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCNotificationService-10-26
-gcloud builds submit --tag gcr.io/telepay-459221/gcnotificationservice-10-26 && \
-gcloud run deploy gcnotificationservice-10-26 \
-  --image gcr.io/telepay-459221/gcnotificationservice-10-26 \
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NOTIFICATIONS_v1
+gcloud builds submit --tag gcr.io/telepay-459221/pgp_notificationservice-10-26 && \
+gcloud run deploy pgp_notificationservice-10-26 \
+  --image gcr.io/telepay-459221/pgp_notificationservice-10-26 \
   --region us-central1
 ```
 

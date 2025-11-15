@@ -114,8 +114,8 @@ def main():
     print("=" * 80)
     print()
     print("Next steps:")
-    print("1. Deploy updated np-webhook-10-26 service")
-    print("2. Deploy updated GCWebhook2-10-26 service")
+    print("1. Deploy updated PGP_NP_IPN_v1 service")
+    print("2. Deploy updated PGP_INVITE_v1 service")
     print("3. Test with new payment")
     print("4. Verify price_amount is captured and validated correctly")
 

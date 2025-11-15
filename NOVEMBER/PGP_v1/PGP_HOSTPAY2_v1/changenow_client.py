@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-ChangeNow API Client for GCHostPay2-10-26 (ChangeNow Status Checker Service).
+ChangeNow API Client for PGP_HOSTPAY2_v1 (ChangeNow Status Checker Service).
 Handles ChangeNow API status check requests with infinite retry logic.
 
 Implements resilience against:

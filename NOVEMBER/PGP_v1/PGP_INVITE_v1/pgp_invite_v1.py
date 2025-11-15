@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCWebhook2-10-26: Telegram Invite Sender Service
+PGP_INVITE_v1: Telegram Invite Sender Service
 Receives encrypted tokens from GCWebhook1 via Cloud Tasks,
 sends Telegram one-time invitation links to users.
 Implements infinite retry via Cloud Tasks (60s fixed backoff, 24h max duration).
@@ -36,7 +36,7 @@ from database_manager import DatabaseManager
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCWebhook2-10-26 Telegram Invite Sender Service")
+print(f"🚀 [APP] Initializing PGP_INVITE_v1 Telegram Invite Sender Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -377,7 +377,7 @@ def health_check():
 
         return jsonify({
             "status": "healthy" if all_healthy else "degraded",
-            "service": "GCWebhook2-10-26 Telegram Invite Sender (with Payment Validation)",
+            "service": "PGP_INVITE_v1 Telegram Invite Sender (with Payment Validation)",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
@@ -390,7 +390,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCWebhook2-10-26 Telegram Invite Sender (with Payment Validation)",
+            "service": "PGP_INVITE_v1 Telegram Invite Sender (with Payment Validation)",
             "error": str(e)
         }), 503
 
@@ -400,5 +400,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCWebhook2-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_INVITE_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

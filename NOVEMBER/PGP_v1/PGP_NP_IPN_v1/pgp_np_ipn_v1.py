@@ -123,7 +123,7 @@ CLOUD_TASKS_LOCATION = (os.getenv('CLOUD_TASKS_LOCATION') or '').strip() or None
 PGP_ORCHESTRATOR_QUEUE = (os.getenv('PGP_ORCHESTRATOR_QUEUE') or '').strip() or None
 PGP_ORCHESTRATOR_URL = (os.getenv('PGP_ORCHESTRATOR_URL') or '').strip() or None
 
-# 🆕 GCNotificationService URL for payment notifications (GCNotificationService_REFACTORING_ARCHITECTURE)
+# 🆕 PGP_NOTIFICATIONS URL for payment notifications (PGP_NOTIFICATIONS_REFACTORING_ARCHITECTURE)
 GCNOTIFICATIONSERVICE_URL = (os.getenv('GCNOTIFICATIONSERVICE_URL') or '').strip() or None
 
 print(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
@@ -934,7 +934,7 @@ def handle_ipn():
                                         print(f"✅ [ORCHESTRATION] Successfully enqueued to GCWebhook1")
                                         print(f"🆔 [ORCHESTRATION] Task: {task_name}")
 
-                                        # 🆕 Trigger notification service via GCNotificationService (GCNotificationService_REFACTORING_ARCHITECTURE)
+                                        # 🆕 Trigger notification service via PGP_NOTIFICATIONS (PGP_NOTIFICATIONS_REFACTORING_ARCHITECTURE)
                                         try:
                                             print(f"")
                                             print(f"📬 [NOTIFICATION] Triggering payment notification...")
@@ -999,8 +999,8 @@ def handle_ipn():
                                                         'duration_days': subscription_time_days
                                                     })
 
-                                                # Send HTTP POST to GCNotificationService
-                                                print(f"📤 [NOTIFICATION] Calling GCNotificationService...")
+                                                # Send HTTP POST to PGP_NOTIFICATIONS
+                                                print(f"📤 [NOTIFICATION] Calling PGP_NOTIFICATIONS...")
                                                 print(f"   URL: {GCNOTIFICATIONSERVICE_URL}/send-notification")
                                                 print(f"   Channel ID: {open_channel_id}")
                                                 print(f"   Payment Type: {payment_type}")
@@ -1272,7 +1272,7 @@ def payment_processing_page():
 def health_check():
     """Health check endpoint."""
     status = {
-        "service": "np-webhook-10-26 NowPayments IPN Handler",
+        "service": "PGP_NP_IPN_v1 NowPayments IPN Handler",
         "status": "healthy",
         "components": {
             "ipn_secret": "configured" if NOWPAYMENTS_IPN_SECRET else "missing",

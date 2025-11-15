@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-💾 Database Connection Manager for GCRegisterAPI-10-26
+💾 Database Connection Manager for PGP_WEBAPI_v1
 Handles PostgreSQL connection pooling via Cloud SQL Connector
 """
 import pg8000

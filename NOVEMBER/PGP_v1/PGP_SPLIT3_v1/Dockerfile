@@ -1,4 +1,4 @@
-# Dockerfile for GCSplit3-10-26 (ETH→ClientCurrency Swapper Service)
+# Dockerfile for PGP_SPLIT3_v1 (ETH→ClientCurrency Swapper Service)
 # Multi-stage build for optimal image size
 
 FROM python:3.10-slim as builder

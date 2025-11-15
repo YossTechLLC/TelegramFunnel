@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🧹 Token Cleanup Script for GCRegisterAPI-10-26
+🧹 Token Cleanup Script for PGP_WEBAPI_v1
 Removes expired verification and password reset tokens from the database
 
 This script should be run daily via Cloud Scheduler to clean up

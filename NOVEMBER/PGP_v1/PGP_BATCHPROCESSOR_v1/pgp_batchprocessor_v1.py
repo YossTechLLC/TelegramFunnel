@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCBatchProcessor-10-26: Batch Payout Processor Service
+PGP_BATCHPROCESSOR_v1: Batch Payout Processor Service
 Triggered by Cloud Scheduler every 5 minutes.
 Detects clients over threshold and triggers batch payouts via GCSplit1.
 """
@@ -16,7 +16,7 @@ from cloudtasks_client import CloudTasksClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCBatchProcessor-10-26 Batch Payout Processor Service")
+print(f"🚀 [APP] Initializing PGP_BATCHPROCESSOR_v1 Batch Payout Processor Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -242,7 +242,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCBatchProcessor-10-26 Batch Payout Processor",
+            "service": "PGP_BATCHPROCESSOR_v1 Batch Payout Processor",
             "timestamp": int(time.time()),
             "components": {
                 "database": "healthy" if db_manager else "unhealthy",
@@ -255,11 +255,11 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCBatchProcessor-10-26 Batch Payout Processor",
+            "service": "PGP_BATCHPROCESSOR_v1 Batch Payout Processor",
             "error": str(e)
         }), 503
 
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCBatchProcessor-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_BATCHPROCESSOR_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

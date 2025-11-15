@@ -206,18 +206,18 @@ class CloudTasksClient(BaseCloudTasksClient):
         encrypted_token: str
     ) -> Optional[str]:
         """
-        Enqueue swap response to GCAccumulator.
+        Enqueue swap response to PGP_ACCUMULATOR.
 
         Args:
-            queue_name: Queue name (e.g., "gcaccumulator-swap-response-queue")
-            target_url: GCAccumulator webhook URL
+            queue_name: Queue name (e.g., "pgp_accumulator-swap-response-queue")
+            target_url: PGP_ACCUMULATOR webhook URL
             encrypted_token: Encrypted token with swap details
 
         Returns:
             Task name if successful, None if failed
         """
         try:
-            print(f"🚀 [CLOUD_TASKS] Enqueueing response to GCAccumulator")
+            print(f"🚀 [CLOUD_TASKS] Enqueueing response to PGP_ACCUMULATOR")
 
             payload = {
                 "token": encrypted_token
@@ -230,5 +230,5 @@ class CloudTasksClient(BaseCloudTasksClient):
             )
 
         except Exception as e:
-            print(f"❌ [CLOUD_TASKS] Error enqueueing GCAccumulator response: {e}")
+            print(f"❌ [CLOUD_TASKS] Error enqueueing PGP_ACCUMULATOR response: {e}")
             return None

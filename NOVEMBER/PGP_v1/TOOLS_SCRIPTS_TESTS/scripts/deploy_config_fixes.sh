@@ -49,12 +49,12 @@ deploy_service() {
 }
 
 # Deploy GCWebhook2
-deploy_service "GCWebhook2-10-26" "gcwebhook2-10-26" \
+deploy_service "PGP_INVITE_v1" "gcwebhook2-10-26" \
     "SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,\
 BOT_TOKEN=BOT_TOKEN:latest"
 
 # Deploy GCSplit1
-deploy_service "GCSplit1-10-26" "gcsplit1-10-26" \
+deploy_service "PGP_SPLIT1_v1" "gcsplit1-10-26" \
     "SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,\
 TPS_HOSTPAY_SIGNING_KEY=TPS_HOSTPAY_SIGNING_KEY:latest,\
 CLOUD_TASKS_PROJECT_ID=CLOUD_TASKS_PROJECT_ID:latest,\
@@ -67,7 +67,7 @@ DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,\
 DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest"
 
 # Deploy GCSplit2
-deploy_service "GCSplit2-10-26" "gcsplit2-10-26" \
+deploy_service "PGP_SPLIT2_v1" "gcsplit2-10-26" \
     "SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,\
 TPS_HOSTPAY_SIGNING_KEY=TPS_HOSTPAY_SIGNING_KEY:latest,\
 CHANGENOW_API_KEY=CHANGENOW_API_KEY:latest,\
@@ -77,7 +77,7 @@ GCSPLIT3_QUEUE=GCSPLIT3_QUEUE:latest,\
 GCSPLIT3_URL=GCSPLIT3_URL:latest"
 
 # Deploy GCSplit3
-deploy_service "GCSplit3-10-26" "gcsplit3-10-26" \
+deploy_service "PGP_SPLIT3_v1" "gcsplit3-10-26" \
     "SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,\
 TPS_HOSTPAY_SIGNING_KEY=TPS_HOSTPAY_SIGNING_KEY:latest,\
 CHANGENOW_API_KEY=CHANGENOW_API_KEY:latest,\
@@ -85,7 +85,7 @@ CLOUD_TASKS_PROJECT_ID=CLOUD_TASKS_PROJECT_ID:latest,\
 CLOUD_TASKS_LOCATION=CLOUD_TASKS_LOCATION:latest"
 
 # Deploy GCHostPay1
-deploy_service "GCHostPay1-10-26" "gchostpay1-10-26" \
+deploy_service "PGP_HOSTPAY1_v1" "gchostpay1-10-26" \
     "SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,\
 TPS_HOSTPAY_SIGNING_KEY=TPS_HOSTPAY_SIGNING_KEY:latest,\
 ALCHEMY_API_KEY=ALCHEMY_API_KEY:latest,\
@@ -99,7 +99,7 @@ DATABASE_USER_SECRET=DATABASE_USER_SECRET:latest,\
 DATABASE_PASSWORD_SECRET=DATABASE_PASSWORD_SECRET:latest"
 
 # Deploy GCHostPay2
-deploy_service "GCHostPay2-10-26" "gchostpay2-10-26" \
+deploy_service "PGP_HOSTPAY2_v1" "gchostpay2-10-26" \
     "SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,\
 TPS_HOSTPAY_SIGNING_KEY=TPS_HOSTPAY_SIGNING_KEY:latest,\
 CHANGENOW_API_KEY=CHANGENOW_API_KEY:latest,\
@@ -109,7 +109,7 @@ GCHOSTPAY3_QUEUE=GCHOSTPAY3_QUEUE:latest,\
 GCHOSTPAY3_URL=GCHOSTPAY3_URL:latest"
 
 # Deploy GCHostPay3
-deploy_service "GCHostPay3-10-26" "gchostpay3-10-26" \
+deploy_service "PGP_HOSTPAY3_v1" "gchostpay3-10-26" \
     "SUCCESS_URL_SIGNING_KEY=SUCCESS_URL_SIGNING_KEY:latest,\
 TPS_HOSTPAY_SIGNING_KEY=TPS_HOSTPAY_SIGNING_KEY:latest,\
 CHANGENOW_API_KEY=CHANGENOW_API_KEY:latest,\
@@ -125,13 +125,13 @@ echo "🎉 All services deployed successfully!"
 echo "=================================="
 echo ""
 echo "✅ Services fixed and deployed:"
-echo "   1. GCWebhook2-10-26"
-echo "   2. GCSplit1-10-26"
-echo "   3. GCSplit2-10-26"
-echo "   4. GCSplit3-10-26"
-echo "   5. GCHostPay1-10-26"
-echo "   6. GCHostPay2-10-26"
-echo "   7. GCHostPay3-10-26"
+echo "   1. PGP_INVITE_v1"
+echo "   2. PGP_SPLIT1_v1"
+echo "   3. PGP_SPLIT2_v1"
+echo "   4. PGP_SPLIT3_v1"
+echo "   5. PGP_HOSTPAY1_v1"
+echo "   6. PGP_HOSTPAY2_v1"
+echo "   7. PGP_HOSTPAY3_v1"
 echo ""
 echo "📝 All services now use direct os.getenv() for secrets"
 echo "🔐 Cloud Run --set-secrets flag properly injects values"

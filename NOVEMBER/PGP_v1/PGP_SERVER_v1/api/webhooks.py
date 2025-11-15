@@ -16,7 +16,7 @@ webhooks_bp = Blueprint('webhooks', __name__, url_prefix='/webhooks')
 @webhooks_bp.route('/notification', methods=['POST'])
 def handle_notification():
     """
-    Handle notification webhook from GCNotificationService.
+    Handle notification webhook from PGP_NOTIFICATIONS.
 
     Security: Applied by server_manager middleware
     - HMAC signature verification

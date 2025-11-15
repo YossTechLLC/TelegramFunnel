@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCAccumulator-10-26: Payment Accumulation Service
+PGP_ACCUMULATOR_v1: Payment Accumulation Service
 Receives payment data from GCWebhook1, converts to USDT immediately,
 and stores in accumulation table to eliminate volatility risk.
 """
@@ -17,7 +17,7 @@ from cloudtasks_client import CloudTasksClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCAccumulator-10-26 Payment Accumulation Service")
+print(f"🚀 [APP] Initializing PGP_ACCUMULATOR_v1 Payment Accumulation Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -183,7 +183,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCAccumulator-10-26 Payment Accumulation",
+            "service": "PGP_ACCUMULATOR_v1 Payment Accumulation",
             "timestamp": int(time.time()),
             "components": {
                 "database": "healthy" if db_manager else "unhealthy",
@@ -196,11 +196,11 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCAccumulator-10-26 Payment Accumulation",
+            "service": "PGP_ACCUMULATOR_v1 Payment Accumulation",
             "error": str(e)
         }), 503
 
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCAccumulator-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_ACCUMULATOR_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

@@ -1,4 +1,4 @@
-# Dockerfile for GCSplit1-10-26 (Orchestrator Service)
+# Dockerfile for PGP_SPLIT1_v1 (Orchestrator Service)
 # Multi-stage build for optimal image size
 
 FROM python:3.10-slim as builder

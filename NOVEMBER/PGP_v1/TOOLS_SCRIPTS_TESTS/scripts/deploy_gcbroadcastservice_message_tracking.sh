@@ -12,7 +12,7 @@ echo "=========================================="
 # Configuration
 PROJECT_ID="telepay-459221"
 REGION="us-central1"
-SERVICE_NAME="gcbroadcastservice-10-26"
+SERVICE_NAME="pgp_broadcastservice-10-26"
 SERVICE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCBroadcastService-10-26"
 
 # Navigate to service directory

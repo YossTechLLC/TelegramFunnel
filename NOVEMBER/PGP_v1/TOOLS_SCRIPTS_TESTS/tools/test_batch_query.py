@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Test the exact query that GCBatchProcessor uses.
+Test the exact query that PGP_BATCHPROCESSOR uses.
 """
 import subprocess
 from google.cloud.sql.connector import Connector
@@ -35,7 +35,7 @@ print("=" * 80)
 
 cur = conn.cursor()
 
-# This is the EXACT query from GCBatchProcessor
+# This is the EXACT query from PGP_BATCHPROCESSOR
 cur.execute("""
     SELECT
         pa.client_id,

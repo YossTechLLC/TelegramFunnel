@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-🔐 Authentication Service for GCRegisterAPI-10-26
+🔐 Authentication Service for PGP_WEBAPI_v1
 Handles user registration, login, and password management
 """
 import bcrypt

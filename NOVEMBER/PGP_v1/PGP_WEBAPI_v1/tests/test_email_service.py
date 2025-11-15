@@ -74,9 +74,9 @@ class TestEmailServiceInitialization:
 
         service = EmailService()
 
-        assert service.from_email == 'noreply@telepay.com'
+        assert service.from_email == 'noreply@pgp_server.com'
         assert service.from_name == 'TelePay'
-        assert service.base_url == 'https://app.telepay.com'
+        assert service.base_url == 'https://app.pgp_server.com'
         print("✅ EmailService uses correct defaults")
 
 

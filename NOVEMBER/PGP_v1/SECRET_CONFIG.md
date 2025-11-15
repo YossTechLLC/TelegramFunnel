@@ -33,10 +33,10 @@
 | `FROM_EMAIL` | `noreply@paygateprime.com` | Sender email |
 | `FROM_NAME` | `PayGatePrime` | Sender name |
 | `GCACCUMULATOR_QUEUE` | `accumulator-payment-queue` | Accumulator queue |
-| `GCACCUMULATOR_RESPONSE_QUEUE` | `gcaccumulator-swap-response-queue` | Accumulator response |
-| `GCACCUMULATOR_URL` | `https://gcaccumulator-10-26-291176869049.us-central1.run.app` | Accumulator service |
-| `GCBATCHPROCESSOR_QUEUE` | `gcbatchprocessor-10-26-queue` | Batch processor queue |
-| `GCBATCHPROCESSOR_URL` | `https://gcbatchprocessor-10-26-291176869049.us-central1.run.app` | Batch processor service |
+| `GCACCUMULATOR_RESPONSE_QUEUE` | `pgp_accumulator-swap-response-queue` | Accumulator response |
+| `GCACCUMULATOR_URL` | `https://pgp_accumulator-10-26-291176869049.us-central1.run.app` | Accumulator service |
+| `GCBATCHPROCESSOR_QUEUE` | `pgp_batchprocessor-10-26-queue` | Batch processor queue |
+| `GCBATCHPROCESSOR_URL` | `https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app` | Batch processor service |
 | `GCHOSTPAY1_BATCH_QUEUE` | `gchostpay1-batch-queue` | HostPay1 batch queue |
 | `GCHOSTPAY1_QUEUE` | `gcsplit-hostpay-trigger-queue` | HostPay1 trigger queue |
 | `GCHOSTPAY1_RESPONSE_QUEUE` | `gchostpay1-response-queue` | HostPay1 response |
@@ -68,10 +68,10 @@
 | `HOST_WALLET_USDT_ADDRESS` | `0x16...1bc4` | Host wallet USDT (same as ETH) |
 | `JWT_SECRET_KEY` | `cc54...de71` (64 chars) | JWT signing key |
 | `MICROBATCH_RESPONSE_QUEUE` | `microbatch-response-queue` | MicroBatch response |
-| `MICROBATCH_URL` | `https://gcmicrobatchprocessor-10-26-pjxwjsdktq-uc.a.run.app` | MicroBatch service |
+| `MICROBATCH_URL` | `https://pgp_microbatchprocessor-10-26-pjxwjsdktq-uc.a.run.app` | MicroBatch service |
 | `MICRO_BATCH_THRESHOLD_USD` | `5.00` | Micro batch threshold |
 | `NOWPAYMENTS_API_KEY` | `WHY9...D9J` (27 chars) | NOWPayments API |
-| `NOWPAYMENTS_IPN_CALLBACK_URL` | `https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app` | NOWPayments IPN callback |
+| `NOWPAYMENTS_IPN_CALLBACK_URL` | `https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app` | NOWPayments IPN callback |
 | `NOWPAYMENTS_IPN_SECRET` | `1EQD...DQs` (28 chars) | NOWPayments IPN secret |
 | `NOWPAYMENT_WEBHOOK_KEY` | `erwU...uqL` (28 chars) | NOWPayments webhook key |
 | `PAYMENT_FALLBACK_TOLERANCE` | `0.75` | Fallback tolerance USD |
@@ -103,13 +103,13 @@ CLOUD_SQL = "telepay-459221:us-central1:telepaypsql"
 ```
 
 ### Service URLs (Pattern: https://[SERVICE]-10-26-291176869049.us-central1.run.app)
-- GCAccumulator, GCBatchProcessor, GCHostPay1/2/3, GCSplit1/2/3, GCWebhook2
+- PGP_ACCUMULATOR, PGP_BATCHPROCESSOR, GCHostPay1/2/3, GCSplit1/2/3, GCWebhook2
 
 ### Service URLs (Pattern: https://[SERVICE]-10-26-pjxwjsdktq-uc.a.run.app)
-- GCWebhook1, GCMicroBatchProcessor, np-webhook
+- GCWebhook1, PGP_MICROBATCHPROCESSOR, np-webhook
 
 ### VM-based (HTTP)
-- TelePay10-26: `http://34.58.80.152:8080`
+- PGP_SERVER_v1: `http://34.58.80.152:8080`
 
 ### Critical Secrets (Fetch via gcloud)
 - `HOST_WALLET_PRIVATE_KEY`: 7273...8f2e (64 chars) 🔴

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📬 GCNotificationService - Standalone Notification Webhook
+📬 PGP_NOTIFICATIONS - Standalone Notification Webhook
 Sends payment notifications to channel owners via Telegram Bot API
 Version: 1.0
 Date: 2025-11-12
@@ -33,7 +33,7 @@ def create_app():
     app = Flask(__name__)
 
     # Initialize configuration
-    logger.info("📬 [INIT] Initializing GCNotificationService...")
+    logger.info("📬 [INIT] Initializing PGP_NOTIFICATIONS...")
     config_manager = ConfigManager()
     config = config_manager.initialize_config()
 
@@ -66,7 +66,7 @@ def create_app():
     # Store in app context
     app.config['notification_handler'] = notification_handler
 
-    logger.info("✅ [INIT] GCNotificationService initialized successfully")
+    logger.info("✅ [INIT] PGP_NOTIFICATIONS initialized successfully")
 
     # ============== ROUTES ==============
 
@@ -75,7 +75,7 @@ def create_app():
         """Health check endpoint for Cloud Run"""
         return jsonify({
             'status': 'healthy',
-            'service': 'GCNotificationService',
+            'service': 'PGP_NOTIFICATIONS',
             'version': '1.0'
         }), 200
 

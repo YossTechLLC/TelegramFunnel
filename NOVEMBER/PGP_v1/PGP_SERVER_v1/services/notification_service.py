@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-📬 Notification Service for TelePay10-26
+📬 Notification Service for PGP_SERVER_v1
 Handles sending payment notifications to channel owners.
-Refactored from root notification_service.py for better modularity.
+Refactored from root notification_pgp_notifications_v1.py for better modularity.
 
 Version: 2.0
 Date: 2025-11-13

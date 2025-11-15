@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCMicroBatchProcessor-10-26: Micro-Batch Conversion Service
+PGP_MICROBATCHPROCESSOR_v1: Micro-Batch Conversion Service
 Triggered by Cloud Scheduler every 15 minutes.
 Checks if total pending USD >= threshold, then creates batch ETH→USDT swap.
 """
@@ -19,7 +19,7 @@ from changenow_client import ChangeNowClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCMicroBatchProcessor-10-26 Micro-Batch Conversion Service")
+print(f"🚀 [APP] Initializing PGP_MICROBATCHPROCESSOR_v1 Micro-Batch Conversion Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -503,7 +503,7 @@ def health_check():
     """Health check endpoint for monitoring."""
     return jsonify({
         "status": "healthy",
-        "service": "GCMicroBatchProcessor-10-26",
+        "service": "PGP_MICROBATCHPROCESSOR_v1",
         "timestamp": int(time.time())
     }), 200
 

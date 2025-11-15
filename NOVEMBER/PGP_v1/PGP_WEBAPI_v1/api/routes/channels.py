@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-📺 Channel Routes for GCRegisterAPI-10-26
+📺 Channel Routes for PGP_WEBAPI_v1
 Handles channel registration, viewing, updating, and deletion
 """
 from flask import Blueprint, request, jsonify

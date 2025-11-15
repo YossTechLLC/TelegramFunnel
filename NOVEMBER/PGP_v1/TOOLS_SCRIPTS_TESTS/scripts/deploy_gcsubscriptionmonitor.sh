@@ -23,6 +23,6 @@ gcloud run deploy ${SERVICE_NAME} \
   --cpu=1 \
   --timeout=300s \
   --concurrency=1 \
-  --service-account=telepay-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com
+  --service-account=pgp_server-cloudrun@${PROJECT_ID}.iam.gserviceaccount.com
 
 echo "✅ Deployment complete!"

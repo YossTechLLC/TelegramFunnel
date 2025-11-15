@@ -608,7 +608,7 @@ def test_database_connection_pool():
 **Migration Architect:** Claude (Anthropic)
 **Project Owner:** YossTechLLC
 **Repository:** TelegramFunnel
-**Branch:** claude/telepay-refactor-access-check-01VoFVjrTXfd97mAZWvaFTYm
+**Branch:** claude/pgp_server-refactor-access-check-01VoFVjrTXfd97mAZWvaFTYm
 
 ---
 

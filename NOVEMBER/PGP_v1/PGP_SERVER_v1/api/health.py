@@ -31,7 +31,7 @@ def health_check():
 
         return jsonify({
             'status': 'healthy',
-            'service': 'TelePay10-26',
+            'service': 'PGP_SERVER_v1',
             'components': {
                 'notification_service': notification_status,
                 # 'database': db_status,  # Future implementation

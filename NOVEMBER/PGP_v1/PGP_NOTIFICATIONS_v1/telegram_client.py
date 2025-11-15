@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-🤖 Telegram Client for GCNotificationService
+🤖 Telegram Client for PGP_NOTIFICATIONS
 Wraps Telegram Bot API for sending messages
 """
 from telegram import Bot

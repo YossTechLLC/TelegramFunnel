@@ -15,7 +15,7 @@ This document records all significant architectural decisions made during the de
 
 **Context:**
 - Users visiting `paygateprime.com` (without www) saw OLD registration page (gcregister10-26)
-- Users visiting `www.paygateprime.com` saw NEW website (GCRegisterWeb + Cloud Storage)
+- Users visiting `www.paygateprime.com` saw NEW website (PGP_WEB + Cloud Storage)
 - Two completely separate infrastructure setups were serving different content
 - This created user confusion and split traffic between old/new versions
 
@@ -127,7 +127,7 @@ This document records all significant architectural decisions made during the de
 ## 2025-11-14: Flask request.get_json() Best Practice Pattern ✅
 
 **Decision:** Use `request.get_json(force=True, silent=True)` for robust JSON parsing in API endpoints
-**Status:** ✅ **IMPLEMENTED & DEPLOYED** (gcbroadcastscheduler-10-26-00020-j6n)
+**Status:** ✅ **IMPLEMENTED & DEPLOYED** (pgp_broadcastscheduler-10-26-00020-j6n)
 
 **Context:**
 - Cloud Scheduler and manual API calls to `/api/broadcast/execute` were failing
@@ -182,7 +182,7 @@ data = request.get_json(force=True, silent=True) or {}
 - Source: Flask Request API documentation (verified via mcp__context7__get-library-docs)
 
 **Applied To:**
-- `GCBroadcastScheduler-10-26/main.py` → `/api/broadcast/execute` endpoint
+- `PGP_BROADCAST_v1/pgp_broadcast_v1.py` → `/api/broadcast/execute` endpoint
 
 **Testing Validated:**
 1. ✅ Missing Content-Type header → Works
@@ -193,7 +193,7 @@ data = request.get_json(force=True, silent=True) or {}
 
 **Future Application:**
 - Apply this pattern to ALL webhook and API endpoints across services:
-  - GCNotificationService webhook endpoints
+  - PGP_NOTIFICATIONS webhook endpoints
   - GCHostPay webhook endpoints
   - TelePay webhook endpoints
   - Any new microservices with HTTP endpoints
@@ -238,15 +238,15 @@ with engine.connect() as conn:
 6. ✅ Row mapping - easy dictionary conversion via `row._mapping`
 
 **Scope:**
-- 11 methods migrated in GCBroadcastScheduler-10-26
-- Services to review later: GCNotificationService, TelePay10-26 (only if errors occur)
+- 11 methods migrated in PGP_BROADCAST_v1
+- Services to review later: PGP_NOTIFICATIONS, PGP_SERVER_v1 (only if errors occur)
 
 ---
 
 ## 2025-11-14: Complete Environment Variable Configuration ✅
 
-**Decision:** Configure ALL 10 required environment variables for GCBroadcastScheduler-10-26
-**Status:** ✅ **COMPLETE & DEPLOYED** (Revision: `gcbroadcastscheduler-10-26-00019-nzk`)
+**Decision:** Configure ALL 10 required environment variables for PGP_BROADCAST_v1
+**Status:** ✅ **COMPLETE & DEPLOYED** (Revision: `pgp_broadcastscheduler-10-26-00019-nzk`)
 
 **Context:**
 - Initial deployment missing 3 environment variables
@@ -291,14 +291,14 @@ BROADCAST_MANUAL_INTERVAL_SECRET →  BROADCAST_MANUAL_INTERVAL  (0.0833 hours =
 **Status:** ✅ **EXECUTED AND COMPLETE**
 
 **Implementation Completed:**
-1. ✅ Paused `gcbroadcastservice-daily` Cloud Scheduler job
-2. ✅ Verified GCBroadcastScheduler-10-26 operational (HEALTHY)
-3. ✅ Deleted `gcbroadcastservice-10-26` Cloud Run service
-4. ✅ Deleted `gcbroadcastservice-daily` scheduler job permanently
+1. ✅ Paused `pgp_broadcastservice-daily` Cloud Scheduler job
+2. ✅ Verified PGP_BROADCAST_v1 operational (HEALTHY)
+3. ✅ Deleted `pgp_broadcastservice-10-26` Cloud Run service
+4. ✅ Deleted `pgp_broadcastservice-daily` scheduler job permanently
 5. ✅ Archived code: `OCTOBER/ARCHIVES/GCBroadcastService-10-26-archived-2025-11-14`
 
 **Infrastructure State After Cleanup:**
-- ✅ ONE broadcast service: `gcbroadcastscheduler-10-26`
+- ✅ ONE broadcast service: `pgp_broadcastscheduler-10-26`
 - ✅ ONE scheduler job: `broadcast-scheduler-daily` (every 5 minutes)
 - ✅ Clean code directory: Only Scheduler in `10-26/`
 - ✅ Redundant service archived for historical reference
@@ -315,7 +315,7 @@ BROADCAST_MANUAL_INTERVAL_SECRET →  BROADCAST_MANUAL_INTERVAL  (0.0833 hours =
 - User insight: "I have a feeling that BroadcastService may not be necessary"
 - Analysis confirmed: 100% redundancy across all endpoints and modules
 - Decision executed: Service and infrastructure completely removed
-- Verification: GCBroadcastScheduler continues operating normally
+- Verification: PGP_BROADCAST continues operating normally
 
 **Documentation:**
 - Full analysis: `BROADCAST_SERVICE_REDUNDANCY_ANALYSIS.md`
@@ -329,7 +329,7 @@ BROADCAST_MANUAL_INTERVAL_SECRET →  BROADCAST_MANUAL_INTERVAL  (0.0833 hours =
 
 **Context:**
 - Production error: `'Cursor' object does not support the context manager protocol`
-- Service affected: GCBroadcastScheduler-10-26
+- Service affected: PGP_BROADCAST_v1
 - Error location: `broadcast_tracker.py` line 199 (`update_message_ids` method)
 - Root cause: pg8000 cursors do NOT support `with` statement
 
@@ -416,13 +416,13 @@ with engine.connect() as conn:
 **Verdict:** User is CORRECT - complete architectural redundancy confirmed
 
 **Services Identified:**
-1. **GCBroadcastScheduler-10-26** (ACTIVE)
+1. **PGP_BROADCAST_v1** (ACTIVE)
    - Cloud Scheduler: `broadcast-scheduler-daily` (every 5 minutes)
    - Status: ✅ Working correctly with recent message deletion fix
    - Code structure: Flat (all modules in root)
 
 2. **GCBroadcastService-10-26** (REDUNDANT)
-   - Cloud Scheduler: `gcbroadcastservice-daily` (once daily at 12:00 UTC)
+   - Cloud Scheduler: `pgp_broadcastservice-daily` (once daily at 12:00 UTC)
    - Status: ⚠️ Unnecessary duplicate
    - Code structure: Organized (services/, routes/, clients/, utils/)
 
@@ -445,13 +445,13 @@ with engine.connect() as conn:
 - Wastes cloud resources (duplicate deployment)
 - Causes confusion (which service to update?)
 - Potential for race conditions (both executing at same time)
-- GCBroadcastScheduler already working with recent bug fixes
+- PGP_BROADCAST already working with recent bug fixes
 
 **Action Plan:**
-1. Pause `gcbroadcastservice-daily` scheduler job
-2. Verify GCBroadcastScheduler continues working (next 5-min cron)
-3. Delete `gcbroadcastservice-10-26` Cloud Run service
-4. Delete `gcbroadcastservice-daily` scheduler job
+1. Pause `pgp_broadcastservice-daily` scheduler job
+2. Verify PGP_BROADCAST continues working (next 5-min cron)
+3. Delete `pgp_broadcastservice-10-26` Cloud Run service
+4. Delete `pgp_broadcastservice-daily` scheduler job
 5. Archive `GCBroadcastService-10-26` code directory
 
 **Lessons Learned:**
@@ -565,7 +565,7 @@ with engine.connect() as conn:
    - Send operations always attempted regardless of deletion outcome
 
 5. **Code Organization:**
-   - DatabaseManager methods for message ID operations (TelePay10-26)
+   - DatabaseManager methods for message ID operations (PGP_SERVER_v1)
    - BroadcastTracker methods for message ID operations (GCBroadcastService)
    - Consistent delete_message implementations across both services
    - Delete logic embedded in broadcast executors (not separate module)
@@ -743,7 +743,7 @@ if db_manager:
 
 ---
 
-## 2025-11-14 Session 159: GCNotificationService - Persistent Event Loop for python-telegram-bot 20.x
+## 2025-11-14 Session 159: PGP_NOTIFICATIONS - Persistent Event Loop for python-telegram-bot 20.x
 
 **Decision:** Implement persistent event loop pattern in TelegramClient instead of creating/closing loop per request.
 
@@ -818,8 +818,8 @@ def send_message(self, ...):
 
 **Context:**
 - THREE redundant implementations of subscription expiration handling discovered:
-  1. TelePay10-26/subscription_manager.py with duplicate SQL methods
-  2. TelePay10-26/database.py with the same SQL methods (96 lines duplicate)
+  1. PGP_SERVER_v1/subscription_manager.py with duplicate SQL methods
+  2. PGP_SERVER_v1/database.py with the same SQL methods (96 lines duplicate)
   3. GCSubscriptionMonitor-10-26 Cloud Run service (separate implementation)
 - No coordination between TelePay and GCSubscriptionMonitor (risk of duplicate processing)
 - 96 lines of duplicate SQL code between subscription_manager.py and database.py
@@ -973,23 +973,23 @@ If TelePay fails, GCSubscriptionMonitor can be quickly re-enabled:
    - Query is lightweight (single SUM aggregation)
 
 **Follow-up Actions:**
-- Deploy updated GCNotificationService (blocked by build issues)
+- Deploy updated PGP_NOTIFICATIONS (blocked by build issues)
 - Test threshold mode with mock accumulated payments
 - Monitor notification delivery performance
 - Gather channel owner feedback on new format
 
 **Related Files:**
-- `/GCNotificationService-10-26/database_manager.py`
-- `/GCNotificationService-10-26/notification_handler.py`
+- `/PGP_NOTIFICATIONS_v1/database_manager.py`
+- `/PGP_NOTIFICATIONS_v1/notification_handler.py`
 - `/NOTIFICATION_MESSAGE_REFACTOR_CHECKLIST.md`
 
-## 2025-11-14 Session 156: Migrate GCNotificationService to NEW_ARCHITECTURE Pattern
+## 2025-11-14 Session 156: Migrate PGP_NOTIFICATIONS to NEW_ARCHITECTURE Pattern
 
-**Decision:** Refactored GCNotificationService database layer to use SQLAlchemy with Cloud SQL Connector, matching TelePay10-26 NEW_ARCHITECTURE pattern established in Session 154.
+**Decision:** Refactored PGP_NOTIFICATIONS database layer to use SQLAlchemy with Cloud SQL Connector, matching PGP_SERVER_v1 NEW_ARCHITECTURE pattern established in Session 154.
 
 **Context:**
-- GCNotificationService was using raw psycopg2 connections with manual connection management
-- TelePay10-26 established NEW_ARCHITECTURE pattern using SQLAlchemy `text()` with connection pooling
+- PGP_NOTIFICATIONS was using raw psycopg2 connections with manual connection management
+- PGP_SERVER_v1 established NEW_ARCHITECTURE pattern using SQLAlchemy `text()` with connection pooling
 - Inconsistent patterns across services increase maintenance burden
 - Notification workflow analysis (NOTIFICATION_WORKFLOW_REPORT.md) identified this as Priority 2 improvement
 
@@ -1101,7 +1101,7 @@ pool_pre_ping=True     # Health check before using connection
 
 3. ✅ **SQLAlchemy Core with text() (selected)**
    - Best balance of consistency, simplicity, and performance
-   - Matches TelePay10-26 pattern exactly
+   - Matches PGP_SERVER_v1 pattern exactly
    - Minimal learning curve for developers
 
 **Deployment Checklist:**
@@ -1124,7 +1124,7 @@ ALL future services MUST use NEW_ARCHITECTURE pattern:
 
 ## 2025-11-14 Session 155: Broadcast Manager Auto-Creation Architecture
 
-**Decision:** Created separate `BroadcastService` module in GCRegisterAPI-10-26 to handle broadcast_manager entry creation during channel registration.
+**Decision:** Created separate `BroadcastService` module in PGP_WEBAPI_v1 to handle broadcast_manager entry creation during channel registration.
 
 **Rationale:**
 - **Separation of concerns**: Channel logic (`ChannelService`) vs Broadcast logic (`BroadcastService`)
@@ -1445,7 +1445,7 @@ from donation_input_handler import DonationKeypadHandler  # TODO: Migrate to bot
 - ✅ Reliable update delivery
 
 **Webhook Architecture (External Services Only):**
-- Payment notifications from NOWPayments/GCNotificationService
+- Payment notifications from NOWPayments/PGP_NOTIFICATIONS
 - Secured with HMAC + IP whitelist + rate limiting
 - Isolated from user interaction path (no impact on UX)
 
@@ -1461,7 +1461,7 @@ Total: ~106-160ms (INSTANT UX)
 
 **Payment Notification Flow:**
 ```
-NOWPayments IPN → GCNotificationService (100-500ms)
+NOWPayments IPN → PGP_NOTIFICATIONS (100-500ms)
 → Webhook /notification (5ms HMAC verify)
 → NotificationService sends message (50ms)
 Total: 2-6 seconds (acceptable for async payment events)
@@ -1647,7 +1647,7 @@ class DatabaseManager:
 self.payment_service = init_payment_service()  # NEW
 self.payment_manager = PaymentGatewayManager()  # LEGACY
 
-# services/payment_service.py
+# services/payment_pgp_notifications_v1.py
 async def start_np_gateway_new(self, update, context, ...):
     # Compatibility wrapper - maps old API to new
     logger.warning("Using compatibility wrapper - migrate to create_invoice()")
@@ -1745,7 +1745,7 @@ If integration causes issues:
 # Immediate rollback
 git checkout app_initializer.py
 git checkout database.py
-git checkout services/payment_service.py
+git checkout services/payment_pgp_notifications_v1.py
 
 # Partial rollback (keep connection pool, revert services)
 # Comment out new service initialization in app_initializer.py

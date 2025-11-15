@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Alerting Service for GCHostPay3-10-26.
+Alerting Service for PGP_HOSTPAY3_v1.
 Sends multi-channel notifications when ETH payments fail permanently.
 """
 import requests

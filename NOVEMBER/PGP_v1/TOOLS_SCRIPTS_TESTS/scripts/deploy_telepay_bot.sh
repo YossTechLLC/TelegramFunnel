@@ -34,10 +34,10 @@ fi
 cd "$SOURCE_DIR"
 
 echo "🔍 Checking for new files..."
-if [ -f "notification_service.py" ]; then
-    echo "   ✅ notification_service.py found"
+if [ -f "notification_pgp_notifications_v1.py" ]; then
+    echo "   ✅ notification_pgp_notifications_v1.py found"
 else
-    echo "   ⚠️ notification_service.py not found"
+    echo "   ⚠️ notification_pgp_notifications_v1.py not found"
 fi
 
 if [ -f "server_manager.py" ]; then

@@ -1,4 +1,4 @@
-# TelePay10-26 Environment Setup Guide
+# PGP_SERVER_v1 Environment Setup Guide
 
 This guide explains how to set up and use the `.env` file for running the TelePay Telegram bot locally.
 
@@ -14,10 +14,10 @@ The TelePay bot requires environment variables that point to secrets in Google C
 
 ### 1. Verify the .env File Exists
 
-The `.env` file should already exist in the `/TelePay10-26` directory:
+The `.env` file should already exist in the `/PGP_SERVER_v1` directory:
 
 ```bash
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/TelePay10-26
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_SERVER_v1
 ls -la .env
 ```
 
@@ -53,8 +53,8 @@ gcloud projects add-iam-policy-binding telepay-459221 \
 ### 4. Run the Bot
 
 ```bash
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/TelePay10-26
-python3 telepay10-26.py
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_SERVER_v1
+python3 pgp_server_v1.py
 ```
 
 ---
@@ -74,7 +74,7 @@ python3 telepay10-26.py
 |----------|-------------|---------------|
 | `PAYMENT_PROVIDER_SECRET_NAME` | Path to NowPayments API token | Used for creating invoices |
 | `NOWPAYMENT_WEBHOOK_KEY` | Path to IPN webhook verification key | Used to verify NowPayments callbacks |
-| `NOWPAYMENTS_IPN_CALLBACK_URL` | Path to IPN callback URL | Example: `https://np-webhook-10-26-*.run.app/nowpayments-ipn` |
+| `NOWPAYMENTS_IPN_CALLBACK_URL` | Path to IPN callback URL | Example: `https://PGP_NP_IPN_v1-*.run.app/nowpayments-ipn` |
 
 ### Payment Flow Configuration
 
@@ -97,7 +97,7 @@ python3 telepay10-26.py
 ## 🔧 How It Works
 
 1. **Environment Variables are Loaded**
-   - When `telepay10-26.py` starts, it reads environment variables from `.env`
+   - When `pgp_server_v1.py` starts, it reads environment variables from `.env`
    - Each variable contains a **path** to a secret in Secret Manager
 
 2. **Secrets are Fetched at Runtime**
@@ -132,7 +132,7 @@ python3 telepay10-26.py
 **Solution:**
 ```bash
 # Verify .env exists
-ls -la /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/TelePay10-26/.env
+ls -la /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_SERVER_v1/.env
 
 # If missing, copy from example
 cp .env.example .env
@@ -196,7 +196,7 @@ chmod +x cloud-sql-proxy
 **Solution:**
 ```bash
 # Install requirements (if requirements.txt exists)
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/TelePay10-26
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_SERVER_v1
 pip3 install -r requirements.txt
 
 # Or install individually
@@ -252,7 +252,7 @@ If you encounter issues not covered in this guide:
 
 Use this checklist to verify your setup:
 
-- [ ] `.env` file exists in `/TelePay10-26` directory
+- [ ] `.env` file exists in `/PGP_SERVER_v1` directory
 - [ ] Google Cloud authentication completed (`gcloud auth application-default login`)
 - [ ] Project set to `telepay-459221` (`gcloud config set project telepay-459221`)
 - [ ] Secret Manager access granted (tested with `gcloud secrets versions access latest --secret=TELEGRAM_BOT_USERNAME`)
@@ -278,8 +278,8 @@ Use this checklist to verify your setup:
 If all checklist items are complete, you're ready to run the bot:
 
 ```bash
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/TelePay10-26
-python3 telepay10-26.py
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_SERVER_v1
+python3 pgp_server_v1.py
 ```
 
 The bot should start and display:

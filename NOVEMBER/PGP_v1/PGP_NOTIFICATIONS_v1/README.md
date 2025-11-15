@@ -1,4 +1,4 @@
-# GCNotificationService
+# PGP_NOTIFICATIONS
 
 ## Overview
 
@@ -29,9 +29,9 @@ Health check endpoint for Cloud Run
 ## Deployment
 
 ```bash
-bash deploy_gcnotificationservice.sh
+bash deploy_pgp_notificationservice.sh
 ```
 
 ## Testing
 
-See GCNotificationService_REFACTORING_ARCHITECTURE.md for detailed testing instructions.
+See PGP_NOTIFICATIONS_REFACTORING_ARCHITECTURE.md for detailed testing instructions.

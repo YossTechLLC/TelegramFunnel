@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-🔐 Authentication Routes for GCRegisterAPI-10-26
+🔐 Authentication Routes for PGP_WEBAPI_v1
 Handles user signup, login, and token refresh
 """
 from flask import Blueprint, request, jsonify

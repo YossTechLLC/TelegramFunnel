@@ -2,11 +2,11 @@
 
 **NEW_ARCHITECTURE_CHECKLIST Phase 3 Complete - Services Layer! 🎉**
 - ✅ Created services/ directory structure
-- ✅ Extracted payment logic into services/payment_service.py
-- ✅ Refactored notification logic into services/notification_service.py
+- ✅ Extracted payment logic into services/payment_pgp_notifications_v1.py
+- ✅ Refactored notification logic into services/notification_pgp_notifications_v1.py
 - ✅ Both services with comprehensive error handling and logging
 
-**Payment Service Implementation (services/payment_service.py):**
+**Payment Service Implementation (services/payment_pgp_notifications_v1.py):**
 
 1. **PaymentService Class - NowPayments Integration:**
    - Invoice creation with NowPayments API
@@ -31,7 +31,7 @@
    - Detailed logging with emojis (✅, ⚠️, ❌)
    - Supports both subscriptions and donations
 
-**Notification Service Implementation (services/notification_service.py):**
+**Notification Service Implementation (services/notification_pgp_notifications_v1.py):**
 
 1. **NotificationService Class - Payment Notifications:**
    - Send payment notifications to channel owners
@@ -68,14 +68,14 @@
 
 **Integration Points:**
 - Payment service replaces start_np_gateway.py logic
-- Notification service replaces root notification_service.py
+- Notification service replaces root notification_pgp_notifications_v1.py
 - Both services designed for easy integration with bot/api modules
 - Services can be used standalone or together
 
 **Files Created:**
-1. `TelePay10-26/services/__init__.py` - Services package
-2. `TelePay10-26/services/payment_service.py` - Payment service (304 lines)
-3. `TelePay10-26/services/notification_service.py` - Notification service (397 lines)
+1. `PGP_SERVER_v1/services/__init__.py` - Services package
+2. `PGP_SERVER_v1/services/payment_pgp_notifications_v1.py` - Payment service (304 lines)
+3. `PGP_SERVER_v1/services/notification_pgp_notifications_v1.py` - Notification service (397 lines)
 
 **Overall Progress:**
 - Phase 1: Security Hardening ✅ Complete (code)
@@ -148,13 +148,13 @@ END conversation
 - TODO markers for payment service integration
 
 **Files Created:**
-- `TelePay10-26/bot/__init__.py` - Bot package
-- `TelePay10-26/bot/handlers/__init__.py` - Handlers package
-- `TelePay10-26/bot/handlers/command_handler.py` - Command handlers
-- `TelePay10-26/bot/utils/__init__.py` - Utils package
-- `TelePay10-26/bot/utils/keyboards.py` - Keyboard builders
-- `TelePay10-26/bot/conversations/__init__.py` - Conversations package
-- `TelePay10-26/bot/conversations/donation_conversation.py` - Donation flow
+- `PGP_SERVER_v1/bot/__init__.py` - Bot package
+- `PGP_SERVER_v1/bot/handlers/__init__.py` - Handlers package
+- `PGP_SERVER_v1/bot/handlers/command_handler.py` - Command handlers
+- `PGP_SERVER_v1/bot/utils/__init__.py` - Utils package
+- `PGP_SERVER_v1/bot/utils/keyboards.py` - Keyboard builders
+- `PGP_SERVER_v1/bot/conversations/__init__.py` - Conversations package
+- `PGP_SERVER_v1/bot/conversations/donation_conversation.py` - Donation flow
 
 **Files Modified:**
 - `NEW_ARCHITECTURE_CHECKLIST_PROGRESS.md` - Phase 2.3 complete
@@ -236,9 +236,9 @@ All Phase 2 components implemented:
    - Automatic recycling prevents stale connections
 
 **Files Created:**
-- `TelePay10-26/models/__init__.py` - Models package
-- `TelePay10-26/models/connection_pool.py` - Connection pooling
-- `TelePay10-26/requirements.txt` - Python dependencies
+- `PGP_SERVER_v1/models/__init__.py` - Models package
+- `PGP_SERVER_v1/models/connection_pool.py` - Connection pooling
+- `PGP_SERVER_v1/requirements.txt` - Python dependencies
 
 **Files Modified:**
 - `NEW_ARCHITECTURE_CHECKLIST_PROGRESS.md` - Phase 2.2 complete
@@ -321,12 +321,12 @@ All Phase 2 components implemented:
    - Modular structure enables easier testing
 
 **Files Created:**
-- `TelePay10-26/api/__init__.py` - Blueprints package
-- `TelePay10-26/api/webhooks.py` - Webhooks blueprint
-- `TelePay10-26/api/health.py` - Health/monitoring blueprint
+- `PGP_SERVER_v1/api/__init__.py` - Blueprints package
+- `PGP_SERVER_v1/api/webhooks.py` - Webhooks blueprint
+- `PGP_SERVER_v1/api/health.py` - Health/monitoring blueprint
 
 **Files Modified:**
-- `TelePay10-26/server_manager.py` - Application factory pattern
+- `PGP_SERVER_v1/server_manager.py` - Application factory pattern
 - `NEW_ARCHITECTURE_CHECKLIST_PROGRESS.md` - Phase 2.1 complete
 
 **Architectural Decisions (see DECISIONS.md):**
@@ -378,7 +378,7 @@ All Phase 2 components implemented:
    - Decorator pattern for Flask routes (@rate_limiter.limit)
    - Prevents DoS attacks on webhook endpoints
 
-4. **Request Signer (GCNotificationService utils/request_signer.py):**
+4. **Request Signer (PGP_NOTIFICATIONS utils/request_signer.py):**
    - HMAC-SHA256 signing for outbound requests
    - Deterministic JSON serialization (sort_keys=True)
    - Reusable utility for any Cloud Run service
@@ -410,16 +410,16 @@ All Phase 2 components implemented:
    - Proper log levels (INFO, WARNING, ERROR)
 
 **Files Created:**
-- `TelePay10-26/security/__init__.py` - Security package
-- `TelePay10-26/security/hmac_auth.py` - HMAC authentication
-- `TelePay10-26/security/ip_whitelist.py` - IP whitelisting
-- `TelePay10-26/security/rate_limiter.py` - Rate limiting
-- `GCNotificationService-10-26/utils/__init__.py` - Utils package
-- `GCNotificationService-10-26/utils/request_signer.py` - Request signing
+- `PGP_SERVER_v1/security/__init__.py` - Security package
+- `PGP_SERVER_v1/security/hmac_auth.py` - HMAC authentication
+- `PGP_SERVER_v1/security/ip_whitelist.py` - IP whitelisting
+- `PGP_SERVER_v1/security/rate_limiter.py` - Rate limiting
+- `PGP_NOTIFICATIONS_v1/utils/__init__.py` - Utils package
+- `PGP_NOTIFICATIONS_v1/utils/request_signer.py` - Request signing
 - `NEW_ARCHITECTURE_CHECKLIST_PROGRESS.md` - Progress tracking
 
 **Files Modified:**
-- `TelePay10-26/server_manager.py` - Security integration
+- `PGP_SERVER_v1/server_manager.py` - Security integration
 
 **Architectural Decisions (see DECISIONS.md):**
 1. Security decorator stack order: Rate Limit → IP Whitelist → HMAC
@@ -559,7 +559,7 @@ All Phase 2 components implemented:
    - Updated _handle_cancel(): Calls state_manager.delete_state()
    - Added optional state_manager parameter to __init__() for dependency injection
 
-4. **Updated Module: service.py:**
+4. **Updated Module: pgp_notifications_v1.py:**
    - Added import: `from keypad_state_manager import KeypadStateManager`
    - Created state_manager instance before KeypadHandler initialization
    - Injected state_manager into KeypadHandler constructor
@@ -572,7 +572,7 @@ All Phase 2 components implemented:
 
 **Files Modified:**
 - `GCDonationHandler-10-26/keypad_handler.py` - Refactored to use database state
-- `GCDonationHandler-10-26/service.py` - Updated initialization
+- `GCDonationHandler-10-26/pgp_notifications_v1.py` - Updated initialization
 - `GCDonationHandler-10-26/Dockerfile` - Added keypad_state_manager.py to build
 
 **Deployment Details:**
@@ -683,12 +683,12 @@ All Phase 2 components implemented:
 ## 2025-11-13 Session 139: GCBroadcastService DEPLOYED TO CLOUD RUN - 90% Complete ✅🚀🎉
 
 **Service Deployment Complete:**
-- ✅ Service deployed to Cloud Run: `gcbroadcastservice-10-26`
-- ✅ Service URL: https://gcbroadcastservice-10-26-291176869049.us-central1.run.app
+- ✅ Service deployed to Cloud Run: `pgp_broadcastservice-10-26`
+- ✅ Service URL: https://pgp_broadcastservice-10-26-291176869049.us-central1.run.app
 - ✅ Health endpoint tested and working (200 OK)
 - ✅ Execute broadcasts endpoint tested and working (200 OK)
 - ✅ All IAM permissions granted (Secret Manager access for 9 secrets)
-- ✅ Cloud Scheduler configured: `gcbroadcastservice-daily` (runs daily at noon UTC)
+- ✅ Cloud Scheduler configured: `pgp_broadcastservice-daily` (runs daily at noon UTC)
 - ✅ Scheduler tested successfully via manual trigger
 - ✅ Fixed Content-Type header issue in Cloud Scheduler configuration
 
@@ -708,7 +708,7 @@ All Phase 2 components implemented:
 - Logs: ✅ Clean (no errors, proper execution flow)
 
 **Bug Fixes:**
-- Fixed main.py for gunicorn compatibility (added module-level `app` variable)
+- Fixed pgp_broadcast_v1.py for gunicorn compatibility (added module-level `app` variable)
 - Fixed Cloud Scheduler Content-Type header (added `Content-Type: application/json`)
 
 **Progress Status:**
@@ -729,12 +729,12 @@ All Phase 2 components implemented:
 - ✅ Copied and refactored client modules (telegram_client, database_client)
 - ✅ Copied and refactored service modules (scheduler, executor, tracker)
 - ✅ Created route modules with Flask blueprints (broadcast_routes, api_routes)
-- ✅ Created main.py with application factory pattern
+- ✅ Created pgp_broadcast_v1.py with application factory pattern
 
 **Module Structure Created:**
 ```
 GCBroadcastService-10-26/
-├── main.py                      # Flask app factory
+├── pgp_broadcast_v1.py                      # Flask app factory
 ├── routes/
 │   ├── broadcast_routes.py      # Cloud Scheduler execution endpoints
 │   └── api_routes.py            # JWT-authenticated manual triggers
@@ -774,10 +774,10 @@ GCBroadcastService-10-26/
 
 ---
 
-## 2025-11-13 Session 137: GCNotificationService Monitoring & Validation - Phase 7 Complete! ✅📊
+## 2025-11-13 Session 137: PGP_NOTIFICATIONS Monitoring & Validation - Phase 7 Complete! ✅📊
 
 **Monitoring & Performance Analysis Complete:**
-- ✅ Analyzed Cloud Logging entries for GCNotificationService
+- ✅ Analyzed Cloud Logging entries for PGP_NOTIFICATIONS
 - ✅ Verified service health (revision 00003-84d LIVE and HEALTHY)
 - ✅ Validated database connectivity via Cloud SQL Unix socket
 - ✅ Confirmed request/response flow working correctly
@@ -816,53 +816,53 @@ GCBroadcastService-10-26/
 
 ---
 
-## 2025-11-13 Session 136: GCNotificationService Integration - np-webhook-10-26 Updated ✅
+## 2025-11-13 Session 136: PGP_NOTIFICATIONS Integration - PGP_NP_IPN_v1 Updated ✅
 
 **Integration Phase Complete:**
-- ✅ Updated np-webhook-10-26/app.py to use GCNotificationService
+- ✅ Updated PGP_NP_IPN_v1/app.py to use PGP_NOTIFICATIONS
 - ✅ Replaced TELEPAY_BOT_URL with GCNOTIFICATIONSERVICE_URL
 - ✅ Updated environment variable configuration
-- ✅ Deployed to Cloud Run (revision: np-webhook-10-26-00017-j9w)
-- ✅ Service URL: https://np-webhook-10-26-291176869049.us-central1.run.app
+- ✅ Deployed to Cloud Run (revision: PGP_NP_IPN_v1-00017-j9w)
+- ✅ Service URL: https://PGP_NP_IPN_v1-291176869049.us-central1.run.app
 
 **Code Changes:**
 - Line 127: Changed TELEPAY_BOT_URL → GCNOTIFICATIONSERVICE_URL
-- Lines 937-1041: Updated notification HTTP POST to call GCNotificationService
+- Lines 937-1041: Updated notification HTTP POST to call PGP_NOTIFICATIONS
 - Improved logging for notification requests
 - Enhanced error handling with proper timeout (10s)
 
 **Discovery:**
 - ✅ Verified that gcwebhook1-10-26, gcwebhook2-10-26, gcsplit1-10-26, gchostpay1-10-26 do NOT have notification code
-- ✅ np-webhook-10-26 is the ONLY entry point for all payments (NowPayments IPN)
+- ✅ PGP_NP_IPN_v1 is the ONLY entry point for all payments (NowPayments IPN)
 - ✅ Centralized notification at np-webhook prevents duplicate notifications
 - ✅ Other services handle payment routing/processing, not notifications
 
 **Architecture Decision:**
-- **One notification point:** np-webhook-10-26 sends notifications after IPN validation
+- **One notification point:** PGP_NP_IPN_v1 sends notifications after IPN validation
 - **Prevents duplicates:** Other services don't need notification code
 - **Clean separation:** Payment processing vs notification delivery
 
 **Status:**
-- 🟢 Integration complete for np-webhook-10-26
-- 🟢 GCNotificationService ready to receive production traffic
+- 🟢 Integration complete for PGP_NP_IPN_v1
+- 🟢 PGP_NOTIFICATIONS ready to receive production traffic
 - 🟢 No other service updates required
 
-## 2025-11-13 Session 135: GCNotificationService-10-26 - DEPLOYED & OPERATIONAL ✅🚀
+## 2025-11-13 Session 135: PGP_NOTIFICATIONS_v1 - DEPLOYED & OPERATIONAL ✅🚀
 
-**MAJOR MILESTONE:** Successfully deployed GCNotificationService to Cloud Run and verified full functionality
+**MAJOR MILESTONE:** Successfully deployed PGP_NOTIFICATIONS to Cloud Run and verified full functionality
 
 **Deployment Complete:**
 - ✅ Fixed database_manager.py to support Cloud SQL Unix socket connections
 - ✅ Added CLOUD_SQL_CONNECTION_NAME environment variable support
 - ✅ Deployed to Cloud Run with --add-cloudsql-instances flag
-- ✅ Service URL: https://gcnotificationservice-10-26-291176869049.us-central1.run.app
+- ✅ Service URL: https://pgp_notificationservice-10-26-291176869049.us-central1.run.app
 - ✅ Health endpoint verified (200 OK)
 - ✅ Send-notification endpoint tested successfully
 - ✅ Database connectivity confirmed (fetching notification settings)
 - ✅ Proper error handling verified (returns "failed" for disabled notifications)
 
 **Cloud Run Configuration:**
-- Service Name: gcnotificationservice-10-26
+- Service Name: pgp_notificationservice-10-26
 - Region: us-central1
 - Memory: 256Mi
 - CPU: 1
@@ -887,7 +887,7 @@ GCBroadcastService-10-26/
 
 **Next Steps:**
 - Phase 6: Update calling services with GCNOTIFICATIONSERVICE_URL
-  - np-webhook-10-26
+  - PGP_NP_IPN_v1
   - gcwebhook1-10-26
   - gcwebhook2-10-26
   - gcsplit1-10-26
@@ -897,12 +897,12 @@ GCBroadcastService-10-26/
 
 ---
 
-## 2025-11-12 Session 134: GCNotificationService-10-26 - Phases 1 & 2 COMPLETE ✅🎉
+## 2025-11-12 Session 134: PGP_NOTIFICATIONS_v1 - Phases 1 & 2 COMPLETE ✅🎉
 
 **MAJOR MILESTONE:** Completed full implementation of standalone notification webhook service
 
 **Implementation Complete:**
-- ✅ Created self-contained GCNotificationService-10-26 directory
+- ✅ Created self-contained PGP_NOTIFICATIONS_v1 directory
 - ✅ Implemented 6 production-ready modules (~974 lines of code)
 - ✅ All configuration files created (Dockerfile, requirements.txt, .env.example, .dockerignore)
 - ✅ Application factory pattern with Flask
@@ -919,7 +919,7 @@ GCBroadcastService-10-26/
 3. telegram_client.py (93 lines) - Telegram Bot API wrapper
 4. validators.py (98 lines) - Input validation
 5. notification_handler.py (260 lines) - Business logic
-6. service.py (243 lines) - Flask application
+6. pgp_notifications_v1.py (243 lines) - Flask application
 
 **Architecture Principles Applied:**
 - ✅ Self-contained service (no shared module dependencies)
@@ -930,7 +930,7 @@ GCBroadcastService-10-26/
 - ✅ Application factory pattern
 
 **Next Steps:**
-- Phase 3: Create deployment script (deploy_gcnotificationservice.sh)
+- Phase 3: Create deployment script (deploy_pgp_notificationservice.sh)
 - Phase 4: Local testing
 - Phase 5: Deploy to Cloud Run
 - Phase 6: Update calling services (np-webhook, gcwebhook1/2, gcsplit1, gchostpay1)
@@ -1004,7 +1004,7 @@ GCBroadcastService-10-26/
 - ✅ Verified /check-expirations endpoint: Returns expired subscription statistics
 
 **Modules Created:**
-- service.py (120 lines) - Flask app factory with 2 endpoints
+- pgp_notifications_v1.py (120 lines) - Flask app factory with 2 endpoints
 - config_manager.py (115 lines) - Secret Manager operations
 - database_manager.py (195 lines) - PostgreSQL operations with date/time parsing
 - telegram_client.py (130 lines) - Telegram Bot API wrapper (ban + unban pattern)
@@ -1041,7 +1041,7 @@ GCBroadcastService-10-26/
 **Next Steps:**
 - Create Cloud Scheduler job (every 60 seconds)
 - Monitor logs for expiration processing
-- Gradually cutover from TelePay10-26 subscription_manager.py
+- Gradually cutover from PGP_SERVER_v1 subscription_manager.py
 
 ---
 
@@ -1061,7 +1061,7 @@ GCBroadcastService-10-26/
 - ✅ Verified health endpoint: `{"status":"healthy","service":"GCDonationHandler","version":"1.0"}`
 
 **Modules Created:**
-- service.py (299 lines) - Flask app factory with 4 endpoints
+- pgp_notifications_v1.py (299 lines) - Flask app factory with 4 endpoints
 - config_manager.py (133 lines) - Secret Manager operations
 - database_manager.py (216 lines) - PostgreSQL channel operations
 - telegram_client.py (236 lines) - Sync wrapper for Telegram Bot API
@@ -1119,7 +1119,7 @@ GCBroadcastService-10-26/
 - ✅ Successfully created test invoice (ID: 5491489566)
 
 **Modules Created:**
-- service.py (160 lines) - Flask app factory with gunicorn
+- pgp_notifications_v1.py (160 lines) - Flask app factory with gunicorn
 - config_manager.py (175 lines) - Secret Manager operations
 - database_manager.py (237 lines) - PostgreSQL channel validation
 - payment_handler.py (304 lines) - NowPayments API integration
@@ -1157,7 +1157,7 @@ GCBroadcastService-10-26/
 
 ## 2025-11-12 Session 128-129: GCBotCommand-10-26 Successfully Deployed to Cloud Run & Production Tested 🤖✅
 
-**WEBHOOK SERVICE DEPLOYED:** Complete bot command webhook service refactored from TelePay10-26 monolith
+**WEBHOOK SERVICE DEPLOYED:** Complete bot command webhook service refactored from PGP_SERVER_v1 monolith
 
 **Implementation Completed:**
 - ✅ Refactored 2,402-line monolithic bot into 19-file modular webhook service (~1,610 lines)
@@ -1172,7 +1172,7 @@ GCBroadcastService-10-26/
 **Modules Created:**
 - config_manager.py (90 lines) - Secret Manager integration
 - database_manager.py (337 lines) - PostgreSQL + conversation state management
-- service.py (60 lines) - Flask app factory
+- pgp_notifications_v1.py (60 lines) - Flask app factory
 - routes/webhook.py (140 lines) - POST /webhook, GET /health, POST /set-webhook
 - handlers/command_handler.py (285 lines) - /start, /database commands
 - handlers/callback_handler.py (245 lines) - Button callback routing
@@ -1225,7 +1225,7 @@ GCBroadcastService-10-26/
   - payment_gateway_manager.py - NowPayments integration
   - keypad_handler.py - Donation keypad logic
   - broadcast_manager.py - Closed channel broadcast
-  - service.py - Flask application entry point
+  - pgp_notifications_v1.py - Flask application entry point
 - **Phase 3:** Supporting Files (12 tasks) - requirements.txt, Dockerfile, .dockerignore, .env.example
 - **Phase 4:** Testing Implementation (24 tasks)
 - **Phase 5:** Deployment Preparation (15 tasks)
@@ -1238,7 +1238,7 @@ GCBroadcastService-10-26/
 **Key Features:**
 - Each module section includes 10-15 specific implementation tasks
 - Explicit verification that modules are self-contained (NO internal imports)
-- Dependency injection pattern enforced (only service.py imports internal modules)
+- Dependency injection pattern enforced (only pgp_notifications_v1.py imports internal modules)
 - Comprehensive appendices: dependency graph, validation rules, secret paths, testing summary
 
 **Files Created:**
@@ -1253,7 +1253,7 @@ GCBroadcastService-10-26/
 
 ## 2025-11-12 Session 126: Fixed Broadcast Webhook Message Delivery 🚀
 
-**CRITICAL FIX DEPLOYED:** Migrated gcbroadcastscheduler-10-26 from python-telegram-bot to direct HTTP requests
+**CRITICAL FIX DEPLOYED:** Migrated pgp_broadcastscheduler-10-26 from python-telegram-bot to direct HTTP requests
 
 **Changes Implemented:**
 - ✅ Refactored `telegram_client.py` to use direct `requests.post()` calls to Telegram API
@@ -1261,22 +1261,22 @@ GCBroadcastService-10-26/
 - ✅ Added `message_id` confirmation in all send methods
 - ✅ Improved error handling with explicit HTTP status codes
 - ✅ Bot authentication test on initialization
-- ✅ Deployed to Cloud Run as revision `gcbroadcastscheduler-10-26-00011-xbk`
+- ✅ Deployed to Cloud Run as revision `pgp_broadcastscheduler-10-26-00011-xbk`
 
 **Files Modified:**
-- `/GCBroadcastScheduler-10-26/telegram_client.py` - Complete refactor (lines 1-277)
+- `/PGP_BROADCAST_v1/telegram_client.py` - Complete refactor (lines 1-277)
   - Replaced imports: `from telegram import Bot` → `import requests`
   - Updated `__init__`: Added bot authentication test on startup
   - Refactored `send_subscription_message()`: Returns `{'success': True, 'message_id': 123}`
   - Refactored `send_donation_message()`: Returns `{'success': True, 'message_id': 456}`
-- `/GCBroadcastScheduler-10-26/requirements.txt` - Updated dependencies
+- `/PGP_BROADCAST_v1/requirements.txt` - Updated dependencies
   - Removed: `python-telegram-bot>=20.0,<21.0`
   - Added: `requests>=2.31.0,<3.0.0`
 
 **Deployment Details:**
-- Build: `gcr.io/telepay-459221/gcbroadcastscheduler-10-26:v11`
-- Revision: `gcbroadcastscheduler-10-26-00011-xbk` (was 00010-qdt)
-- Service URL: `https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app`
+- Build: `gcr.io/telepay-459221/pgp_broadcastscheduler-10-26:v11`
+- Revision: `pgp_broadcastscheduler-10-26-00011-xbk` (was 00010-qdt)
+- Service URL: `https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app`
 - Health: ✅ HEALTHY
 - Status: **LIVE IN PRODUCTION**
 
@@ -1284,7 +1284,7 @@ GCBroadcastService-10-26/
 - Bot token validated: `8139434770:AAGc7zRahRJksnhp3_HOvOLERRXdgaYo6Co` (PayGatePrime_bot)
 - Manual tests: Sent test messages to both channels successfully
 - Logs confirm: Bot initializes with "🤖 TelegramClient initialized for @PayGatePrime_bot"
-- Architecture: Now matches proven working TelePay10-26 implementation
+- Architecture: Now matches proven working PGP_SERVER_v1 implementation
 
 **Before vs After:**
 ```
@@ -1304,34 +1304,34 @@ telegram_client.py:160 - "✅ Subscription message sent to -1003202734748, messa
 - If successful for 7 days: Mark as complete and remove old backup
 
 **Backup Available:**
-- Previous revision: `gcbroadcastscheduler-10-26-00010-qdt`
+- Previous revision: `pgp_broadcastscheduler-10-26-00010-qdt`
 - Backup file: `telegram_client.py.backup-20251112-151325`
 - Rollback command available if needed
 
 ## 2025-11-12 Session 125: Comprehensive Broadcast Webhook Failure Analysis 🔍
 
-**DIAGNOSTIC REPORT CREATED:** Analyzed why gcbroadcastscheduler-10-26 webhook logs show success but messages don't arrive
+**DIAGNOSTIC REPORT CREATED:** Analyzed why pgp_broadcastscheduler-10-26 webhook logs show success but messages don't arrive
 
 **Investigation Completed:**
-- ✅ Reviewed Cloud Run logs from gcbroadcastscheduler-10-26 deployment
-- ✅ Compared webhook implementation (GCBroadcastScheduler-10-26) vs working broadcast_manager (TelePay10-26)
+- ✅ Reviewed Cloud Run logs from pgp_broadcastscheduler-10-26 deployment
+- ✅ Compared webhook implementation (PGP_BROADCAST_v1) vs working broadcast_manager (PGP_SERVER_v1)
 - ✅ Identified architectural differences between implementations
 - ✅ Analyzed recent execution logs showing "successful" sends that don't arrive
 - ✅ Documented root cause and recommended solutions
 
 **Key Findings:**
-- **Working Implementation**: Uses direct `requests.post()` to Telegram API (TelePay10-26/broadcast_manager.py)
-- **Non-Working Implementation**: Uses `python-telegram-bot` library with Bot object (GCBroadcastScheduler-10-26/telegram_client.py)
+- **Working Implementation**: Uses direct `requests.post()` to Telegram API (PGP_SERVER_v1/broadcast_manager.py)
+- **Non-Working Implementation**: Uses `python-telegram-bot` library with Bot object (PGP_BROADCAST_v1/telegram_client.py)
 - **Silent Failure**: Logs report success (no exceptions) but messages not arriving in channels
 - **Root Cause**: Library abstraction causing silent failures, possible bot token mismatch, or permission issues
 
 **Architecture Comparison:**
 ```
-✅ Working (TelePay10-26):
+✅ Working (PGP_SERVER_v1):
 broadcast_manager.py → requests.post() → Telegram API → ✅ Message arrives
 
 ❌ Non-Working (Webhook):
-main.py → broadcast_executor.py → telegram_client.py → Bot.send_message() → ??? → ❌ No message
+pgp_broadcast_v1.py → broadcast_executor.py → telegram_client.py → Bot.send_message() → ??? → ❌ No message
 ```
 
 **Critical Issues Identified:**
@@ -1354,7 +1354,7 @@ main.py → broadcast_executor.py → telegram_client.py → Bot.send_message() 
 
 **Recommended Solutions (Priority Order):**
 1. **🚀 Solution 1 (Recommended)**: Migrate webhook to use direct `requests.post()` HTTP calls
-   - ✅ Proven to work in TelePay10-26
+   - ✅ Proven to work in PGP_SERVER_v1
    - ✅ Simpler architecture, better error visibility
    - ✅ Direct access to Telegram API responses (message_id)
 
@@ -1470,13 +1470,13 @@ gcloud scheduler jobs update http broadcast-scheduler-daily \
   - Applied fix to both `mark_success()` (line 79) and `mark_failure()` (line 112)
 
 **Files Modified:**
-- `/GCBroadcastScheduler-10-26/database_manager.py` - Added debug logging (lines 116-177)
-- `/GCBroadcastScheduler-10-26/broadcast_tracker.py` - Fixed UUID slicing (lines 79, 112)
+- `/PGP_BROADCAST_v1/database_manager.py` - Added debug logging (lines 116-177)
+- `/PGP_BROADCAST_v1/broadcast_tracker.py` - Fixed UUID slicing (lines 79, 112)
 
 **Deployment:**
-- ✅ Built image: `gcr.io/telepay-459221/gcbroadcastscheduler-10-26:latest`
-- ✅ Deployed revision: `gcbroadcastscheduler-10-26-00009-466`
-- ✅ Service URL: `https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app`
+- ✅ Built image: `gcr.io/telepay-459221/pgp_broadcastscheduler-10-26:latest`
+- ✅ Deployed revision: `pgp_broadcastscheduler-10-26-00009-466`
+- ✅ Service URL: `https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app`
 
 **Test Results:**
 ```json
@@ -1495,41 +1495,41 @@ gcloud scheduler jobs update http broadcast-scheduler-daily \
 - ✅ **0 failures** - No errors in execution
 - ✅ **Fast execution** - All broadcasts completed in ~3 seconds
 
-## 2025-11-12 Session 121: JWT Signature Verification Fixed in GCBroadcastScheduler ✅
+## 2025-11-12 Session 121: JWT Signature Verification Fixed in PGP_BROADCAST ✅
 
 **JWT AUTHENTICATION FIX:** Resolved JWT signature verification failures causing manual broadcast triggers to fail
 
 **Problem:**
 - ❌ Users clicking "Resend Messages" saw error: "Session expired. Please log in again."
 - ❌ Users automatically logged out when attempting manual broadcasts
-- ❌ Logs showed: `Signature verification failed` in GCBroadcastScheduler
+- ❌ Logs showed: `Signature verification failed` in PGP_BROADCAST
 - ❌ Manual broadcast trigger feature non-functional despite valid JWT tokens
 
 **Root Cause (Two-Part Issue):**
 1. **Library Incompatibility:**
-   - GCBroadcastScheduler used raw `PyJWT` library
-   - GCRegisterAPI used `flask-jwt-extended` library
+   - PGP_BROADCAST used raw `PyJWT` library
+   - PGP_WEBAPI used `flask-jwt-extended` library
    - Token structures incompatible between libraries
 
 2. **Whitespace Mismatch in Secrets (Primary Cause):**
    - JWT_SECRET_KEY in Secret Manager contained trailing newline (65 chars total)
-   - GCRegisterAPI: `decode("UTF-8").strip()` → 64-char secret (signs tokens)
-   - GCBroadcastScheduler: `decode("UTF-8")` → 65-char secret with `\n` (verifies tokens)
+   - PGP_WEBAPI: `decode("UTF-8").strip()` → 64-char secret (signs tokens)
+   - PGP_BROADCAST: `decode("UTF-8")` → 65-char secret with `\n` (verifies tokens)
    - **Result:** Signature mismatch despite "same" secret key
 
 **Solution:**
 - ✅ **Phase 1 - Library Standardization:**
   - Added `flask-jwt-extended>=4.5.0,<5.0.0` to requirements.txt
-  - Initialized `JWTManager` in main.py with app config
+  - Initialized `JWTManager` in pgp_broadcast_v1.py with app config
   - Added JWT error handlers for expired/invalid/missing tokens
   - Replaced custom PyJWT decoder with `@jwt_required()` decorators in broadcast_web_api.py
-  - Deployed revision: `gcbroadcastscheduler-10-26-00004-2p8`
+  - Deployed revision: `pgp_broadcastscheduler-10-26-00004-2p8`
   - **Testing:** Still failed - signature verification continued
 
 - ✅ **Phase 2 - Whitespace Fix (Critical):**
   - Added `.strip()` to config_manager.py line 59: `decode("UTF-8").strip()`
   - Now both services process secrets identically
-  - Deployed revision: `gcbroadcastscheduler-10-26-00005-t9j`
+  - Deployed revision: `pgp_broadcastscheduler-10-26-00005-t9j`
   - **Testing:** SUCCESS - JWT authentication working
 
 **Code Changes:**
@@ -1543,7 +1543,7 @@ value = response.payload.data.decode("UTF-8")  # Keeps trailing \n
 value = response.payload.data.decode("UTF-8").strip()  # Removes whitespace
 ```
 
-*main.py (JWT Initialization):*
+*pgp_broadcast_v1.py (JWT Initialization):*
 ```python
 from flask_jwt_extended import JWTManager
 
@@ -1592,16 +1592,16 @@ def trigger_broadcast():
 - ✅ Secrets processed identically in all config managers
 
 **Files Modified:**
-- `GCBroadcastScheduler-10-26/requirements.txt` - Added flask-jwt-extended
-- `GCBroadcastScheduler-10-26/main.py` - JWT initialization & error handlers
-- `GCBroadcastScheduler-10-26/broadcast_web_api.py` - Replaced PyJWT with flask-jwt-extended
-- `GCBroadcastScheduler-10-26/config_manager.py` - Added .strip() to secret handling
+- `PGP_BROADCAST_v1/requirements.txt` - Added flask-jwt-extended
+- `PGP_BROADCAST_v1/pgp_broadcast_v1.py` - JWT initialization & error handlers
+- `PGP_BROADCAST_v1/broadcast_web_api.py` - Replaced PyJWT with flask-jwt-extended
+- `PGP_BROADCAST_v1/config_manager.py` - Added .strip() to secret handling
 
 **Note:** Database connection timeout (127s) observed during testing is a separate infrastructure issue unrelated to JWT authentication.
 
 ---
 
-## 2025-11-12 Session 120: CORS Configuration Added to GCBroadcastScheduler ✅
+## 2025-11-12 Session 120: CORS Configuration Added to PGP_BROADCAST ✅
 
 **CORS FIX:** Resolved cross-origin request blocking for manual broadcast triggers from website
 
@@ -1612,21 +1612,21 @@ def trigger_broadcast():
 - ❌ Manual broadcast trigger feature completely non-functional
 
 **Root Cause:**
-- GCBroadcastScheduler Flask app had NO CORS configuration
+- PGP_BROADCAST Flask app had NO CORS configuration
 - No `flask-cors` dependency installed
 - Preflight OPTIONS requests failed with no CORS headers
 - Browser enforced same-origin policy and blocked all cross-origin requests
 
 **Solution:**
 - ✅ Added `flask-cors>=4.0.0,<5.0.0` to requirements.txt
-- ✅ Configured CORS in main.py with secure settings:
+- ✅ Configured CORS in pgp_broadcast_v1.py with secure settings:
   - Origin: `https://www.paygateprime.com` (restricted, not wildcard)
   - Methods: GET, POST, OPTIONS
   - Headers: Content-Type, Authorization
   - Credentials: Enabled (for JWT auth)
   - Max Age: 3600 seconds (1 hour cache)
 - ✅ Rebuilt Docker image with flask-cors-4.0.2 installed
-- ✅ Deployed new revision: `gcbroadcastscheduler-10-26-00003-wmv`
+- ✅ Deployed new revision: `pgp_broadcastscheduler-10-26-00003-wmv`
 
 **CORS Configuration:**
 ```python
@@ -1645,7 +1645,7 @@ CORS(app, resources={
 **Verification:**
 ```bash
 # OPTIONS preflight test - SUCCESS
-curl -X OPTIONS https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/trigger \
+curl -X OPTIONS https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/trigger \
   -H "Origin: https://www.paygateprime.com" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: Content-Type,Authorization"
@@ -1673,17 +1673,17 @@ curl -X OPTIONS https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.
 - ✅ Browser no longer blocks API requests
 
 **Files Modified:**
-- `GCBroadcastScheduler-10-26/requirements.txt` - Added flask-cors
-- `GCBroadcastScheduler-10-26/main.py` - Imported and configured CORS
+- `PGP_BROADCAST_v1/requirements.txt` - Added flask-cors
+- `PGP_BROADCAST_v1/pgp_broadcast_v1.py` - Imported and configured CORS
 
 ---
 
-## 2025-11-12 Session 119: GCBroadcastScheduler IAM Permissions Fixed ✅
+## 2025-11-12 Session 119: PGP_BROADCAST IAM Permissions Fixed ✅
 
 **BROADCAST SERVICE FIX:** Resolved 404 secret access errors by granting IAM permissions
 
 **Problem:**
-- ❌ GCBroadcastScheduler-10-26 crashing on startup
+- ❌ PGP_BROADCAST_v1 crashing on startup
 - ❌ Error: `404 Secret [projects/291176869049/secrets/BOT_TOKEN] not found or has no versions`
 - ❌ Service returning 503 errors on all endpoints
 
@@ -1695,18 +1695,18 @@ curl -X OPTIONS https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.
 **Solution:**
 - ✅ Granted `roles/secretmanager.secretAccessor` to service account on TELEGRAM_BOT_SECRET_NAME
 - ✅ Granted `roles/secretmanager.secretAccessor` to service account on TELEGRAM_BOT_USERNAME
-- ✅ Service automatically redeployed with new revision: `gcbroadcastscheduler-10-26-00002-hkx`
+- ✅ Service automatically redeployed with new revision: `pgp_broadcastscheduler-10-26-00002-hkx`
 - ✅ Startup probe succeeded after 1 attempt
 - ✅ Health endpoint returning 200 OK
 
 **Verification:**
 ```bash
 # Health check
-curl https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app/health
-# Response: {"service":"GCBroadcastScheduler-10-26","status":"healthy","timestamp":"..."}
+curl https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app/health
+# Response: {"service":"PGP_BROADCAST_v1","status":"healthy","timestamp":"..."}
 
 # Execute endpoint test
-curl -X POST https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/execute
+curl -X POST https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/execute
 # Response: {"success":true,"message":"No broadcasts due",...}
 ```
 
@@ -1721,13 +1721,13 @@ curl -X POST https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app
 **WEBSITE INTEGRATION:** Added manual broadcast trigger functionality to client dashboard
 
 **Summary:**
-- ✅ Created broadcastService.ts (API client for GCBroadcastScheduler-10-26)
+- ✅ Created broadcastService.ts (API client for PGP_BROADCAST_v1)
 - ✅ Updated Channel type to include broadcast_id field
-- ✅ Updated GCRegisterAPI to return broadcast_id in channel data (JOIN broadcast_manager)
+- ✅ Updated PGP_WEBAPI to return broadcast_id in channel data (JOIN broadcast_manager)
 - ✅ Created BroadcastControls component with "Resend Messages" button
 - ✅ Integrated BroadcastControls into DashboardPage
-- ✅ Deployed updated GCRegisterAPI (gcregisterapi-10-26-00027-44b)
-- ✅ Deployed updated GCRegisterWeb frontend to Cloud Storage
+- ✅ Deployed updated PGP_WEBAPI (gcregisterapi-10-26-00027-44b)
+- ✅ Deployed updated PGP_WEB frontend to Cloud Storage
 - ✅ Invalidated CDN cache
 
 **Frontend Changes:**
@@ -1747,7 +1747,7 @@ curl -X POST https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app
 4. **DashboardPage.tsx** - Integrated BroadcastControls into each channel card
 
 **Backend Changes:**
-1. **channel_service.py** - Modified `get_user_channels()` query
+1. **channel_pgp_notifications_v1.py** - Modified `get_user_channels()` query
    - Added LEFT JOIN with broadcast_manager table
    - Returns broadcast_id for each channel pair
    - Uses composite key (open_channel_id + closed_channel_id) for join
@@ -1800,7 +1800,7 @@ curl -X POST https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app
 - **Name:** broadcast-scheduler-daily
 - **Location:** us-central1
 - **Schedule:** 0 0 * * * (Every day at midnight UTC)
-- **Target URL:** https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/execute
+- **Target URL:** https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/execute
 - **HTTP Method:** POST
 - **Authentication:** OIDC (service account: 291176869049-compute@developer.gserviceaccount.com)
 - **State:** ENABLED
@@ -1846,12 +1846,12 @@ gcloud scheduler jobs run broadcast-scheduler-daily --location=us-central1
 
 ## 2025-11-11 Session 116 (Continued): Broadcast Manager Phase 4 Complete - Cloud Run Deployment ✅
 
-**CLOUD RUN DEPLOYMENT:** Successfully deployed GCBroadcastScheduler-10-26 service
+**CLOUD RUN DEPLOYMENT:** Successfully deployed PGP_BROADCAST_v1 service
 
 **Summary:**
 - ✅ Created deployment script (deploy_broadcast_scheduler.sh)
 - ✅ Built Docker image using Cloud Build
-- ✅ Deployed to Cloud Run (gcbroadcastscheduler-10-26)
+- ✅ Deployed to Cloud Run (pgp_broadcastscheduler-10-26)
 - ✅ Configured all 9 environment variables (Secret Manager paths)
 - ✅ Fixed secret name mismatches (BOT_TOKEN → TELEGRAM_BOT_SECRET_NAME)
 - ✅ Tested health endpoint (returns healthy status)
@@ -1860,8 +1860,8 @@ gcloud scheduler jobs run broadcast-scheduler-daily --location=us-central1
 - ✅ Verified service configuration
 
 **Service Details:**
-- **Name:** gcbroadcastscheduler-10-26
-- **URL:** https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app
+- **Name:** pgp_broadcastscheduler-10-26
+- **URL:** https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app
 - **Region:** us-central1
 - **Memory:** 512Mi
 - **CPU:** 1
@@ -1883,11 +1883,11 @@ gcloud scheduler jobs run broadcast-scheduler-daily --location=us-central1
 **Testing Results:**
 ```bash
 # Health check
-curl https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app/health
-# Response: {"status":"healthy","service":"GCBroadcastScheduler-10-26","timestamp":"2025-11-12T00:53:10.350868"}
+curl https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app/health
+# Response: {"status":"healthy","service":"PGP_BROADCAST_v1","timestamp":"2025-11-12T00:53:10.350868"}
 
 # Broadcast execution test
-curl -X POST https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/execute \
+curl -X POST https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app/api/broadcast/execute \
      -H "Content-Type: application/json" -d '{"source":"manual_test"}'
 # Response: {"success":true,"total_broadcasts":0,"successful":0,"failed":0,"execution_time_seconds":0,"message":"No broadcasts due"}
 ```
@@ -1952,10 +1952,10 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
 
 ## 2025-11-11 Session 115 (Continued): Broadcast Manager Phase 2 Complete - Service Development ✅
 
-**SERVICE DEVELOPMENT:** Implemented all 7 modular components for GCBroadcastScheduler-10-26
+**SERVICE DEVELOPMENT:** Implemented all 7 modular components for PGP_BROADCAST_v1
 
 **Summary:**
-- ✅ Created GCBroadcastScheduler-10-26 directory structure with modular architecture
+- ✅ Created PGP_BROADCAST_v1 directory structure with modular architecture
 - ✅ Implemented ConfigManager (Secret Manager integration)
 - ✅ Implemented DatabaseManager (all broadcast_manager queries)
 - ✅ Implemented TelegramClient (Telegram Bot API wrapper)
@@ -1963,7 +1963,7 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
 - ✅ Implemented BroadcastScheduler (scheduling logic & rate limiting)
 - ✅ Implemented BroadcastExecutor (message sending to both channels)
 - ✅ Implemented BroadcastWebAPI (manual trigger API endpoints)
-- ✅ Implemented main.py (Flask application integrating all components)
+- ✅ Implemented pgp_broadcast_v1.py (Flask application integrating all components)
 - ✅ Created Dockerfile, requirements.txt, and configuration files
 
 **Modules Implemented (8 files):**
@@ -2012,7 +2012,7 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
    - Rate limit enforcement (429 status)
    - Ownership verification
 
-8. **main.py** (180 lines)
+8. **pgp_broadcast_v1.py** (180 lines)
    - Flask application initialization
    - Dependency injection (all components)
    - GET /health - health check
@@ -2042,23 +2042,23 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
 - **Next:** Phase 3 - Secret Manager Setup (6 tasks)
 
 **Files Created This Phase:**
-- GCBroadcastScheduler-10-26/config_manager.py
-- GCBroadcastScheduler-10-26/database_manager.py
-- GCBroadcastScheduler-10-26/telegram_client.py
-- GCBroadcastScheduler-10-26/broadcast_tracker.py
-- GCBroadcastScheduler-10-26/broadcast_scheduler.py
-- GCBroadcastScheduler-10-26/broadcast_executor.py
-- GCBroadcastScheduler-10-26/broadcast_web_api.py
-- GCBroadcastScheduler-10-26/main.py
-- GCBroadcastScheduler-10-26/requirements.txt
-- GCBroadcastScheduler-10-26/Dockerfile
-- GCBroadcastScheduler-10-26/.dockerignore
-- GCBroadcastScheduler-10-26/.env.example
-- GCBroadcastScheduler-10-26/__init__.py (+ subdirectories)
+- PGP_BROADCAST_v1/config_manager.py
+- PGP_BROADCAST_v1/database_manager.py
+- PGP_BROADCAST_v1/telegram_client.py
+- PGP_BROADCAST_v1/broadcast_tracker.py
+- PGP_BROADCAST_v1/broadcast_scheduler.py
+- PGP_BROADCAST_v1/broadcast_executor.py
+- PGP_BROADCAST_v1/broadcast_web_api.py
+- PGP_BROADCAST_v1/pgp_broadcast_v1.py
+- PGP_BROADCAST_v1/requirements.txt
+- PGP_BROADCAST_v1/Dockerfile
+- PGP_BROADCAST_v1/.dockerignore
+- PGP_BROADCAST_v1/.env.example
+- PGP_BROADCAST_v1/__init__.py (+ subdirectories)
 
 **Next Steps:**
 1. Phase 3: Create BROADCAST_AUTO_INTERVAL & BROADCAST_MANUAL_INTERVAL secrets
-2. Phase 4: Deploy GCBroadcastScheduler-10-26 to Cloud Run
+2. Phase 4: Deploy PGP_BROADCAST_v1 to Cloud Run
 3. Phase 5: Configure Cloud Scheduler cron job
 
 ---
@@ -2116,7 +2116,7 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
 
 **Next Steps:**
 1. Begin Phase 2: Service Development
-2. Create GCBroadcastScheduler-10-26 directory structure
+2. Create PGP_BROADCAST_v1 directory structure
 3. Implement 6 modular components:
    - ConfigManager (Secret Manager integration)
    - DatabaseManager (broadcast_manager queries)
@@ -2159,7 +2159,7 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
 
 **3. Google Cloud Infrastructure:**
 - **Cloud Scheduler**: Cron job triggers daily (0 0 * * * - midnight UTC)
-- **Cloud Run Service**: GCBroadcastScheduler-10-26 (webhook target)
+- **Cloud Run Service**: PGP_BROADCAST_v1 (webhook target)
 - **Secret Manager Secrets**:
   - BROADCAST_AUTO_INTERVAL: 24 hours (automated broadcast interval)
   - BROADCAST_MANUAL_INTERVAL: 5 minutes (manual trigger rate limit)
@@ -2204,7 +2204,7 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
 1. Database setup (create table, run migration)
 2. Service development (implement 5 modules)
 3. Secret Manager setup (create secrets, grant access)
-4. Cloud Run deployment (deploy GCBroadcastScheduler-10-26)
+4. Cloud Run deployment (deploy PGP_BROADCAST_v1)
 5. Cloud Scheduler setup (create cron job)
 6. Website integration (add "Resend Messages" button)
 7. Monitoring & testing (logs, dashboards, alerts)
@@ -2214,10 +2214,10 @@ gcloud secrets versions access latest --secret=BROADCAST_MANUAL_INTERVAL  # Retu
 - BROADCAST_MANAGER_ARCHITECTURE.md (comprehensive architecture document)
 
 **Files Referenced:**
-- TelePay10-26/broadcast_manager.py (current implementation)
-- TelePay10-26/closed_channel_manager.py (donation messages)
-- TelePay10-26/database.py (database operations)
-- TelePay10-26/app_initializer.py (startup calls)
+- PGP_SERVER_v1/broadcast_manager.py (current implementation)
+- PGP_SERVER_v1/closed_channel_manager.py (donation messages)
+- PGP_SERVER_v1/database.py (database operations)
+- PGP_SERVER_v1/app_initializer.py (startup calls)
 
 **Database Schema Highlights:**
 ```sql
@@ -2251,7 +2251,7 @@ CREATE TABLE broadcast_manager (
 1. Phase 1: Database Setup (8 tasks) - Create and populate broadcast_manager table
 2. Phase 2: Service Development (27 tasks) - Implement 5 modular components
 3. Phase 3: Secret Manager Setup (6 tasks) - Configure Google Cloud secrets
-4. Phase 4: Cloud Run Deployment (8 tasks) - Deploy GCBroadcastScheduler service
+4. Phase 4: Cloud Run Deployment (8 tasks) - Deploy PGP_BROADCAST service
 5. Phase 5: Cloud Scheduler Setup (5 tasks) - Configure automated daily broadcasts
 6. Phase 6: Website Integration (7 tasks) - Add manual trigger to dashboard
 7. Phase 7: Monitoring & Testing (10 tasks) - Setup monitoring and test everything
@@ -2272,9 +2272,9 @@ CREATE TABLE broadcast_manager (
 **BUG FIX & DEPLOYMENT:** Fixed critical bug preventing tier count changes on PayGatePrime website
 
 **Summary:**
-- ✅ Fixed tier update logic in GCRegisterAPI-10-26 (channel_service.py line 304)
+- ✅ Fixed tier update logic in PGP_WEBAPI_v1 (channel_pgp_notifications_v1.py line 304)
 - ✅ Changed `exclude_none=True` → `exclude_unset=True` in Pydantic model dump
-- ✅ Deployed GCRegisterAPI-10-26 revision 00026-4jw
+- ✅ Deployed PGP_WEBAPI_v1 revision 00026-4jw
 - ✅ Tested and verified: 3 tiers → 1 tier update now works correctly
 - ✅ Database values (sub_2_price, sub_2_time, sub_3_price, sub_3_time) properly cleared to NULL
 
@@ -2285,7 +2285,7 @@ CREATE TABLE broadcast_manager (
 - **Solution:** Use `exclude_unset=True` to distinguish between:
   - "Field not sent" (exclude from update)
   - "Field explicitly set to null" (include in update to clear value)
-- **File:** GCRegisterAPI-10-26/api/services/channel_service.py
+- **File:** PGP_WEBAPI_v1/api/services/channel_pgp_notifications_v1.py
 
 **Deployment:**
 - ✅ Service URL: https://gcregisterapi-10-26-291176869049.us-central1.run.app
@@ -2307,11 +2307,11 @@ CREATE TABLE broadcast_manager (
 
 ## 2025-11-11 Session 112: Cloud Tasks Configuration Fix - Critical ⚙️
 
-**BUG FIX:** Fixed missing Cloud Tasks environment variables in np-webhook-10-26
+**BUG FIX:** Fixed missing Cloud Tasks environment variables in PGP_NP_IPN_v1
 
 **Summary:**
 - ✅ Identified 4 missing environment variables (CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION, GCWEBHOOK1_QUEUE, GCWEBHOOK1_URL)
-- ✅ Redeployed np-webhook-10-26 with all 12 required secrets (was only 7)
+- ✅ Redeployed PGP_NP_IPN_v1 with all 12 required secrets (was only 7)
 - ✅ Cloud Tasks client now initializes successfully
 - ✅ GCWebhook1 orchestration now works after IPN validation
 
@@ -2322,9 +2322,9 @@ CREATE TABLE broadcast_manager (
 - **Solution:** Deployed with complete secret configuration (12 secrets total)
 
 **Deployment:**
-- ✅ Service URL: https://np-webhook-10-26-291176869049.us-central1.run.app
+- ✅ Service URL: https://PGP_NP_IPN_v1-291176869049.us-central1.run.app
 - ✅ Health check: PASSED
-- ✅ Revision: np-webhook-10-26-00015-czv (serving 100% traffic)
+- ✅ Revision: PGP_NP_IPN_v1-00015-czv (serving 100% traffic)
 - ✅ Cloud Tasks initialization: VERIFIED (logs show "✅ [CLOUDTASKS] Client initialized successfully")
 
 **Complete Secret List:**
@@ -2354,23 +2354,23 @@ CREATE TABLE broadcast_manager (
 **BUG FIX & DEPLOYMENT:** Fixed critical IndexError in subscription notification tier determination
 
 **Summary:**
-- ✅ Fixed tier logic in np-webhook-10-26/app.py (lines 961-1000)
+- ✅ Fixed tier logic in PGP_NP_IPN_v1/app.py (lines 961-1000)
 - ✅ Replaced broken array access (sub_data[9], sub_data[11]) with proper database query
 - ✅ Added Decimal-based price comparison for accurate tier matching
 - ✅ Added comprehensive error handling with fallback to tier 1
 - ✅ Maintained emoji logging pattern (🎯, ⚠️, ❌)
-- ✅ **DEPLOYED** to Cloud Run (revision: np-webhook-10-26-00014-fsf)
+- ✅ **DEPLOYED** to Cloud Run (revision: PGP_NP_IPN_v1-00014-fsf)
 
 **Technical Details:**
 - **Problem:** Code tried to access sub_data[9] and sub_data[11], but tuple only had 5 elements (indices 0-4)
 - **Impact:** IndexError would crash subscription notifications
 - **Solution:** Query tier prices from main_clients_database and match against subscription_price
-- **File:** np-webhook-10-26/app.py
+- **File:** PGP_NP_IPN_v1/app.py
 
 **Deployment:**
-- ✅ Service URL: https://np-webhook-10-26-291176869049.us-central1.run.app
+- ✅ Service URL: https://PGP_NP_IPN_v1-291176869049.us-central1.run.app
 - ✅ Health check: PASSED
-- ✅ Revision: np-webhook-10-26-00014-fsf (serving 100% traffic)
+- ✅ Revision: PGP_NP_IPN_v1-00014-fsf (serving 100% traffic)
 
 **Testing Required:**
 - ⚠️ Test subscription notification (tier 1, 2, 3)
@@ -2384,16 +2384,16 @@ CREATE TABLE broadcast_manager (
 **DEPLOYMENT:** Complete deployment of notification management feature to production
 
 **Summary:**
-- ✅ Backend API (GCRegisterAPI-10-26) deployed successfully
-- ✅ Frontend (GCRegisterWeb-10-26) deployed with notification UI
-- ✅ IPN Webhook (np-webhook-10-26) deployed with notification trigger
+- ✅ Backend API (PGP_WEBAPI_v1) deployed successfully
+- ✅ Frontend (PGP_WEB_v1) deployed with notification UI
+- ✅ IPN Webhook (PGP_NP_IPN_v1) deployed with notification trigger
 - ✅ TELEPAY_BOT_URL secret configured (pointing to VM: http://34.58.80.152:8080)
 - ⚠️ TelePay bot running locally on VM (not deployed to Cloud Run)
 
 **Deployments Completed:**
 1. **Backend API** → https://gcregisterapi-10-26-291176869049.us-central1.run.app
 2. **Frontend** → https://www.paygateprime.com (bucket: www-paygateprime-com)
-3. **np-webhook** → https://np-webhook-10-26-291176869049.us-central1.run.app
+3. **np-webhook** → https://PGP_NP_IPN_v1-291176869049.us-central1.run.app
 
 **Configuration:**
 - Fixed deployment scripts (CRLF → LF conversion)
@@ -2426,20 +2426,20 @@ CREATE TABLE broadcast_manager (
 
 **Components Created:**
 1. Database migration scripts (add + rollback + execution script)
-2. TelePay10-26/notification_service.py (NEW FILE)
+2. PGP_SERVER_v1/notification_pgp_notifications_v1.py (NEW FILE)
 3. Flask /send-notification endpoint in server_manager.py
-4. Integration in app_initializer.py and telepay10-26.py
+4. Integration in app_initializer.py and pgp_server_v1.py
 
 **Files Modified (11 total):**
 - Database: add_notification_columns.sql, rollback_notification_columns.sql, execute_notification_migration.py
-- API Models: GCRegisterAPI-10-26/api/models/channel.py
-- API Services: GCRegisterAPI-10-26/api/services/channel_service.py
-- Bot Database: TelePay10-26/database.py (added get_notification_settings)
-- Bot Service: TelePay10-26/notification_service.py (NEW)
-- Bot Server: TelePay10-26/server_manager.py
-- Bot Init: TelePay10-26/app_initializer.py
-- Bot Main: TelePay10-26/telepay10-26.py
-- IPN Webhook: np-webhook-10-26/app.py
+- API Models: PGP_WEBAPI_v1/api/models/channel.py
+- API Services: PGP_WEBAPI_v1/api/services/channel_pgp_notifications_v1.py
+- Bot Database: PGP_SERVER_v1/database.py (added get_notification_settings)
+- Bot Service: PGP_SERVER_v1/notification_pgp_notifications_v1.py (NEW)
+- Bot Server: PGP_SERVER_v1/server_manager.py
+- Bot Init: PGP_SERVER_v1/app_initializer.py
+- Bot Main: PGP_SERVER_v1/pgp_server_v1.py
+- IPN Webhook: PGP_NP_IPN_v1/app.py
 
 **Key Features:**
 - 📬 Rich HTML notifications via Telegram Bot API
@@ -2482,7 +2482,7 @@ CREATE TABLE broadcast_manager (
 - ✅ Error messages display correct minimum amount
 
 **Files Modified:**
-- `TelePay10-26/donation_input_handler.py`:
+- `PGP_SERVER_v1/donation_input_handler.py`:
   - Line 29: Updated validation rules docstring
   - Line 39: Updated attributes docstring
   - Line 56: Changed self.MIN_AMOUNT = 1.00 to 4.99
@@ -2499,7 +2499,7 @@ CREATE TABLE broadcast_manager (
 
 **FEATURE:** Updated donation message and confirmation message formatting
 
-**Changes to TelePay10-26:**
+**Changes to PGP_SERVER_v1:**
 - ✅ Updated closed channel donation message format (closed_channel_manager.py)
   - Added period after "donation"
   - Custom message now appears on new line
@@ -2510,11 +2510,11 @@ CREATE TABLE broadcast_manager (
   - Added "@PayGatePrime_bot" mention to prepare message
 
 **Files Modified:**
-- `TelePay10-26/closed_channel_manager.py` (line 219)
-- `TelePay10-26/donation_input_handler.py` (lines 450-452)
+- `PGP_SERVER_v1/closed_channel_manager.py` (line 219)
+- `PGP_SERVER_v1/donation_input_handler.py` (lines 450-452)
 
 **Testing Required:**
-- [ ] Restart telepay10-26 bot locally on VM
+- [ ] Restart pgp_server10-26 bot locally on VM
 - [ ] Test donation message in closed channel -1003016667267
 - [ ] Verify confirmation message format when user clicks donate button
 
@@ -2539,13 +2539,13 @@ CREATE TABLE broadcast_manager (
 - Constraints: NOT NULL, CHECK (LENGTH(TRIM(closed_channel_donation_message)) > 0)
 - Migration: Successfully updated 16 existing channels
 
-**Backend Changes (GCRegisterAPI-10-26):**
+**Backend Changes (PGP_WEBAPI_v1):**
 - Updated `ChannelRegistrationRequest`, `ChannelUpdateRequest`, `ChannelResponse` models
 - Added field validators for 10-256 character length
 - Updated `register_channel()`, `get_user_channels()`, `get_channel_by_id()` methods
 - `update_channel()` automatically handles new field via model_dump()
 
-**Frontend Changes (GCRegisterWeb-10-26):**
+**Frontend Changes (PGP_WEB_v1):**
 - Updated TypeScript interfaces (`Channel`, `ChannelRegistrationRequest`)
 - Added donation message section to `RegisterChannelPage.tsx` (between Closed Channel and Subscription Tiers)
 - Added donation message section to `EditChannelPage.tsx`
@@ -2557,11 +2557,11 @@ CREATE TABLE broadcast_manager (
 - `TOOLS_SCRIPTS_TESTS/scripts/add_donation_message_column.sql` (NEW)
 - `TOOLS_SCRIPTS_TESTS/scripts/rollback_donation_message_column.sql` (NEW)
 - `TOOLS_SCRIPTS_TESTS/tools/execute_donation_message_migration.py` (NEW)
-- `GCRegisterAPI-10-26/api/models/channel.py`
-- `GCRegisterAPI-10-26/api/services/channel_service.py`
-- `GCRegisterWeb-10-26/src/types/channel.ts`
-- `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`
-- `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`
+- `PGP_WEBAPI_v1/api/models/channel.py`
+- `PGP_WEBAPI_v1/api/services/channel_pgp_notifications_v1.py`
+- `PGP_WEB_v1/src/types/channel.ts`
+- `PGP_WEB_v1/src/pages/RegisterChannelPage.tsx`
+- `PGP_WEB_v1/src/pages/EditChannelPage.tsx`
 
 ---
 
@@ -2942,7 +2942,7 @@ Send ReplyKeyboardMarkup to user's DM
 ```
 
 **FILE MODIFIED:**
-- `TelePay10-26/donation_input_handler.py` (line 480-482)
+- `PGP_SERVER_v1/donation_input_handler.py` (line 480-482)
 
 **CODE CHANGE:**
 ```python
@@ -2981,9 +2981,9 @@ chat_id = update.effective_user.id  # Returns user's private chat ID
 **INVESTIGATION:**
 - Searched codebase for other services using same table
 - Found 3+ services successfully using correct column names:
-  - `GCWebhook1-10-26/database_manager.py`
-  - `np-webhook-10-26/database_manager.py`
-  - `GCBatchProcessor-10-26/database_manager.py`
+  - `PGP_ORCHESTRATOR_v1/database_manager.py`
+  - `PGP_NP_IPN_v1/database_manager.py`
+  - `PGP_BATCHPROCESSOR_v1/database_manager.py`
 - Confirmed: columns exist as `payout_strategy` and `payout_threshold_usd`
 
 **FIX IMPLEMENTED:**
@@ -2993,7 +2993,7 @@ chat_id = update.effective_user.id  # Returns user's private chat ID
 - ✅ Logic and mapping unchanged (only names corrected)
 
 **FILE MODIFIED:**
-- `TelePay10-26/database.py` (lines 245-246)
+- `PGP_SERVER_v1/database.py` (lines 245-246)
 
 **CORRECTED SQL:**
 ```python
@@ -3051,7 +3051,7 @@ if self.closed_channel_manager:
 ```
 
 **FILE MODIFIED:**
-- `TelePay10-26/app_initializer.py` (+6 lines at lines 123-128)
+- `PGP_SERVER_v1/app_initializer.py` (+6 lines at lines 123-128)
 
 **TECHNICAL DETAILS:**
 - Challenge: `send_donation_message_to_closed_channels()` is async, but `initialize()` is sync
@@ -3060,14 +3060,14 @@ if self.closed_channel_manager:
 - Impact: Every app restart now broadcasts donation messages to all closed channels
 
 **EXPECTED BEHAVIOR:**
-When you run `telepay10-26.py` now:
+When you run `pgp_server_v1.py` now:
 1. ✅ Open channels receive subscription tier buttons (no donate button)
 2. ✅ Closed channels receive donation message with "💝 Donate to Support This Channel" button
 3. ✅ Log shows: `📨 Sending donation messages to closed channels...`
 4. ✅ Log shows: `✅ Donation broadcast complete: X/Y successful`
 
 **NEXT STEPS:**
-- ⬜ Run `telepay10-26.py` and verify donation messages appear in closed channels
+- ⬜ Run `pgp_server_v1.py` and verify donation messages appear in closed channels
 - ⬜ Check logs for broadcast statistics
 - ⬜ Test clicking donation button in closed channel
 
@@ -3128,14 +3128,14 @@ When you run `telepay10-26.py` now:
   - Updated docstring to clarify donations now in closed channels
 
 **FILES CREATED:**
-1. `TelePay10-26/closed_channel_manager.py` (225 lines)
-2. `TelePay10-26/donation_input_handler.py` (549 lines)
+1. `PGP_SERVER_v1/closed_channel_manager.py` (225 lines)
+2. `PGP_SERVER_v1/donation_input_handler.py` (549 lines)
 
 **FILES MODIFIED:**
-1. `TelePay10-26/database.py` (+105 lines) - Added 2 new methods
-2. `TelePay10-26/broadcast_manager.py` (+7/-7 lines) - Removed donate button
-3. `TelePay10-26/app_initializer.py` (+17 lines) - Initialized new managers
-4. `TelePay10-26/bot_manager.py` (+14 lines) - Registered handlers
+1. `PGP_SERVER_v1/database.py` (+105 lines) - Added 2 new methods
+2. `PGP_SERVER_v1/broadcast_manager.py` (+7/-7 lines) - Removed donate button
+3. `PGP_SERVER_v1/app_initializer.py` (+17 lines) - Initialized new managers
+4. `PGP_SERVER_v1/bot_manager.py` (+14 lines) - Registered handlers
 
 **TOTAL CHANGES:**
 - Lines Added: ~890 lines
@@ -3186,9 +3186,9 @@ When you run `telepay10-26.py` now:
 - ❌ **ROOT CAUSE FOUND**: `BASE_URL` environment variable NOT SET
 
 **ROOT CAUSE:**
-- `email_service.py:42` defaults to `https://app.telepay.com` when `BASE_URL` is missing
+- `email_pgp_notifications_v1.py:42` defaults to `https://app.pgp_server.com` when `BASE_URL` is missing
 - Emails WERE being sent, but contained broken links:
-  - ❌ Broken: `https://app.telepay.com/reset-password?token=XXX` (non-existent domain)
+  - ❌ Broken: `https://app.pgp_server.com/reset-password?token=XXX` (non-existent domain)
   - ✅ Correct: `https://www.paygateprime.com/reset-password?token=XXX`
 
 **FIX IMPLEMENTED:**
@@ -3232,7 +3232,7 @@ After discovering that `BASE_URL` was missing, user identified that `CORS_ORIGIN
 **USER REQUEST**: Implement password recovery functionality for registered users who have verified their email addresses.
 
 **INVESTIGATION & ANALYSIS:**
-- ✅ Backend already 100% complete (OWASP-compliant implementation in `auth_service.py`)
+- ✅ Backend already 100% complete (OWASP-compliant implementation in `auth_pgp_notifications_v1.py`)
 - ✅ API endpoints exist: `/api/auth/forgot-password` & `/api/auth/reset-password`
 - ✅ Token service fully implemented with cryptographic signing (1-hour expiration)
 - ✅ SendGrid email service ready
@@ -3243,17 +3243,17 @@ After discovering that `BASE_URL` was missing, user identified that `CORS_ORIGIN
 
 **IMPLEMENTATION:**
 
-**Created:** `GCRegisterWeb-10-26/src/pages/ForgotPasswordPage.tsx`
+**Created:** `PGP_WEB_v1/src/pages/ForgotPasswordPage.tsx`
 - Email input form to request password reset
 - Calls `authService.requestPasswordReset(email)`
 - Shows success message regardless of account existence (anti-user enumeration)
 - Links back to login page after submission
 
-**Modified:** `GCRegisterWeb-10-26/src/App.tsx`
+**Modified:** `PGP_WEB_v1/src/App.tsx`
 - ✅ Added import: `import ForgotPasswordPage from './pages/ForgotPasswordPage'` (line 7)
 - ✅ Added route: `<Route path="/forgot-password" element={<ForgotPasswordPage />} />` (line 43)
 
-**Modified:** `GCRegisterWeb-10-26/src/pages/LoginPage.tsx`
+**Modified:** `PGP_WEB_v1/src/pages/LoginPage.tsx`
 - ✅ Added "Forgot password?" link below password field (lines 56-60)
 - ✅ Right-aligned, styled consistently with existing auth pages
 - ✅ Links to `/forgot-password`
@@ -3324,7 +3324,7 @@ Created Python script to test login and /api/channels endpoints directly:
 
 **FIX IMPLEMENTED:**
 
-**File Modified:** `GCRegisterWeb-10-26/src/components/Header.tsx`
+**File Modified:** `PGP_WEB_v1/src/components/Header.tsx`
 
 **Changes Made** (Lines 1-21):
 
@@ -3386,7 +3386,7 @@ export default function Header({ user }: HeaderProps) {
 - ✅ No backend changes required - issue was purely frontend caching
 
 **FILES CHANGED:**
-1. `GCRegisterWeb-10-26/src/components/Header.tsx` - Added queryClient.clear() to logout handler
+1. `PGP_WEB_v1/src/components/Header.tsx` - Added queryClient.clear() to logout handler
 
 **SEVERITY:** 🔴 **CRITICAL** - Security/Privacy Vulnerability
 **STATUS:** ✅ **RESOLVED & DEPLOYED**
@@ -3481,8 +3481,8 @@ Applied flexbox grow ratios to create proper 2:1 split:
 - Button: 281px (37%)
 
 **Files Changed:**
-1. `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx` - Added flex properties to h1 and button
-2. `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx` - Added flex properties to h1 and button
+1. `PGP_WEB_v1/src/pages/RegisterChannelPage.tsx` - Added flex properties to h1 and button
+2. `PGP_WEB_v1/src/pages/EditChannelPage.tsx` - Added flex properties to h1 and button
 
 **Documentation Updated:**
 1. PROGRESS.md - This entry
@@ -3526,7 +3526,7 @@ HTTP 500 returned to client (should have been 400)
 
 **FIX IMPLEMENTED:**
 
-**File Modified:** `GCRegisterAPI-10-26/api/routes/auth.py`
+**File Modified:** `PGP_WEBAPI_v1/api/routes/auth.py`
 
 **Change:** Updated ValidationError exception handler to properly serialize error objects
 
@@ -3597,7 +3597,7 @@ except ValidationError as e:
 - At least one digit (0-9)
 
 **Files Changed:**
-1. `GCRegisterAPI-10-26/api/routes/auth.py` - Fixed ValidationError handler
+1. `PGP_WEBAPI_v1/api/routes/auth.py` - Fixed ValidationError handler
 
 **Documentation Updated:**
 1. BUGS.md - Added to "Recently Resolved" section
@@ -4185,7 +4185,7 @@ New Routes:
 
 **Files Created:**
 
-1. **`GCRegisterAPI-10-26/docs/API_VERIFICATION_ENDPOINTS.md`** (~450 lines) - Comprehensive API Documentation
+1. **`PGP_WEBAPI_v1/docs/API_VERIFICATION_ENDPOINTS.md`** (~450 lines) - Comprehensive API Documentation
    - ✅ Complete endpoint documentation for all verification and account management endpoints
    - ✅ Modified endpoints documented: /signup, /login, /me
    - ✅ New verification endpoints: /verification/status, /verification/resend
@@ -4225,7 +4225,7 @@ New Routes:
 
 **Test Files Created:**
 
-1. **`GCRegisterAPI-10-26/tests/test_api_verification.py`** (450 lines) - Verification Endpoint Tests
+1. **`PGP_WEBAPI_v1/tests/test_api_verification.py`** (450 lines) - Verification Endpoint Tests
    - ✅ **TestVerificationStatus** (3 tests)
      - Requires authentication (401 check)
      - Valid JWT token handling
@@ -4256,7 +4256,7 @@ New Routes:
 
    **Total:** 15 test scenarios covering all verification endpoints
 
-2. **`GCRegisterAPI-10-26/tests/test_api_account.py`** (650 lines) - Account Management Tests
+2. **`PGP_WEBAPI_v1/tests/test_api_account.py`** (650 lines) - Account Management Tests
    - ✅ **TestChangeEmail** (8 tests)
      - Authentication requirement
      - Verified account requirement
@@ -4315,7 +4315,7 @@ New Routes:
 
    **Total:** 40 test scenarios covering all account management
 
-3. **`GCRegisterAPI-10-26/tests/test_flows.py`** (650 lines) - End-to-End Flow Tests
+3. **`PGP_WEBAPI_v1/tests/test_flows.py`** (650 lines) - End-to-End Flow Tests
    - ✅ **TestSignupFlow** (2 tests)
      - Signup with auto-login concept
      - Response structure validation
@@ -4416,7 +4416,7 @@ New Routes:
 
 **New Files Created:**
 
-1. **`GCRegisterWeb-10-26/src/components/Header.tsx`** + **`Header.css`** - Reusable Header Component
+1. **`PGP_WEB_v1/src/components/Header.tsx`** + **`Header.css`** - Reusable Header Component
    - ✅ Props: `user?: { username: string, email_verified: boolean }`
    - ✅ Displays "Welcome, {username}"
    - ✅ Verification button with visual states:
@@ -4427,7 +4427,7 @@ New Routes:
    - ✅ Responsive design (mobile-friendly)
    - ✅ Clean, professional styling matching architecture spec
 
-2. **`GCRegisterWeb-10-26/src/pages/VerificationStatusPage.tsx`** + **CSS** - Verification Status Page
+2. **`PGP_WEB_v1/src/pages/VerificationStatusPage.tsx`** + **CSS** - Verification Status Page
    - ✅ Loads verification status on mount via authService.getVerificationStatus()
    - ✅ Two visual states:
      - **Verified**: Green checkmark icon, success message
@@ -4443,7 +4443,7 @@ New Routes:
    - ✅ Loading states
    - ✅ Responsive design
 
-3. **`GCRegisterWeb-10-26/src/pages/AccountManagePage.tsx`** + **CSS** - Account Management Page
+3. **`PGP_WEB_v1/src/pages/AccountManagePage.tsx`** + **CSS** - Account Management Page
    - ✅ Loads current user data on mount
    - ✅ Verification check: redirects to `/verification` if not verified
    - ✅ **Section 1: Change Email**:
@@ -4465,7 +4465,7 @@ New Routes:
    - ✅ Responsive layout
    - ✅ Section descriptions
 
-4. **`GCRegisterWeb-10-26/src/pages/EmailChangeConfirmPage.tsx`** + **CSS** - Email Change Confirmation Page
+4. **`PGP_WEB_v1/src/pages/EmailChangeConfirmPage.tsx`** + **CSS** - Email Change Confirmation Page
    - ✅ Reads token from URL query parameter (useSearchParams)
    - ✅ Auto-executes confirmation on component mount
    - ✅ Calls API: `GET /api/auth/account/confirm-email-change?token={token}`
@@ -4481,7 +4481,7 @@ New Routes:
 
 **File Modified:**
 
-5. **`GCRegisterWeb-10-26/src/App.tsx`** - Routing Configuration
+5. **`PGP_WEB_v1/src/App.tsx`** - Routing Configuration
    - ✅ Imported new components: VerificationStatusPage, AccountManagePage, EmailChangeConfirmPage
    - ✅ Added route: `/verify-email` → VerifyEmailPage (public)
    - ✅ Added route: `/reset-password` → ResetPasswordPage (public)
@@ -4518,7 +4518,7 @@ New Routes:
 
 **Files Modified:**
 
-1. **`GCRegisterWeb-10-26/src/types/auth.ts`** - TypeScript Interface Definitions
+1. **`PGP_WEB_v1/src/types/auth.ts`** - TypeScript Interface Definitions
    - ✅ Updated `User` interface: Added `email_verified`, `created_at`, `last_login`
    - ✅ Updated `AuthResponse` interface: Added `email_verified` field
    - ✅ Added `VerificationStatus` interface (6 fields)
@@ -4527,7 +4527,7 @@ New Routes:
    - ✅ Added `PasswordChangeRequest` interface (3 fields)
    - ✅ Added `PasswordChangeResponse` interface (2 fields)
 
-2. **`GCRegisterWeb-10-26/src/services/authService.ts`** - API Client Methods
+2. **`PGP_WEB_v1/src/services/authService.ts`** - API Client Methods
 
    **Modified Methods:**
    - ✅ **`signup()`**: Now stores access_token and refresh_token (auto-login behavior)
@@ -4572,7 +4572,7 @@ New Routes:
 
 ### Phase 6: Account Management Endpoints
 
-**New File Created:** `GCRegisterAPI-10-26/api/routes/account.py` (452 lines)
+**New File Created:** `PGP_WEBAPI_v1/api/routes/account.py` (452 lines)
 
 **New Endpoints:**
 
@@ -4623,7 +4623,7 @@ New Routes:
 
 ### Phase 7: Audit Logging
 
-**File Modified:** `GCRegisterAPI-10-26/api/utils/audit_logger.py`
+**File Modified:** `PGP_WEBAPI_v1/api/utils/audit_logger.py`
 
 **New Audit Methods:**
 - ✅ `log_email_change_requested()` - 📧 Log email change requests
@@ -4650,8 +4650,8 @@ New Routes:
 1. ✅ `api/models/auth.py` - Added 5 new Pydantic models
 2. ✅ `api/routes/auth.py` - Added 2 verification endpoints, modified 1
 3. ✅ `api/routes/account.py` - **CREATED** new file with 4 endpoints (452 lines)
-4. ✅ `api/services/token_service.py` - Added email change token methods
-5. ✅ `api/services/email_service.py` - Added 3 email change methods + templates
+4. ✅ `api/services/token_pgp_notifications_v1.py` - Added email change token methods
+5. ✅ `api/services/email_pgp_notifications_v1.py` - Added 3 email change methods + templates
 6. ✅ `api/utils/audit_logger.py` - Added 6 audit logging methods
 7. ✅ `app.py` - Registered account blueprint, added FRONTEND_URL config
 
@@ -4725,8 +4725,8 @@ New Routes:
 - **Backend API Routes:** 41% complete (Phases 1-5 done)
 - **Next Phase:** Phase 6 - Account Management Endpoints (email/password change)
 - **Files Modified This Session:**
-  - `GCRegisterAPI-10-26/api/models/auth.py` - Added 5 new models
-  - `GCRegisterAPI-10-26/api/routes/auth.py` - Added 2 new endpoints, modified 1
+  - `PGP_WEBAPI_v1/api/models/auth.py` - Added 5 new models
+  - `PGP_WEBAPI_v1/api/routes/auth.py` - Added 2 new endpoints, modified 1
 
 **Architecture Notes:**
 - Using existing EmailService and TokenService (no new services needed yet)
@@ -4772,7 +4772,7 @@ New Routes:
 
 **Backend API Changes - AUTO-LOGIN FLOW:**
 
-**Modified `/signup` Endpoint (GCRegisterAPI-10-26/api/routes/auth.py):**
+**Modified `/signup` Endpoint (PGP_WEBAPI_v1/api/routes/auth.py):**
 - ✅ **NEW BEHAVIOR**: Returns access_token and refresh_token immediately
 - ✅ Users now auto-login after signup (no verification required to access app)
 - ✅ Added `AuthService.create_tokens()` call after user creation
@@ -4780,19 +4780,19 @@ New Routes:
 - ✅ Updated success message: "Account created successfully. Please verify your email to unlock all features."
 - ✅ Updated docstring to reflect auto-login behavior
 
-**Modified `/login` Endpoint (GCRegisterAPI-10-26/api/routes/auth.py):**
+**Modified `/login` Endpoint (PGP_WEBAPI_v1/api/routes/auth.py):**
 - ✅ **NEW BEHAVIOR**: Allows unverified users to login
 - ✅ Removed 403 error response for unverified emails
 - ✅ Updated docstring: "allows unverified users"
 - ✅ Response includes `email_verified` status for client-side UI
 
-**Modified `AuthService.authenticate_user()` (GCRegisterAPI-10-26/api/services/auth_service.py):**
+**Modified `AuthService.authenticate_user()` (PGP_WEBAPI_v1/api/services/auth_pgp_notifications_v1.py):**
 - ✅ **REMOVED**: Email verification check that blocked logins
 - ✅ Users with `email_verified=false` can now login successfully
 - ✅ Still returns `email_verified` status in response
 - ✅ Updated docstring: "ALLOWS UNVERIFIED EMAILS - NEW BEHAVIOR"
 
-**Modified `/me` Endpoint (GCRegisterAPI-10-26/api/routes/auth.py):**
+**Modified `/me` Endpoint (PGP_WEBAPI_v1/api/routes/auth.py):**
 - ✅ Added `email_verified` to SQL SELECT query
 - ✅ Response now includes `email_verified` boolean field
 - ✅ Frontend can check verification status on page load
@@ -4805,7 +4805,7 @@ New Routes:
 
 2. Backend API:
    - `api/routes/auth.py` - Modified `/signup`, `/login`, `/me` endpoints
-   - `api/services/auth_service.py` - Modified `authenticate_user()` method
+   - `api/services/auth_pgp_notifications_v1.py` - Modified `authenticate_user()` method
 
 3. Documentation:
    - `VERIFICATION_ARCHITECTURE_1_CHECKLIST_PROGRESS.md` - NEW FILE (progress tracking)
@@ -4843,7 +4843,7 @@ New Routes:
 1. ✅ Used Playwright to test login flow - captured 401 errors
 2. ✅ Analyzed Cloud Logging - found "Invalid username or password" errors
 3. ✅ Tested API directly with curl - confirmed 401 responses
-4. ✅ Reviewed auth_service.py - authentication logic was correct
+4. ✅ Reviewed auth_pgp_notifications_v1.py - authentication logic was correct
 5. ✅ Checked database records - discovered multiple user2 entries
 
 **Fixes Implemented:**
@@ -4894,11 +4894,11 @@ New Routes:
 
 **Fixes Implemented:**
 
-**Backend Fixes (GCRegisterAPI-10-26):**
+**Backend Fixes (PGP_WEBAPI_v1):**
 - ✅ Fixed `config_manager.py` - Added `.strip()` to all secret loads to remove whitespace/newlines
 - ✅ Deployed new revision: `gcregisterapi-10-26-00016-kds`
 
-**Frontend Fixes (GCRegisterWeb-10-26):**
+**Frontend Fixes (PGP_WEB_v1):**
 - ✅ Created `VerifyEmailPage.tsx` - Full verification flow with loading/success/error states
 - ✅ Created `ResetPasswordPage.tsx` - Password reset form with validation
 - ✅ Updated `authService.ts` - Added 4 new methods:
@@ -5031,7 +5031,7 @@ New Routes:
   - Recommended schedule: `0 2 * * *` (2 AM daily UTC)
 
 **Phase 5.3: TokenService Unit Tests** ✅
-- ✅ Created `tests/test_token_service.py` (~350 lines)
+- ✅ Created `tests/test_token_pgp_notifications_v1.py` (~350 lines)
   - 17 comprehensive unit tests
   - **All 17 tests PASSED** ✅
   - Test coverage:
@@ -5051,7 +5051,7 @@ New Routes:
     - Edge cases (empty values, special characters) handled
 
 **Phase 5.4: EmailService Unit Tests** ✅
-- ✅ Created `tests/test_email_service.py` (~350 lines)
+- ✅ Created `tests/test_email_pgp_notifications_v1.py` (~350 lines)
   - 16 comprehensive unit tests
   - **All 16 tests PASSED** ✅
   - Test coverage:
@@ -5077,8 +5077,8 @@ New Routes:
 
 **Files Created (3):**
 1. `tools/cleanup_expired_tokens.py` - Token cleanup automation
-2. `tests/test_token_service.py` - TokenService unit tests
-3. `tests/test_email_service.py` - EmailService unit tests
+2. `tests/test_token_pgp_notifications_v1.py` - TokenService unit tests
+3. `tests/test_email_pgp_notifications_v1.py` - EmailService unit tests
 
 **Dependencies Installed:**
 - ✅ `pytest==9.0.0` - Testing framework
@@ -5116,7 +5116,7 @@ New Routes:
 - ✅ Updated `TokenService.__init__()` to accept secret_key parameter
   - Falls back to environment variable if not provided
   - Supports both config_manager (production) and .env (dev)
-- ✅ Updated `auth_service.py` to pass secret from current_app.config
+- ✅ Updated `auth_pgp_notifications_v1.py` to pass secret from current_app.config
   - All 5 TokenService instantiations updated
   - Uses `current_app.config.get('SIGNUP_SECRET_KEY')`
 - ✅ Updated `.env.example` with `SIGNUP_SECRET_KEY` variable
@@ -5135,8 +5135,8 @@ New Routes:
 **Files Modified (5):**
 1. `config_manager.py` - Added signup_secret_key to config dict
 2. `app.py` - Added SIGNUP_SECRET_KEY to app.config
-3. `api/services/token_service.py` - Updated __init__ to accept secret_key param
-4. `api/services/auth_service.py` - Updated all 5 TokenService instantiations
+3. `api/services/token_pgp_notifications_v1.py` - Updated __init__ to accept secret_key param
+4. `api/services/auth_pgp_notifications_v1.py` - Updated all 5 TokenService instantiations
 5. `.env.example` - Updated variable name and security notes
 
 ---
@@ -5239,7 +5239,7 @@ New Routes:
 
 **Files Modified (3):**
 1. `api/models/auth.py` - Added 7 new Pydantic models
-2. `api/services/auth_service.py` - Added 4 methods (~300 lines)
+2. `api/services/auth_pgp_notifications_v1.py` - Added 4 methods (~300 lines)
 3. `api/routes/auth.py` - Modified 2 endpoints, added 4 new (~200 lines)
 
 **Security Features:**
@@ -5279,25 +5279,25 @@ New Routes:
 - ✅ **SECRET_KEY generated**: Cryptographically secure key for token signing
 
 **Files Created (5):**
-1. `GCRegisterAPI-10-26/api/services/token_service.py` (~250 lines)
+1. `PGP_WEBAPI_v1/api/services/token_pgp_notifications_v1.py` (~250 lines)
    - Email verification token generation/validation (24h expiration)
    - Password reset token generation/validation (1h expiration)
    - URLSafeTimedSerializer with unique salts per token type
    - Comprehensive error handling and logging
 
-2. `GCRegisterAPI-10-26/api/services/email_service.py` (~350 lines)
+2. `PGP_WEBAPI_v1/api/services/email_pgp_notifications_v1.py` (~350 lines)
    - SendGrid integration with dev mode fallback
    - Responsive HTML email templates for verification, reset, confirmation
    - Professional gradient designs with clear CTAs
    - Security warnings and expiration notices
 
-3. `GCRegisterAPI-10-26/database/migrations/add_token_indexes.sql`
+3. `PGP_WEBAPI_v1/database/migrations/add_token_indexes.sql`
    - Partial indexes on verification_token (WHERE NOT NULL)
    - Partial indexes on reset_token (WHERE NOT NULL)
    - Performance optimization: O(n) → O(log n) lookups
    - 90% storage reduction via partial indexing
 
-4. `GCRegisterAPI-10-26/.env.example` (~100 lines)
+4. `PGP_WEBAPI_v1/.env.example` (~100 lines)
    - Complete environment variable template
    - Security best practices documented
    - SendGrid, Redis, reCAPTCHA configuration
@@ -5308,7 +5308,7 @@ New Routes:
    - Session logs and notes
 
 **Files Modified (1):**
-1. `GCRegisterAPI-10-26/requirements.txt`
+1. `PGP_WEBAPI_v1/requirements.txt`
    - Added itsdangerous==2.1.2
    - Added sendgrid==6.11.0
    - Added redis==5.0.1
@@ -5347,19 +5347,19 @@ New Routes:
 - ✅ **6 external API integrations** detailed
 
 **Services Analyzed:**
-1. **np-webhook-10-26** - NowPayments IPN handler
-2. **GCWebhook1-10-26** - Primary payment orchestrator
-3. **GCWebhook2-10-26** - Instant payment handler
-4. **GCSplit1-10-26** - Instant vs threshold router
-5. **GCSplit2-10-26** - ChangeNow exchange creator (instant)
-6. **GCSplit3-10-26** - ChangeNow exchange creator (threshold)
-7. **GCAccumulator-10-26** - Threshold payment accumulator
-8. **GCBatchProcessor-10-26** - Scheduled batch processor
-9. **GCMicroBatchProcessor-10-26** - Micro batch processor
-10. **GCHostPay1-10-26** - Payment orchestrator
-11. **GCHostPay2-10-26** - ChangeNow status checker
-12. **GCHostPay3-10-26** - ETH payment executor
-13. **GCRegisterAPI-10-26** - Channel registration API
+1. **PGP_NP_IPN_v1** - NowPayments IPN handler
+2. **PGP_ORCHESTRATOR_v1** - Primary payment orchestrator
+3. **PGP_INVITE_v1** - Instant payment handler
+4. **PGP_SPLIT1_v1** - Instant vs threshold router
+5. **PGP_SPLIT2_v1** - ChangeNow exchange creator (instant)
+6. **PGP_SPLIT3_v1** - ChangeNow exchange creator (threshold)
+7. **PGP_ACCUMULATOR_v1** - Threshold payment accumulator
+8. **PGP_BATCHPROCESSOR_v1** - Scheduled batch processor
+9. **PGP_MICROBATCHPROCESSOR_v1** - Micro batch processor
+10. **PGP_HOSTPAY1_v1** - Payment orchestrator
+11. **PGP_HOSTPAY2_v1** - ChangeNow status checker
+12. **PGP_HOSTPAY3_v1** - ETH payment executor
+13. **PGP_WEBAPI_v1** - Channel registration API
 
 **Documentation Created:**
 - ✅ `ENDPOINT_WEBHOOK_ANALYSIS.md` - Comprehensive 1,200+ line analysis
@@ -5386,29 +5386,29 @@ New Routes:
 - **GCSplit1**: 2 endpoints (routing decision, health)
 - **GCSplit2**: 2 endpoints (create exchange instant, health)
 - **GCSplit3**: 2 endpoints (create exchange threshold, health)
-- **GCAccumulator**: 3 endpoints (accumulate, swap executed, health)
-- **GCBatchProcessor**: 2 endpoints (scheduled trigger, health)
-- **GCMicroBatchProcessor**: 2 endpoints (scheduled trigger, health)
+- **PGP_ACCUMULATOR**: 3 endpoints (accumulate, swap executed, health)
+- **PGP_BATCHPROCESSOR**: 2 endpoints (scheduled trigger, health)
+- **PGP_MICROBATCHPROCESSOR**: 2 endpoints (scheduled trigger, health)
 - **GCHostPay1**: 4 endpoints (orchestrate, status verified, payment completed, health)
 - **GCHostPay2**: 2 endpoints (status check, health)
 - **GCHostPay3**: 2 endpoints (execute payment, health)
-- **GCRegisterAPI**: 14 endpoints (auth, channels CRUD, mappings, health, root)
+- **PGP_WEBAPI**: 14 endpoints (auth, channels CRUD, mappings, health, root)
 
 **External API Integrations:**
 1. **NowPayments API** - Invoice creation (GCWebhook1)
 2. **ChangeNow API** - Exchange creation + status (GCSplit2, GCSplit3, GCHostPay2)
 3. **CoinGecko API** - Crypto price fetching (np-webhook)
 4. **Alchemy RPC** - Ethereum blockchain (GCHostPay3)
-5. **Telegram Bot API** - User notifications (GCWebhook1, GCAccumulator)
+5. **Telegram Bot API** - User notifications (GCWebhook1, PGP_ACCUMULATOR)
 
 **Database Operations:**
 - `private_channel_users_database` - User subscriptions (np-webhook, GCWebhook1)
-- `main_clients_database` - Channel config (GCWebhook1, GCAccumulator, GCRegisterAPI)
-- `batch_conversions` - Threshold batching (GCSplit1, GCBatchProcessor, GCAccumulator)
+- `main_clients_database` - Channel config (GCWebhook1, PGP_ACCUMULATOR, PGP_WEBAPI)
+- `batch_conversions` - Threshold batching (GCSplit1, PGP_BATCHPROCESSOR, PGP_ACCUMULATOR)
 - `hostpay_transactions` - Successful payments (GCHostPay3)
 - `failed_transactions` - Failed payments (GCHostPay3)
 - `processed_payments` - Idempotency tracking (np-webhook, GCWebhook1)
-- `users` - Authentication (GCRegisterAPI)
+- `users` - Authentication (PGP_WEBAPI)
 
 **Impact:**
 - Complete understanding of microservices architecture
@@ -5615,7 +5615,7 @@ Implemented a comprehensive wallet address validation system across 3 phases:
 - ✅ Both Register and Edit pages now have identical button positioning
 
 **Files Modified:**
-- ✅ `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/RegisterChannelPage.tsx`:
   - Changed button from standalone element (lines 200-202) to flex layout (lines 200-205)
   - Heading and button now inline, button on right side
 
@@ -5652,10 +5652,10 @@ Implemented a comprehensive wallet address validation system across 3 phases:
 - ✅ Filtering still works: selecting one dropdown filters available options in the other
 
 **Files Modified:**
-- ✅ `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/RegisterChannelPage.tsx`:
   - Simplified `handleNetworkChange` (lines 64-67): Only sets network, no auto-population
   - Simplified `handleCurrencyChange` (lines 69-72): Only sets currency, no auto-population
-- ✅ `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/EditChannelPage.tsx`:
   - Simplified `handleNetworkChange` (lines 111-114): Only sets network, no auto-population
   - Simplified `handleCurrencyChange` (lines 116-119): Only sets currency, no auto-population
 
@@ -5695,19 +5695,19 @@ Implemented a comprehensive wallet address validation system across 3 phases:
 - ✅ Repositioned "Back to Dashboard" button to right side, inline with "Edit Channel" heading
 
 **Files Modified:**
-- ✅ `GCRegisterWeb-10-26/src/index.css`:
+- ✅ `PGP_WEB_v1/src/index.css`:
   - Reverted body background-color to #f5f5f5
   - Changed header background to #A8E870
   - Added `.dashboard-logo` class for white text color
-- ✅ `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/DashboardPage.tsx`:
   - Added `dashboard-logo` class to all logo instances
   - Removed channel counter from header nav section
   - Added channel counter next to "+ Add Channel" button (lines 118-125)
-- ✅ `GCRegisterWeb-10-26/src/pages/LandingPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/LandingPage.tsx`:
   - Updated background gradient to green
   - Changed "Get Started Free" button to dark green solid color
   - Changed "Login to Dashboard" button border/text to dark green
-- ✅ `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/EditChannelPage.tsx`:
   - Repositioned "Back to Dashboard" button inline with heading (lines 278-283)
 
 **Deployment:**
@@ -5759,24 +5759,24 @@ Implemented a comprehensive wallet address validation system across 3 phases:
 - ✅ Added cursor pointer and transition styles to .logo class
 
 **Files Modified:**
-- ✅ `GCRegisterWeb-10-26/src/index.css`:
+- ✅ `PGP_WEB_v1/src/index.css`:
   - Updated body background-color and text color
   - Updated .btn-primary colors
   - Updated .logo with clickable styles
   - Updated focus states for form inputs
   - Updated .auth-container gradient
   - Updated .auth-link color
-- ✅ `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/DashboardPage.tsx`:
   - Changed all 3 instances of "PayGate Prime" to "PayGatePrime"
   - Added onClick={() => navigate('/dashboard')} to all logo divs
   - Updated progress bar color
-- ✅ `GCRegisterWeb-10-26/src/pages/EditChannelPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/EditChannelPage.tsx`:
   - Changed 2 instances of "PayGate Prime" to "PayGatePrime"
   - Added onClick={() => navigate('/dashboard')} to both logo divs
-- ✅ `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/RegisterChannelPage.tsx`:
   - Changed "PayGate Prime" to "PayGatePrime"
   - Added onClick={() => navigate('/dashboard')} to logo div
-- ✅ `GCRegisterWeb-10-26/src/pages/LandingPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/LandingPage.tsx`:
   - Changed "PayGate Prime" to "PayGatePrime"
   - Updated title gradient colors
 
@@ -5824,7 +5824,7 @@ Implemented a comprehensive wallet address validation system across 3 phases:
 - ✅ Fixed long address overflow: Added `minHeight: '60px'` and `lineHeight: '1.5'` to wallet address container to handle extended addresses (XMR: 95+ chars) without offsetting buttons
 
 **Files Modified:**
-- ✅ `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx`:
+- ✅ `PGP_WEB_v1/src/pages/DashboardPage.tsx`:
   - Added `visibleWallets` state management (line 12)
   - Added `toggleWalletVisibility()` function (lines 24-29)
   - Updated tier-list div with `minHeight: '132px'` (line 146)
@@ -5870,19 +5870,19 @@ Implemented a comprehensive wallet address validation system across 3 phases:
 **Deliverable:** `/TOKEN_ENCRYPTION_MAP.md` (762 lines)
 
 **Complete Service Analysis:**
-- ✅ GCWebhook1-10-26: DECRYPT (NOWPayments) + ENCRYPT (GCWebhook2, GCSplit1)
-- ✅ GCWebhook2-10-26: DECRYPT (GCWebhook1) only
-- ✅ GCSplit1-10-26: ENCRYPT (GCSplit2, GCSplit3, GCHostPay1) - No decrypt (receives plain JSON)
-- ✅ GCSplit2-10-26: DECRYPT (GCSplit1) + ENCRYPT (GCSplit1) - USDT→ETH estimator
-- ✅ GCSplit3-10-26: DECRYPT (GCSplit1) + ENCRYPT (GCSplit1) - ETH→Client swapper
-- ✅ GCHostPay1-10-26: DECRYPT (GCSplit1) + ENCRYPT (GCHostPay2, GCHostPay3, GCMicroBatch)
-- ✅ GCHostPay2-10-26: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Status checker
-- ✅ GCHostPay3-10-26: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Payment executor
-- ✅ GCAccumulator-10-26: Has token_manager.py but UNUSED (plain JSON, no encryption)
-- ✅ GCBatchProcessor-10-26: ENCRYPT (GCSplit1) only - Batch detector
-- ✅ GCMicroBatchProcessor-10-26: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Micro-batch handler
-- ✅ np-webhook-10-26: No tokens (HMAC signature verification only, not encryption)
-- ✅ TelePay10-26: No tokens (Telegram bot, direct API)
+- ✅ PGP_ORCHESTRATOR_v1: DECRYPT (NOWPayments) + ENCRYPT (GCWebhook2, GCSplit1)
+- ✅ PGP_INVITE_v1: DECRYPT (GCWebhook1) only
+- ✅ PGP_SPLIT1_v1: ENCRYPT (GCSplit2, GCSplit3, GCHostPay1) - No decrypt (receives plain JSON)
+- ✅ PGP_SPLIT2_v1: DECRYPT (GCSplit1) + ENCRYPT (GCSplit1) - USDT→ETH estimator
+- ✅ PGP_SPLIT3_v1: DECRYPT (GCSplit1) + ENCRYPT (GCSplit1) - ETH→Client swapper
+- ✅ PGP_HOSTPAY1_v1: DECRYPT (GCSplit1) + ENCRYPT (GCHostPay2, GCHostPay3, GCMicroBatch)
+- ✅ PGP_HOSTPAY2_v1: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Status checker
+- ✅ PGP_HOSTPAY3_v1: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Payment executor
+- ✅ PGP_ACCUMULATOR_v1: Has token_manager.py but UNUSED (plain JSON, no encryption)
+- ✅ PGP_BATCHPROCESSOR_v1: ENCRYPT (GCSplit1) only - Batch detector
+- ✅ PGP_MICROBATCHPROCESSOR_v1: DECRYPT (GCHostPay1) + ENCRYPT (GCHostPay1) - Micro-batch handler
+- ✅ PGP_NP_IPN_v1: No tokens (HMAC signature verification only, not encryption)
+- ✅ PGP_SERVER_v1: No tokens (Telegram bot, direct API)
 
 **Token Encryption Statistics:**
 - Services with token_manager.py: 11
@@ -5902,9 +5902,9 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 
 **Token Flow Paths Documented:**
 1. **Instant Payout**: GCWebhook1 → GCSplit1 → GCSplit2 (estimate) → GCSplit3 (swap) → GCHostPay1 (validate) → GCHostPay2 (status) → GCHostPay3 (execute)
-2. **Threshold Payout**: GCWebhook1 → GCAccumulator (no encryption) → GCSplit2 (async conversion)
-3. **Batch Payout**: Cloud Scheduler → GCBatchProcessor → GCSplit1 (USDT→Client swap)
-4. **Micro-Batch**: Cloud Scheduler → GCMicroBatchProcessor → GCHostPay1 → GCHostPay2/3 → callback
+2. **Threshold Payout**: GCWebhook1 → PGP_ACCUMULATOR (no encryption) → GCSplit2 (async conversion)
+3. **Batch Payout**: Cloud Scheduler → PGP_BATCHPROCESSOR → GCSplit1 (USDT→Client swap)
+4. **Micro-Batch**: Cloud Scheduler → PGP_MICROBATCHPROCESSOR → GCHostPay1 → GCHostPay2/3 → callback
 
 **Token Payload Formats:**
 - Payment data token: 38+ bytes (binary packed with HMAC-SHA256 truncated to 16 bytes)
@@ -5912,7 +5912,7 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 - HostPay token: Variable length (includes actual + estimated ETH amounts for validation)
 
 **Key Security Findings:**
-1. GCAccumulator has unused token_manager (architectural remnant)
+1. PGP_ACCUMULATOR has unused token_manager (architectural remnant)
 2. Token expiration windows vary by use case: 2hr (payment), 24hr (invite), 60sec (hostpay)
 3. All HMAC signatures truncated to 16 bytes for efficiency
 4. Base64 URL-safe encoding without padding
@@ -5957,24 +5957,24 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 - Create implementation tickets for each phase
 - Update API documentation for optional fields
 
-## 2025-11-07 Session 75: GCSplit1-10-26 Threshold Payout Fix DEPLOYED ✅
+## 2025-11-07 Session 75: PGP_SPLIT1_v1 Threshold Payout Fix DEPLOYED ✅
 
 **CRITICAL BUG FIX**: Restored threshold payout method after instant payout refactoring broke batch payouts
 
 **Issue Discovered:**
 - ❌ Threshold payouts failing with: `TokenManager.encrypt_gcsplit1_to_gcsplit2_token() got an unexpected keyword argument 'adjusted_amount_usdt'`
-- ❌ Error occurred when GCBatchProcessor triggered GCSplit1's `/batch-payout` endpoint
+- ❌ Error occurred when PGP_BATCHPROCESSOR triggered GCSplit1's `/batch-payout` endpoint
 - 🔍 Root cause: During instant payout implementation, we refactored token methods to be currency-agnostic but forgot to update the `/batch-payout` endpoint
 
 **Fix Implemented:**
-- ✅ Updated `tps1-10-26.py` lines 926-937: Changed parameter names in token encryption call
+- ✅ Updated `pgp_split1_v1.py` lines 926-937: Changed parameter names in token encryption call
 - ✅ Changed `adjusted_amount_usdt=amount_usdt` → `adjusted_amount=amount_usdt`
 - ✅ Added `swap_currency='usdt'` (threshold always uses USDT)
 - ✅ Added `payout_mode='threshold'` (marks as threshold payout)
 - ✅ Added `actual_eth_amount=0.0` (no ETH in threshold flow)
 
 **Files Modified:**
-- ✅ `GCSplit1-10-26/tps1-10-26.py`: Lines 926-937 (ENDPOINT 4: /batch-payout)
+- ✅ `PGP_SPLIT1_v1/pgp_split1_v1.py`: Lines 926-937 (ENDPOINT 4: /batch-payout)
 - ✅ Documentation: `THRESHOLD_PAYOUT_FIX.md` created with comprehensive analysis
 
 **Deployments:**
@@ -5990,7 +5990,7 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 
 **Technical Details:**
 - Instant payout flow: GCWebhook1 → GCSplit1 (ENDPOINT 1: POST /) → GCSplit2 → GCSplit3 → GCHostPay
-- Threshold payout flow: GCBatchProcessor → GCSplit1 (ENDPOINT 4: POST /batch-payout) → GCSplit2 → GCSplit3 → GCHostPay
+- Threshold payout flow: PGP_BATCHPROCESSOR → GCSplit1 (ENDPOINT 4: POST /batch-payout) → GCSplit2 → GCSplit3 → GCHostPay
 - Both flows now use same token structure with `adjusted_amount`, `swap_currency`, `payout_mode`, `actual_eth_amount`
 
 **Verification:**
@@ -5999,7 +5999,7 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 - ✅ Previous errors (500) on /batch-payout endpoint stopped after deployment
 - ✅ Code review confirms fix matches token manager method signature
 
-## 2025-11-07 Session 74: GCMicroBatchProcessor-10-26 Threshold Logging Enhanced ✅
+## 2025-11-07 Session 74: PGP_MICROBATCHPROCESSOR_v1 Threshold Logging Enhanced ✅
 
 **ENHANCEMENT DEPLOYED**: Added threshold logging during service initialization
 
@@ -6011,16 +6011,16 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 - ✅ Modified `config_manager.py`: Call `get_micro_batch_threshold()` during `initialize_config()`
 - ✅ Added threshold to config dictionary as `micro_batch_threshold`
 - ✅ Added threshold to configuration status log: `Micro-Batch Threshold: ✅ ($5.00)`
-- ✅ Updated `microbatch10-26.py`: Use threshold from config instead of fetching again
+- ✅ Updated `micropgp_batchprocessor_v1.py`: Use threshold from config instead of fetching again
 
 **Files Modified:**
-- ✅ `GCMicroBatchProcessor-10-26/config_manager.py`: Lines 147-148, 161, 185
-- ✅ `GCMicroBatchProcessor-10-26/microbatch10-26.py`: Lines 105-114
+- ✅ `PGP_MICROBATCHPROCESSOR_v1/config_manager.py`: Lines 147-148, 161, 185
+- ✅ `PGP_MICROBATCHPROCESSOR_v1/micropgp_batchprocessor_v1.py`: Lines 105-114
 
 **Deployments:**
-- ✅ gcmicrobatchprocessor-10-26: Revision `gcmicrobatchprocessor-10-26-00016-9kz` deployed successfully
+- ✅ pgp_microbatchprocessor-10-26: Revision `pgp_microbatchprocessor-10-26-00016-9kz` deployed successfully
 - ✅ Build: `e70b4f50-8c11-43fa-89b7-15a2e63c8809` completed in 35s
-- ✅ Service URL: https://gcmicrobatchprocessor-10-26-291176869049.us-central1.run.app
+- ✅ Service URL: https://pgp_microbatchprocessor-10-26-291176869049.us-central1.run.app
 
 **Impact:**
 - ✅ Threshold now logged twice during initialization:
@@ -6030,13 +6030,13 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 - ✅ Improved operational visibility for threshold monitoring
 - ✅ Single source of truth for threshold value (loaded once, used throughout)
 
-## 2025-11-07 Session 73: GCMicroBatchProcessor-10-26 Logging Issue FIXED ✅
+## 2025-11-07 Session 73: PGP_MICROBATCHPROCESSOR_v1 Logging Issue FIXED ✅
 
-**CRITICAL BUG FIX DEPLOYED**: Restored stdout logging visibility for GCMicroBatchProcessor service
+**CRITICAL BUG FIX DEPLOYED**: Restored stdout logging visibility for PGP_MICROBATCHPROCESSOR service
 
 **Issue Discovered:**
 - ❌ Cloud Scheduler successfully triggered /check-threshold endpoint (HTTP 200) but produced ZERO stdout logs
-- ✅ Comparison service (gcbatchprocessor-10-26) produced 11 detailed logs per request
+- ✅ Comparison service (pgp_batchprocessor-10-26) produced 11 detailed logs per request
 - 🔍 Root cause: Flask `abort()` function terminates requests abruptly, preventing stdout buffer flush
 
 **Fix Implemented:**
@@ -6046,17 +6046,17 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 - ✅ Fixed 13 abort() locations across both endpoints (/check-threshold, /swap-executed)
 
 **Files Modified:**
-- ✅ `GCMicroBatchProcessor-10-26/microbatch10-26.py`: Replaced abort() with jsonify() returns
+- ✅ `PGP_MICROBATCHPROCESSOR_v1/micropgp_batchprocessor_v1.py`: Replaced abort() with jsonify() returns
 
 **Deployments:**
-- ✅ gcmicrobatchprocessor-10-26: Revision `gcmicrobatchprocessor-10-26-00015-gd9` deployed successfully
+- ✅ pgp_microbatchprocessor-10-26: Revision `pgp_microbatchprocessor-10-26-00015-gd9` deployed successfully
 - ✅ Build: `047930fe-659e-4417-b839-78103716745b` completed in 45s
-- ✅ Service URL: https://gcmicrobatchprocessor-10-26-291176869049.us-central1.run.app
+- ✅ Service URL: https://pgp_microbatchprocessor-10-26-291176869049.us-central1.run.app
 
 **Impact:**
 - ✅ Logs now visible in Cloud Logging stdout stream
 - ✅ Debugging and monitoring capabilities restored
-- ✅ Consistent error handling with gcbatchprocessor-10-26
+- ✅ Consistent error handling with pgp_batchprocessor-10-26
 - ✅ Graceful request termination ensures proper log flushing
 - ✅ No functional changes to endpoint behavior
 
@@ -6088,7 +6088,7 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 **Enhancement Implemented:**
 - ✅ Switched MICRO_BATCH_THRESHOLD_USD from static environment variable to dynamic Secret Manager API fetching
 - ✅ Updated secret value: $2.00 → $5.00
-- ✅ Redeployed GCMicroBatchProcessor without MICRO_BATCH_THRESHOLD_USD in --set-secrets
+- ✅ Redeployed PGP_MICROBATCHPROCESSOR without MICRO_BATCH_THRESHOLD_USD in --set-secrets
 - ✅ Retained 11 other secrets as static (optimal performance)
 
 **Configuration Changes:**
@@ -6097,7 +6097,7 @@ Internal Boundary (SUCCESS_URL_SIGNING_KEY)
 - ✅ No code changes required (fallback logic already existed in config_manager.py:57-66)
 
 **Deployments:**
-- ✅ gcmicrobatchprocessor-10-26: Revision `gcmicrobatchprocessor-10-26-00014-lxq`, 100% traffic
+- ✅ pgp_microbatchprocessor-10-26: Revision `pgp_microbatchprocessor-10-26-00014-lxq`, 100% traffic
 - ✅ Secret MICRO_BATCH_THRESHOLD_USD: Version 5 (value: $5.00)
 
 **Verification:**
@@ -6134,7 +6134,7 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 - TP fee was being sent to ChangeNOW instead of retained by platform
 
 **Root Cause:**
-- GCHostPay1-10-26/token_manager.py:238 assigned from_amount = first_amount (actual_eth_amount)
+- PGP_HOSTPAY1_v1/token_manager.py:238 assigned from_amount = first_amount (actual_eth_amount)
 - Should have been from_amount = estimated_eth_amount (fee-adjusted amount)
 
 **Changes Implemented:**
@@ -6242,7 +6242,7 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 - Phase 1 (80 min): Add actual_eth_amount to split_payout_que + fix hostpay population
   - Task 1.1: Database migration (add column)
   - Task 1.2: GCSplit1 database_manager.py updates
-  - Task 1.3: GCSplit1 tps1-10-26.py updates
+  - Task 1.3: GCSplit1 pgp_split1_v1.py updates
   - Task 1.4: GCHostPay1 database_manager.py updates
   - Task 1.5: Find and update caller
   - Testing & deployment procedures
@@ -6269,14 +6269,14 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 - ✅ payment_status field added to Cloud Tasks payload
 
 **Files Modified:**
-1. `np-webhook-10-26/app.py` - Added status validation after line 631, added payment_status to enqueue call
-2. `np-webhook-10-26/cloudtasks_client.py` - Updated method signature and payload
-3. `GCWebhook1-10-26/tph1-10-26.py` - Added second layer status validation after line 229
-4. `GCSplit1-10-26/database_manager.py` - Added check_split_payout_que_by_cn_api_id() method
-5. `GCSplit1-10-26/tps1-10-26.py` - Added idempotency check before insertion, race condition handling
+1. `PGP_NP_IPN_v1/app.py` - Added status validation after line 631, added payment_status to enqueue call
+2. `PGP_NP_IPN_v1/cloudtasks_client.py` - Updated method signature and payload
+3. `PGP_ORCHESTRATOR_v1/pgp_orchestrator_v1.py` - Added second layer status validation after line 229
+4. `PGP_SPLIT1_v1/database_manager.py` - Added check_split_payout_que_by_cn_api_id() method
+5. `PGP_SPLIT1_v1/pgp_split1_v1.py` - Added idempotency check before insertion, race condition handling
 
 **Deployments:**
-- ✅ np-webhook-10-26: Build 979a033a, Image ipn-status-validation, Revision 00011-qh6
+- ✅ PGP_NP_IPN_v1: Build 979a033a, Image ipn-status-validation, Revision 00011-qh6
 - ✅ gcwebhook1-10-26: Image defense-in-depth-validation, Revision 00023-596
 - ✅ gcsplit1-10-26: Build 579f9496, Image idempotency-protection, Revision 00021-7zd
 
@@ -6321,7 +6321,7 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 - ✅ No impact on GCSplit2 or GCSplit3
 
 **Files Modified:**
-- `GCSplit1-10-26/tps1-10-26.py` (lines 199-255, 476, 487, 492) - Naming consistency fix
+- `PGP_SPLIT1_v1/pgp_split1_v1.py` (lines 199-255, 476, 487, 492) - Naming consistency fix
 
 **Status:** ✅ **DEPLOYED TO PRODUCTION - READY FOR TEST TRANSACTIONS**
 
@@ -6342,7 +6342,7 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 
 **Fix Applied:**
 - Reordered GCSplit1 decryption to match GCSplit2 packing order
-- Lines modified: GCSplit1-10-26/token_manager.py:399-432
+- Lines modified: PGP_SPLIT1_v1/token_manager.py:399-432
 - Now unpacks: `from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency → payout_mode` ✅
 
 **Deployment:**
@@ -6359,7 +6359,7 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 - ✅ Both ETH and USDT swap paths working
 
 **Files Modified:**
-- `GCSplit1-10-26/token_manager.py` (lines 399-432) - Field ordering fix
+- `PGP_SPLIT1_v1/token_manager.py` (lines 399-432) - Field ordering fix
 
 **Status:** ✅ **DEPLOYED TO PRODUCTION - AWAITING TEST TRANSACTION**
 
@@ -6379,7 +6379,7 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 - Variable names changed from `*_usdt` to generic names
 
 **Deployment Actions:**
-- ✅ Created backup: `/OCTOBER/ARCHIVES/GCSplit2-10-26-BACKUP-DUAL-CURRENCY-FIX/`
+- ✅ Created backup: `/OCTOBER/ARCHIVES/PGP_SPLIT2_v1-BACKUP-DUAL-CURRENCY-FIX/`
 - ✅ Built Docker image: `gcr.io/telepay-459221/gcsplit2-10-26:dual-currency-fixed`
 - ✅ Deployed to Cloud Run: Revision `gcsplit2-10-26-00014-4qn` (100% traffic)
 - ✅ Health check passed: All components healthy
@@ -6393,12 +6393,12 @@ echo "NEW_VALUE" | gcloud secrets versions add MICRO_BATCH_THRESHOLD_USD --data-
 **Verification:**
 - ✅ No syntax errors
 - ✅ No old variable names (`adjusted_amount_usdt`, `from_amount_usdt`)
-- ✅ Main service (tps2-10-26.py) fully compatible
+- ✅ Main service (pgp_split2_v1.py) fully compatible
 - ✅ Service deployed and healthy
 
 **Files Modified:**
-- `GCSplit2-10-26/token_manager.py` - All 3 token methods (already updated)
-- `GCSplit2-10-26/tps2-10-26.py` - Main service (already compatible)
+- `PGP_SPLIT2_v1/token_manager.py` - All 3 token methods (already updated)
+- `PGP_SPLIT2_v1/pgp_split2_v1.py` - Main service (already compatible)
 
 **Status:** ✅ **DEPLOYED TO PRODUCTION**
 
@@ -6446,15 +6446,15 @@ adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)  # ✅ TP fee applied
 - ✅ All services match architecture specification
 
 **Files Modified:**
-- `GCSplit1-10-26/tps1-10-26.py` - Lines 350-357 (TP_FEE calculation fix)
+- `PGP_SPLIT1_v1/pgp_split1_v1.py` - Lines 350-357 (TP_FEE calculation fix)
 
 **Status:** ✅ **DEPLOYED TO PRODUCTION**
 
 **Deployment Summary:**
-- ✅ GCWebhook1-10-26: Deployed from source (revision: gcwebhook1-10-26-00022-sqx) - 100% traffic
-- ✅ GCSplit1-10-26: Deployed from container (revision: gcsplit1-10-26-00018-qjj) - 100% traffic
-- ✅ GCSplit2-10-26: Deployed from container (revision: gcsplit2-10-26-00013-dqj) - 100% traffic
-- ✅ GCSplit3-10-26: Deployed from container (revision: gcsplit3-10-26-00010-tjs) - 100% traffic
+- ✅ PGP_ORCHESTRATOR_v1: Deployed from source (revision: gcwebhook1-10-26-00022-sqx) - 100% traffic
+- ✅ PGP_SPLIT1_v1: Deployed from container (revision: gcsplit1-10-26-00018-qjj) - 100% traffic
+- ✅ PGP_SPLIT2_v1: Deployed from container (revision: gcsplit2-10-26-00013-dqj) - 100% traffic
+- ✅ PGP_SPLIT3_v1: Deployed from container (revision: gcsplit3-10-26-00010-tjs) - 100% traffic
 
 **Deployment Method:**
 - GCWebhook1: Source deployment (`gcloud run deploy --source`)
@@ -6479,7 +6479,7 @@ adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)  # ✅ TP fee applied
 **Root Cause Identified:**
 - Payment `4479119533` completed at NowPayments (status: "finished") but stuck processing
 - IPN callback failing with "No records found to update" error
-- `np-webhook-10-26/app.py` used UPDATE-only approach, requiring pre-existing DB record
+- `PGP_NP_IPN_v1/app.py` used UPDATE-only approach, requiring pre-existing DB record
 - Direct payment link usage (no Telegram bot interaction first) = no initial record created
 - Result: HTTP 500 loop, infinite NowPayments retries, user stuck on "Processing..." page
 
@@ -6492,7 +6492,7 @@ adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)  # ✅ TP fee applied
 
 **Solution Implemented:**
 
-1. **UPSERT Strategy in np-webhook-10-26/app.py (lines 290-535):**
+1. **UPSERT Strategy in PGP_NP_IPN_v1/app.py (lines 290-535):**
    - Changed from UPDATE-only to conditional INSERT or UPDATE
    - Checks if record exists before operation
    - **UPDATE**: If record exists (normal bot flow) - update payment fields
@@ -6511,15 +6511,15 @@ adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)  # ✅ TP fee applied
    - Subscription: 30 days (expires 2025-12-07)
 
 **Files Modified:**
-- `np-webhook-10-26/app.py` - UPSERT implementation (lines 290-535)
+- `PGP_NP_IPN_v1/app.py` - UPSERT implementation (lines 290-535)
 - `tools/manual_insert_payment_4479119533.py` - Payment recovery script (new)
 - `NOWPAYMENTS_IPN_NO_PAYMENT_RECORD_ISSUE_ANALYSIS.md` - Investigation report (new)
 
 **Deployment:**
 - Build: ✅ Complete (Build ID: `7f9c9fd9-c6e8-43db-a98b-33edefa945d7`)
-- Deploy: ✅ Complete (Revision: `np-webhook-10-26-00010-pds`)
+- Deploy: ✅ Complete (Revision: `PGP_NP_IPN_v1-00010-pds`)
 - Health: ✅ All components healthy (connector, database, ipn_secret)
-- Target: `np-webhook-10-26` Cloud Run service (us-central1)
+- Target: `PGP_NP_IPN_v1` Cloud Run service (us-central1)
 
 **Expected Results:**
 - ✅ Future direct payment links will work without bot interaction
@@ -6546,14 +6546,14 @@ adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)  # ✅ TP fee applied
 **GCHostPay3 Fixes Applied:**
 - Fixed 3 encryption functions (Lines 248, 400, 562)
 - Fixed 4 decryption functions (Lines 297, 450, 620, 806)
-- Total: 7 functions updated in `GCHostPay3-10-26/token_manager.py`
+- Total: 7 functions updated in `PGP_HOSTPAY3_v1/token_manager.py`
 - Build: ✅ Complete (Build ID: 86326fcd-67af-4303-bd20-957cc1605de0)
 - Deployment: ✅ Complete (Revision: gchostpay3-10-26-00017-ptd)
 - Health check: ✅ All components healthy (cloudtasks, database, token_manager, wallet)
 
 **Complete Batch Conversion Path Now Fixed:**
 ```
-GCMicroBatchProcessor → GCHostPay1 → GCHostPay2 → GCHostPay3 → callback
+PGP_MICROBATCHPROCESSOR → GCHostPay1 → GCHostPay2 → GCHostPay3 → callback
         ✅                    ✅            ✅            ✅
 ```
 
@@ -6577,7 +6577,7 @@ GCMicroBatchProcessor → GCHostPay1 → GCHostPay2 → GCHostPay3 → callback
 **GCHostPay2 Fixes Applied:**
 - Fixed 4 encryption functions (Lines 247, 401, 546, 686)
 - Fixed 4 decryption functions (Lines 298, 453, 597, 737)
-- Total: 8 functions updated in `GCHostPay2-10-26/token_manager.py`
+- Total: 8 functions updated in `PGP_HOSTPAY2_v1/token_manager.py`
 - Build & deployment: In progress
 
 **Impact:**
@@ -6587,14 +6587,14 @@ GCMicroBatchProcessor → GCHostPay1 → GCHostPay2 → GCHostPay3 → callback
 - ✅ GCHostPay3 → GCHostPay1 payment execution responses
 - ✅ Complete batch conversion flow now preserves full 42-character `batch_{uuid}` format
 
-## 2025-11-04 Session 62: GCMicroBatchProcessor UUID Truncation Bug Fixed ✅
+## 2025-11-04 Session 62: PGP_MICROBATCHPROCESSOR UUID Truncation Bug Fixed ✅
 
 **CRITICAL BUG FIX**: Fixed UUID truncation from 36 characters to 11 characters causing PostgreSQL errors and 100% batch conversion failure
 
 **Problem:**
 - Batch conversion UUIDs truncated from `fc3f8f55-c123-4567-8901-234567890123` (36 chars) to `fc3f8f55-c` (11 chars)
 - PostgreSQL rejecting truncated UUIDs: `invalid input syntax for type uuid: "fc3f8f55-c"`
-- GCMicroBatchProcessor `/swap-executed` endpoint returning 404
+- PGP_MICROBATCHPROCESSOR `/swap-executed` endpoint returning 404
 - ALL micro-batch conversions failing (100% failure rate)
 - Accumulated payments stuck in "swapping" status indefinitely
 - Users not receiving USDT payouts from batch conversions
@@ -6614,7 +6614,7 @@ GCMicroBatchProcessor → GCHostPay1 → GCHostPay2 → GCHostPay3 → callback
 - Total: 18 function fixes in GCHostPay1/token_manager.py
 
 **Files Modified:**
-1. **`GCHostPay1-10-26/token_manager.py`** - 9 token encryption/decryption function pairs:
+1. **`PGP_HOSTPAY1_v1/token_manager.py`** - 9 token encryption/decryption function pairs:
    - `encrypt_gchostpay1_to_gchostpay2_token()` (Line 395) - Status check request
    - `decrypt_gchostpay1_to_gchostpay2_token()` (Line 446) - Status check request handler
    - `encrypt_gchostpay2_to_gchostpay1_token()` (Line 549) - Status check response
@@ -6656,7 +6656,7 @@ unique_id, offset = self._unpack_string(raw, offset)
 - ✅ **Future-proof**: Supports any identifier format
 
 **Deployment:**
-- Built: GCHostPay1-10-26 Docker image with fixes
+- Built: PGP_HOSTPAY1_v1 Docker image with fixes
 - Status: ⏳ Pending deployment and testing
 
 **Documentation:**
@@ -6685,13 +6685,13 @@ unique_id, offset = self._unpack_string(raw, offset)
 - Updated docstrings to reflect new behavior
 
 **Files Modified:**
-1. **`TelePay10-26/broadcast_manager.py`**:
+1. **`PGP_SERVER_v1/broadcast_manager.py`**:
    - Removed lines 101-110 (auto-deletion code)
    - Removed `msg_id` extraction and `asyncio.call_later(60, delete_message)` timer
    - Function: `broadcast_hash_links()` - subscription tier button broadcasts
    - Messages now persist permanently in open channels
 
-2. **`TelePay10-26/message_utils.py`**:
+2. **`PGP_SERVER_v1/message_utils.py`**:
    - Removed lines 23-32 (auto-deletion code)
    - Updated docstring: "Send a message to a Telegram chat" (removed "with auto-deletion after 60 seconds")
    - Function: `send_message()` - general channel message sending
@@ -6732,11 +6732,11 @@ unique_id, offset = self._unpack_string(raw, offset)
 
 **Deployment Status:**
 - ✅ Code changes complete
-- ⏳ Pending: Build TelePay10-26 Docker image
+- ⏳ Pending: Build PGP_SERVER_v1 Docker image
 - ⏳ Pending: Deploy to Cloud Run
 
 **Next Steps:**
-- Build and deploy TelePay10-26 with fix
+- Build and deploy PGP_SERVER_v1 with fix
 - Test subscription flow: verify messages remain visible after 60+ seconds
 - Monitor user feedback on improved transparency
 - Consider Phase 2: Edit-in-place payment status updates
@@ -6759,7 +6759,7 @@ unique_id, offset = self._unpack_string(raw, offset)
 - Fixed all logging to show dynamic currency instead of hardcoded "ETH"
 
 **Files Modified:**
-1. **`GCHostPay3-10-26/wallet_manager.py`**:
+1. **`PGP_HOSTPAY3_v1/wallet_manager.py`**:
    - Added minimal ERC-20 ABI (transfer, balanceOf, decimals functions)
    - Created `TOKEN_CONFIGS` dict with mainnet contract addresses:
      - USDT: 0xdac17f958d2ee523a2206206994597c13d831ec7 (6 decimals)
@@ -6773,7 +6773,7 @@ unique_id, offset = self._unpack_string(raw, offset)
      - EIP-1559 transaction building
      - Full error handling and logging
 
-2. **`GCHostPay3-10-26/tph3-10-26.py`**:
+2. **`PGP_HOSTPAY3_v1/tph3-10-26.py`**:
    - Imported `TOKEN_CONFIGS` from wallet_manager
    - Fixed logging: replaced hardcoded "ETH" with `{from_currency.upper()}`
    - Added currency type detection logic (lines 222-255):
@@ -6819,7 +6819,7 @@ unique_id, offset = self._unpack_string(raw, offset)
 **CONFIGURATION ENHANCEMENT**: Made payment validation thresholds configurable via Secret Manager instead of hardcoded values
 
 **Problem:**
-- Payment validation thresholds hardcoded in `GCWebhook2-10-26/database_manager.py`
+- Payment validation thresholds hardcoded in `PGP_INVITE_v1/database_manager.py`
 - Line 310: `minimum_amount = expected_amount * 0.75` (75% hardcoded)
 - Line 343: `minimum_amount = expected_amount * 0.95` (95% hardcoded fallback)
 - Legitimate payment failed: $0.95 received vs $1.01 required (70.4% vs 75% threshold)
@@ -6833,19 +6833,19 @@ unique_id, offset = self._unpack_string(raw, offset)
 - Thresholds now injected via Cloud Run `--set-secrets` flag
 
 **Files Modified:**
-1. **`GCWebhook2-10-26/config_manager.py`**:
+1. **`PGP_INVITE_v1/config_manager.py`**:
    - Added `get_payment_tolerances()` method to fetch tolerance values from environment
    - Updated `initialize_config()` to include tolerance values in config dict
    - Added logging to display loaded threshold values
 
-2. **`GCWebhook2-10-26/database_manager.py`**:
+2. **`PGP_INVITE_v1/database_manager.py`**:
    - Added `payment_min_tolerance` parameter to `__init__()` (default: 0.50)
    - Added `payment_fallback_tolerance` parameter to `__init__()` (default: 0.75)
    - Line 322: Replaced hardcoded `0.75` with `self.payment_min_tolerance`
    - Line 357: Replaced hardcoded `0.95` with `self.payment_fallback_tolerance`
    - Added logging to show which tolerance is being used during validation
 
-3. **`GCWebhook2-10-26/tph2-10-26.py`**:
+3. **`PGP_INVITE_v1/pgp_invite_v1.py`**:
    - Updated `DatabaseManager` initialization to pass tolerance values from config
    - Added fallback defaults (0.50, 0.75) if config values missing
 
@@ -6923,7 +6923,7 @@ Expected:
 - Complete payment workflow broken for all token payouts
 
 **Fix Applied:**
-- **File**: `GCSplit1-10-26/tps1-10-26.py`
+- **File**: `PGP_SPLIT1_v1/pgp_split1_v1.py`
 - **Line**: 507
 - **Change**: `eth_amount=pure_market_eth_value` → `eth_amount=from_amount_usdt`
 - **Result**: GCSplit3 now receives correct USDT amount (5.48) instead of token quantity (596,726)
@@ -6946,7 +6946,7 @@ encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
 ```
 
 **Deployment:**
-- ✅ Code fixed in GCSplit1-10-26/tps1-10-26.py
+- ✅ Code fixed in PGP_SPLIT1_v1/pgp_split1_v1.py
 - ✅ Docker image built: gcr.io/telepay-459221/gcsplit1-10-26:latest
 - ✅ Deployed to Cloud Run: gcsplit1-10-26 (revision 00017-vcq)
 - ✅ Service URL: https://gcsplit1-10-26-291176869049.us-central1.run.app
@@ -6965,13 +6965,13 @@ encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
 
 **Related Files:**
 - `/GCSPLIT3_USDT_AMOUNT_MULTIPLICATION_BUG_ANALYSIS.md` (comprehensive analysis)
-- `GCSplit1-10-26/tps1-10-26.py` (single line fix)
+- `PGP_SPLIT1_v1/pgp_split1_v1.py` (single line fix)
 
 ---
 
 ## 2025-11-04 Session 57: Numeric Precision Overflow - GCSplit1 Cannot Store Large Token Quantities 🔢
 
-**CRITICAL DATABASE FIX**: GCSplit1-10-26 failing to insert SHIB/DOGE transactions due to NUMERIC precision overflow
+**CRITICAL DATABASE FIX**: PGP_SPLIT1_v1 failing to insert SHIB/DOGE transactions due to NUMERIC precision overflow
 
 **Root Cause:**
 - Database column `split_payout_request.to_amount` defined as `NUMERIC(12,8)`
@@ -7033,9 +7033,9 @@ split_payout_hostpay.from_amount:    NUMERIC(20,8) ✅ GOOD
 - ✅ GCSplit1 ready to handle large token quantities
 - ℹ️ No service rebuild required (database-only change)
 
-## 2025-11-03 Session 56: Token Expiration - GCMicroBatchProcessor Rejecting Valid Callbacks ⏰
+## 2025-11-03 Session 56: Token Expiration - PGP_MICROBATCHPROCESSOR Rejecting Valid Callbacks ⏰
 
-**CRITICAL BUG FIX**: GCMicroBatchProcessor rejecting GCHostPay1 callbacks with "Token expired" error
+**CRITICAL BUG FIX**: PGP_MICROBATCHPROCESSOR rejecting GCHostPay1 callbacks with "Token expired" error
 
 **Root Cause:**
 - 5-minute token expiration window **too short** for asynchronous batch conversion workflow
@@ -7057,14 +7057,14 @@ split_payout_hostpay.from_amount:    NUMERIC(20,8) ✅ GOOD
 **Impact:**
 - ✅ ChangeNow swap completes successfully
 - ✅ Platform receives USDT
-- ❌ GCMicroBatchProcessor cannot distribute USDT to individual records
+- ❌ PGP_MICROBATCHPROCESSOR cannot distribute USDT to individual records
 - ❌ Batch conversions stuck in "processing" state
 
 **Solution Applied:**
 - Increased token expiration window from **300s (5 minutes)** → **1800s (30 minutes)**
 - Accounts for ChangeNow retry delays (15m) + Cloud Tasks delays (5m) + safety margin (10m)
 
-**GCMicroBatchProcessor-10-26 Changes:**
+**PGP_MICROBATCHPROCESSOR_v1 Changes:**
 - ✅ Line 154-157: Updated token validation window
   - Changed `current_time - 300` → `current_time - 1800`
   - Added comprehensive comment explaining delay sources
@@ -7073,32 +7073,32 @@ split_payout_hostpay.from_amount:    NUMERIC(20,8) ✅ GOOD
 
 **Deployment:**
 - ✅ Built: Build ID **a12e0cf9-8b8e-41a0-8014-d582862c6c59**
-- ✅ Deployed: Revision **gcmicrobatchprocessor-10-26-00013-5zw** (100% traffic)
-- ✅ Service URL: https://gcmicrobatchprocessor-10-26-291176869049.us-central1.run.app
+- ✅ Deployed: Revision **pgp_microbatchprocessor-10-26-00013-5zw** (100% traffic)
+- ✅ Service URL: https://pgp_microbatchprocessor-10-26-291176869049.us-central1.run.app
 
 **System-Wide Token Expiration Audit:**
 Performed comprehensive scan of all token_manager.py files:
-- ❌ **GCMicroBatchProcessor**: 5m → **FIXED to 30m**
+- ❌ **PGP_MICROBATCHPROCESSOR**: 5m → **FIXED to 30m**
 - ✅ GCHostPay1/3: 2 hours (already appropriate)
 - ⚠️ GCHostPay2: 5 minutes (review needed)
 - ⚠️ GCSplit3: 5 minutes (review needed)
-- ⚠️ GCAccumulator: 5 minutes (review needed)
+- ⚠️ PGP_ACCUMULATOR: 5 minutes (review needed)
 
 **Files Modified:**
-- `/GCMicroBatchProcessor-10-26/token_manager.py`
+- `/PGP_MICROBATCHPROCESSOR_v1/token_manager.py`
 
 **Documentation Created:**
 - `/TOKEN_EXPIRATION_BATCH_CALLBACK_ANALYSIS.md` - Comprehensive root cause analysis
 
 **Verification Required:**
-- [ ] Monitor GCMicroBatchProcessor logs for successful token validation
+- [ ] Monitor PGP_MICROBATCHPROCESSOR logs for successful token validation
 - [ ] Verify no "Token expired" errors in production
 - [ ] Confirm batch conversions completing end-to-end
 - [ ] Check token age logs to validate actual delays in production
 - [ ] Trigger test batch conversion to validate fix
 
 **Next Steps:**
-- Phase 2: Review GCHostPay2, GCSplit3, GCAccumulator for similar issues
+- Phase 2: Review GCHostPay2, GCSplit3, PGP_ACCUMULATOR for similar issues
 - Phase 3: Standardize token expiration windows across all services
 - Add monitoring/alerting for token expiration rates
 
@@ -7106,7 +7106,7 @@ Performed comprehensive scan of all token_manager.py files:
 
 ## 2025-11-03 Session 55: UUID Truncation Bug - Batch Conversion IDs Cut to 10 Characters 🆔
 
-**CRITICAL BUG FIX**: GCMicroBatchProcessor failing with "invalid input syntax for type uuid"
+**CRITICAL BUG FIX**: PGP_MICROBATCHPROCESSOR failing with "invalid input syntax for type uuid"
 
 **Root Cause:**
 - Fixed 16-byte encoding in GCHostPay3 token encryption **truncates UUIDs**
@@ -7130,12 +7130,12 @@ Performed comprehensive scan of all token_manager.py files:
 
 **Fix Applied (Phase 1 - Critical Production Bug):**
 
-**GCHostPay3-10-26 Changes:**
+**PGP_HOSTPAY3_v1 Changes:**
 - ✅ Line 749: Updated token structure comment (16 bytes → variable-length)
 - ✅ Line 764: Removed `unique_id.encode('utf-8')[:16].ljust(16, b'\x00')`
 - ✅ Line 767: Changed `packed_data.extend(unique_id_bytes)` → `packed_data.extend(self._pack_string(unique_id))`
 
-**GCHostPay1-10-26 Changes:**
+**PGP_HOSTPAY1_v1 Changes:**
 - ✅ Line 886: Updated minimum token size (52 → 43 bytes for variable-length unique_id)
 - ✅ Lines 891-893: Changed fixed 16-byte read → `unique_id, offset = self._unpack_string(raw, offset)`
 
@@ -7152,19 +7152,19 @@ Performed comprehensive scan of all token_manager.py files:
 - ⏳ Production testing: Monitor next batch payout for full UUID propagation
 
 **Files Modified:**
-- `/10-26/GCHostPay3-10-26/token_manager.py` (lines 749, 764, 767)
-- `/10-26/GCHostPay1-10-26/token_manager.py` (lines 886, 891-893)
+- `/10-26/PGP_HOSTPAY3_v1/token_manager.py` (lines 749, 764, 767)
+- `/10-26/PGP_HOSTPAY1_v1/token_manager.py` (lines 886, 891-893)
 
 **Impact:**
 - ✅ Batch conversion IDs now preserve full 36-character UUID
-- ✅ GCMicroBatchProcessor can query database successfully
+- ✅ PGP_MICROBATCHPROCESSOR can query database successfully
 - ✅ Batch payout flow unblocked
 - ⚠️ **Phase 2 Pending**: Fix remaining 18 truncation instances in other token methods
 
 **Testing Required:**
 - ⏳ Trigger batch conversion and monitor GCHostPay3 encryption logs
 - ⏳ Verify GCHostPay1 decryption shows full UUID (not truncated)
-- ⏳ Check GCMicroBatchProcessor receives full UUID
+- ⏳ Check PGP_MICROBATCHPROCESSOR receives full UUID
 - ⏳ Confirm database query succeeds (no "invalid input syntax" error)
 
 **Documentation:**
@@ -7199,13 +7199,13 @@ Performed comprehensive scan of all token_manager.py files:
 
 **Fix Applied:**
 
-**GCSplit2-10-26 Changes (3 edits):**
+**PGP_SPLIT2_v1 Changes (3 edits):**
 - ✅ Line 127: Updated log message to show dynamic currency
 - ✅ Lines 131-132: Changed `to_currency="eth"` → `to_currency=payout_currency`
 - ✅ Lines 131-132: Changed `to_network="eth"` → `to_network=payout_network`
 - ✅ Line 154: Updated log to show actual payout currency
 
-**GCSplit3-10-26 Changes (4 edits):**
+**PGP_SPLIT3_v1 Changes (4 edits):**
 - ✅ Line 112: Renamed `eth_amount` → `usdt_amount` (clarity)
 - ✅ Line 118: Updated log message to show "USDT Amount"
 - ✅ Line 127: Updated log to show "USDT→{payout_currency}"
@@ -7226,8 +7226,8 @@ Performed comprehensive scan of all token_manager.py files:
 - ⏳ End-to-end batch payout test pending
 
 **Files Modified:**
-- `/10-26/GCSplit2-10-26/tps2-10-26.py` (lines 127, 131-132, 154)
-- `/10-26/GCSplit3-10-26/tps3-10-26.py` (lines 112, 118, 127, 130, 132, 162)
+- `/10-26/PGP_SPLIT2_v1/pgp_split2_v1.py` (lines 127, 131-132, 154)
+- `/10-26/PGP_SPLIT3_v1/pgp_split3_v1.py` (lines 112, 118, 127, 130, 132, 162)
 
 **Impact:**
 - ✅ Second swap will now correctly use USDT→ClientCurrency
@@ -7260,13 +7260,13 @@ Performed comprehensive scan of all token_manager.py files:
 **Error Log:**
 ```
 ✅ [BATCH_CALLBACK] Response token encrypted
-📡 [BATCH_CALLBACK] Enqueueing callback to: https://gcmicrobatchprocessor-10-26-pjxwjsdktq-uc.a.run.app/swap-executed
+📡 [BATCH_CALLBACK] Enqueueing callback to: https://pgp_microbatchprocessor-10-26-pjxwjsdktq-uc.a.run.app/swap-executed
 ❌ [BATCH_CALLBACK] Unexpected error: 'CloudTasksClient' object has no attribute 'enqueue_task'
 ❌ [ENDPOINT_4] Failed to send batch callback
 ```
 
 **Fix Applied:**
-- ✅ Replaced `enqueue_task()` → `create_task()` (tphp1-10-26.py line 160)
+- ✅ Replaced `enqueue_task()` → `create_task()` (pgp_hostpay1_v1.py line 160)
 - ✅ Replaced `url=` → `target_url=` parameter
 - ✅ Updated return value handling (task_name → boolean)
 - ✅ Added task name logging for debugging
@@ -7287,11 +7287,11 @@ Performed comprehensive scan of all token_manager.py files:
 - ✅ No other services use this non-existent method
 
 **Files Modified:**
-- `/10-26/GCHostPay1-10-26/tphp1-10-26.py` (lines 159-172) - Fixed method call and parameters
+- `/10-26/PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py` (lines 159-172) - Fixed method call and parameters
 
 **Impact:**
 - ✅ Batch conversion callbacks now working correctly
-- ✅ GCMicroBatchProcessor will receive swap completion notifications
+- ✅ PGP_MICROBATCHPROCESSOR will receive swap completion notifications
 - ✅ End-to-end batch conversion flow operational
 
 **Testing:**
@@ -7338,10 +7338,10 @@ Performed comprehensive scan of all token_manager.py files:
 **Cross-Service Verification:**
 - ✅ GCHostPay2: No self-callback logic → No action needed
 - ✅ GCHostPay3: Already loads GCHOSTPAY3_URL and GCHOSTPAY3_RETRY_QUEUE → Working correctly
-- ⏳ GCAccumulator, GCBatchProcessor, GCMicroBatchProcessor: Recommended for review (non-blocking)
+- ⏳ PGP_ACCUMULATOR, PGP_BATCHPROCESSOR, PGP_MICROBATCHPROCESSOR: Recommended for review (non-blocking)
 
 **Files Modified:**
-- `/10-26/GCHostPay1-10-26/config_manager.py` - Added GCHOSTPAY1_URL and GCHOSTPAY1_RESPONSE_QUEUE loading
+- `/10-26/PGP_HOSTPAY1_v1/config_manager.py` - Added GCHOSTPAY1_URL and GCHOSTPAY1_RESPONSE_QUEUE loading
 
 **Impact:**
 - ✅ Phase 2 retry logic now functional
@@ -7368,7 +7368,7 @@ Performed comprehensive scan of all token_manager.py files:
 - ✅ Added retry token encryption/decryption to token_manager.py (lines 1132-1273)
 - ✅ Updated cloudtasks_client.py with schedule_time support (lines 72-77)
 - ✅ Added `enqueue_gchostpay1_retry_callback()` method (lines 222-254)
-- ✅ Added `_enqueue_delayed_callback_check()` helper to tphp1-10-26.py (lines 178-267)
+- ✅ Added `_enqueue_delayed_callback_check()` helper to pgp_hostpay1_v1.py (lines 178-267)
 - ✅ Created ENDPOINT_4 `/retry-callback-check` (lines 770-960)
 - ✅ Updated ENDPOINT_3 to enqueue retry when swap not finished (lines 703-717)
 - ✅ Deployed revision: gchostpay1-10-26-00016-f4f
@@ -7377,7 +7377,7 @@ Performed comprehensive scan of all token_manager.py files:
 1. ENDPOINT_3 detects swap status = 'waiting'/'confirming'/'exchanging'/'sending'
 2. Enqueues Cloud Task with 5-minute delay to `/retry-callback-check`
 3. After 5 minutes, ENDPOINT_4 re-queries ChangeNow API
-4. If finished: Sends callback to GCMicroBatchProcessor with actual_usdt_received
+4. If finished: Sends callback to PGP_MICROBATCHPROCESSOR with actual_usdt_received
 5. If still in-progress: Schedules another retry (max 3 total retries = 15 minutes)
 
 **Impact:**
@@ -7387,15 +7387,15 @@ Performed comprehensive scan of all token_manager.py files:
 - ✅ Max 3 retries ensures eventual timeout if ChangeNow stuck
 
 **Files Modified:**
-- `/10-26/GCHostPay1-10-26/token_manager.py` - Retry token methods (lines 1132-1273)
-- `/10-26/GCHostPay1-10-26/cloudtasks_client.py` - Schedule_time support (lines 72-77, 222-254)
-- `/10-26/GCHostPay1-10-26/tphp1-10-26.py` - Retry helper + ENDPOINT_4 (lines 178-267, 703-717, 770-960)
+- `/10-26/PGP_HOSTPAY1_v1/token_manager.py` - Retry token methods (lines 1132-1273)
+- `/10-26/PGP_HOSTPAY1_v1/cloudtasks_client.py` - Schedule_time support (lines 72-77, 222-254)
+- `/10-26/PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py` - Retry helper + ENDPOINT_4 (lines 178-267, 703-717, 770-960)
 
 **Testing:**
 - ⏳ Monitor logs for retry task creation (5-minute delay)
 - ⏳ Verify ENDPOINT_4 executes after delay
 - ⏳ Verify callback sent once swap finishes
-- ⏳ Confirm GCMicroBatchProcessor receives actual_usdt_received
+- ⏳ Confirm PGP_MICROBATCHPROCESSOR receives actual_usdt_received
 
 ---
 
@@ -7422,8 +7422,8 @@ Performed comprehensive scan of all token_manager.py files:
 - ⚠️ Callback still not sent if swap not finished (Phase 2 will add retry logic)
 
 **Files Modified:**
-- `/10-26/GCHostPay1-10-26/changenow_client.py` - Added safe_decimal helper (lines 12-45, 111-127)
-- `/10-26/GCHostPay1-10-26/tphp1-10-26.py` - Enhanced ChangeNow query logic (lines 590-632)
+- `/10-26/PGP_HOSTPAY1_v1/changenow_client.py` - Added safe_decimal helper (lines 12-45, 111-127)
+- `/10-26/PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py` - Enhanced ChangeNow query logic (lines 590-632)
 
 **Testing:**
 - ✅ No ConversionSyntax errors expected in logs
@@ -7450,7 +7450,7 @@ Performed comprehensive scan of all token_manager.py files:
 - **REAL PROBLEM**: Reading wrong bytes as timestamp due to unpacking order mismatch
 
 **Fix Implemented:**
-- ✅ Updated GCSplit1-10-26/token_manager.py `decrypt_gcsplit3_to_gcsplit1_token()` method
+- ✅ Updated PGP_SPLIT1_v1/token_manager.py `decrypt_gcsplit3_to_gcsplit1_token()` method
 - ✅ Swapped unpacking order: Extract `actual_eth_amount` (8 bytes) BEFORE timestamp (4 bytes)
 - ✅ Added defensive check: `if offset + 8 + 4 <= len(payload)` ensures room for both fields
 - ✅ Updated error handling to catch extraction errors gracefully
@@ -7510,7 +7510,7 @@ offset += 4
 - Timestamp validation saw timestamp=0 (Unix epoch 1970-01-01) and rejected with "Token expired"
 
 **Fix Implemented:**
-- ✅ Updated GCSplit1-10-26/token_manager.py to add `actual_eth_amount` parameter
+- ✅ Updated PGP_SPLIT1_v1/token_manager.py to add `actual_eth_amount` parameter
 - ✅ Added 8-byte packing: `struct.pack(">d", actual_eth_amount)` before timestamp
 - ✅ Updated docstring to reflect new token structure
 - ✅ Added logging: `💰 [TOKEN_ENC] ACTUAL ETH: {actual_eth_amount}`
@@ -7547,14 +7547,14 @@ offset += 4
 - ✅ 86.7% of payments in last 7 days have actual ETH (65/75 rows)
 
 **Services Deployed (downstream → upstream order):**
-1. GCHostPay3-10-26 (revision: 00014-w99)
-2. GCHostPay1-10-26 (revision: 00014-5pk)
-3. GCSplit3-10-26 (revision: 00008-4qm)
-4. GCSplit2-10-26 (deployed successfully)
-5. GCSplit1-10-26 (revision: 00014-4gg)
-6. GCWebhook1-10-26 (revision: 00021-2pp)
-7. GCBatchProcessor-10-26 (deployed successfully)
-8. GCMicroBatchProcessor-10-26 (revision: 00012-lvx)
+1. PGP_HOSTPAY3_v1 (revision: 00014-w99)
+2. PGP_HOSTPAY1_v1 (revision: 00014-5pk)
+3. PGP_SPLIT3_v1 (revision: 00008-4qm)
+4. PGP_SPLIT2_v1 (deployed successfully)
+5. PGP_SPLIT1_v1 (revision: 00014-4gg)
+6. PGP_ORCHESTRATOR_v1 (revision: 00021-2pp)
+7. PGP_BATCHPROCESSOR_v1 (deployed successfully)
+8. PGP_MICROBATCHPROCESSOR_v1 (revision: 00012-lvx)
 
 **Production Validation:**
 - Sample payment amounts verified: 0.0002733 - 0.0002736 ETH
@@ -7580,15 +7580,15 @@ offset += 4
 3. ✅ **Micro-Batch Conversions** - Uses actual ETH for swaps (was using USD by mistake!)
 
 **Files Modified Total (8 files across 3 sessions):**
-- GCWebhook1-10-26 (2 files)
-- GCSplit1-10-26 (2 files)
-- GCSplit2-10-26 (2 files)
-- GCSplit3-10-26 (2 files)
-- GCHostPay1-10-26 (2 files)
-- GCHostPay3-10-26 (2 files)
-- GCAccumulator-10-26 (1 file)
-- GCBatchProcessor-10-26 (3 files)
-- GCMicroBatchProcessor-10-26 (2 files)
+- PGP_ORCHESTRATOR_v1 (2 files)
+- PGP_SPLIT1_v1 (2 files)
+- PGP_SPLIT2_v1 (2 files)
+- PGP_SPLIT3_v1 (2 files)
+- PGP_HOSTPAY1_v1 (2 files)
+- PGP_HOSTPAY3_v1 (2 files)
+- PGP_ACCUMULATOR_v1 (1 file)
+- PGP_BATCHPROCESSOR_v1 (3 files)
+- PGP_MICROBATCHPROCESSOR_v1 (2 files)
 
 **Architecture Changes:**
 - Database: Added `actual_eth_amount` column to 2 tables with indexes
@@ -7605,16 +7605,16 @@ offset += 4
 **Phase 3: Service Code Updates - In Progress (11/18 tasks)**
 
 **Tasks Completed This Session:**
-1. ✅ **Task 3.11** - GCAccumulator: Added `get_accumulated_actual_eth()` database method
-2. ✅ **Task 3.12** - GCBatchProcessor: Updated threshold payouts to use summed actual ETH
-3. ✅ **Task 3.14** - GCMicroBatchProcessor: Updated micro-batch conversions to use actual ETH
+1. ✅ **Task 3.11** - PGP_ACCUMULATOR: Added `get_accumulated_actual_eth()` database method
+2. ✅ **Task 3.12** - PGP_BATCHPROCESSOR: Updated threshold payouts to use summed actual ETH
+3. ✅ **Task 3.14** - PGP_MICROBATCHPROCESSOR: Updated micro-batch conversions to use actual ETH
 
 **Files Modified This Session (5 files):**
-- `GCBatchProcessor-10-26/database_manager.py` - Added `get_accumulated_actual_eth()` method (lines 310-356)
-- `GCBatchProcessor-10-26/token_manager.py` - Added `actual_eth_amount` parameter to batch token
-- `GCBatchProcessor-10-26/batch10-26.py` - Fetch and pass summed actual ETH for threshold payouts
-- `GCMicroBatchProcessor-10-26/database_manager.py` - Added `get_total_pending_actual_eth()` method (lines 471-511)
-- `GCMicroBatchProcessor-10-26/microbatch10-26.py` - Use actual ETH for swaps and GCHostPay1 payments
+- `PGP_BATCHPROCESSOR_v1/database_manager.py` - Added `get_accumulated_actual_eth()` method (lines 310-356)
+- `PGP_BATCHPROCESSOR_v1/token_manager.py` - Added `actual_eth_amount` parameter to batch token
+- `PGP_BATCHPROCESSOR_v1/pgp_batchprocessor_v1.py` - Fetch and pass summed actual ETH for threshold payouts
+- `PGP_MICROBATCHPROCESSOR_v1/database_manager.py` - Added `get_total_pending_actual_eth()` method (lines 471-511)
+- `PGP_MICROBATCHPROCESSOR_v1/micropgp_batchprocessor_v1.py` - Use actual ETH for swaps and GCHostPay1 payments
 
 **Key Implementation Details:**
 - **Threshold Payout Fix (Task 3.12)**: When client reaches payout threshold, batch processor now:
@@ -7661,10 +7661,10 @@ offset += 4
 - ✅ GCSplit1 decrypt from GCSplit2 (extract `actual_eth_amount`)
 
 **Files Modified This Session (4 files):**
-- `GCSplit1-10-26/tps1-10-26.py` - ENDPOINT 1 & 2 updates
-- `GCSplit1-10-26/token_manager.py` - GCSplit2 token chain
-- `GCSplit2-10-26/tps2-10-26.py` - Pass through actual_eth_amount
-- `GCSplit2-10-26/token_manager.py` - Encrypt/decrypt with backward compat
+- `PGP_SPLIT1_v1/pgp_split1_v1.py` - ENDPOINT 1 & 2 updates
+- `PGP_SPLIT1_v1/token_manager.py` - GCSplit2 token chain
+- `PGP_SPLIT2_v1/pgp_split2_v1.py` - Pass through actual_eth_amount
+- `PGP_SPLIT2_v1/token_manager.py` - Encrypt/decrypt with backward compat
 
 **Data Flow Complete:**
 ```
@@ -7725,13 +7725,13 @@ Pass `actual_eth_amount` through entire payment chain (6 services) to GCHostPay3
 8. ✅ GCHostPay1 Token Decrypt - Backward-compatible parsing (auto-detects format)
 
 **Files Modified (7 files):**
-- `GCWebhook1-10-26/cloudtasks_client.py` - CloudTasks payload
-- `GCWebhook1-10-26/tph1-10-26.py` - Pass to CloudTasks
-- `GCSplit1-10-26/database_manager.py` - Database INSERT
-- `GCSplit1-10-26/token_manager.py` - Token encryption/decryption
-- `GCSplit1-10-26/tps1-10-26.py` - Binary token builder
-- `GCSplit3-10-26/token_manager.py` - Token encryption/decryption
-- `GCHostPay1-10-26/token_manager.py` - Binary token decryption with backward compat
+- `PGP_ORCHESTRATOR_v1/cloudtasks_client.py` - CloudTasks payload
+- `PGP_ORCHESTRATOR_v1/pgp_orchestrator_v1.py` - Pass to CloudTasks
+- `PGP_SPLIT1_v1/database_manager.py` - Database INSERT
+- `PGP_SPLIT1_v1/token_manager.py` - Token encryption/decryption
+- `PGP_SPLIT1_v1/pgp_split1_v1.py` - Binary token builder
+- `PGP_SPLIT3_v1/token_manager.py` - Token encryption/decryption
+- `PGP_HOSTPAY1_v1/token_manager.py` - Binary token decryption with backward compat
 
 **Key Achievement:** ACTUAL ETH now flows through entire token chain with full backward compatibility!
 
@@ -7751,7 +7751,7 @@ Pass `actual_eth_amount` through entire payment chain (6 services) to GCHostPay3
 
 **Problem Identified:**
 - np-webhook service URL stored in two places:
-  1. Secret Manager: `NOWPAYMENTS_IPN_CALLBACK_URL` = `https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app`
+  1. Secret Manager: `NOWPAYMENTS_IPN_CALLBACK_URL` = `https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app`
   2. Hardcoded in payment-processing.html: `API_BASE_URL` = same URL
 - Violates DRY (Don't Repeat Yourself) principle
 - Risk: URL changes require updates in two places
@@ -7782,7 +7782,7 @@ def payment_processing_page():
 **2. Updated payment-processing.html (line 253):**
 ```javascript
 // BEFORE:
-const API_BASE_URL = 'https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app';  // ❌ Hardcoded
+const API_BASE_URL = 'https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app';  // ❌ Hardcoded
 
 // AFTER:
 const API_BASE_URL = window.location.origin;  // ✅ Dynamic, no hardcoding
@@ -7805,16 +7805,16 @@ User → NowPayments → Redirect to Cloud Storage URL
                       ↓
                storage.googleapis.com/paygateprime-static/payment-processing.html
                       ↓ (Cross-origin API calls - needed CORS)
-               np-webhook-10-26.run.app/api/payment-status
+               PGP_NP_IPN_v1.run.app/api/payment-status
 ```
 
 **AFTER (Session 45):**
 ```
 User → NowPayments → Redirect to np-webhook URL
                       ↓
-               np-webhook-10-26.run.app/payment-processing
+               PGP_NP_IPN_v1.run.app/payment-processing
                       ↓ (Same-origin API calls - no CORS needed)
-               np-webhook-10-26.run.app/api/payment-status
+               PGP_NP_IPN_v1.run.app/api/payment-status
 ```
 
 **Benefits:**
@@ -7826,8 +7826,8 @@ User → NowPayments → Redirect to np-webhook URL
 
 **Deployment:**
 - Build: 2149a1e5-5015-46ad-9d9e-aef77403e2b1
-- Revision: np-webhook-10-26-00009-th6
-- New endpoint: `https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app/payment-processing`
+- Revision: PGP_NP_IPN_v1-00009-th6
+- New endpoint: `https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app/payment-processing`
 
 **Testing:**
 - ✅ HTML served correctly with `Content-Type: text/html; charset=utf-8`
@@ -7835,12 +7835,12 @@ User → NowPayments → Redirect to np-webhook URL
 - ✅ Same-origin requests work (no CORS errors)
 
 **Files Modified:**
-1. `np-webhook-10-26/app.py` - Added `/payment-processing` route, updated CORS comment
-2. `np-webhook-10-26/payment-processing.html` - Changed `API_BASE_URL` to use `window.location.origin`
-3. `np-webhook-10-26/Dockerfile` - Added `COPY payment-processing.html .`
+1. `PGP_NP_IPN_v1/app.py` - Added `/payment-processing` route, updated CORS comment
+2. `PGP_NP_IPN_v1/payment-processing.html` - Changed `API_BASE_URL` to use `window.location.origin`
+3. `PGP_NP_IPN_v1/Dockerfile` - Added `COPY payment-processing.html .`
 
 **Next Steps:**
-- Update NowPayments success_url to use: `https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app/payment-processing?order_id={order_id}`
+- Update NowPayments success_url to use: `https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app/payment-processing?order_id={order_id}`
 - Cloud Storage HTML can remain for backward compatibility (CORS still configured)
 
 ---
@@ -7864,13 +7864,13 @@ Created comprehensive analysis document: `PAYMENT_CONFIRMATION_STUCK_ROOT_CAUSE_
 - Architecture diagrams showing IPN flow vs. Frontend polling flow
 - Identified parallel processes: IPN callback updates DB, Frontend polls API
 - Key finding: Backend works perfectly, Frontend can't reach API
-- CORS error: `storage.googleapis.com` → `np-webhook-10-26-*.run.app` blocked by browser
+- CORS error: `storage.googleapis.com` → `PGP_NP_IPN_v1-*.run.app` blocked by browser
 
 **Implementation Phases:**
 
 **PHASE 1: Backend CORS Configuration ✅**
-1. Added `flask-cors==4.0.0` to np-webhook-10-26/requirements.txt
-2. Configured CORS in np-webhook-10-26/app.py:
+1. Added `flask-cors==4.0.0` to PGP_NP_IPN_v1/requirements.txt
+2. Configured CORS in PGP_NP_IPN_v1/app.py:
    ```python
    from flask_cors import CORS
 
@@ -7884,10 +7884,10 @@ Created comprehensive analysis document: `PAYMENT_CONFIRMATION_STUCK_ROOT_CAUSE_
        }
    })
    ```
-3. Deployed np-webhook-10-26:
+3. Deployed PGP_NP_IPN_v1:
    - Build ID: f410815a-8a22-4109-964f-ec7bd5d351dd
-   - Revision: np-webhook-10-26-00008-bvc
-   - Service URL: https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app
+   - Revision: PGP_NP_IPN_v1-00008-bvc
+   - Service URL: https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app
 4. Verified CORS headers:
    - `access-control-allow-origin: https://storage.googleapis.com` ✅
    - `access-control-allow-methods: GET, OPTIONS` ✅
@@ -7895,8 +7895,8 @@ Created comprehensive analysis document: `PAYMENT_CONFIRMATION_STUCK_ROOT_CAUSE_
 
 **PHASE 2: Frontend URL & Error Handling ✅**
 1. Updated API_BASE_URL in payment-processing.html (line 253):
-   - FROM: `https://np-webhook-10-26-291176869049.us-east1.run.app` (wrong)
-   - TO: `https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app` (correct)
+   - FROM: `https://PGP_NP_IPN_v1-291176869049.us-east1.run.app` (wrong)
+   - TO: `https://PGP_NP_IPN_v1-pjxwjsdktq-uc.a.run.app` (correct)
 2. Enhanced checkPaymentStatus() function:
    - Added explicit CORS mode: `mode: 'cors', credentials: 'omit'`
    - Added detailed console logging with emojis (🔄, 📡, 📊, ✅, ❌, ⏳, ⚠️)
@@ -7926,8 +7926,8 @@ Created comprehensive analysis document: `PAYMENT_CONFIRMATION_STUCK_ROOT_CAUSE_
    - HTTP 200 for valid requests, 400 for invalid format ✅
 
 **Files Modified:**
-1. `np-webhook-10-26/requirements.txt` - Added flask-cors==4.0.0
-2. `np-webhook-10-26/app.py` - Added CORS configuration
+1. `PGP_NP_IPN_v1/requirements.txt` - Added flask-cors==4.0.0
+2. `PGP_NP_IPN_v1/app.py` - Added CORS configuration
 3. `static-landing-page/payment-processing.html` - Fixed URL + enhanced error handling
 
 **Documentation:**
@@ -7939,7 +7939,7 @@ Created comprehensive analysis document: `PAYMENT_CONFIRMATION_STUCK_ROOT_CAUSE_
 6. Updated `PROGRESS.md` - This entry
 
 **Deployment Summary:**
-- Backend: np-webhook-10-26-00008-bvc deployed to Cloud Run ✅
+- Backend: PGP_NP_IPN_v1-00008-bvc deployed to Cloud Run ✅
 - Frontend: payment-processing.html deployed to Cloud Storage ✅
 - CORS verified working ✅
 - Error handling tested ✅
@@ -7964,14 +7964,14 @@ Payment confirmation page now works correctly:
 - Correct pattern: Use `get_connection()` + `cursor()` + `execute()` + `commit()` + `close()`
 
 **Affected Services:**
-1. GCWebhook1-10-26 (line 434) - UPDATE processed_payments SET gcwebhook1_processed = TRUE
-2. GCWebhook2-10-26 (line 137) - SELECT from processed_payments (idempotency check)
-3. GCWebhook2-10-26 (line 281) - UPDATE processed_payments SET telegram_invite_sent = TRUE
+1. PGP_ORCHESTRATOR_v1 (line 434) - UPDATE processed_payments SET gcwebhook1_processed = TRUE
+2. PGP_INVITE_v1 (line 137) - SELECT from processed_payments (idempotency check)
+3. PGP_INVITE_v1 (line 281) - UPDATE processed_payments SET telegram_invite_sent = TRUE
 4. NP-Webhook - ✅ CORRECT (already using proper connection pattern)
 
 **Fixes Applied:**
 
-**GCWebhook1 (tph1-10-26.py line 434):**
+**GCWebhook1 (pgp_orchestrator_v1.py line 434):**
 ```python
 # BEFORE (WRONG):
 db_manager.execute_query("""UPDATE...""", params)
@@ -7986,7 +7986,7 @@ if conn:
     conn.close()
 ```
 
-**GCWebhook2 (tph2-10-26.py lines 137 & 281):**
+**GCWebhook2 (pgp_invite_v1.py lines 137 & 281):**
 - Fixed SELECT query (line 137): Now uses proper connection pattern + tuple result access
 - Fixed UPDATE query (line 281): Now uses proper connection pattern with commit
 - **Important:** Changed result access from dict `result[0]['column']` to tuple `result[0]` (pg8000 returns tuples)
@@ -8007,8 +8007,8 @@ if conn:
 5. **Check for similar issues** across all affected services
 
 **Files Modified:**
-- GCWebhook1-10-26/tph1-10-26.py (1 location fixed)
-- GCWebhook2-10-26/tph2-10-26.py (2 locations fixed)
+- PGP_ORCHESTRATOR_v1/pgp_orchestrator_v1.py (1 location fixed)
+- PGP_INVITE_v1/pgp_invite_v1.py (2 locations fixed)
 
 **Documentation Created:**
 - DATABASE_MANAGER_EXECUTE_QUERY_FIX_CHECKLIST.md (comprehensive fix guide)
@@ -8033,12 +8033,12 @@ if conn:
   - **Result:** Code couldn't find the secret, all IPNs rejected
 
 **Fix Applied:**
-- Updated np-webhook-10-26 deployment configuration to use correct env var name
+- Updated PGP_NP_IPN_v1 deployment configuration to use correct env var name
 - Changed `NOWPAYMENTS_IPN_SECRET_KEY` → `NOWPAYMENTS_IPN_SECRET`
 - Verified only np-webhook uses NOWPAYMENTS secrets (other services unaffected)
 
 **Deployment Results:**
-- **New Revision:** np-webhook-10-26-00007-gk8 ✅
+- **New Revision:** PGP_NP_IPN_v1-00007-gk8 ✅
 - **Startup Logs:** `✅ [CONFIG] NOWPAYMENTS_IPN_SECRET loaded` (previously `❌ Missing`)
 - **Status:** Service healthy, IPN signature verification now functional
 
@@ -8078,10 +8078,10 @@ if conn:
   - If gcwebhook1_processed = TRUE: Return 200 without re-processing
   - If new payment: INSERT with ON CONFLICT DO NOTHING
   - Fail-open mode: Proceed if DB unavailable
-- **Deployment:** np-webhook-10-26-00006-9xs ✅
+- **Deployment:** PGP_NP_IPN_v1-00006-9xs ✅
 
 **Layer 2 - GCWebhook1 (Payment Orchestrator):**
-- **Location:** tph1-10-26.py lines 428-448 (20 lines)
+- **Location:** pgp_orchestrator_v1.py lines 428-448 (20 lines)
 - **Function:** Mark as processed after successful routing
 - **Logic:**
   - UPDATE processed_payments SET gcwebhook1_processed = TRUE
@@ -8091,7 +8091,7 @@ if conn:
 - **Deployment:** gcwebhook1-10-26-00019-zbs ✅
 
 **Layer 3 - GCWebhook2 (Telegram Invite Sender):**
-- **Location:** tph2-10-26.py lines 125-171 (idempotency check) + 273-300 (marker)
+- **Location:** pgp_invite_v1.py lines 125-171 (idempotency check) + 273-300 (marker)
 - **Function:** Check before sending, mark after success
 - **Logic:**
   - Extract payment_id from request payload
@@ -8136,13 +8136,13 @@ if conn:
 
 **Problem:**
 - Users receiving 11+ duplicate Telegram invitation links for a single payment ❌
-- Same payment being processed multiple times (duplicate GCAccumulator records)
+- Same payment being processed multiple times (duplicate PGP_ACCUMULATOR records)
 - Cloud Tasks showing tasks stuck in retry loop with HTTP 500 errors
 - Payment flow APPEARS successful (invites sent) but service crashes immediately after
 
 **Root Cause:**
 - After Session 40 Part 2 type conversion fix, GCWebhook1 successfully processes payments ✅
-- Payment routed to GCAccumulator/GCSplit1 successfully ✅
+- Payment routed to PGP_ACCUMULATOR/GCSplit1 successfully ✅
 - Telegram invite enqueued to GCWebhook2 successfully ✅
 - **BUT** service crashes at line 437 when returning HTTP response ❌
 - Error: `TypeError: unsupported operand type(s) for -: 'float' and 'str'`
@@ -8196,7 +8196,7 @@ if conn:
 **Objective:** Fix token encryption failure due to string vs integer type mismatch for user_id and closed_channel_id
 
 **Problem:**
-- After queue fix, payments successfully reached GCWebhook1 and routed to GCAccumulator ✅
+- After queue fix, payments successfully reached GCWebhook1 and routed to PGP_ACCUMULATOR ✅
 - Token encryption for GCWebhook2 (Telegram invite) failing with type error ❌
 - Error: `closed_channel_id must be integer, got str: -1003296084379`
 - Users receiving payments but NO Telegram invite links
@@ -8232,12 +8232,12 @@ if conn:
 **Why This Fix is Local & Safe:**
 - ✅ No changes to NP-Webhook (continues sending data as-is)
 - ✅ No changes to GCWebhook2 (receives same encrypted token format)
-- ✅ No changes to GCSplit1/GCAccumulator (already working)
+- ✅ No changes to GCSplit1/PGP_ACCUMULATOR (already working)
 - ✅ GCWebhook1 handles type normalization internally
 - ✅ Defensive against future type variations from upstream
 
 **Files Changed:**
-- `/OCTOBER/10-26/GCWebhook1-10-26/tph1-10-26.py` - Added defensive type conversion
+- `/OCTOBER/10-26/PGP_ORCHESTRATOR_v1/pgp_orchestrator_v1.py` - Added defensive type conversion
 
 **Deployment:**
 - ✅ Rebuilt GCWebhook1 Docker image
@@ -8335,7 +8335,7 @@ Retry Config:
 - Create new test payment via Telegram bot
 - Verify np-webhook logs show: `✅ [CLOUDTASKS] Task created successfully`
 - Verify GCWebhook1 receives task and processes payment
-- Verify complete end-to-end flow: IPN → GCWebhook1 → GCSplit/GCAccumulator → User invite
+- Verify complete end-to-end flow: IPN → GCWebhook1 → GCSplit/PGP_ACCUMULATOR → User invite
 
 **Files Changed:**
 - None (queue creation only, no code changes)
@@ -8375,7 +8375,7 @@ Retry Config:
    echo -n "https://gcwebhook1-10-26-pjxwjsdktq-uc.a.run.app" | gcloud secrets versions add GCWEBHOOK1_URL --data-file=-
    ```
 
-2. **Added defensive .strip() pattern to np-webhook-10-26/app.py:**
+2. **Added defensive .strip() pattern to PGP_NP_IPN_v1/app.py:**
    ```python
    # Lines 31, 39-42, 89-92
    NOWPAYMENTS_IPN_SECRET = (os.getenv('NOWPAYMENTS_IPN_SECRET') or '').strip() or None
@@ -8391,18 +8391,18 @@ Retry Config:
    # After (SAFE):
    secret_value = (os.getenv(secret_name_env) or '').strip() or None
    ```
-   - GCWebhook1-10-26, GCWebhook2-10-26
-   - GCSplit1-10-26, GCSplit2-10-26, GCSplit3-10-26
-   - GCAccumulator-10-26, GCBatchProcessor-10-26, GCMicroBatchProcessor-10-26
-   - GCHostPay1-10-26, GCHostPay2-10-26, GCHostPay3-10-26
+   - PGP_ORCHESTRATOR_v1, PGP_INVITE_v1
+   - PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1
+   - PGP_ACCUMULATOR_v1, PGP_BATCHPROCESSOR_v1, PGP_MICROBATCHPROCESSOR_v1
+   - PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1
 
-4. **Fixed database connection double-close bug in np-webhook-10-26/app.py:**
+4. **Fixed database connection double-close bug in PGP_NP_IPN_v1/app.py:**
    - Removed duplicate `cur.close()` and `conn.close()` statements (lines 689-690)
    - Connection now properly closed only once after subscription data fetch
 
 **Files Changed:**
-1. `/OCTOBER/10-26/np-webhook-10-26/app.py` - Added .strip() to all env vars, fixed db connection
-2. `/OCTOBER/10-26/np-webhook-10-26/cloudtasks_client.py` - No changes (already safe)
+1. `/OCTOBER/10-26/PGP_NP_IPN_v1/app.py` - Added .strip() to all env vars, fixed db connection
+2. `/OCTOBER/10-26/PGP_NP_IPN_v1/cloudtasks_client.py` - No changes (already safe)
 3. `/OCTOBER/10-26/GC*/config_manager.py` - 11 files updated with defensive .strip() pattern
 
 **Secret Manager Updates:**
@@ -8410,8 +8410,8 @@ Retry Config:
 - GCWEBHOOK1_URL: Version 2 (49 bytes, no newline)
 
 **Deployment:**
-- ✅ Rebuilt np-webhook-10-26 Docker image: `gcr.io/telepay-459221/np-webhook-10-26:latest`
-- ✅ Deployed to Cloud Run: `np-webhook-10-26-00004-q9b` (revision 4)
+- ✅ Rebuilt PGP_NP_IPN_v1 Docker image: `gcr.io/telepay-459221/PGP_NP_IPN_v1:latest`
+- ✅ Deployed to Cloud Run: `PGP_NP_IPN_v1-00004-q9b` (revision 4)
 - ✅ All secrets injected via `--set-secrets` with `:latest` versions
 
 **Impact:**
@@ -8422,18 +8422,18 @@ Retry Config:
 - ✅ Future deployments protected by defensive .strip() pattern
 
 **All Services Redeployed:** ✅
-- np-webhook-10-26 (revision 4)
-- GCWebhook1-10-26 (revision 16)
-- GCWebhook2-10-26 (deployed)
-- GCSplit1-10-26, GCSplit2-10-26, GCSplit3-10-26 (deployed)
-- GCAccumulator-10-26, GCBatchProcessor-10-26, GCMicroBatchProcessor-10-26 (deployed)
-- GCHostPay1-10-26, GCHostPay2-10-26, GCHostPay3-10-26 (deployed)
+- PGP_NP_IPN_v1 (revision 4)
+- PGP_ORCHESTRATOR_v1 (revision 16)
+- PGP_INVITE_v1 (deployed)
+- PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1 (deployed)
+- PGP_ACCUMULATOR_v1, PGP_BATCHPROCESSOR_v1, PGP_MICROBATCHPROCESSOR_v1 (deployed)
+- PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1 (deployed)
 
 **Testing Required:**
 - Create new payment transaction to trigger IPN callback
 - Verify np-webhook logs show successful Cloud Tasks enqueue
 - Verify GCWebhook1 receives task and processes payment
-- Verify complete flow: IPN → GCWebhook1 → GCSplit/GCAccumulator → User invite
+- Verify complete flow: IPN → GCWebhook1 → GCSplit/PGP_ACCUMULATOR → User invite
 
 ## 2025-11-02 Session 38: NowPayments Success URL Encoding Fix ✅
 
@@ -8466,7 +8466,7 @@ secure_success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe=''
 ```
 
 **Files Changed:**
-1. `/OCTOBER/10-26/TelePay10-26/start_np_gateway.py`
+1. `/OCTOBER/10-26/PGP_SERVER_v1/start_np_gateway.py`
    - Added `from urllib.parse import quote` import (line 5)
    - Updated success_url generation to encode order_id (line 300)
 
@@ -8599,7 +8599,7 @@ wallet_address = (webhook_data.get('wallet_address') or '').strip()
 ```
 
 **Fix Applied:**
-- Updated `/GCSplit1-10-26/tps1-10-26.py` lines 296-304
+- Updated `/PGP_SPLIT1_v1/pgp_split1_v1.py` lines 296-304
 - Changed from `.get(key, '')` to `(get(key) or '')` pattern
 - Applied to: wallet_address, payout_currency, payout_network, subscription_price
 - Added explanatory comments for future maintainers
@@ -8626,7 +8626,7 @@ wallet_address = (webhook_data.get('wallet_address') or '').strip()
 - [x] Purged stuck Cloud Tasks with invalid test data
 
 **Files Changed:**
-1. `/OCTOBER/10-26/GCSplit1-10-26/tps1-10-26.py` (lines 296-304)
+1. `/OCTOBER/10-26/PGP_SPLIT1_v1/pgp_split1_v1.py` (lines 296-304)
 
 **Documentation Created:**
 1. `/OCTOBER/10-26/GCSPLIT1_NONETYPE_STRIP_FIX_CHECKLIST.md` (comprehensive fix guide)
@@ -8674,9 +8674,9 @@ wallet_address = (webhook_data.get('wallet_address') or '').strip()
   - Endpoint: `GET /api/payment-status?order_id={order_id}`
   - Response: JSON with status (pending|confirmed|failed|error), message, and data
 - Implemented two-step database lookup (open_channel_id → closed_channel_id → payment_status)
-- Built Docker image: `gcr.io/telepay-459221/np-webhook-10-26`
-- Deployed to Cloud Run: revision `np-webhook-10-26-00002-8rs`
-- Service URL: `https://np-webhook-10-26-291176869049.us-east1.run.app`
+- Built Docker image: `gcr.io/telepay-459221/PGP_NP_IPN_v1`
+- Deployed to Cloud Run: revision `PGP_NP_IPN_v1-00002-8rs`
+- Service URL: `https://PGP_NP_IPN_v1-291176869049.us-east1.run.app`
 - Configured all required secrets
 - Tested API endpoint successfully
 
@@ -8714,9 +8714,9 @@ wallet_address = (webhook_data.get('wallet_address') or '').strip()
 
 **Files Modified:**
 1. `/tools/execute_landing_page_schema_migration.py` (NEW)
-2. `/np-webhook-10-26/app.py` (Updated IPN handler + new API endpoint)
+2. `/PGP_NP_IPN_v1/app.py` (Updated IPN handler + new API endpoint)
 3. `/static-landing-page/payment-processing.html` (NEW)
-4. `/TelePay10-26/start_np_gateway.py` (Updated success_url generation)
+4. `/PGP_SERVER_v1/start_np_gateway.py` (Updated success_url generation)
 5. Database: `private_channel_users_database` schema updated
 
 **Files Created:**
@@ -8740,7 +8740,7 @@ wallet_address = (webhook_data.get('wallet_address') or '').strip()
 
 **Deployment Status:**
 - ✅ Cloud Storage bucket created and configured
-- ✅ np-webhook-10-26 deployed with API endpoint
+- ✅ PGP_NP_IPN_v1 deployed with API endpoint
 - ✅ Landing page deployed and publicly accessible
 - ✅ TelePay bot code updated (not yet deployed/restarted)
 
@@ -8761,13 +8761,13 @@ wallet_address = (webhook_data.get('wallet_address') or '').strip()
 
 ## 2025-11-02 Session 34: Complete Environment Variables Documentation ✅
 
-**Objective:** Create comprehensive documentation of ALL environment variables required to run TelePay10-26 architecture
+**Objective:** Create comprehensive documentation of ALL environment variables required to run PGP_SERVER_v1 architecture
 
 **Actions Completed:**
 - ✅ Reviewed 14 service config_manager.py files
-- ✅ Analyzed TelePay10-26 bot configuration
-- ✅ Analyzed np-webhook-10-26 configuration
-- ✅ Analyzed GCRegisterAPI-10-26 and GCRegisterWeb-10-26
+- ✅ Analyzed PGP_SERVER_v1 bot configuration
+- ✅ Analyzed PGP_NP_IPN_v1 configuration
+- ✅ Analyzed PGP_WEBAPI_v1 and PGP_WEB_v1
 - ✅ Created comprehensive environment variables reference document
 
 **Documentation Created:**
@@ -8797,29 +8797,29 @@ wallet_address = (webhook_data.get('wallet_address') or '').strip()
 
 **Service-Specific Matrix:**
 Documented exact requirements for all 14 services:
-- np-webhook-10-26: 9 required
-- GCWebhook1-10-26: 13 required
-- GCWebhook2-10-26: 6 required
-- GCSplit1-10-26: 15 required
-- GCSplit2-10-26: 6 required
-- GCSplit3-10-26: 8 required
-- GCAccumulator-10-26: 15 required
-- GCHostPay1-10-26: 11 required
-- GCHostPay2-10-26: 6 required
-- GCHostPay3-10-26: 17 required + 2 optional
-- GCBatchProcessor-10-26: 10 required
-- GCMicroBatchProcessor-10-26: 12 required
-- TelePay10-26: 5 required + 1 legacy
-- GCRegisterAPI-10-26: 5 required + 1 optional
-- GCRegisterWeb-10-26: 1 required (build-time)
+- PGP_NP_IPN_v1: 9 required
+- PGP_ORCHESTRATOR_v1: 13 required
+- PGP_INVITE_v1: 6 required
+- PGP_SPLIT1_v1: 15 required
+- PGP_SPLIT2_v1: 6 required
+- PGP_SPLIT3_v1: 8 required
+- PGP_ACCUMULATOR_v1: 15 required
+- PGP_HOSTPAY1_v1: 11 required
+- PGP_HOSTPAY2_v1: 6 required
+- PGP_HOSTPAY3_v1: 17 required + 2 optional
+- PGP_BATCHPROCESSOR_v1: 10 required
+- PGP_MICROBATCHPROCESSOR_v1: 12 required
+- PGP_SERVER_v1: 5 required + 1 legacy
+- PGP_WEBAPI_v1: 5 required + 1 optional
+- PGP_WEB_v1: 1 required (build-time)
 
 **Summary Statistics:**
 - Total unique secrets: ~45-50
 - Services requiring database: 10
 - Services requiring Cloud Tasks: 11
 - Services requiring ChangeNow API: 4
-- Most complex service: GCHostPay3-10-26 (19 total variables)
-- Simplest service: GCRegisterWeb-10-26 (1 variable)
+- Most complex service: PGP_HOSTPAY3_v1 (19 total variables)
+- Simplest service: PGP_WEB_v1 (1 variable)
 
 **Files Created:**
 - `TELEPAY10-26_ENVIRONMENT_VARIABLES_COMPLETE.md` - Master reference
@@ -8874,7 +8874,7 @@ Documented exact requirements for all 14 services:
   - Fetches all required data in one query
   - Ensures `subscription_price` is converted to string
 
-- ✅ **Added Defensive Validation** (`GCWebhook1/tph1-10-26.py` lines 367-380):
+- ✅ **Added Defensive Validation** (`GCWebhook1/pgp_orchestrator_v1.py` lines 367-380):
   - Validates `subscription_time_days` and `subscription_price` are not None
   - Converts to correct types (int and str) before token encryption
   - Returns clear error message if data missing
@@ -8894,9 +8894,9 @@ Documented exact requirements for all 14 services:
   - Both services healthy and operational
 
 **Files Modified:**
-1. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/np-webhook-10-26/app.py` (lines 616-644)
-2. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCWebhook1-10-26/tph1-10-26.py` (lines 367-380)
-3. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCWebhook1-10-26/token_manager.py` (lines 211-219)
+1. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NP_IPN_v1/app.py` (lines 616-644)
+2. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_ORCHESTRATOR_v1/pgp_orchestrator_v1.py` (lines 367-380)
+3. `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_ORCHESTRATOR_v1/token_manager.py` (lines 211-219)
 
 **Files Created:**
 - `TOKEN_ENCRYPTION_ERROR_FIX_CHECKLIST.md` - Comprehensive fix documentation
@@ -8932,12 +8932,12 @@ Documented exact requirements for all 14 services:
 
 - ✅ **Fix Applied**: Updated np-webhook Dockerfile
   - Added `COPY cloudtasks_client.py .` before `COPY app.py .`
-  - File: `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/np-webhook-10-26/Dockerfile`
+  - File: `/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_NP_IPN_v1/Dockerfile`
 
-- ✅ **Deployment**: Redeployed np-webhook-10-26
-  - New revision: `np-webhook-10-26-00002-cmd`
+- ✅ **Deployment**: Redeployed PGP_NP_IPN_v1
+  - New revision: `PGP_NP_IPN_v1-00002-cmd`
   - Build successful, container deployed
-  - Service URL: `https://np-webhook-10-26-291176869049.us-central1.run.app`
+  - Service URL: `https://PGP_NP_IPN_v1-291176869049.us-central1.run.app`
 
 - ✅ **Verification**: Confirmed CloudTasks initialization
   - Log: `✅ [CLOUDTASKS] Client initialized successfully`
@@ -8948,13 +8948,13 @@ Documented exact requirements for all 14 services:
   - Checked 10 services for similar Dockerfile issues
   - All services verified:
     - GCWebhook1, GCSplit1, GCSplit2, GCSplit3: ✅ Has COPY cloudtasks_client.py
-    - GCAccumulator, GCBatchProcessor: ✅ Has COPY cloudtasks_client.py
-    - GCMicroBatchProcessor: ✅ Uses `COPY . .` (includes all files)
+    - PGP_ACCUMULATOR, PGP_BATCHPROCESSOR: ✅ Has COPY cloudtasks_client.py
+    - PGP_MICROBATCHPROCESSOR: ✅ Uses `COPY . .` (includes all files)
     - GCHostPay1, GCHostPay2, GCHostPay3: ✅ Has COPY cloudtasks_client.py
     - GCWebhook2: N/A (doesn't use cloudtasks_client.py)
 
 **Files Modified:**
-- `np-webhook-10-26/Dockerfile` - Added cloudtasks_client.py copy command
+- `PGP_NP_IPN_v1/Dockerfile` - Added cloudtasks_client.py copy command
 
 **Documentation Created:**
 - `NP_WEBHOOK_CLOUDTASKS_IMPORT_FIX_CHECKLIST.md` - Comprehensive fix checklist
@@ -9027,8 +9027,8 @@ Documented exact requirements for all 14 services:
 - Check fee reconciliation logs for accuracy
 
 **Files Modified:**
-- `GCWebhook2-10-26/database_manager.py` (lines 1-9, 149-241, 295-364)
-- `GCWebhook2-10-26/requirements.txt` (line 6)
+- `PGP_INVITE_v1/database_manager.py` (lines 1-9, 149-241, 295-364)
+- `PGP_INVITE_v1/requirements.txt` (line 6)
 
 **Related:**
 - Checklist: `VALIDATION_OUTCOME_AMOUNT_FIX_CHECKLIST.md`
@@ -9055,13 +9055,13 @@ Documented exact requirements for all 14 services:
     - `nowpayments_outcome_currency` (VARCHAR) - Outcome crypto currency
   - Migration executed successfully, columns verified
 
-- ✅ **Phase 2**: Updated IPN webhook handler (`np-webhook-10-26/app.py`)
+- ✅ **Phase 2**: Updated IPN webhook handler (`PGP_NP_IPN_v1/app.py`)
   - Capture `price_amount`, `price_currency`, `outcome_currency` from IPN payload
   - Added fallback: infer `outcome_currency` from `pay_currency` if missing
   - Updated database INSERT query to store 3 new fields
   - Enhanced IPN logging to display USD amount and crypto outcome separately
 
-- ✅ **Phase 3**: Updated GCWebhook2 validation (`GCWebhook2-10-26/database_manager.py`)
+- ✅ **Phase 3**: Updated GCWebhook2 validation (`PGP_INVITE_v1/database_manager.py`)
   - Modified `get_nowpayments_data()` to fetch 4 new fields
   - Updated result parsing to include price/outcome currency data
   - Completely rewrote `validate_payment_complete()` with 3-tier validation:
@@ -9076,7 +9076,7 @@ Documented exact requirements for all 14 services:
       - Requires external price API
 
 - ✅ **Deployment**:
-  - np-webhook: Image `gcr.io/telepay-459221/np-webhook-10-26`, Revision `np-webhook-00007-rf2`
+  - np-webhook: Image `gcr.io/telepay-459221/PGP_NP_IPN_v1`, Revision `np-webhook-00007-rf2`
   - gcwebhook2-10-26: Image `gcr.io/telepay-459221/gcwebhook2-10-26`, Revision `gcwebhook2-10-26-00012-9m5`
   - Both services deployed and healthy
 
@@ -9097,8 +9097,8 @@ Documented exact requirements for all 14 services:
 
 **Files Modified:**
 - `tools/execute_price_amount_migration.py` (NEW)
-- `np-webhook-10-26/app.py` (lines 388, 407-426)
-- `GCWebhook2-10-26/database_manager.py` (lines 91-129, 148-251)
+- `PGP_NP_IPN_v1/app.py` (lines 388, 407-426)
+- `PGP_INVITE_v1/database_manager.py` (lines 91-129, 148-251)
 
 **Related:**
 - Checklist: `NP_WEBHOOK_FIX_AMOUNT_CHECKLIST.md`
@@ -9116,13 +9116,13 @@ Documented exact requirements for all 14 services:
 - Database lookup fails because webhook searches with positive channel ID
 
 **Actions Completed:**
-- ✅ **Phase 1**: Fixed order ID generation in `TelePay10-26/start_np_gateway.py`
+- ✅ **Phase 1**: Fixed order ID generation in `PGP_SERVER_v1/start_np_gateway.py`
   - Changed separator from `-` to `|` (preserves negative sign)
   - Format: `PGP-{user_id}|{open_channel_id}` → `PGP-6271402111|-1003268562225`
   - Added validation to ensure channel IDs are negative
   - Added comprehensive debug logging
 
-- ✅ **Phase 2**: Fixed IPN webhook parsing in `np-webhook-10-26/app.py`
+- ✅ **Phase 2**: Fixed IPN webhook parsing in `PGP_NP_IPN_v1/app.py`
   - Created `parse_order_id()` function with new and old format support
   - Implemented two-step database lookup:
     1. Parse order_id → extract user_id and open_channel_id
@@ -9143,7 +9143,7 @@ Documented exact requirements for all 14 services:
   - Confirmed NowPayments columns exist in private_channel_users_database
 
 - ✅ **Deployment**: Updated np-webhook service
-  - Built Docker image: `gcr.io/telepay-459221/np-webhook-10-26`
+  - Built Docker image: `gcr.io/telepay-459221/PGP_NP_IPN_v1`
   - Deployed to Cloud Run: revision `np-webhook-00006-q7g`
   - Service URL: `https://np-webhook-291176869049.us-east1.run.app`
   - Health check: ✅ All components healthy
@@ -9171,20 +9171,20 @@ Documented exact requirements for all 14 services:
 **Objective:** Deploy np-webhook with comprehensive startup logging similar to other webhook services
 
 **Actions Completed:**
-- ✅ Created new np-webhook-10-26 service with detailed logging
+- ✅ Created new PGP_NP_IPN_v1 service with detailed logging
 - ✅ Added emoji-based status indicators matching GCWebhook1/GCWebhook2 pattern
 - ✅ Comprehensive startup checks for all required secrets
 - ✅ Clear configuration status logging for:
   - NOWPAYMENTS_IPN_SECRET (IPN signature verification)
   - CLOUD_SQL_CONNECTION_NAME (database connection)
   - DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
-- ✅ Built and pushed Docker image: `gcr.io/telepay-459221/np-webhook-10-26`
+- ✅ Built and pushed Docker image: `gcr.io/telepay-459221/PGP_NP_IPN_v1`
 - ✅ Deployed to Cloud Run: revision `np-webhook-00005-pvx`
 - ✅ Verified all secrets loaded successfully in startup logs
 
 **Enhanced Logging Output:**
 ```
-🚀 [APP] Initializing np-webhook-10-26 - NowPayments IPN Handler
+🚀 [APP] Initializing PGP_NP_IPN_v1 - NowPayments IPN Handler
 📋 [APP] This service processes IPN callbacks from NowPayments
 🔐 [APP] Verifies signatures and updates database with payment_id
 ⚙️ [CONFIG] Loading configuration from Secret Manager...
@@ -9205,7 +9205,7 @@ Documented exact requirements for all 14 services:
 **Health Check Status:**
 ```json
 {
-  "service": "np-webhook-10-26 NowPayments IPN Handler",
+  "service": "PGP_NP_IPN_v1 NowPayments IPN Handler",
   "status": "healthy",
   "components": {
     "ipn_secret": "configured",
@@ -9216,13 +9216,13 @@ Documented exact requirements for all 14 services:
 ```
 
 **Files Created:**
-- `/np-webhook-10-26/app.py` - Complete IPN handler with enhanced logging
-- `/np-webhook-10-26/requirements.txt` - Dependencies
-- `/np-webhook-10-26/Dockerfile` - Container build file
-- `/np-webhook-10-26/.dockerignore` - Build exclusions
+- `/PGP_NP_IPN_v1/app.py` - Complete IPN handler with enhanced logging
+- `/PGP_NP_IPN_v1/requirements.txt` - Dependencies
+- `/PGP_NP_IPN_v1/Dockerfile` - Container build file
+- `/PGP_NP_IPN_v1/.dockerignore` - Build exclusions
 
 **Deployment:**
-- Image: `gcr.io/telepay-459221/np-webhook-10-26`
+- Image: `gcr.io/telepay-459221/PGP_NP_IPN_v1`
 - Service: `np-webhook` (us-east1)
 - Revision: `np-webhook-00005-pvx`
 - URL: `https://np-webhook-291176869049.us-east1.run.app`
@@ -9307,7 +9307,7 @@ gcloud run services update-traffic np-webhook --region=us-east1 --to-latest
 - ✅ Created `database_manager.py` with payment validation logic
 - ✅ Added `get_nowpayments_data()` method to query payment_id from database
 - ✅ Added `validate_payment_complete()` method to verify payment status
-- ✅ Updated `tph2-10-26.py` to validate payment before sending invitation
+- ✅ Updated `pgp_invite_v1.py` to validate payment before sending invitation
 - ✅ Updated `config_manager.py` to fetch database credentials from Secret Manager
 - ✅ Updated `requirements.txt` with Cloud SQL connector dependencies
 - ✅ Fixed Dockerfile to include `database_manager.py` in container
@@ -9321,7 +9321,7 @@ gcloud run services update-traffic np-webhook --region=us-east1 --to-latest
 - get_nowpayments_data(): Queries payment_id, status, outcome_amount
 - validate_payment_complete(): Validates payment_id, status='finished', amount >= 80%
 
-# tph2-10-26.py (MODIFIED)
+# pgp_invite_v1.py (MODIFIED)
 - Added database_manager initialization
 - Added payment validation after token decryption
 - Returns 503 if IPN pending (Cloud Tasks retries)
@@ -9429,7 +9429,7 @@ When creating invoice:
 **Objective:** Update TelePay bot to include `ipn_callback_url` in NowPayments invoice creation for payment_id capture
 
 **Actions Completed:**
-- ✅ Updated `/OCTOBER/10-26/TelePay10-26/start_np_gateway.py`
+- ✅ Updated `/OCTOBER/10-26/PGP_SERVER_v1/start_np_gateway.py`
 - ✅ Modified `create_payment_invoice()` method to include `ipn_callback_url` field
 - ✅ Added environment variable lookup: `os.getenv('NOWPAYMENTS_IPN_CALLBACK_URL')`
 - ✅ Added logging for invoice_id, order_id, and IPN callback URL
@@ -9526,12 +9526,12 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 - ✅ Added NOWPAYMENTS_IPN_SECRET to Secret Manager
 - ✅ Added NOWPAYMENTS_IPN_CALLBACK_URL to Secret Manager (np-webhook service)
 - ✅ Updated GCWebhook1 to query payment_id from database
-- ✅ Updated GCAccumulator to store payment_id in payout_accumulation
+- ✅ Updated PGP_ACCUMULATOR to store payment_id in payout_accumulation
 - ✅ Deployed both services successfully
 
 **Services Updated:**
-- GCWebhook1-10-26: revision 00013-cbb
-- GCAccumulator-10-26: revision 00018-22p
+- PGP_ORCHESTRATOR_v1: revision 00013-cbb
+- PGP_ACCUMULATOR_v1: revision 00018-22p
 
 **Next Steps:**
 - ⏭️ Verify np-webhook service is configured correctly
@@ -9561,7 +9561,7 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 - 🔄 Both scheduler jobs now aligned at 5-minute intervals
 
 **Configuration:**
-- Service: GCMicroBatchProcessor-10-26
+- Service: PGP_MICROBATCHPROCESSOR_v1
 - Endpoint: /check-threshold
 - Schedule: */5 * * * * (Etc/UTC)
 - State: ENABLED
@@ -9575,8 +9575,8 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 **Actions Completed:**
 - ✅ Reviewed all 11 critical services in threshold payout workflow
 - ✅ Analyzed recent logs from GCWebhook1, GCWebhook2, GCSplit services (1-3)
-- ✅ Analyzed recent logs from GCAccumulator and GCMicroBatchProcessor
-- ✅ Analyzed recent logs from GCBatchProcessor and GCHostPay services (1-3)
+- ✅ Analyzed recent logs from PGP_ACCUMULATOR and PGP_MICROBATCHPROCESSOR
+- ✅ Analyzed recent logs from PGP_BATCHPROCESSOR and GCHostPay services (1-3)
 - ✅ Verified threshold configuration: $2.00 (from Secret Manager)
 - ✅ Verified scheduler jobs: micro-batch (15 min) and batch processor (5 min)
 - ✅ Verified Cloud Tasks queues: All 16 critical queues operational
@@ -9587,9 +9587,9 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 - 🎯 All 11 critical services operational and healthy
 - ✅ Threshold correctly set at $2.00 (MICRO_BATCH_THRESHOLD_USD)
 - ✅ Recent payment successfully processed ($1.35 → $1.1475 after 15% fee)
-- ✅ GCAccumulator working correctly (Accumulation ID: 8 stored)
-- ✅ GCMicroBatchProcessor checking threshold every 15 minutes
-- ✅ GCBatchProcessor checking for payouts every 5 minutes
+- ✅ PGP_ACCUMULATOR working correctly (Accumulation ID: 8 stored)
+- ✅ PGP_MICROBATCHPROCESSOR checking threshold every 15 minutes
+- ✅ PGP_BATCHPROCESSOR checking for payouts every 5 minutes
 - ✅ All Cloud Tasks queues running with appropriate rate limits
 - ✅ Scheduler jobs active and enabled
 
@@ -9672,15 +9672,15 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 3. **IMPLEMENTATION_SUMMARY.md** - Critical implementation details for all services
 
 ### 🔄 Ready for Implementation
-1. **GCWebhook1-10-26 modifications** - Payout strategy routing logic documented
+1. **PGP_ORCHESTRATOR_v1 modifications** - Payout strategy routing logic documented
 2. **GCRegister10-26 modifications** - Threshold payout UI fields documented
-3. **GCAccumulator-10-26** - Service scaffold defined, ready for full implementation
-4. **GCBatchProcessor-10-26** - Service scaffold defined, ready for full implementation
+3. **PGP_ACCUMULATOR_v1** - Service scaffold defined, ready for full implementation
+4. **PGP_BATCHPROCESSOR_v1** - Service scaffold defined, ready for full implementation
 5. **Cloud Tasks queues** - Shell script ready for deployment
 
 ### ⏳ Pending User Action
 1. **Database Migration** - Execute `DB_MIGRATION_THRESHOLD_PAYOUT.md` SQL manually
-2. ~~**Service Implementation**~~ ✅ **COMPLETED** - GCAccumulator & GCBatchProcessor created
+2. ~~**Service Implementation**~~ ✅ **COMPLETED** - PGP_ACCUMULATOR & PGP_BATCHPROCESSOR created
 3. ~~**Service Modifications**~~ ✅ **COMPLETED** - GCWebhook1 modified, GCRegister guide created
 4. **Cloud Deployment** - Deploy new services to Google Cloud Run (follow `DEPLOYMENT_GUIDE_THRESHOLD_PAYOUT.md`)
 5. **Queue Creation** - Execute `deploy_accumulator_tasks_queues.sh`
@@ -9691,9 +9691,9 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 
 ### ✅ Services Created
 
-1. **GCAccumulator-10-26** - Payment Accumulation Service
-   - Location: `OCTOBER/10-26/GCAccumulator-10-26/`
-   - Files: acc10-26.py, config_manager.py, database_manager.py, token_manager.py, cloudtasks_client.py
+1. **PGP_ACCUMULATOR_v1** - Payment Accumulation Service
+   - Location: `OCTOBER/10-26/PGP_ACCUMULATOR_v1/`
+   - Files: pgp_accumulator_v1.py, config_manager.py, database_manager.py, token_manager.py, cloudtasks_client.py
    - Purpose: Immediately converts payments to USDT to eliminate market volatility
    - Key Features:
      - ETH→USDT conversion (mock for now, ready for ChangeNow integration)
@@ -9702,9 +9702,9 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
      - Logs remaining amount to reach threshold
    - Status: Ready for deployment
 
-2. **GCBatchProcessor-10-26** - Batch Payout Processor Service
-   - Location: `OCTOBER/10-26/GCBatchProcessor-10-26/`
-   - Files: batch10-26.py, config_manager.py, database_manager.py, token_manager.py, cloudtasks_client.py
+2. **PGP_BATCHPROCESSOR_v1** - Batch Payout Processor Service
+   - Location: `OCTOBER/10-26/PGP_BATCHPROCESSOR_v1/`
+   - Files: pgp_batchprocessor_v1.py, config_manager.py, database_manager.py, token_manager.py, cloudtasks_client.py
    - Purpose: Detects clients over threshold and triggers batch payouts
    - Key Features:
      - Finds clients with accumulated USDT >= threshold
@@ -9717,18 +9717,18 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 
 ### ✅ Services Modified
 
-1. **GCWebhook1-10-26** - Payment Processor (Modified)
+1. **PGP_ORCHESTRATOR_v1** - Payment Processor (Modified)
    - New Functions in database_manager.py:
      - `get_payout_strategy()` - Fetches strategy and threshold from database
      - `get_subscription_id()` - Gets subscription ID for accumulation record
    - New Function in cloudtasks_client.py:
-     - `enqueue_gcaccumulator_payment()` - Enqueues to GCAccumulator
+     - `enqueue_pgp_accumulator_payment()` - Enqueues to PGP_ACCUMULATOR
    - Updated config_manager.py:
      - Added `GCACCUMULATOR_QUEUE` secret fetch
      - Added `GCACCUMULATOR_URL` secret fetch
-   - Modified tph1-10-26.py:
+   - Modified pgp_orchestrator_v1.py:
      - Added payout strategy check after database write
-     - Routes to GCAccumulator if strategy='threshold'
+     - Routes to PGP_ACCUMULATOR if strategy='threshold'
      - Routes to GCSplit1 if strategy='instant' (existing flow unchanged)
      - Telegram invite still sent regardless of strategy
    - Status: Ready for re-deployment
@@ -9745,8 +9745,8 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 
 1. **deploy_accumulator_tasks_queues.sh**
    - Creates 2 Cloud Tasks queues:
-     - `accumulator-payment-queue` (GCWebhook1 → GCAccumulator)
-     - `gcsplit1-batch-queue` (GCBatchProcessor → GCSplit1)
+     - `accumulator-payment-queue` (GCWebhook1 → PGP_ACCUMULATOR)
+     - `gcsplit1-batch-queue` (PGP_BATCHPROCESSOR → GCSplit1)
    - Configuration: 60s fixed backoff, infinite retry, 24h max duration
    - Status: Ready for execution
 
@@ -9904,9 +9904,9 @@ print(f"📋 [INVOICE] IPN will be sent to: {ipn_callback_url}")
 - **Context Remaining:** 138,011 tokens (69% available)
 
 ### What Was Accomplished (Previous Session)
-1. ✅ Created GCAccumulator-10-26 service (complete)
-2. ✅ Created GCBatchProcessor-10-26 service (complete)
-3. ✅ Modified GCWebhook1-10-26 with routing logic (complete)
+1. ✅ Created PGP_ACCUMULATOR_v1 service (complete)
+2. ✅ Created PGP_BATCHPROCESSOR_v1 service (complete)
+3. ✅ Modified PGP_ORCHESTRATOR_v1 with routing logic (complete)
 4. ✅ Created GCREGISTER_MODIFICATIONS_GUIDE.md for threshold UI (complete)
 5. ✅ Created DB_MIGRATION_THRESHOLD_PAYOUT.md (complete)
 6. ✅ Created DEPLOYMENT_GUIDE_THRESHOLD_PAYOUT.md (complete)
@@ -9926,7 +9926,7 @@ All implementation work is complete. The following requires manual execution:
 2. 📋 Apply GCREGISTER_MODIFICATIONS_GUIDE.md changes to GCRegister10-26
 3. 📋 Follow DEPLOYMENT_GUIDE_THRESHOLD_PAYOUT.md for Cloud Run deployment
 4. 📋 Execute deploy_accumulator_tasks_queues.sh for Cloud Tasks queues
-5. 📋 Create Cloud Scheduler job for GCBatchProcessor-10-26
+5. 📋 Create Cloud Scheduler job for PGP_BATCHPROCESSOR_v1
 6. 📋 Test instant payout flow (verify unchanged)
 7. 📋 Test threshold payout end-to-end
 
@@ -9959,9 +9959,9 @@ All implementation work is complete. The following requires manual execution:
    - Verify with provided queries
 
 3. **Deploy Services**
-   - Deploy GCAccumulator-10-26 to Cloud Run
-   - Deploy GCBatchProcessor-10-26 to Cloud Run
-   - Re-deploy GCWebhook1-10-26 with modifications
+   - Deploy PGP_ACCUMULATOR_v1 to Cloud Run
+   - Deploy PGP_BATCHPROCESSOR_v1 to Cloud Run
+   - Re-deploy PGP_ORCHESTRATOR_v1 with modifications
    - Apply GCRegister threshold UI modifications
    - Create Cloud Tasks queues via deploy_accumulator_tasks_queues.sh
    - Set up Cloud Scheduler for batch processor
@@ -10026,8 +10026,8 @@ All implementation work is complete. The following requires manual execution:
 1. **THRESHOLD_PAYOUT_ARCHITECTURE**
    - Status: ✅ Documentation Complete - Ready for Deployment
    - Purpose: Eliminate market volatility risk via USDT accumulation
-   - Services: GCAccumulator-10-26, GCBatchProcessor-10-26
-   - Modifications: GCWebhook1-10-26, GCRegister10-26
+   - Services: PGP_ACCUMULATOR_v1, PGP_BATCHPROCESSOR_v1
+   - Modifications: PGP_ORCHESTRATOR_v1, GCRegister10-26
    - Database: payout_accumulation, payout_batches tables + main_clients_database columns
    - Key Innovation: USDT locks USD value immediately, preventing volatility losses
 
@@ -10042,7 +10042,7 @@ All implementation work is complete. The following requires manual execution:
 3. **GCREGISTER_MODERNIZATION_ARCHITECTURE**
    - Status: ⏳ Design Complete - Awaiting Approval
    - Purpose: Convert to modern TypeScript + React SPA
-   - Services: GCRegisterWeb-10-26 (React SPA), GCRegisterAPI-10-26 (Flask REST API)
+   - Services: PGP_WEB_v1 (React SPA), PGP_WEBAPI_v1 (Flask REST API)
    - Infrastructure: Cloud Storage + CDN (zero cold starts)
    - Key Innovation: 0ms page load times, instant interactions, mobile-first UX
    - Timeline: 7-8 weeks implementation
@@ -10096,16 +10096,16 @@ All implementation work is complete. The following requires manual execution:
 5. ✅ Updated `encrypt_gchostpay1_to_gchostpay3_token()` with context parameter
 
 **Deployment:**
-- Service: GCHostPay1-10-26
+- Service: PGP_HOSTPAY1_v1
 - Revision: gchostpay1-10-26-00006-zcq (upgraded from 00005-htc)
 - Status: ✅ Healthy (all components operational)
 - URL: https://gchostpay1-10-26-291176869049.us-central1.run.app
 
 **Threshold Payout Flow (NOW COMPLETE):**
 ```
-1. Payment → GCWebhook1 → GCAccumulator
-2. GCAccumulator stores payment → converts to USDT
-3. GCAccumulator → GCHostPay1 (accumulation_id token) ✅ NEW
+1. Payment → GCWebhook1 → PGP_ACCUMULATOR
+2. PGP_ACCUMULATOR stores payment → converts to USDT
+3. PGP_ACCUMULATOR → GCHostPay1 (accumulation_id token) ✅ NEW
 4. GCHostPay1 decrypts accumulator token ✅ NEW
 5. GCHostPay1 creates synthetic unique_id: acc_{id} ✅ NEW
 6. GCHostPay1 → GCHostPay2 (status check)
@@ -10113,12 +10113,12 @@ All implementation work is complete. The following requires manual execution:
 8. GCHostPay1 detects context='threshold' ✅ NEW
 9. GCHostPay1 → GCHostPay3 (with context)
 10. GCHostPay3 executes ETH payment
-11. GCHostPay3 routes to GCAccumulator (based on context) ✅
-12. GCAccumulator finalizes conversion with USDT amount
+11. GCHostPay3 routes to PGP_ACCUMULATOR (based on context) ✅
+12. PGP_ACCUMULATOR finalizes conversion with USDT amount
 ```
 
 **Architectural Decisions:**
-1. **Dual Token Support:** Try/fallback decryption (GCSplit1 first, then GCAccumulator)
+1. **Dual Token Support:** Try/fallback decryption (GCSplit1 first, then PGP_ACCUMULATOR)
 2. **Synthetic unique_id:** Format `acc_{accumulation_id}` for database compatibility
 3. **Context Detection:** Pattern-based detection from unique_id prefix
 4. **Response Routing:** Context-based routing in GCHostPay3
@@ -10149,8 +10149,8 @@ All implementation work is complete. The following requires manual execution:
 **Session Summary:**
 - ✅ Successfully deployed complete Threshold Payout system to production
 - ✅ Executed all database migrations (threshold payout + user accounts)
-- ✅ Deployed 2 new services: GCAccumulator-10-26, GCBatchProcessor-10-26
-- ✅ Re-deployed GCWebhook1-10-26 with threshold routing logic
+- ✅ Deployed 2 new services: PGP_ACCUMULATOR_v1, PGP_BATCHPROCESSOR_v1
+- ✅ Re-deployed PGP_ORCHESTRATOR_v1 with threshold routing logic
 - ✅ Created 2 Cloud Tasks queues and 1 Cloud Scheduler job
 - ✅ All Phase 1 features from MAIN_ARCHITECTURE_WORKFLOW.md are DEPLOYED
 
@@ -10168,40 +10168,40 @@ All implementation work is complete. The following requires manual execution:
    - All 13 existing channels assigned to legacy user
 
 **New Services Deployed:**
-1. **GCAccumulator-10-26** ✅
-   - URL: https://gcaccumulator-10-26-291176869049.us-central1.run.app
+1. **PGP_ACCUMULATOR_v1** ✅
+   - URL: https://pgp_accumulator-10-26-291176869049.us-central1.run.app
    - Purpose: Immediately converts payments to USDT to eliminate volatility
    - Status: Deployed and healthy
 
-2. **GCBatchProcessor-10-26** ✅
-   - URL: https://gcbatchprocessor-10-26-291176869049.us-central1.run.app
+2. **PGP_BATCHPROCESSOR_v1** ✅
+   - URL: https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app
    - Purpose: Detects clients over threshold and triggers batch payouts
    - Triggered by Cloud Scheduler every 5 minutes
    - Status: Deployed and healthy
 
 **Services Updated:**
-1. **GCWebhook1-10-26** ✅ (Revision 4)
+1. **PGP_ORCHESTRATOR_v1** ✅ (Revision 4)
    - URL: https://gcwebhook1-10-26-291176869049.us-central1.run.app
-   - Added threshold routing logic (lines 174-230 in tph1-10-26.py)
-   - Routes to GCAccumulator if `strategy='threshold'`
+   - Added threshold routing logic (lines 174-230 in pgp_orchestrator_v1.py)
+   - Routes to PGP_ACCUMULATOR if `strategy='threshold'`
    - Routes to GCSplit1 if `strategy='instant'` (unchanged)
-   - Fallback to instant if GCAccumulator unavailable
+   - Fallback to instant if PGP_ACCUMULATOR unavailable
 
 **Infrastructure Created:**
 1. **Cloud Tasks Queues** ✅
-   - `accumulator-payment-queue` (GCWebhook1 → GCAccumulator)
-   - `gcsplit1-batch-queue` (GCBatchProcessor → GCSplit1)
+   - `accumulator-payment-queue` (GCWebhook1 → PGP_ACCUMULATOR)
+   - `gcsplit1-batch-queue` (PGP_BATCHPROCESSOR → GCSplit1)
    - Config: 10 dispatches/sec, 50 concurrent, infinite retry
 
 2. **Cloud Scheduler Job** ✅
    - Job Name: `batch-processor-job`
    - Schedule: Every 5 minutes (`*/5 * * * *`)
-   - Target: https://gcbatchprocessor-10-26-291176869049.us-central1.run.app/process
+   - Target: https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app/process
    - State: ENABLED
 
 3. **Secret Manager Secrets** ✅
    - `GCACCUMULATOR_QUEUE` = `accumulator-payment-queue`
-   - `GCACCUMULATOR_URL` = `https://gcaccumulator-10-26-291176869049.us-central1.run.app`
+   - `GCACCUMULATOR_URL` = `https://pgp_accumulator-10-26-291176869049.us-central1.run.app`
    - `GCSPLIT1_BATCH_QUEUE` = `gcsplit1-batch-queue`
 
 **Next Steps - READY FOR MANUAL TESTING:**
@@ -10233,7 +10233,7 @@ All implementation work is complete. The following requires manual execution:
 
 **Services Created:**
 
-1. **GCRegisterAPI-10-26** - Flask REST API (deployed)
+1. **PGP_WEBAPI_v1** - Flask REST API (deployed)
    - URL: https://gcregisterapi-10-26-291176869049.us-central1.run.app
    - JWT authentication with Flask-JWT-Extended
    - Pydantic request validation with email-validator
@@ -10242,7 +10242,7 @@ All implementation work is complete. The following requires manual execution:
    - Cloud SQL PostgreSQL connection pooling
    - Secret Manager integration
 
-2. **GCRegisterWeb-10-26** - React TypeScript SPA (deployed)
+2. **PGP_WEB_v1** - React TypeScript SPA (deployed)
    - URL: https://storage.googleapis.com/www-paygateprime-com/index.html
    - TypeScript + React 18 + Vite build system
    - React Router for client-side routing
@@ -10380,10 +10380,10 @@ Landing Page → Signup → Login → Dashboard (0 channels)
 ```
 
 **Files Modified:**
-- Created: `GCRegisterWeb-10-26/src/pages/RegisterChannelPage.tsx` (470 lines)
-- Modified: `GCRegisterWeb-10-26/src/App.tsx` (added /register route)
-- Modified: `GCRegisterWeb-10-26/src/pages/DashboardPage.tsx` (added onClick handlers)
-- Modified: `GCRegisterWeb-10-26/src/types/channel.ts` (added tier_count field)
+- Created: `PGP_WEB_v1/src/pages/RegisterChannelPage.tsx` (470 lines)
+- Modified: `PGP_WEB_v1/src/App.tsx` (added /register route)
+- Modified: `PGP_WEB_v1/src/pages/DashboardPage.tsx` (added onClick handlers)
+- Modified: `PGP_WEB_v1/src/types/channel.ts` (added tier_count field)
 
 **Deployment:**
 - Built with Vite: 267KB raw, ~87KB gzipped
@@ -10431,32 +10431,32 @@ Landing Page → Signup → Login → Dashboard (0 channels)
 3. ✅ Redeployed all services with correct --set-secrets configuration
 
 **Services Fixed & Redeployed:**
-1. **GCWebhook2-10-26** ✅ (Revision 00009-6xg)
+1. **PGP_INVITE_v1** ✅ (Revision 00009-6xg)
    - Secrets: SUCCESS_URL_SIGNING_KEY, TELEGRAM_BOT_SECRET_NAME
    - Logs show: `✅ [CONFIG] Successfully loaded` for both secrets
 
-2. **GCSplit1-10-26** ✅ (Revision 00007-fmt)
+2. **PGP_SPLIT1_v1** ✅ (Revision 00007-fmt)
    - Secrets: 15 total (including database, Cloud Tasks, queues)
    - All configurations loading with ✅ indicators
    - Database manager initialized successfully
 
-3. **GCSplit2-10-26** ✅ (Revision 00006-8lt)
+3. **PGP_SPLIT2_v1** ✅ (Revision 00006-8lt)
    - Secrets: SUCCESS_URL_SIGNING_KEY, CHANGENOW_API_KEY, Cloud Tasks configs, queues
    - All configurations verified
 
-4. **GCSplit3-10-26** ✅ (Revision 00005-tnp)
+4. **PGP_SPLIT3_v1** ✅ (Revision 00005-tnp)
    - Secrets: SUCCESS_URL_SIGNING_KEY, CHANGENOW_API_KEY, Cloud Tasks configs, queues
    - All configurations verified
 
-5. **GCHostPay1-10-26** ✅ (Revision 00003-fd8)
+5. **PGP_HOSTPAY1_v1** ✅ (Revision 00003-fd8)
    - Secrets: 12 total (signing keys, Cloud Tasks, database configs)
    - All configurations verified
 
-6. **GCHostPay2-10-26** ✅ (Revision 00003-lw8)
+6. **PGP_HOSTPAY2_v1** ✅ (Revision 00003-lw8)
    - Secrets: SUCCESS_URL_SIGNING_KEY, CHANGENOW_API_KEY, Cloud Tasks configs
    - All configurations verified
 
-7. **GCHostPay3-10-26** ✅ (Revision 00003-wmq)
+7. **PGP_HOSTPAY3_v1** ✅ (Revision 00003-wmq)
    - Secrets: 13 total (wallet, RPC, Cloud Tasks, database)
    - All configurations verified
 
@@ -10483,13 +10483,13 @@ gcloud run deploy gcwebhook2-10-26 \
 ```
 
 **Files Modified:**
-- GCWebhook2-10-26/config_manager.py:21-44
-- GCSplit1-10-26/config_manager.py:21-44
-- GCSplit2-10-26/config_manager.py:21-44
-- GCSplit3-10-26/config_manager.py:21-44
-- GCHostPay1-10-26/config_manager.py:21-44
-- GCHostPay2-10-26/config_manager.py:21-44
-- GCHostPay3-10-26/config_manager.py:21-44
+- PGP_INVITE_v1/config_manager.py:21-44
+- PGP_SPLIT1_v1/config_manager.py:21-44
+- PGP_SPLIT2_v1/config_manager.py:21-44
+- PGP_SPLIT3_v1/config_manager.py:21-44
+- PGP_HOSTPAY1_v1/config_manager.py:21-44
+- PGP_HOSTPAY2_v1/config_manager.py:21-44
+- PGP_HOSTPAY3_v1/config_manager.py:21-44
 
 **Status:** ✅ ALL SERVICES OPERATIONAL AND VERIFIED
 
@@ -10504,7 +10504,7 @@ gcloud run deploy gcwebhook2-10-26 \
 - **NEW (2025-10-28):** Three major architecture documents completed
 - **NEW (2025-10-28):** Threshold payout implementation guides complete
 - **NEW (2025-10-28):** User account management implementation guides complete
-- **NEW (2025-10-29):** GCRegisterAPI-10-26 REST API deployed to Cloud Run (Phase 3 backend)
+- **NEW (2025-10-29):** PGP_WEBAPI_v1 REST API deployed to Cloud Run (Phase 3 backend)
 - **NEW (2025-10-29):** RegisterChannelPage.tsx complete - full user flow operational
 - **NEW (2025-10-29):** ✅ CRITICAL FIX - Config manager pattern corrected across 7 services
 - **KEY INNOVATION (Threshold Payout):** USDT accumulation eliminates market volatility risk
@@ -10531,15 +10531,15 @@ gcloud run deploy gcwebhook2-10-26 \
 5. Result: database_manager attempted to use secret VALUE as a PATH, causing API call to fail
 
 **Services Affected:**
-- ❌ GCHostPay1-10-26 (Validator & Orchestrator) - FIXED
-- ❌ GCHostPay3-10-26 (Payment Executor) - FIXED
+- ❌ PGP_HOSTPAY1_v1 (Validator & Orchestrator) - FIXED
+- ❌ PGP_HOSTPAY3_v1 (Payment Executor) - FIXED
 
 **Services Already Correct:**
-- ✅ GCHostPay2-10-26 (no database access)
-- ✅ GCAccumulator-10-26 (constructor-based from start)
-- ✅ GCBatchProcessor-10-26 (constructor-based from start)
-- ✅ GCWebhook1-10-26 (constructor-based from start)
-- ✅ GCSplit1-10-26 (constructor-based from start)
+- ✅ PGP_HOSTPAY2_v1 (no database access)
+- ✅ PGP_ACCUMULATOR_v1 (constructor-based from start)
+- ✅ PGP_BATCHPROCESSOR_v1 (constructor-based from start)
+- ✅ PGP_ORCHESTRATOR_v1 (constructor-based from start)
+- ✅ PGP_SPLIT1_v1 (constructor-based from start)
 
 **Solution Implemented:**
 1. **Standardized DatabaseManager pattern across all services**
@@ -10555,14 +10555,14 @@ gcloud run deploy gcwebhook2-10-26 \
    - Testability: Easier to mock and test with injected credentials
 
 **Files Modified:**
-- `GCHostPay1-10-26/database_manager.py` - Converted to constructor-based initialization
-- `GCHostPay1-10-26/tphp1-10-26.py:53` - Pass credentials to DatabaseManager()
-- `GCHostPay3-10-26/database_manager.py` - Converted to constructor-based initialization
-- `GCHostPay3-10-26/tphp3-10-26.py:67` - Pass credentials to DatabaseManager()
+- `PGP_HOSTPAY1_v1/database_manager.py` - Converted to constructor-based initialization
+- `PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py:53` - Pass credentials to DatabaseManager()
+- `PGP_HOSTPAY3_v1/database_manager.py` - Converted to constructor-based initialization
+- `PGP_HOSTPAY3_v1/pgp_hostpay3_v1.py:67` - Pass credentials to DatabaseManager()
 
 **Deployments:**
-- ✅ GCHostPay1-10-26 revision 00004-xmg deployed successfully
-- ✅ GCHostPay3-10-26 revision 00004-662 deployed successfully
+- ✅ PGP_HOSTPAY1_v1 revision 00004-xmg deployed successfully
+- ✅ PGP_HOSTPAY3_v1 revision 00004-662 deployed successfully
 
 **Verification:**
 - ✅ GCHostPay1 logs: "🗄️ [DATABASE] DatabaseManager initialized" with credentials
@@ -10620,7 +10620,7 @@ User reported that channel `-1003296084379` with threshold payout strategy ($2.0
    - Rebuilt from source to ensure latest code deployed
 
 2. **Verified other services:**
-   - GCSplit1, GCAccumulator, GCBatchProcessor: Already using `--set-secrets` (valueFrom) ✅
+   - GCSplit1, PGP_ACCUMULATOR, PGP_BATCHPROCESSOR: Already using `--set-secrets` (valueFrom) ✅
    - GCWebhook2, GCSplit2, GCSplit3: Don't need database access ✅
    - GCHostPay1, GCHostPay3: Fixed earlier today with same issue ✅
    - **Only GCWebhook1 had the secret configuration problem**
@@ -10665,7 +10665,7 @@ Health check response:
 ```json
 {
   "status": "healthy",
-  "service": "GCWebhook1-10-26 Payment Processor",
+  "service": "PGP_ORCHESTRATOR_v1 Payment Processor",
   "components": {
     "token_manager": "healthy",
     "database": "healthy",
@@ -10686,15 +10686,15 @@ Health check response:
 - 🎯 **CRITICAL BUG RESOLVED**: Threshold payout strategy now works correctly
 - 🎯 Future payments to threshold channels will accumulate properly
 - 🎯 `get_payout_strategy()` can now find channel configurations in database
-- 🎯 Payments will route to GCAccumulator instead of GCSplit1 when threshold configured
+- 🎯 Payments will route to PGP_ACCUMULATOR instead of GCSplit1 when threshold configured
 - 🎯 `split_payout_request.type` will be `accumulation` instead of `direct`
 - 🎯 `payout_accumulation` table will receive entries
-- 🎯 GCBatchProcessor will trigger when thresholds are met
+- 🎯 PGP_BATCHPROCESSOR will trigger when thresholds are met
 
 **Next Steps:**
 - Monitor next threshold channel payment to verify correct behavior
 - Look for logs showing: `✅ [DATABASE] Found client by closed_channel_id: strategy=threshold`
-- Verify task enqueued to GCAccumulator instead of GCSplit1
+- Verify task enqueued to PGP_ACCUMULATOR instead of GCSplit1
 - Confirm `payout_accumulation` table entry created
 
 **Time to Resolution:** ~45 minutes (investigation + deployment iterations + verification)
@@ -10713,7 +10713,7 @@ User reported that GCWebhook1 was showing the following error in production logs
 ```
 ❌ [CLOUD_TASKS] Error creating task: 400 Queue ID "accumulator-payment-queue
 " can contain only letters ([A-Za-z]), numbers ([0-9]), or hyphens (-).
-❌ [ENDPOINT] Failed to enqueue to GCAccumulator - falling back to instant
+❌ [ENDPOINT] Failed to enqueue to PGP_ACCUMULATOR - falling back to instant
 ```
 
 This was preventing threshold payout routing from working, causing all threshold payments to fall back to instant payout mode.
@@ -10725,7 +10725,7 @@ This was preventing threshold payout routing from working, causing all threshold
    - `GCACCUMULATOR_QUEUE` = `"accumulator-payment-queue\n"` ← **CRITICAL BUG**
    - `GCSPLIT3_QUEUE` = `"gcsplit-eth-client-swap-queue\n"`
    - `GCHOSTPAY1_RESPONSE_QUEUE` = `"gchostpay1-response-queue\n"`
-   - `GCACCUMULATOR_URL` = `"https://gcaccumulator-10-26-291176869049.us-central1.run.app\n"`
+   - `GCACCUMULATOR_URL` = `"https://pgp_accumulator-10-26-291176869049.us-central1.run.app\n"`
    - `GCWEBHOOK2_URL` = `"https://gcwebhook2-10-26-291176869049.us-central1.run.app\n"`
 
 3. **Root Cause Analysis**:
@@ -10744,7 +10744,7 @@ Created new versions of all affected secrets without trailing newlines:
 echo -n "accumulator-payment-queue" | gcloud secrets versions add GCACCUMULATOR_QUEUE --data-file=-
 echo -n "gcsplit-eth-client-swap-queue" | gcloud secrets versions add GCSPLIT3_QUEUE --data-file=-
 echo -n "gchostpay1-response-queue" | gcloud secrets versions add GCHOSTPAY1_RESPONSE_QUEUE --data-file=-
-echo -n "https://gcaccumulator-10-26-291176869049.us-central1.run.app" | gcloud secrets versions add GCACCUMULATOR_URL --data-file=-
+echo -n "https://pgp_accumulator-10-26-291176869049.us-central1.run.app" | gcloud secrets versions add GCACCUMULATOR_URL --data-file=-
 echo -n "https://gcwebhook2-10-26-291176869049.us-central1.run.app" | gcloud secrets versions add GCWEBHOOK2_URL --data-file=-
 ```
 
@@ -10758,13 +10758,13 @@ secret_value = secret_value.strip()
 ```
 
 **Files Modified:**
-- `GCWebhook1-10-26/config_manager.py:40`
-- `GCSplit3-10-26/config_manager.py:40`
-- `GCHostPay3-10-26/config_manager.py:40`
+- `PGP_ORCHESTRATOR_v1/config_manager.py:40`
+- `PGP_SPLIT3_v1/config_manager.py:40`
+- `PGP_HOSTPAY3_v1/config_manager.py:40`
 
 ### Deployment
 
-**GCWebhook1-10-26:**
+**PGP_ORCHESTRATOR_v1:**
 - Deployed revision: `gcwebhook1-10-26-00012-9pb`
 - Command: `gcloud run deploy gcwebhook1-10-26 --source . --set-secrets=...`
 - Status: ✅ Successful
@@ -10785,8 +10785,8 @@ secret_value = secret_value.strip()
 
 2. **Configuration Loading Logs (Revision 00012-9pb):**
    - ✅ All secrets loading successfully
-   - ✅ GCAccumulator queue name loaded without errors
-   - ✅ GCAccumulator service URL loaded without errors
+   - ✅ PGP_ACCUMULATOR queue name loaded without errors
+   - ✅ PGP_ACCUMULATOR service URL loaded without errors
    - ✅ Database credentials loading correctly
    - ✅ No Cloud Tasks errors
 
@@ -10798,13 +10798,13 @@ secret_value = secret_value.strip()
 **Before Fix:**
 - ❌ Threshold payout routing completely broken
 - ❌ All threshold channels fell back to instant payout
-- ❌ GCAccumulator never received any tasks
+- ❌ PGP_ACCUMULATOR never received any tasks
 - ❌ Payments bypassing accumulation architecture
 
 **After Fix:**
 - ✅ Queue names clean (no whitespace/newlines)
 - ✅ Cloud Tasks can create tasks successfully
-- ✅ GCWebhook1 can route to GCAccumulator
+- ✅ GCWebhook1 can route to PGP_ACCUMULATOR
 - ✅ Threshold payout architecture functional
 - ✅ Defensive `.strip()` prevents future occurrences
 
@@ -10848,15 +10848,15 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 2. **Expected Logs** - Look for:
    ```
    🎯 [ENDPOINT] Threshold payout mode - $X.XX threshold
-   ✅ [ENDPOINT] Enqueued to GCAccumulator for threshold payout
+   ✅ [ENDPOINT] Enqueued to PGP_ACCUMULATOR for threshold payout
    ```
 
 ### Files Changed This Session
 
 **Code Changes:**
-- `GCWebhook1-10-26/config_manager.py` - Added `.strip()` to fetch_secret
-- `GCSplit3-10-26/config_manager.py` - Added `.strip()` to fetch_secret
-- `GCHostPay3-10-26/config_manager.py` - Added `.strip()` to fetch_secret
+- `PGP_ORCHESTRATOR_v1/config_manager.py` - Added `.strip()` to fetch_secret
+- `PGP_SPLIT3_v1/config_manager.py` - Added `.strip()` to fetch_secret
+- `PGP_HOSTPAY3_v1/config_manager.py` - Added `.strip()` to fetch_secret
 
 **Secret Manager Changes:**
 - `GCACCUMULATOR_QUEUE` - Created version 2 (no newline)
@@ -10887,7 +10887,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
 - **CRITICAL FINDING**: Threshold payout system has NO actual ETH→USDT conversion implementation
 - **Problem Identified:**
-  - GCAccumulator only stores "mock" USDT values in database (1:1 with USD, `eth_to_usdt_rate = 1.0`)
+  - PGP_ACCUMULATOR only stores "mock" USDT values in database (1:1 with USD, `eth_to_usdt_rate = 1.0`)
   - No actual blockchain swap occurs - ETH sits in host_wallet unconverted
   - System is fully exposed to ETH market volatility during accumulation period
   - Client with $500 threshold could receive $375-625 depending on ETH price movement
@@ -10897,7 +10897,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
     - Problem analysis with volatility risk quantification
     - Current broken flow vs required flow diagrams
     - 3 implementation options (MVP: extend GCSplit2, Production: dedicated service, Async: Cloud Tasks)
-    - Detailed code changes for GCAccumulator, GCSplit2, GCBatchProcessor
+    - Detailed code changes for PGP_ACCUMULATOR, GCSplit2, PGP_BATCHPROCESSOR
     - Cost analysis: $1-3 gas fees per conversion (can optimize to $0.20-0.50 with batching)
     - Risk assessment and mitigation strategies
     - 4-phase implementation plan (MVP in 3-4 days, production in 2 weeks)
@@ -10913,7 +10913,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
       6. Legacy Data Migration: Convert existing mock records or mark as legacy?
     - Secret Manager configuration (5 new secrets required)
     - Database verification (schema already correct, no changes needed)
-    - Code modifications checklist (GCAccumulator, GCSplit2, GCBatchProcessor)
+    - Code modifications checklist (PGP_ACCUMULATOR, GCSplit2, PGP_BATCHPROCESSOR)
     - Integration testing checklist (8 test scenarios)
     - Deployment checklist (4-service deployment order)
     - Monitoring & validation (logging queries, daily reconciliation)
@@ -10945,14 +10945,14 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
 - **PHASE 8 STATUS: IN PROGRESS (30% complete)**
   - ✅ **Infrastructure Verification Complete**:
-    - All 5 refactored services healthy (GCAccumulator, GCSplit2, GCSplit3, GCHostPay1, GCHostPay3)
-    - All Cloud Tasks queues running (gcaccumulator-swap-response-queue, gcsplit-eth-client-swap-queue, etc.)
+    - All 5 refactored services healthy (PGP_ACCUMULATOR, GCSplit2, GCSplit3, GCHostPay1, GCHostPay3)
+    - All Cloud Tasks queues running (pgp_accumulator-swap-response-queue, gcsplit-eth-client-swap-queue, etc.)
     - All Secret Manager configurations verified
 
   - 🚨 **CRITICAL FIX DEPLOYED: GCHostPay3 Configuration Gap**:
     - **Problem**: GCHostPay3 config_manager.py missing GCACCUMULATOR secrets
     - **Impact**: Threshold payout routing would fail (context-based routing broken)
-    - **Root Cause**: Phase 4 code expected gcaccumulator_response_queue and gcaccumulator_url but config didn't load them
+    - **Root Cause**: Phase 4 code expected pgp_accumulator_response_queue and pgp_accumulator_url but config didn't load them
     - **Fix Applied**:
       - Added GCACCUMULATOR_RESPONSE_QUEUE and GCACCUMULATOR_URL to config_manager.py
       - Added secrets to config dictionary and logging
@@ -10963,14 +10963,14 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
   - 📊 **Infrastructure Verification Results**:
     - **Service Health**: All 5 services returning healthy status with all components operational
-    - **Queue Status**: 6 critical queues running (gcaccumulator-swap-response-queue, gcsplit-eth-client-swap-queue, gcsplit-hostpay-trigger-queue, etc.)
+    - **Queue Status**: 6 critical queues running (pgp_accumulator-swap-response-queue, gcsplit-eth-client-swap-queue, gcsplit-hostpay-trigger-queue, etc.)
     - **Secret Status**: All 7 Phase 6 & 7 secrets verified with correct values
     - **Service Revisions**:
-      - GCAccumulator: 00014-m8d (latest with wallet config)
+      - PGP_ACCUMULATOR: 00014-m8d (latest with wallet config)
       - GCSplit2: 00009-n2q (simplified)
       - GCSplit3: 00006-pdw (enhanced with /eth-to-usdt)
       - GCHostPay1: 00005-htc
-      - GCHostPay3: 00008-rfv (FIXED with GCAccumulator config)
+      - GCHostPay3: 00008-rfv (FIXED with PGP_ACCUMULATOR config)
 
   - 📝 **Integration Testing Documentation**:
     - Created SESSION_SUMMARY_10-31_PHASE8_INTEGRATION_TESTING.md
@@ -10982,7 +10982,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - **PROGRESS TRACKING**:
     - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
     - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-    - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+    - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
     - ✅ Phase 4: GCHostPay3 Response Routing (COMPLETE + FIX)
     - ✅ Phase 5: Database Schema Updates (COMPLETE)
     - ✅ Phase 6: Cloud Tasks Queue Setup (COMPLETE)
@@ -11011,23 +11011,23 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - **Result**: Database schema fully prepared for new architecture
 
 - **PHASE 6 COMPLETE: Cloud Tasks Queue Setup**
-  - ✅ **Created New Queue**: `gcaccumulator-swap-response-queue`
-    - Purpose: GCSplit3 → GCAccumulator swap creation responses
+  - ✅ **Created New Queue**: `pgp_accumulator-swap-response-queue`
+    - Purpose: GCSplit3 → PGP_ACCUMULATOR swap creation responses
     - Configuration: 10 dispatches/sec, 50 concurrent, infinite retry, 60s backoff
     - Location: us-central1
   - ✅ **Verified Existing Queues** can be reused:
-    - `gcsplit-eth-client-swap-queue` - For GCAccumulator → GCSplit3 (ETH→USDT requests)
-    - `gcsplit-hostpay-trigger-queue` - For GCAccumulator → GCHostPay1 (execution requests)
+    - `gcsplit-eth-client-swap-queue` - For PGP_ACCUMULATOR → GCSplit3 (ETH→USDT requests)
+    - `gcsplit-hostpay-trigger-queue` - For PGP_ACCUMULATOR → GCHostPay1 (execution requests)
   - **Architectural Decision**: Reuse existing queues where possible to minimize complexity
   - **Result**: All required queues now exist and configured
 
 - **PHASE 7 COMPLETE: Secret Manager Configuration**
   - ✅ **Created New Secrets**:
-    - `GCACCUMULATOR_RESPONSE_QUEUE` = `gcaccumulator-swap-response-queue`
+    - `GCACCUMULATOR_RESPONSE_QUEUE` = `pgp_accumulator-swap-response-queue`
     - `GCHOSTPAY1_QUEUE` = `gcsplit-hostpay-trigger-queue` (reuses existing queue)
     - `HOST_WALLET_USDT_ADDRESS` = `0x16bf79087671ff98c0b63a0b1970dbd5c4231bc4` ✅
   - ✅ **Verified Existing Secrets**:
-    - `GCACCUMULATOR_URL` = `https://gcaccumulator-10-26-291176869049.us-central1.run.app`
+    - `GCACCUMULATOR_URL` = `https://pgp_accumulator-10-26-291176869049.us-central1.run.app`
     - `GCSPLIT3_URL` = `https://gcsplit3-10-26-291176869049.us-central1.run.app`
     - `GCHOSTPAY1_URL` = `https://gchostpay1-10-26-291176869049.us-central1.run.app`
     - `GCSPLIT3_QUEUE` = `gcsplit-eth-client-swap-queue`
@@ -11038,13 +11038,13 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - 🎯 **Database**: Schema complete with conversion tracking fields
   - 🎯 **Cloud Tasks**: All queues created and configured
   - 🎯 **Secret Manager**: All secrets created (1 requires update)
-  - 🎯 **Services**: GCSplit2, GCSplit3, GCAccumulator, GCHostPay3 all deployed with refactored code
+  - 🎯 **Services**: GCSplit2, GCSplit3, PGP_ACCUMULATOR, GCHostPay3 all deployed with refactored code
   - 🎯 **Architecture**: ETH→USDT conversion flow fully implemented
 
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+  - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
   - ✅ Phase 4: GCHostPay3 Response Routing (COMPLETE)
   - ✅ Phase 5: Database Schema Updates (COMPLETE)
   - ✅ Phase 6: Cloud Tasks Queue Setup (COMPLETE)
@@ -11056,8 +11056,8 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **CONFIGURATION UPDATE (Post-Phase 7)**:
   - ✅ Renamed `PLATFORM_USDT_WALLET_ADDRESS` → `HOST_WALLET_USDT_ADDRESS`
   - ✅ Set value to `0x16bf79087671ff98c0b63a0b1970dbd5c4231bc4` (same as HOST_WALLET_ETH_ADDRESS)
-  - ✅ Updated GCAccumulator config_manager.py to fetch HOST_WALLET_USDT_ADDRESS
-  - ✅ Redeployed GCAccumulator (revision gcaccumulator-10-26-00014-m8d)
+  - ✅ Updated PGP_ACCUMULATOR config_manager.py to fetch HOST_WALLET_USDT_ADDRESS
+  - ✅ Redeployed PGP_ACCUMULATOR (revision pgp_accumulator-10-26-00014-m8d)
   - ✅ Health check: All components healthy
 
 - **NEXT STEPS (Phase 8)**:
@@ -11076,45 +11076,45 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
     - Added backward compatibility: defaults to 'instant' if context field missing (legacy tokens)
     - Token structure now includes: unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, **context**, timestamp
 
-  - ✅ **GCHostPay3 Conditional Routing** (lines 221-273 in tphp3-10-26.py):
-    - **Context = 'threshold'**: Routes to GCAccumulator `/swap-executed` endpoint
+  - ✅ **GCHostPay3 Conditional Routing** (lines 221-273 in pgp_hostpay3_v1.py):
+    - **Context = 'threshold'**: Routes to PGP_ACCUMULATOR `/swap-executed` endpoint
     - **Context = 'instant'**: Routes to GCHostPay1 `/payment-completed` (existing behavior)
-    - Uses config values: `gcaccumulator_response_queue`, `gcaccumulator_url` for threshold routing
+    - Uses config values: `pgp_accumulator_response_queue`, `pgp_accumulator_url` for threshold routing
     - Uses config values: `gchostpay1_response_queue`, `gchostpay1_url` for instant routing
     - Logs routing decision with clear indicators
 
-  - ✅ **GCAccumulator Token Manager Enhanced** (context field added):
+  - ✅ **PGP_ACCUMULATOR Token Manager Enhanced** (context field added):
     - Updated `encrypt_accumulator_to_gchostpay1_token()` to include `context='threshold'` (default)
     - Token structure now includes: accumulation_id, cn_api_id, from_currency, from_network, from_amount, payin_address, **context**, timestamp
     - Context always set to 'threshold' for accumulator payouts (distinguishes from instant payouts)
 
   - ✅ **Deployed**:
     - GCHostPay3 deployed as revision `gchostpay3-10-26-00007-q5k`
-    - GCAccumulator redeployed as revision `gcaccumulator-10-26-00013-vpg`
+    - PGP_ACCUMULATOR redeployed as revision `pgp_accumulator-10-26-00013-vpg`
     - Both services healthy and running
 
   - **Service URLs**:
     - GCHostPay3: https://gchostpay3-10-26-291176869049.us-central1.run.app
-    - GCAccumulator: https://gcaccumulator-10-26-291176869049.us-central1.run.app
+    - PGP_ACCUMULATOR: https://pgp_accumulator-10-26-291176869049.us-central1.run.app
 
   - **File Changes**:
-    - `GCHostPay3-10-26/token_manager.py`: +2 lines to encrypt method, +14 lines to decrypt method (context handling)
-    - `GCHostPay3-10-26/tphp3-10-26.py`: +52 lines (conditional routing logic), total ~355 lines
-    - `GCAccumulator-10-26/token_manager.py`: +3 lines (context parameter and packing)
+    - `PGP_HOSTPAY3_v1/token_manager.py`: +2 lines to encrypt method, +14 lines to decrypt method (context handling)
+    - `PGP_HOSTPAY3_v1/pgp_hostpay3_v1.py`: +52 lines (conditional routing logic), total ~355 lines
+    - `PGP_ACCUMULATOR_v1/token_manager.py`: +3 lines (context parameter and packing)
     - **Total**: ~71 lines of new code across 3 files
 
 - **ARCHITECTURAL TRANSFORMATION**:
   - **BEFORE**: GCHostPay3 always routed responses to GCHostPay1 (single path)
-  - **AFTER**: GCHostPay3 routes based on context: threshold → GCAccumulator, instant → GCHostPay1
+  - **AFTER**: GCHostPay3 routes based on context: threshold → PGP_ACCUMULATOR, instant → GCHostPay1
   - **IMPACT**: Response routing now context-aware, enabling separate flows for instant vs threshold payouts
 
 - **ROUTING FLOW**:
   - **Threshold Payouts** (NEW):
-    1. GCAccumulator → GCHostPay1 (with context='threshold')
+    1. PGP_ACCUMULATOR → GCHostPay1 (with context='threshold')
     2. GCHostPay1 → GCHostPay3 (passes context through)
     3. GCHostPay3 executes ETH payment
-    4. **GCHostPay3 → GCAccumulator /swap-executed** (based on context='threshold')
-    5. GCAccumulator finalizes conversion, stores final USDT amount
+    4. **GCHostPay3 → PGP_ACCUMULATOR /swap-executed** (based on context='threshold')
+    5. PGP_ACCUMULATOR finalizes conversion, stores final USDT amount
 
   - **Instant Payouts** (UNCHANGED):
     1. GCSplit1 → GCHostPay1 (with context='instant' or no context)
@@ -11125,7 +11125,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **KEY ACHIEVEMENTS**:
   - 🎯 **Context-Based Routing**: GCHostPay3 now intelligently routes responses based on payout type
   - 🎯 **Backward Compatibility**: Legacy tokens without context field default to 'instant' (safe fallback)
-  - 🎯 **Separation of Flows**: Threshold payouts now have complete end-to-end flow back to GCAccumulator
+  - 🎯 **Separation of Flows**: Threshold payouts now have complete end-to-end flow back to PGP_ACCUMULATOR
   - 🎯 **Zero Breaking Changes**: Instant payout flow remains unchanged and working
 
 - **IMPORTANT NOTE**:
@@ -11139,7 +11139,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+  - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
   - ✅ Phase 4: GCHostPay3 Response Routing (COMPLETE)
   - ⏳ Phase 5: Database Schema Updates (NEXT)
   - ⏳ Phase 6: Cloud Tasks Queue Setup (PENDING)
@@ -11155,7 +11155,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 ---
 
 ### October 31, 2025 - ARCHITECTURE REFACTORING IMPLEMENTATION: Phase 3 Complete ✅
-- **PHASE 3 COMPLETE: GCAccumulator Refactoring**
+- **PHASE 3 COMPLETE: PGP_ACCUMULATOR Refactoring**
   - ✅ **Token Manager Enhanced** (4 new methods, ~370 lines added):
     - `encrypt_accumulator_to_gcsplit3_token()` - Encrypt ETH→USDT swap requests to GCSplit3
     - `decrypt_gcsplit3_to_accumulator_token()` - Decrypt swap creation responses from GCSplit3
@@ -11185,7 +11185,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
     - Updates database: `conversion_status = 'swapping'`
     - Encrypts token for GCHostPay1 with execution request
     - Enqueues execution task to GCHostPay1
-    - Complete flow orchestration: GCSplit3 → GCAccumulator → GCHostPay1
+    - Complete flow orchestration: GCSplit3 → PGP_ACCUMULATOR → GCHostPay1
 
   - ✅ **Added `/swap-executed` Endpoint** (82 lines, lines 336-417):
     - Receives execution completion from GCHostPay1
@@ -11193,26 +11193,26 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
     - Finalizes database record: `accumulated_amount_usdt`, `conversion_status = 'completed'`
     - Logs success: "USDT locked in value - volatility protection active!"
 
-  - ✅ **Deployed** as revision `gcaccumulator-10-26-00012-qkw`
-  - **Service URL**: https://gcaccumulator-10-26-291176869049.us-central1.run.app
+  - ✅ **Deployed** as revision `pgp_accumulator-10-26-00012-qkw`
+  - **Service URL**: https://pgp_accumulator-10-26-291176869049.us-central1.run.app
   - **Health Status**: All 3 components healthy (database, token_manager, cloudtasks)
   - **File Changes**:
     - `token_manager.py`: 89 lines → 450 lines (+361 lines, +405% growth)
     - `cloudtasks_client.py`: 116 lines → 166 lines (+50 lines, +43% growth)
     - `database_manager.py`: 216 lines → 330 lines (+114 lines, +53% growth)
-    - `acc10-26.py`: 221 lines → 446 lines (+225 lines, +102% growth)
+    - `pgp_accumulator_v1.py`: 221 lines → 446 lines (+225 lines, +102% growth)
     - **Total**: ~750 lines of new code added
 
 - **ARCHITECTURAL TRANSFORMATION**:
-  - **BEFORE**: GCAccumulator → GCSplit2 (quotes only, no actual swaps)
-  - **AFTER**: GCAccumulator → GCSplit3 → GCHostPay1 (actual swap creation + execution)
+  - **BEFORE**: PGP_ACCUMULATOR → GCSplit2 (quotes only, no actual swaps)
+  - **AFTER**: PGP_ACCUMULATOR → GCSplit3 → GCHostPay1 (actual swap creation + execution)
   - **IMPACT**: Volatility protection NOW WORKS - actual ETH→USDT conversions happening!
   - **FLOW**:
-    1. Payment arrives → GCAccumulator stores with `conversion_status = 'pending'`
-    2. GCAccumulator → GCSplit3 (create ETH→USDT ChangeNow transaction)
-    3. GCSplit3 → GCAccumulator `/swap-created` (transaction details)
-    4. GCAccumulator → GCHostPay1 (execute ETH payment to ChangeNow)
-    5. GCHostPay1 → GCAccumulator `/swap-executed` (final USDT amount)
+    1. Payment arrives → PGP_ACCUMULATOR stores with `conversion_status = 'pending'`
+    2. PGP_ACCUMULATOR → GCSplit3 (create ETH→USDT ChangeNow transaction)
+    3. GCSplit3 → PGP_ACCUMULATOR `/swap-created` (transaction details)
+    4. PGP_ACCUMULATOR → GCHostPay1 (execute ETH payment to ChangeNow)
+    5. GCHostPay1 → PGP_ACCUMULATOR `/swap-executed` (final USDT amount)
     6. Database updated: `accumulated_amount_usdt` set, `conversion_status = 'completed'`
 
 - **KEY ACHIEVEMENTS**:
@@ -11225,7 +11225,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+  - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
   - 🔄 Phase 4: GCHostPay3 Response Routing (NEXT)
   - ⏳ Phase 5: Database Schema Updates (PENDING)
   - ⏳ Phase 6: Cloud Tasks Queue Setup (PENDING)
@@ -11233,7 +11233,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
 - **NEXT STEPS (Phase 4)**:
   - Refactor GCHostPay3 to add conditional routing based on context
-  - Route threshold payout responses to GCAccumulator `/swap-executed`
+  - Route threshold payout responses to PGP_ACCUMULATOR `/swap-executed`
   - Route instant payout responses to GCHostPay1 (existing flow)
   - Verify GCHostPay1 can receive and process accumulator execution requests
 
@@ -11251,15 +11251,15 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
 - **PHASE 2 COMPLETE: GCSplit3 Enhancement**
   - ✅ Added 2 new token manager methods:
-    - `decrypt_accumulator_to_gcsplit3_token()` - Decrypt requests from GCAccumulator
-    - `encrypt_gcsplit3_to_accumulator_token()` - Encrypt responses to GCAccumulator
+    - `decrypt_accumulator_to_gcsplit3_token()` - Decrypt requests from PGP_ACCUMULATOR
+    - `encrypt_gcsplit3_to_accumulator_token()` - Encrypt responses to PGP_ACCUMULATOR
   - ✅ Added cloudtasks_client method:
-    - `enqueue_accumulator_swap_response()` - Queue responses to GCAccumulator
+    - `enqueue_accumulator_swap_response()` - Queue responses to PGP_ACCUMULATOR
   - ✅ Added new `/eth-to-usdt` endpoint (158 lines)
     - Receives accumulation_id, client_id, eth_amount, usdt_wallet_address
     - Creates ChangeNow ETH→USDT fixed-rate transaction with infinite retry
     - Encrypts response with transaction details
-    - Enqueues response back to GCAccumulator `/swap-created` endpoint
+    - Enqueues response back to PGP_ACCUMULATOR `/swap-created` endpoint
   - ✅ Deployed enhanced GCSplit3 as revision `gcsplit3-10-26-00006-pdw`
   - **Result**: Service now handles BOTH instant (ETH→ClientCurrency) AND threshold (ETH→USDT) swaps
   - **Health Status**: All 3 components healthy
@@ -11268,11 +11268,11 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **KEY ACHIEVEMENTS**:
   - 🎯 **Single Responsibility**: GCSplit2 = Estimator, GCSplit3 = Swap Creator
   - 🎯 **Infrastructure Reuse**: GCSplit3/GCHostPay now used for all swaps (not just instant)
-  - 🎯 **Foundation Laid**: Token encryption/decryption ready for GCAccumulator integration
+  - 🎯 **Foundation Laid**: Token encryption/decryption ready for PGP_ACCUMULATOR integration
   - 🎯 **Zero Downtime**: Both services deployed successfully without breaking existing flows
 
 - **NEXT STEPS (Phase 3)**:
-  - Refactor GCAccumulator to queue GCSplit3 instead of GCSplit2
+  - Refactor PGP_ACCUMULATOR to queue GCSplit3 instead of GCSplit2
   - Add `/swap-created` endpoint to receive swap creation confirmation
   - Add `/swap-executed` endpoint to receive execution confirmation
   - Update database manager methods for conversion tracking
@@ -11280,7 +11280,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - 🔄 Phase 3: GCAccumulator Refactoring (NEXT)
+  - 🔄 Phase 3: PGP_ACCUMULATOR Refactoring (NEXT)
   - ⏳ Phase 4: GCHostPay3 Response Routing (PENDING)
   - ⏳ Phase 5: Database Schema Updates (PENDING)
   - ⏳ Phase 6: Cloud Tasks Queue Setup (PENDING)
@@ -11299,13 +11299,13 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **PROPOSED SOLUTION**:
   - **GCSplit2**: ONLY USDT→ETH estimation (remove 168 lines, simplify by ~40%)
   - **GCSplit3**: ADD new `/eth-to-usdt` endpoint for creating actual ETH→USDT swaps (threshold payouts)
-  - **GCAccumulator**: Trigger actual swap creation via GCSplit3/GCHostPay (not just quotes)
-  - **GCBatchProcessor**: Remain as ONLY service checking thresholds (eliminate redundancy)
+  - **PGP_ACCUMULATOR**: Trigger actual swap creation via GCSplit3/GCHostPay (not just quotes)
+  - **PGP_BATCHPROCESSOR**: Remain as ONLY service checking thresholds (eliminate redundancy)
   - **GCHostPay2/3**: Already currency-agnostic, just add conditional routing (minimal changes)
 - **IMPLEMENTATION CHECKLIST**: 10-phase comprehensive plan with acceptance criteria:
   1. Phase 1: GCSplit2 Simplification (2-3 hours)
   2. Phase 2: GCSplit3 Enhancement (4-5 hours)
-  3. Phase 3: GCAccumulator Refactoring (6-8 hours)
+  3. Phase 3: PGP_ACCUMULATOR Refactoring (6-8 hours)
   4. Phase 4: GCHostPay3 Response Routing (2-3 hours)
   5. Phase 5: Database Schema Updates (1-2 hours)
   6. Phase 6: Cloud Tasks Queue Setup (1-2 hours)
@@ -11323,7 +11323,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **KEY ARCHITECTURAL CHANGES**:
   - GCSplit2: Remove `/estimate-and-update`, database manager, threshold checking (~40% code reduction)
   - GCSplit3: Add `/eth-to-usdt` endpoint (mirrors existing `/` for ETH→Client)
-  - GCAccumulator: Add `/swap-created` and `/swap-executed` endpoints, orchestrate via GCSplit3/GCHostPay
+  - PGP_ACCUMULATOR: Add `/swap-created` and `/swap-executed` endpoints, orchestrate via GCSplit3/GCHostPay
   - GCHostPay3: Add context-based routing (instant vs threshold payouts)
   - Database: Add `conversion_status` field if not exists (already done in earlier migration)
 - **ROLLBACK STRATEGY**: Documented for each service with specific triggers and procedures
@@ -11338,15 +11338,15 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 ---
 
 ### October 31, 2025 - ARCHITECTURE REFACTORING: Async ETH→USDT Conversion ✅
-- **CRITICAL REFACTORING**: Moved ChangeNow ETH→USDT conversion from GCAccumulator to GCSplit2 via Cloud Tasks
-- **Problem Identified:** GCAccumulator was making synchronous ChangeNow API calls in webhook endpoint, violating Cloud Tasks pattern
+- **CRITICAL REFACTORING**: Moved ChangeNow ETH→USDT conversion from PGP_ACCUMULATOR to GCSplit2 via Cloud Tasks
+- **Problem Identified:** PGP_ACCUMULATOR was making synchronous ChangeNow API calls in webhook endpoint, violating Cloud Tasks pattern
   - Created single point of failure (ChangeNow downtime blocks entire webhook)
   - Risk of Cloud Run timeout (60 min) causing data loss
   - Cascading failures to GCWebhook1
   - Only service in entire architecture violating non-blocking pattern
 - **Solution Implemented:** Move ChangeNow call to GCSplit2 queue handler (Option 1 from analysis document)
 - **Changes Made:**
-  1. **GCAccumulator-10-26 Refactoring**
+  1. **PGP_ACCUMULATOR_v1 Refactoring**
      - Removed synchronous ChangeNow API call from `/accumulate` endpoint
      - Now stores payment with `accumulated_eth` and `conversion_status='pending'`
      - Queues task to GCSplit2 `/estimate-and-update` endpoint
@@ -11355,12 +11355,12 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
      - Removed `CHANGENOW_API_KEY` from secrets
      - Added `insert_payout_accumulation_pending()` to database_manager
      - Added `enqueue_gcsplit2_conversion()` to cloudtasks_client
-  2. **GCSplit2-10-26 Enhancement**
+  2. **PGP_SPLIT2_v1 Enhancement**
      - Created new `/estimate-and-update` endpoint for ETH→USDT conversion
-     - Receives `accumulation_id`, `client_id`, `accumulated_eth` from GCAccumulator
+     - Receives `accumulation_id`, `client_id`, `accumulated_eth` from PGP_ACCUMULATOR
      - Calls ChangeNow API with infinite retry (in queue handler - non-blocking)
      - Updates payout_accumulation record with conversion data
-     - Checks if client threshold met, queues GCBatchProcessor if needed
+     - Checks if client threshold met, queues PGP_BATCHPROCESSOR if needed
      - Added database_manager.py for database operations
      - Added database configuration to config_manager
      - Created new secrets: `GCBATCHPROCESSOR_QUEUE`, `GCBATCHPROCESSOR_URL`
@@ -11373,24 +11373,24 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
      - Updated 3 existing records to `conversion_status='completed'`
 - **New Architecture Flow:**
   ```
-  GCWebhook1 → GCAccumulator → GCSplit2 → Updates DB → Checks Threshold → GCBatchProcessor
+  GCWebhook1 → PGP_ACCUMULATOR → GCSplit2 → Updates DB → Checks Threshold → PGP_BATCHPROCESSOR
      (queue)     (stores ETH)     (queue)    (converts)    (if met)         (queue)
        ↓               ↓                         ↓
     Returns 200   Returns 200            Calls ChangeNow
     immediately   immediately            (infinite retry)
   ```
 - **Key Benefits:**
-  - ✅ Non-blocking webhooks (GCAccumulator returns 200 immediately)
+  - ✅ Non-blocking webhooks (PGP_ACCUMULATOR returns 200 immediately)
   - ✅ Fault isolation (ChangeNow failure only affects GCSplit2 queue)
   - ✅ No data loss (payment persisted before conversion attempt)
   - ✅ Automatic retry via Cloud Tasks (up to 24 hours)
   - ✅ Better observability (conversion status in database + Cloud Tasks console)
   - ✅ Follows architectural pattern (all external APIs in queue handlers)
 - **Deployments:**
-  - GCAccumulator: `gcaccumulator-10-26-00011-cmt` ✅
+  - PGP_ACCUMULATOR: `pgp_accumulator-10-26-00011-cmt` ✅
   - GCSplit2: `gcsplit2-10-26-00008-znd` ✅
 - **Health Status:**
-  - GCAccumulator: ✅ (database, token_manager, cloudtasks)
+  - PGP_ACCUMULATOR: ✅ (database, token_manager, cloudtasks)
   - GCSplit2: ✅ (database, token_manager, cloudtasks, changenow)
 - **Documentation:**
   - Created `GCACCUMULATOR_CHANGENOW_ARCHITECTURE_ANALYSIS.md` (detailed analysis)
@@ -11399,18 +11399,18 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
 ---
 
-### October 31, 2025 (SUPERSEDED) - GCAccumulator Real ChangeNow ETH→USDT Conversion ❌
+### October 31, 2025 (SUPERSEDED) - PGP_ACCUMULATOR Real ChangeNow ETH→USDT Conversion ❌
 - **FEATURE IMPLEMENTATION**: Replaced mock 1:1 conversion with real ChangeNow API ETH→USDT conversion
 - **Context:** Previous implementation used `eth_to_usdt_rate = 1.0` and `accumulated_usdt = adjusted_amount_usd` (mock)
 - **Problem:** Mock conversion didn't protect against real market volatility - no actual USDT acquisition
 - **Implementation:**
-  1. **Created ChangeNow Client for GCAccumulator**
-     - New file: `GCAccumulator-10-26/changenow_client.py`
+  1. **Created ChangeNow Client for PGP_ACCUMULATOR**
+     - New file: `PGP_ACCUMULATOR_v1/changenow_client.py`
      - Method: `get_eth_to_usdt_estimate_with_retry()` with infinite retry logic
      - Fixed 60-second backoff on errors/rate limits (same pattern as GCSplit2)
      - Specialized for ETH→USDT conversion (opposite direction from GCSplit2's USDT→ETH)
-  2. **Updated GCAccumulator Main Service**
-     - File: `GCAccumulator-10-26/acc10-26.py`
+  2. **Updated PGP_ACCUMULATOR Main Service**
+     - File: `PGP_ACCUMULATOR_v1/pgp_accumulator_v1.py`
      - Replaced mock conversion (lines 111-121) with real ChangeNow API call
      - Added ChangeNow client initialization with CN_API_KEY from Secret Manager
      - Calculates pure market rate from ChangeNow response (excluding fees for audit trail)
@@ -11421,7 +11421,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
      - Added ChangeNow client to health check components
 - **API Flow:**
   ```
-  GCAccumulator receives payment ($9.70 after TP fee)
+  PGP_ACCUMULATOR receives payment ($9.70 after TP fee)
   → Calls ChangeNow API: ETH→USDT estimate
   → ChangeNow returns: {toAmount, rate, id, depositFee, withdrawalFee}
   → Stores USDT amount in database (locks value)
@@ -11440,25 +11440,25 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - ✅ Conversion timestamp for correlation with market data
   - ✅ Infinite retry ensures eventual success (up to 24h Cloud Tasks limit)
 - **Batch Payout System Verification:**
-  - Verified GCBatchProcessor already sends `total_amount_usdt` to GCSplit1
+  - Verified PGP_BATCHPROCESSOR already sends `total_amount_usdt` to GCSplit1
   - Verified GCSplit1 `/batch-payout` endpoint correctly forwards USDT→ClientCurrency
-  - Flow: GCBatchProcessor → GCSplit1 → GCSplit2 (USDT→ETH) → GCSplit3 (ETH→ClientCurrency)
+  - Flow: PGP_BATCHPROCESSOR → GCSplit1 → GCSplit2 (USDT→ETH) → GCSplit3 (ETH→ClientCurrency)
   - **No changes needed** - batch system already handles USDT correctly
 - **Files Modified:**
-  - Created: `GCAccumulator-10-26/changenow_client.py` (161 lines)
-  - Modified: `GCAccumulator-10-26/acc10-26.py` (replaced mock conversion with real API call)
-  - Modified: `GCAccumulator-10-26/requirements.txt` (added requests library)
-- **Deployment Status:** ✅ DEPLOYED to production (revision gcaccumulator-10-26-00010-q4l)
+  - Created: `PGP_ACCUMULATOR_v1/changenow_client.py` (161 lines)
+  - Modified: `PGP_ACCUMULATOR_v1/pgp_accumulator_v1.py` (replaced mock conversion with real API call)
+  - Modified: `PGP_ACCUMULATOR_v1/requirements.txt` (added requests library)
+- **Deployment Status:** ✅ DEPLOYED to production (revision pgp_accumulator-10-26-00010-q4l)
 - **Testing Required:**
   - Test with real ChangeNow API in staging
   - Verify eth_to_usdt_rate calculation accuracy
   - Confirm conversion_tx_hash stored correctly
   - Validate database writes with real conversion data
 - **Deployment Details:**
-  - Service: `gcaccumulator-10-26`
-  - Revision: `gcaccumulator-10-26-00010-q4l`
+  - Service: `pgp_accumulator-10-26`
+  - Revision: `pgp_accumulator-10-26-00010-q4l`
   - Region: `us-central1`
-  - URL: `https://gcaccumulator-10-26-291176869049.us-central1.run.app`
+  - URL: `https://pgp_accumulator-10-26-291176869049.us-central1.run.app`
   - Health Check: ✅ All components healthy (database, cloudtasks, token_manager, changenow)
   - Secrets Configured: CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET, SUCCESS_URL_SIGNING_KEY, TP_FLAT_FEE, CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION, CHANGENOW_API_KEY, GCSPLIT2_QUEUE, GCSPLIT2_URL
 - **Status:** ✅ Implementation complete, deployed to production, ready for real-world testing
@@ -11490,7 +11490,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
 ### October 29, 2025 - GCSplit1 /batch-payout Endpoint Implemented ✅
 - **CRITICAL FIX**: Implemented missing `/batch-payout` endpoint in GCSplit1 service
-- **Problem:** GCBatchProcessor was successfully creating batches and enqueueing tasks, but GCSplit1 returned 404 errors
+- **Problem:** PGP_BATCHPROCESSOR was successfully creating batches and enqueueing tasks, but GCSplit1 returned 404 errors
 - **Root Causes:**
   1. GCSplit1 only had instant payout endpoints (/, /usdt-eth-estimate, /eth-client-swap)
   2. Missing `decrypt_batch_token()` method in TokenManager
@@ -11502,18 +11502,18 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - Modified GCSplit1 initialization to pass TPS_HOSTPAY_SIGNING_KEY for batch decryption
   - Batch payouts use `user_id=0` (not tied to single user, aggregates multiple payments)
 - **Deployment:** GCSplit1 revision 00009-krs deployed successfully
-- **Batch Payout Flow:** GCBatchProcessor → GCSplit1 /batch-payout → GCSplit2 → GCSplit3 → GCHostPay
+- **Batch Payout Flow:** PGP_BATCHPROCESSOR → GCSplit1 /batch-payout → GCSplit2 → GCSplit3 → GCHostPay
 - **Status:** Batch payout endpoint now operational, ready to process threshold payment batches
 
 ### October 29, 2025 - Threshold Payout Batch System Now Working ✅
 - **CRITICAL FIX**: Identified and resolved batch payout system failure
 - **Root Causes:**
   1. GCSPLIT1_BATCH_QUEUE secret had trailing newline (`\n`) - Cloud Tasks rejected with "400 Queue ID" error
-  2. GCAccumulator queried wrong column (`open_channel_id` instead of `closed_channel_id`) for threshold lookup
+  2. PGP_ACCUMULATOR queried wrong column (`open_channel_id` instead of `closed_channel_id`) for threshold lookup
 - **Resolution:**
   - Fixed all queue/URL secrets using `fix_secret_newlines.sh` script
-  - Corrected GCAccumulator database query to use `closed_channel_id`
-  - Redeployed GCBatchProcessor (picks up new secrets) and GCAccumulator (query fix)
+  - Corrected PGP_ACCUMULATOR database query to use `closed_channel_id`
+  - Redeployed PGP_BATCHPROCESSOR (picks up new secrets) and PGP_ACCUMULATOR (query fix)
 - **Verification:** First batch successfully created (`bd90fadf-fdc8-4f9e-b575-9de7a7ff41e0`) with 2 payments totaling $2.295 USDT
 - **Status:** Batch payouts now fully operational - accumulations will be processed every 5 minutes by Cloud Scheduler
 - **Reference:** `THRESHOLD_PAYOUT_BUG_FIX_SUMMARY.md`
@@ -11522,7 +11522,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 
 ### Production Services (Deployed on Google Cloud Run)
 
-#### ✅ TelePay10-26 - Telegram Bot Service
+#### ✅ PGP_SERVER_v1 - Telegram Bot Service
 - **Status:** Production Ready
 - **Recent Changes:** New inline form UI for DATABASE functionality implemented
 - **Components:**
@@ -11534,7 +11534,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **Emoji Patterns:** 🚀 ✅ ❌ 💾 👤 📨 🕐 💰
 
 #### ✅ GCRegister10-26 - Channel Registration Web App (LEGACY)
-- **Status:** Legacy system (being replaced by GCRegisterWeb + GCRegisterAPI)
+- **Status:** Legacy system (being replaced by PGP_WEB + PGP_WEBAPI)
 - **Type:** Flask web application
 - **Features:**
   - Channel registration forms with validation
@@ -11544,7 +11544,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - Tier selection (1-3 subscription tiers)
 - **Emoji Patterns:** 🚀 ✅ ❌ 📝 💰 🔐 🔍
 
-#### ✅ GCRegisterAPI-10-26 - REST API Backend (NEW)
+#### ✅ PGP_WEBAPI_v1 - REST API Backend (NEW)
 - **Status:** Production Ready (Revision 00011-jsv)
 - **URL:** https://gcregisterapi-10-26-291176869049.us-central1.run.app
 - **Type:** Flask REST API (JWT authentication)
@@ -11563,7 +11563,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - ✅ Fixed tier_count column error in ChannelUpdateRequest (removed, calculated dynamically)
 - **Emoji Patterns:** 🔐 ✅ ❌ 👤 📊 🔍
 
-#### ✅ GCRegisterWeb-10-26 - React SPA Frontend (NEW)
+#### ✅ PGP_WEB_v1 - React SPA Frontend (NEW)
 - **Status:** Production Ready
 - **URL:** https://www.paygateprime.com
 - **Deployment:** Cloud Storage + Load Balancer + Cloud CDN
@@ -11586,7 +11586,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - ✅ Fixed tier_count not being sent in update payload (calculated dynamically)
 - **Emoji Patterns:** 🎨 ✅ 📱 🚀
 
-#### ✅ GCWebhook1-10-26 - Payment Processor Service
+#### ✅ PGP_ORCHESTRATOR_v1 - Payment Processor Service
 - **Status:** Production Ready
 - **Purpose:** Receives success_url from NOWPayments, writes to DB, enqueues tasks
 - **Flow:**
@@ -11598,7 +11598,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   6. Enqueues to GCSplit1 (payment split)
 - **Emoji Patterns:** 🎯 ✅ ❌ 💾 👤 💰 🏦 🌐 📅 🕒
 
-#### ✅ GCWebhook2-10-26 - Telegram Invite Sender
+#### ✅ PGP_INVITE_v1 - Telegram Invite Sender
 - **Status:** Production Ready
 - **Architecture:** Sync route with asyncio.run() for isolated event loops
 - **Purpose:** Sends one-time Telegram invite links to users
@@ -11606,7 +11606,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
 - **Retry:** Infinite retry via Cloud Tasks (60s backoff, 24h max)
 - **Emoji Patterns:** 🎯 ✅ ❌ 📨 👤 🔄
 
-#### ✅ GCSplit1-10-26 - Payment Split Orchestrator
+#### ✅ PGP_SPLIT1_v1 - Payment Split Orchestrator
 - **Status:** Production Ready
 - **Purpose:** Orchestrates 3-stage payment splitting workflow
 - **Endpoints:**
@@ -11618,7 +11618,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   - `split_payout_que` (stores swap transaction data)
 - **Emoji Patterns:** 🎯 ✅ ❌ 💰 🏦 🌐 💾 🆔 👤 🧮
 
-#### ✅ GCSplit2-10-26 - USDT→ETH Estimator
+#### ✅ PGP_SPLIT2_v1 - USDT→ETH Estimator
 - **Status:** Production Ready
 - **Purpose:** Calls ChangeNow API for USDT→ETH estimates
 - **Retry Logic:** Infinite retry with 60s backoff
@@ -11630,7 +11630,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   5. Enqueue back to GCSplit1
 - **Emoji Patterns:** 🎯 ✅ ❌ 👤 💰 🌐 🏦
 
-#### ✅ GCSplit3-10-26 - ETH→ClientCurrency Swapper
+#### ✅ PGP_SPLIT3_v1 - ETH→ClientCurrency Swapper
 - **Status:** Production Ready
 - **Purpose:** Creates ChangeNow fixed-rate transactions (ETH→ClientCurrency)
 - **Retry Logic:** Infinite retry with 60s backoff
@@ -11642,7 +11642,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   5. Enqueue back to GCSplit1
 - **Emoji Patterns:** 🎯 ✅ ❌ 🆔 👤 💰 🌐 🏦
 
-#### ✅ GCHostPay1-10-26 - Validator & Orchestrator
+#### ✅ PGP_HOSTPAY1_v1 - Validator & Orchestrator
 - **Status:** Production Ready
 - **Purpose:** Orchestrates 3-stage HostPay workflow
 - **Endpoints:**
@@ -11655,7 +11655,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   3. Orchestrates status check → payment execution
 - **Emoji Patterns:** 🎯 ✅ ❌ 🆔 💰 🏦 📊
 
-#### ✅ GCHostPay2-10-26 - ChangeNow Status Checker
+#### ✅ PGP_HOSTPAY2_v1 - ChangeNow Status Checker
 - **Status:** Production Ready
 - **Purpose:** Checks ChangeNow transaction status with infinite retry
 - **Retry Logic:** 60s fixed backoff, 24h max duration
@@ -11666,7 +11666,7 @@ def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[
   4. Enqueue back to GCHostPay1 /status-verified
 - **Emoji Patterns:** 🎯 ✅ ❌ 🆔 📊 🌐 💰
 
-#### ✅ GCHostPay3-10-26 - ETH Payment Executor
+#### ✅ PGP_HOSTPAY3_v1 - ETH Payment Executor
 - **Status:** Production Ready
 - **Purpose:** Executes ETH payments with infinite retry
 - **Retry Logic:** 60s fixed backoff, 24h max duration
@@ -11819,19 +11819,19 @@ User → TelePay (Bot) → GCWebhook1 ┬→ GCWebhook2 → Telegram Invite
 ### Google Cloud Run Services
 | Service | Status | URL | Queue(s) |
 |---------|--------|-----|----------|
-| TelePay10-26 | ✅ Running | - | - |
+| PGP_SERVER_v1 | ✅ Running | - | - |
 | GCRegister10-26 | ✅ Running | www.paygateprime.com | - |
-| **GCRegisterAPI-10-26** | ✅ Running | https://gcregisterapi-10-26-291176869049.us-central1.run.app | - |
-| GCWebhook1-10-26 | ✅ Running (Rev 4) | https://gcwebhook1-10-26-291176869049.us-central1.run.app | - |
-| GCWebhook2-10-26 | ✅ Running | - | gcwebhook-telegram-invite-queue |
-| **GCAccumulator-10-26** | ✅ Running | https://gcaccumulator-10-26-291176869049.us-central1.run.app | accumulator-payment-queue |
-| **GCBatchProcessor-10-26** | ✅ Running | https://gcbatchprocessor-10-26-291176869049.us-central1.run.app | gcsplit1-batch-queue |
-| GCSplit1-10-26 | ✅ Running | - | gcsplit1-response-queue |
-| GCSplit2-10-26 | ✅ Running | - | gcsplit-usdt-eth-estimate-queue |
-| GCSplit3-10-26 | ✅ Running | - | gcsplit-eth-client-swap-queue |
-| GCHostPay1-10-26 | ✅ Running | - | gchostpay1-response-queue |
-| GCHostPay2-10-26 | ✅ Running | - | gchostpay-status-check-queue |
-| GCHostPay3-10-26 | ✅ Running | - | gchostpay-payment-exec-queue |
+| **PGP_WEBAPI_v1** | ✅ Running | https://gcregisterapi-10-26-291176869049.us-central1.run.app | - |
+| PGP_ORCHESTRATOR_v1 | ✅ Running (Rev 4) | https://gcwebhook1-10-26-291176869049.us-central1.run.app | - |
+| PGP_INVITE_v1 | ✅ Running | - | gcwebhook-telegram-invite-queue |
+| **PGP_ACCUMULATOR_v1** | ✅ Running | https://pgp_accumulator-10-26-291176869049.us-central1.run.app | accumulator-payment-queue |
+| **PGP_BATCHPROCESSOR_v1** | ✅ Running | https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app | gcsplit1-batch-queue |
+| PGP_SPLIT1_v1 | ✅ Running | - | gcsplit1-response-queue |
+| PGP_SPLIT2_v1 | ✅ Running | - | gcsplit-usdt-eth-estimate-queue |
+| PGP_SPLIT3_v1 | ✅ Running | - | gcsplit-eth-client-swap-queue |
+| PGP_HOSTPAY1_v1 | ✅ Running | - | gchostpay1-response-queue |
+| PGP_HOSTPAY2_v1 | ✅ Running | - | gchostpay-status-check-queue |
+| PGP_HOSTPAY3_v1 | ✅ Running | - | gchostpay-payment-exec-queue |
 
 ### Google Cloud Tasks Queues
 All queues configured with:
@@ -11846,7 +11846,7 @@ All queues configured with:
 ### Google Cloud Scheduler Jobs
 | Job Name | Schedule | Target | Status |
 |----------|----------|--------|--------|
-| **batch-processor-job** | Every 5 minutes (`*/5 * * * *`) | https://gcbatchprocessor-10-26-291176869049.us-central1.run.app/process | ✅ ENABLED |
+| **batch-processor-job** | Every 5 minutes (`*/5 * * * *`) | https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app/process | ✅ ENABLED |
 
 ---
 
@@ -11882,14 +11882,14 @@ All queues configured with:
 **Objective:** Convert GCRegister10-26 from monolithic Flask app to modern SPA architecture
 
 **Proposed Solution:**
-- **Frontend:** TypeScript + React SPA (GCRegisterWeb-10-26)
+- **Frontend:** TypeScript + React SPA (PGP_WEB_v1)
   - Hosted on Cloud Storage + CDN (zero cold starts)
   - Vite build system (instant HMR)
   - React Hook Form + Zod validation
   - React Query for API caching
   - Tailwind CSS for styling
 
-- **Backend:** Flask REST API (GCRegisterAPI-10-26)
+- **Backend:** Flask REST API (PGP_WEBAPI_v1)
   - JSON-only responses (no templates)
   - JWT authentication (stateless)
   - CORS-enabled for SPA
@@ -12005,7 +12005,7 @@ grep "## PACKAGE" PACKAGE_VERIFICATION_GOTCHAS.md
 ## 2025-11-01 Session 19 Part 2: GCMICROBATCHPROCESSOR USD→ETH CONVERSION FIX ✅
 
 ### 🎯 Purpose
-Fixed critical USD→ETH amount conversion bug in GCMicroBatchProcessor that was creating swap transactions worth thousands of dollars instead of actual accumulated amounts.
+Fixed critical USD→ETH amount conversion bug in PGP_MICROBATCHPROCESSOR that was creating swap transactions worth thousands of dollars instead of actual accumulated amounts.
 
 ### 🚨 Problem Discovered
 **Incorrect ChangeNow Transaction Amounts:**
@@ -12018,7 +12018,7 @@ User reported transaction ID: **ccb079fe70f827**
 **Root Cause Analysis:**
 ```
 1. payout_accumulation.accumulated_amount_usdt stores USD VALUES (not crypto amounts)
-2. GCMicroBatchProcessor queries: total_pending = $2.295 USD
+2. PGP_MICROBATCHPROCESSOR queries: total_pending = $2.295 USD
 3. Code passed $2.295 directly to ChangeNow as "from_amount" in ETH
 4. ChangeNow interpreted 2.295 as ETH amount (not USD)
 5. At ~$3,800/ETH, this created swap worth $8,735 instead of $2.295
@@ -12056,7 +12056,7 @@ def get_estimated_amount_v2_with_retry(
     # Returns: {'toAmount': Decimal, 'depositFee': Decimal, ...}
 ```
 
-**Step 2: Updated microbatch10-26.py with two-step conversion (lines 149-187)**
+**Step 2: Updated micropgp_batchprocessor_v1.py with two-step conversion (lines 149-187)**
 ```python
 # Step 1: Convert USD to ETH equivalent
 print(f"📊 [ENDPOINT] Step 1: Converting USD to ETH equivalent")
@@ -12086,17 +12086,17 @@ swap_result = changenow_client.create_fixed_rate_transaction_with_retry(
 ```
 
 **Files Modified:**
-1. `GCMicroBatchProcessor-10-26/changenow_client.py` (+135 lines)
+1. `PGP_MICROBATCHPROCESSOR_v1/changenow_client.py` (+135 lines)
    - Added `get_estimated_amount_v2_with_retry()` method
-2. `GCMicroBatchProcessor-10-26/microbatch10-26.py` (lines 149-187 replaced)
+2. `PGP_MICROBATCHPROCESSOR_v1/micropgp_batchprocessor_v1.py` (lines 149-187 replaced)
    - Added Step 1: USD→ETH conversion via estimate API
    - Added Step 2: ETH→USDT swap with correct amount
 
 ### 🚀 Deployment
 
 ```bash
-cd GCMicroBatchProcessor-10-26
-gcloud run deploy gcmicrobatchprocessor-10-26 \
+cd PGP_MICROBATCHPROCESSOR_v1
+gcloud run deploy pgp_microbatchprocessor-10-26 \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
@@ -12106,7 +12106,7 @@ gcloud run deploy gcmicrobatchprocessor-10-26 \
 # Result:
 # Building Container...done ✅
 # Creating Revision...done ✅
-# Revision: gcmicrobatchprocessor-10-26-00010-6dg ✅
+# Revision: pgp_microbatchprocessor-10-26-00010-6dg ✅
 # Previous revision: 00009-xcs (had deployment fix but still had USD/ETH bug)
 # Serving 100% traffic ✅
 ```
@@ -12115,20 +12115,20 @@ gcloud run deploy gcmicrobatchprocessor-10-26 \
 
 **1. Health Check:**
 ```bash
-curl https://gcmicrobatchprocessor-10-26-291176869049.us-central1.run.app/health
-# {"status": "healthy", "service": "GCMicroBatchProcessor-10-26"} ✅
+curl https://pgp_microbatchprocessor-10-26-291176869049.us-central1.run.app/health
+# {"status": "healthy", "service": "PGP_MICROBATCHPROCESSOR_v1"} ✅
 ```
 
 **2. Cross-Service USD/ETH Check:**
-- ✅ GCBatchProcessor: Uses `total_usdt` correctly (no ETH confusion)
+- ✅ PGP_BATCHPROCESSOR: Uses `total_usdt` correctly (no ETH confusion)
 - ✅ GCSplit3: Receives actual `eth_amount` from GCSplit1 (correct)
-- ✅ GCAccumulator: Stores USD values in `accumulated_amount_usdt` (correct)
-- ✅ **Issue isolated to GCMicroBatchProcessor only**
+- ✅ PGP_ACCUMULATOR: Stores USD values in `accumulated_amount_usdt` (correct)
+- ✅ **Issue isolated to PGP_MICROBATCHPROCESSOR only**
 
 **3. Code Pattern Verification:**
 ```bash
 grep -r "create_fixed_rate_transaction_with_retry" OCTOBER/10-26/ --include="*.py"
-# Checked all usages - only GCMicroBatchProcessor had USD/ETH confusion ✅
+# Checked all usages - only PGP_MICROBATCHPROCESSOR had USD/ETH confusion ✅
 ```
 
 ### 📊 Results
@@ -12175,12 +12175,12 @@ Value: ~$2.295 (correct!) ✅
 ## 2025-11-01 Session 19 Part 1: GCMICROBATCHPROCESSOR DEPLOYMENT FIX ✅
 
 ### 🎯 Purpose
-Fixed incomplete Session 18 deployment - GCMicroBatchProcessor code was corrected but container image wasn't rebuilt, causing continued AttributeError in production.
+Fixed incomplete Session 18 deployment - PGP_MICROBATCHPROCESSOR code was corrected but container image wasn't rebuilt, causing continued AttributeError in production.
 
 ### 🚨 Problem Discovered
 **Production Still Failing After Session 18 "Fix":**
 ```
-GCMicroBatchProcessor Logs (02:44:54 EDT) - AFTER Session 18:
+PGP_MICROBATCHPROCESSOR Logs (02:44:54 EDT) - AFTER Session 18:
 ✅ Threshold reached! Creating batch conversion
 💰 Swap amount: $2.29500000
 🔄 Creating ChangeNow swap: ETH → USDT
@@ -12189,7 +12189,7 @@ POST 200 (misleading success - actually returned error JSON)
 ```
 
 **Root Cause Analysis:**
-1. ✅ Session 18 correctly edited `microbatch10-26.py` line 153 (local file fixed)
+1. ✅ Session 18 correctly edited `micropgp_batchprocessor_v1.py` line 153 (local file fixed)
 2. ❌ Session 18 deployment created revision 00008-5jt BUT didn't rebuild container
 3. ❌ Production still running OLD code with broken method call
 4. ❌ Cloud Build cache or source upload issue prevented rebuild
@@ -12203,8 +12203,8 @@ POST 200 (misleading success - actually returned error JSON)
 
 **Force Container Rebuild:**
 ```bash
-cd GCMicroBatchProcessor-10-26
-gcloud run deploy gcmicrobatchprocessor-10-26 \
+cd PGP_MICROBATCHPROCESSOR_v1
+gcloud run deploy pgp_microbatchprocessor-10-26 \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
@@ -12214,7 +12214,7 @@ gcloud run deploy gcmicrobatchprocessor-10-26 \
 # Output:
 # Building Container...done ✅
 # Creating Revision...done ✅
-# Revision: gcmicrobatchprocessor-10-26-00009-xcs ✅
+# Revision: pgp_microbatchprocessor-10-26-00009-xcs ✅
 # Serving 100% traffic ✅
 ```
 
@@ -12222,15 +12222,15 @@ gcloud run deploy gcmicrobatchprocessor-10-26 \
 
 **1. New Revision Serving Traffic:**
 ```bash
-gcloud run services describe gcmicrobatchprocessor-10-26 --region=us-central1
-# Latest: gcmicrobatchprocessor-10-26-00009-xcs ✅
+gcloud run services describe pgp_microbatchprocessor-10-26 --region=us-central1
+# Latest: pgp_microbatchprocessor-10-26-00009-xcs ✅
 # Traffic: 100% ✅
 ```
 
 **2. Health Check:**
 ```bash
-curl https://gcmicrobatchprocessor-10-26-291176869049.us-central1.run.app/health
-# {"status": "healthy", "service": "GCMicroBatchProcessor-10-26"} ✅
+curl https://pgp_microbatchprocessor-10-26-291176869049.us-central1.run.app/health
+# {"status": "healthy", "service": "PGP_MICROBATCHPROCESSOR_v1"} ✅
 ```
 
 **3. Manual Scheduler Trigger:**
@@ -12279,7 +12279,7 @@ grep -r "create_eth_to_usdt_swap" OCTOBER/10-26/
 ### 🎯 Purpose
 Fixed TWO critical production issues blocking payment processing:
 1. **GCHostPay3**: Token expiration preventing ETH payment execution
-2. **GCMicroBatchProcessor**: Missing ChangeNow method breaking micro-batch conversions
+2. **PGP_MICROBATCHPROCESSOR**: Missing ChangeNow method breaking micro-batch conversions
 
 ### 🚨 Issues Identified
 
@@ -12309,14 +12309,14 @@ GCHostPay3 Logs (02:28-02:32 EDT):
 
 ---
 
-**ISSUE #2: GCMicroBatchProcessor Missing Method - Batch Conversion Broken**
+**ISSUE #2: PGP_MICROBATCHPROCESSOR Missing Method - Batch Conversion Broken**
 
 **Error:**
 ```
-GCMicroBatchProcessor Logs (02:15:01 EDT):
+PGP_MICROBATCHPROCESSOR Logs (02:15:01 EDT):
 POST 500 - AttributeError
 Traceback (most recent call last):
-  File "/app/microbatch10-26.py", line 153, in check_threshold
+  File "/app/micropgp_batchprocessor_v1.py", line 153, in check_threshold
     swap_result = changenow_client.create_eth_to_usdt_swap(
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: 'ChangeNowClient' object has no attribute 'create_eth_to_usdt_swap'
@@ -12336,8 +12336,8 @@ AttributeError: 'ChangeNowClient' object has no attribute 'create_eth_to_usdt_sw
 **FIX #1: Token TTL Extension (300s → 7200s)**
 
 **Files Modified:**
-- `GCHostPay1-10-26/token_manager.py` - All token validation methods
-- `GCHostPay3-10-26/token_manager.py` - All token validation methods
+- `PGP_HOSTPAY1_v1/token_manager.py` - All token validation methods
+- `PGP_HOSTPAY3_v1/token_manager.py` - All token validation methods
 
 **Changes:**
 ```python
@@ -12361,7 +12361,7 @@ if not (current_time - 7200 <= timestamp <= current_time + 5):
 **FIX #2: ChangeNow Method Correction**
 
 **File Modified:**
-- `GCMicroBatchProcessor-10-26/microbatch10-26.py` (Line 153)
+- `PGP_MICROBATCHPROCESSOR_v1/micropgp_batchprocessor_v1.py` (Line 153)
 
 **Changes:**
 ```python
@@ -12387,22 +12387,22 @@ swap_result = changenow_client.create_fixed_rate_transaction_with_retry(
 **Deployment Commands:**
 ```bash
 # GCHostPay1 (Token TTL fix)
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCHostPay1-10-26
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_HOSTPAY1_v1
 gcloud run deploy gchostpay1-10-26 --source . --region us-central1 \
   --allow-unauthenticated --timeout 3600 --memory 512Mi
 # Revision: gchostpay1-10-26-00012-shr ✅
 
 # GCHostPay3 (Token TTL fix)
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCHostPay3-10-26
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_HOSTPAY3_v1
 gcloud run deploy gchostpay3-10-26 --source . --region us-central1 \
   --allow-unauthenticated --timeout 3600 --memory 512Mi
 # Revision: gchostpay3-10-26-00009-x44 ✅
 
-# GCMicroBatchProcessor (Method fix)
-cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCMicroBatchProcessor-10-26
-gcloud run deploy gcmicrobatchprocessor-10-26 --source . --region us-central1 \
+# PGP_MICROBATCHPROCESSOR (Method fix)
+cd /mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/PGP_MICROBATCHPROCESSOR_v1
+gcloud run deploy pgp_microbatchprocessor-10-26 --source . --region us-central1 \
   --allow-unauthenticated --timeout 3600 --memory 512Mi
-# Revision: gcmicrobatchprocessor-10-26-00008-5jt ✅
+# Revision: pgp_microbatchprocessor-10-26-00008-5jt ✅
 ```
 
 ### 🔬 Verification & Results
@@ -12434,7 +12434,7 @@ gcloud run deploy gcmicrobatchprocessor-10-26 --source . --region us-central1 \
 
 ---
 
-**GCMicroBatchProcessor Method Fix - DEPLOYED ✅**
+**PGP_MICROBATCHPROCESSOR Method Fix - DEPLOYED ✅**
 
 **Deployment Verified:**
 - ✅ Service deployed successfully (revision 00008-5jt)
@@ -12445,8 +12445,8 @@ gcloud run deploy gcmicrobatchprocessor-10-26 --source . --region us-central1 \
 
 **No Errors in Other Services:**
 Checked ALL services for similar issues:
-- ✅ GCAccumulator: No token expiration errors
-- ✅ GCMicroBatchProcessor: No token expiration errors
+- ✅ PGP_ACCUMULATOR: No token expiration errors
+- ✅ PGP_MICROBATCHPROCESSOR: No token expiration errors
 - ✅ No other services calling non-existent ChangeNow methods
 
 ### 🎉 Impact
@@ -12456,20 +12456,20 @@ Checked ALL services for similar issues:
 **Fixed:**
 - ✅ GCHostPay3 token expiration issue completely resolved
 - ✅ ETH payment execution restored for stuck transactions
-- ✅ GCMicroBatchProcessor method call corrected
+- ✅ PGP_MICROBATCHPROCESSOR method call corrected
 - ✅ Micro-batch conversion architecture functional
 - ✅ All services deployed and verified
 
 **Services Affected:**
 - `gchostpay1-10-26` (revision 00012-shr) - Token TTL updated
 - `gchostpay3-10-26` (revision 00009-x44) - Token TTL updated + payment executing
-- `gcmicrobatchprocessor-10-26` (revision 00008-5jt) - Method call fixed
+- `pgp_microbatchprocessor-10-26` (revision 00008-5jt) - Method call fixed
 
 **Cloud Tasks Queue Status:**
 - `gchostpay3-payment-exec-queue`: 1 old stuck task (24 attempts), 1 new task ready for processing
 
 **Next Steps:**
-- ✅ Monitor next Cloud Scheduler run for GCMicroBatchProcessor
+- ✅ Monitor next Cloud Scheduler run for PGP_MICROBATCHPROCESSOR
 - ✅ Verify micro-batch conversion when threshold reached
 - ✅ Confirm no new token expiration errors in production
 
@@ -12478,7 +12478,7 @@ Checked ALL services for similar issues:
 ## 2025-11-01 Session 17: CLOUD TASKS IAM AUTHENTICATION FIX ✅
 
 ### 🎯 Purpose
-Fixed critical IAM permissions issue preventing Cloud Tasks from invoking GCAccumulator and GCMicroBatchProcessor services. This was blocking ALL payment accumulation processing.
+Fixed critical IAM permissions issue preventing Cloud Tasks from invoking PGP_ACCUMULATOR and PGP_MICROBATCHPROCESSOR services. This was blocking ALL payment accumulation processing.
 
 ### 🚨 Emergency Situation
 **Customer Impact:**
@@ -12497,8 +12497,8 @@ or set the proper Authorization header.
 ```
 
 **Affected Services:**
-- `gcaccumulator-10-26` - NO IAM bindings (blocking accumulation)
-- `gcmicrobatchprocessor-10-26` - NO IAM bindings (would block batch processing)
+- `pgp_accumulator-10-26` - NO IAM bindings (blocking accumulation)
+- `pgp_microbatchprocessor-10-26` - NO IAM bindings (would block batch processing)
 
 **Cloud Tasks Queue Status:**
 ```
@@ -12511,8 +12511,8 @@ Queue: accumulator-payment-queue
 
 **IAM Policy Comparison:**
 - ✅ All other services: `bindings: [{members: [allUsers], role: roles/run.invoker}]`
-- ❌ GCAccumulator: `etag: BwZCgaKi9IU= version: 1` (NO bindings)
-- ❌ GCMicroBatchProcessor: `etag: BwZCgZHpZkU= version: 1` (NO bindings)
+- ❌ PGP_ACCUMULATOR: `etag: BwZCgaKi9IU= version: 1` (NO bindings)
+- ❌ PGP_MICROBATCHPROCESSOR: `etag: BwZCgZHpZkU= version: 1` (NO bindings)
 
 **Why This Happened:**
 Services were deployed WITHOUT IAM permissions configured. Cloud Tasks requires either:
@@ -12525,20 +12525,20 @@ The services had neither, causing immediate 403 errors.
 
 **IAM Permission Grants:**
 ```bash
-gcloud run services add-iam-policy-binding gcaccumulator-10-26 \
+gcloud run services add-iam-policy-binding pgp_accumulator-10-26 \
   --region=us-central1 \
   --member=allUsers \
   --role=roles/run.invoker
 
-gcloud run services add-iam-policy-binding gcmicrobatchprocessor-10-26 \
+gcloud run services add-iam-policy-binding pgp_microbatchprocessor-10-26 \
   --region=us-central1 \
   --member=allUsers \
   --role=roles/run.invoker
 ```
 
 **Results:**
-- ✅ GCAccumulator: IAM policy updated (etag: BwZCgkXypLo=)
-- ✅ GCMicroBatchProcessor: IAM policy updated (etag: BwZCgklQjRw=)
+- ✅ PGP_ACCUMULATOR: IAM policy updated (etag: BwZCgkXypLo=)
+- ✅ PGP_MICROBATCHPROCESSOR: IAM policy updated (etag: BwZCgklQjRw=)
 
 ### 🔬 Verification & Results
 
@@ -12584,7 +12584,7 @@ gcloud tasks list --queue=accumulator-payment-queue --location=us-central1
 **System Status:** FULLY OPERATIONAL ✅
 
 **Fixed:**
-- ✅ Cloud Tasks → GCAccumulator communication restored
+- ✅ Cloud Tasks → PGP_ACCUMULATOR communication restored
 - ✅ Both stuck payments processed and accumulated
 - ✅ Database has pending records ready for micro-batch conversion
 - ✅ Queue cleared - no more stuck tasks
@@ -12612,7 +12612,7 @@ Fixed DUAL critical errors blocking micro-batch conversion architecture:
 
 ### 🐛 Problems Identified
 
-**ERROR #1: GCAccumulator - NULL Constraint Violation**
+**ERROR #1: PGP_ACCUMULATOR - NULL Constraint Violation**
 ```
 ❌ [DATABASE] Failed to insert accumulation record:
 null value in column "eth_to_usdt_rate" violates not-null constraint
@@ -12621,7 +12621,7 @@ null value in column "eth_to_usdt_rate" violates not-null constraint
 - Cloud Tasks continuously retrying failed requests
 - Payments cannot be accumulated for batch processing
 
-**ERROR #2: GCMicroBatchProcessor - Outdated Code**
+**ERROR #2: PGP_MICROBATCHPROCESSOR - Outdated Code**
 ```
 ❌ [DATABASE] Query error: column "accumulated_eth" does not exist
 ```
@@ -12638,8 +12638,8 @@ null value in column "eth_to_usdt_rate" violates not-null constraint
   conversion_timestamp TIMESTAMP NOT NULL,        -- ❌ WRONG
   ```
 - Architecture requires two-phase processing:
-  1. GCAccumulator: Stores pending (NULL conversion data)
-  2. GCMicroBatchProcessor: Fills conversion data later
+  1. PGP_ACCUMULATOR: Stores pending (NULL conversion data)
+  2. PGP_MICROBATCHPROCESSOR: Fills conversion data later
 
 **Problem #2 Root Cause:**
 - Code was updated locally but service never redeployed
@@ -12659,28 +12659,28 @@ Results:
 
 **Fix #2: Service Redeployments**
 ```bash
-# Build & Deploy GCMicroBatchProcessor
-gcloud builds submit --tag gcr.io/telepay-459221/gcmicrobatchprocessor-10-26
-gcloud run deploy gcmicrobatchprocessor-10-26 --image gcr.io/telepay-459221/gcmicrobatchprocessor-10-26
+# Build & Deploy PGP_MICROBATCHPROCESSOR
+gcloud builds submit --tag gcr.io/telepay-459221/pgp_microbatchprocessor-10-26
+gcloud run deploy pgp_microbatchprocessor-10-26 --image gcr.io/telepay-459221/pgp_microbatchprocessor-10-26
 
-# Build & Deploy GCAccumulator
-gcloud builds submit --tag gcr.io/telepay-459221/gcaccumulator-10-26
-gcloud run deploy gcaccumulator-10-26 --image gcr.io/telepay-459221/gcaccumulator-10-26
+# Build & Deploy PGP_ACCUMULATOR
+gcloud builds submit --tag gcr.io/telepay-459221/pgp_accumulator-10-26
+gcloud run deploy pgp_accumulator-10-26 --image gcr.io/telepay-459221/pgp_accumulator-10-26
 ```
 
 **New Revisions:**
-- GCMicroBatchProcessor: `gcmicrobatchprocessor-10-26-00007-9c8` ✅
-- GCAccumulator: `gcaccumulator-10-26-00017-phl` ✅
+- PGP_MICROBATCHPROCESSOR: `pgp_microbatchprocessor-10-26-00007-9c8` ✅
+- PGP_ACCUMULATOR: `pgp_accumulator-10-26-00017-phl` ✅
 
 ### 🔬 Verification
 
 **Service Health Checks:**
-- ✅ GCAccumulator: Service healthy, running without errors
-- ✅ GCMicroBatchProcessor: Service healthy, running without errors
+- ✅ PGP_ACCUMULATOR: Service healthy, running without errors
+- ✅ PGP_MICROBATCHPROCESSOR: Service healthy, running without errors
 
 **Production Log Verification:**
 ```
-GCMicroBatchProcessor logs (2025-11-01 05:43:29):
+PGP_MICROBATCHPROCESSOR logs (2025-11-01 05:43:29):
 🔐 [ENDPOINT] Fetching micro-batch threshold from Secret Manager
 ✅ [CONFIG] Threshold fetched: $2.00
 💰 [ENDPOINT] Current threshold: $2.00
@@ -12707,21 +12707,21 @@ GCMicroBatchProcessor logs (2025-11-01 05:43:29):
 
 **Micro-Batch Architecture Flow:**
 ```
-✅ GCWebhook1 → GCAccumulator (stores pending, NULL conversion data)
-✅ GCAccumulator → Database (no NULL constraint violations)
-✅ GCMicroBatchProcessor → Queries pending USD (correct column)
-✅ GCMicroBatchProcessor → Creates batches when threshold met
+✅ GCWebhook1 → PGP_ACCUMULATOR (stores pending, NULL conversion data)
+✅ PGP_ACCUMULATOR → Database (no NULL constraint violations)
+✅ PGP_MICROBATCHPROCESSOR → Queries pending USD (correct column)
+✅ PGP_MICROBATCHPROCESSOR → Creates batches when threshold met
 ✅ GCHostPay1 → Executes batch swaps
-✅ GCHostPay1 → Callbacks to GCMicroBatchProcessor
-✅ GCMicroBatchProcessor → Distributes USDT proportionally
+✅ GCHostPay1 → Callbacks to PGP_MICROBATCHPROCESSOR
+✅ PGP_MICROBATCHPROCESSOR → Distributes USDT proportionally
 ```
 
 **All Services Operational:**
 - ✅ GCWebhook1, GCWebhook2
 - ✅ GCSplit1, GCSplit2, GCSplit3
-- ✅ GCAccumulator ⬅️ FIXED
-- ✅ GCMicroBatchProcessor ⬅️ FIXED
-- ✅ GCBatchProcessor
+- ✅ PGP_ACCUMULATOR ⬅️ FIXED
+- ✅ PGP_MICROBATCHPROCESSOR ⬅️ FIXED
+- ✅ PGP_BATCHPROCESSOR
 - ✅ GCHostPay1, GCHostPay2, GCHostPay3
 
 ### 📝 Documentation Updated
@@ -12740,23 +12740,23 @@ GCMicroBatchProcessor logs (2025-11-01 05:43:29):
 ## 2025-11-01 Session 15: DATABASE SCHEMA CONSTRAINT FIX ✅
 
 ### 🎯 Purpose
-Fixed critical NULL constraint violations in payout_accumulation table schema that prevented GCAccumulator from storing pending conversion records.
+Fixed critical NULL constraint violations in payout_accumulation table schema that prevented PGP_ACCUMULATOR from storing pending conversion records.
 
 ### 🐛 Problem Identified
 **Symptoms:**
-- GCAccumulator: `null value in column "eth_to_usdt_rate" violates not-null constraint`
-- GCAccumulator: `null value in column "conversion_timestamp" violates not-null constraint`
+- PGP_ACCUMULATOR: `null value in column "eth_to_usdt_rate" violates not-null constraint`
+- PGP_ACCUMULATOR: `null value in column "conversion_timestamp" violates not-null constraint`
 - Payment accumulation requests returning 500 errors
 - Cloud Tasks retrying failed requests continuously
-- GCMicroBatchProcessor: Still showed `accumulated_eth` error in old logs (but this was already fixed in Session 14)
+- PGP_MICROBATCHPROCESSOR: Still showed `accumulated_eth` error in old logs (but this was already fixed in Session 14)
 
 **Root Cause:**
 - Database schema (`execute_migrations.py:153-154`) incorrectly defined:
   - `eth_to_usdt_rate NUMERIC(18, 8) NOT NULL` ❌
   - `conversion_timestamp TIMESTAMP NOT NULL` ❌
 - Architecture requires two-phase processing:
-  1. **GCAccumulator**: Stores payments with `conversion_status='pending'` WITHOUT conversion data
-  2. **GCMicroBatchProcessor**: Later fills in conversion data during batch processing
+  1. **PGP_ACCUMULATOR**: Stores payments with `conversion_status='pending'` WITHOUT conversion data
+  2. **PGP_MICROBATCHPROCESSOR**: Later fills in conversion data during batch processing
 - NOT NULL constraints prevented storing pending records with NULL conversion fields
 
 ### ✅ Fix Applied
@@ -12783,14 +12783,14 @@ ALTER COLUMN conversion_timestamp DROP NOT NULL;
 **Checked for Schema Issues:**
 1. ✅ No service code has hardcoded NOT NULL constraints
 2. ✅ `accumulated_eth` only exists as variable names (not SQL columns)
-3. ✅ GCMicroBatchProcessor verified working (status 200 on scheduled checks)
+3. ✅ PGP_MICROBATCHPROCESSOR verified working (status 200 on scheduled checks)
 4. ✅ Database schema matches architecture requirements
 
 **Architecture Validation:**
 ```
 Payment Flow:
 ┌─────────────────┐    ┌──────────────────┐    ┌────────────────────┐
-│  GCWebhook1     │───▶│  GCAccumulator   │───▶│  Database          │
+│  GCWebhook1     │───▶│  PGP_ACCUMULATOR   │───▶│  Database          │
 │  (Receives $)   │    │  (Stores pending)│    │  (pending status)  │
 └─────────────────┘    └──────────────────┘    │  eth_to_usdt_rate: │
                                                 │    NULL ✅         │
@@ -12808,7 +12808,7 @@ Payment Flow:
 ### ⚠️ Discovered Issues
 
 **Cloud Tasks Authentication (NEW - Not in original scope):**
-- GCAccumulator receiving 403 errors from Cloud Tasks
+- PGP_ACCUMULATOR receiving 403 errors from Cloud Tasks
 - Error: "The request was not authenticated"
 - Impact: Cannot test schema fix with real production requests
 - Status: Documented in BUGS.md as Active Bug
@@ -12826,34 +12826,34 @@ Payment Flow:
 ## 2025-11-01 Session 14: DATABASE SCHEMA MISMATCH FIX ✅
 
 ### 🎯 Purpose
-Fixed critical database schema mismatch in GCMicroBatchProcessor and GCAccumulator that was causing "column does not exist" errors and breaking the entire micro-batch conversion architecture.
+Fixed critical database schema mismatch in PGP_MICROBATCHPROCESSOR and PGP_ACCUMULATOR that was causing "column does not exist" errors and breaking the entire micro-batch conversion architecture.
 
 ### 🐛 Problem Identified
 **Symptoms:**
-- GCMicroBatchProcessor: `column "accumulated_eth" does not exist` when querying pending USD
-- GCAccumulator: `column "accumulated_eth" of relation "payout_accumulation" does not exist` when inserting payments
+- PGP_MICROBATCHPROCESSOR: `column "accumulated_eth" does not exist` when querying pending USD
+- PGP_ACCUMULATOR: `column "accumulated_eth" of relation "payout_accumulation" does not exist` when inserting payments
 - Threshold checks returning $0.00 (all queries failing)
 - Payment accumulation completely broken (500 errors)
 - Cloud Scheduler jobs failing every 15 minutes
 
 **Root Cause:**
 - Database schema was migrated during ETH→USDT refactoring to use `accumulated_amount_usdt` column
-- GCMicroBatchProcessor and GCAccumulator code was never updated to match the new schema
+- PGP_MICROBATCHPROCESSOR and PGP_ACCUMULATOR code was never updated to match the new schema
 - Code still referenced the old `accumulated_eth` column which no longer exists
 - Schema mismatch caused all database operations to fail
 
 ### ✅ Fix Applied
 
 **Files Modified:**
-1. `GCMicroBatchProcessor-10-26/database_manager.py` (4 locations)
-2. `GCAccumulator-10-26/database_manager.py` (1 location)
+1. `PGP_MICROBATCHPROCESSOR_v1/database_manager.py` (4 locations)
+2. `PGP_ACCUMULATOR_v1/database_manager.py` (1 location)
 
 **Changes:**
 - Line 83: `get_total_pending_usd()` - Changed SELECT to query `accumulated_amount_usdt`
 - Line 123: `get_all_pending_records()` - Changed SELECT to query `accumulated_amount_usdt`
 - Line 279: `get_records_by_batch()` - Changed SELECT to query `accumulated_amount_usdt`
 - Line 329: `distribute_usdt_proportionally()` - Changed dict key to `accumulated_amount_usdt`
-- Line 107 (GCAccumulator): INSERT changed to use `accumulated_amount_usdt` column
+- Line 107 (PGP_ACCUMULATOR): INSERT changed to use `accumulated_amount_usdt` column
 
 **Updated Comments:**
 Added clarifying comments explaining that `accumulated_amount_usdt` stores:
@@ -12863,25 +12863,25 @@ Added clarifying comments explaining that `accumulated_amount_usdt` stores:
 ### 🚀 Deployment
 
 **Steps Executed:**
-1. ✅ Fixed GCMicroBatchProcessor database queries
-2. ✅ Fixed GCAccumulator database INSERT
-3. ✅ Built and deployed GCMicroBatchProcessor (revision `00006-fwb`)
-4. ✅ Built and deployed GCAccumulator (revision `00016-h6n`)
+1. ✅ Fixed PGP_MICROBATCHPROCESSOR database queries
+2. ✅ Fixed PGP_ACCUMULATOR database INSERT
+3. ✅ Built and deployed PGP_MICROBATCHPROCESSOR (revision `00006-fwb`)
+4. ✅ Built and deployed PGP_ACCUMULATOR (revision `00016-h6n`)
 5. ✅ Verified health checks pass
 6. ✅ Verified no "column does not exist" errors in logs
 7. ✅ Verified no other services reference old column name
 
 ### ✅ Verification
 
-**GCMicroBatchProcessor:**
+**PGP_MICROBATCHPROCESSOR:**
 - ✅ Service deployed successfully
-- ✅ Revision: `gcmicrobatchprocessor-10-26-00006-fwb`
+- ✅ Revision: `pgp_microbatchprocessor-10-26-00006-fwb`
 - ✅ No initialization errors
 - ✅ All database queries use correct column name
 
-**GCAccumulator:**
+**PGP_ACCUMULATOR:**
 - ✅ Service deployed successfully
-- ✅ Revision: `gcaccumulator-10-26-00016-h6n`
+- ✅ Revision: `pgp_accumulator-10-26-00016-h6n`
 - ✅ Health check: `{"status":"healthy","components":{"database":"healthy"}}`
 - ✅ Database manager initialized correctly
 - ✅ Token manager initialized correctly
@@ -12895,7 +12895,7 @@ Added clarifying comments explaining that `accumulated_amount_usdt` stores:
 - ✅ System can now accumulate payments and trigger batch conversions
 
 ### 📝 Notes
-- Variable/parameter names in `acc10-26.py` and `cloudtasks_client.py` still use `accumulated_eth` for backward compatibility, but they now correctly store USD/USDT amounts
+- Variable/parameter names in `pgp_accumulator_v1.py` and `cloudtasks_client.py` still use `accumulated_eth` for backward compatibility, but they now correctly store USD/USDT amounts
 - The database schema correctly uses `accumulated_amount_usdt` which is more semantically accurate
 - All database operations now aligned with actual schema
 
@@ -12919,7 +12919,7 @@ Fixed critical JWT refresh token authentication bug in www.paygateprime.com that
 
 ### ✅ Fix Applied
 
-**File Modified:** `GCRegisterWeb-10-26/src/services/api.ts` lines 42-51
+**File Modified:** `PGP_WEB_v1/src/services/api.ts` lines 42-51
 
 **Before (Incorrect):**
 ```typescript
@@ -13010,20 +13010,20 @@ Test results from `test_changenow_precision.py` revealed:
 ### ✅ Implementation Complete
 
 **Files Modified:**
-1. **GCBatchProcessor-10-26/batch10-26.py**
+1. **PGP_BATCHPROCESSOR_v1/pgp_batchprocessor_v1.py**
    - Line 149: Changed `float(total_usdt)` → `str(total_usdt)`
    - Preserves Decimal precision when passing to token manager
 
-2. **GCBatchProcessor-10-26/token_manager.py**
+2. **PGP_BATCHPROCESSOR_v1/token_manager.py**
    - Line 35: Updated type hint `float` → `str`
    - Accepts string to preserve precision through JSON serialization
 
-3. **GCSplit2-10-26/changenow_client.py**
+3. **PGP_SPLIT2_v1/changenow_client.py**
    - Added `from decimal import Decimal` import
    - Lines 117-119: Parse ChangeNow responses with Decimal
    - Converts `toAmount`, `depositFee`, `withdrawalFee` to Decimal
 
-4. **GCSplit1-10-26/token_manager.py**
+4. **PGP_SPLIT1_v1/token_manager.py**
    - Added `from decimal import Decimal, Union` imports
    - Line 77: Updated type hint to `Union[str, float, Decimal]`
    - Lines 98-105: Convert string/Decimal to float for struct.pack with documentation
@@ -13031,15 +13031,15 @@ Test results from `test_changenow_precision.py` revealed:
 ### 🚀 Deployment Status
 
 **Services Deployed:**
-- ✅ GCBatchProcessor-10-26 (batch10-26.py + token_manager.py)
-- ✅ GCSplit2-10-26 (changenow_client.py)
-- ✅ GCSplit1-10-26 (token_manager.py)
+- ✅ PGP_BATCHPROCESSOR_v1 (pgp_batchprocessor_v1.py + token_manager.py)
+- ✅ PGP_SPLIT2_v1 (changenow_client.py)
+- ✅ PGP_SPLIT1_v1 (token_manager.py)
 
 **Health Check Results:**
 ```json
-GCBatchProcessor-10-26: {"status":"healthy","components":{"cloudtasks":"healthy","database":"healthy","token_manager":"healthy"}}
-GCSplit2-10-26: {"status":"healthy","components":{"changenow":"healthy","cloudtasks":"healthy","token_manager":"healthy"}}
-GCSplit1-10-26: {"status":"healthy","components":{"cloudtasks":"healthy","database":"healthy","token_manager":"healthy"}}
+PGP_BATCHPROCESSOR_v1: {"status":"healthy","components":{"cloudtasks":"healthy","database":"healthy","token_manager":"healthy"}}
+PGP_SPLIT2_v1: {"status":"healthy","components":{"changenow":"healthy","cloudtasks":"healthy","token_manager":"healthy"}}
+PGP_SPLIT1_v1: {"status":"healthy","components":{"cloudtasks":"healthy","database":"healthy","token_manager":"healthy"}}
 ```
 
 ### 📝 Technical Details
@@ -13083,12 +13083,12 @@ GCSplit1-10-26: {"status":"healthy","components":{"cloudtasks":"healthy","databa
 1. **✅ All Critical Bugs VERIFIED FIXED:**
    - CRITICAL BUG #1: Database column queries - FIXED in database_manager.py (lines 82, 122, 278)
    - ISSUE #2: Token methods - VERIFIED complete in GCHostPay1 token_manager.py
-   - ISSUE #3: Callback implementation - VERIFIED complete in GCHostPay1 tphp1-10-26.py
+   - ISSUE #3: Callback implementation - VERIFIED complete in GCHostPay1 pgp_hostpay1_v1.py
 
 2. **🟡 Minor Documentation Issues Identified:**
    - Stale comment in database_manager.py line 135 (non-blocking)
-   - Misleading comment in acc10-26.py line 114 (non-blocking)
-   - Incomplete TODO in tphp1-10-26.py lines 620-623 (non-blocking)
+   - Misleading comment in pgp_accumulator_v1.py line 114 (non-blocking)
+   - Incomplete TODO in pgp_hostpay1_v1.py lines 620-623 (non-blocking)
 
 3. **🟢 Edge Cases Noted:**
    - Missing zero-amount validation (very low priority)
@@ -13154,13 +13154,13 @@ After implementing micro-batch conversion, it was unclear how threshold-based pa
    - Designed for ALL ETH→USDT conversions, not just instant payments
 
 2. **Current Implementation Status**
-   - GCAccumulator only has `/` and `/health` endpoints (no `/swap-executed`)
+   - PGP_ACCUMULATOR only has `/` and `/health` endpoints (no `/swap-executed`)
    - GCHostPay1 has TODO placeholder for threshold callback (lines 620-623)
    - System already stores ALL payments with `conversion_status='pending'` regardless of payout_strategy
 
 3. **No Code Changes Needed**
    - System already implements Option A approach
-   - GCMicroBatchProcessor batches ALL pending payments when threshold reached
+   - PGP_MICROBATCHPROCESSOR batches ALL pending payments when threshold reached
    - Single conversion path for all payment types
 
 **Rationale:**
@@ -13213,9 +13213,9 @@ After implementing micro-batch conversion, it was unclear how threshold-based pa
 
 **Verification Completed:**
 1. **Infrastructure Health Checks**
-   - GCMicroBatchProcessor: HEALTHY (revision 00005-vfd)
+   - PGP_MICROBATCHPROCESSOR: HEALTHY (revision 00005-vfd)
    - GCHostPay1: HEALTHY (revision 00011-svz)
-   - GCAccumulator: READY (modified logic deployed)
+   - PGP_ACCUMULATOR: READY (modified logic deployed)
    - Cloud Scheduler: RUNNING every 15 minutes
    - Cloud Tasks queues: CONFIGURED
 
@@ -13228,7 +13228,7 @@ After implementing micro-batch conversion, it was unclear how threshold-based pa
 3. **Callback Implementation Verification**
    - ChangeNow client initialized in GCHostPay1 ✅
    - Context detection implemented (batch_* / acc_* / regular) ✅
-   - Callback routing to GCMicroBatchProcessor ready ✅
+   - Callback routing to PGP_MICROBATCHPROCESSOR ready ✅
    - Token encryption/decryption tested ✅
 
 4. **Database Schema Verification**
@@ -13278,7 +13278,7 @@ Instead, we verified:
 
 **Changes Made:**
 1. **Created ChangeNow Client (158 lines)**
-   - File: `GCHostPay1-10-26/changenow_client.py`
+   - File: `PGP_HOSTPAY1_v1/changenow_client.py`
    - Method: `get_transaction_status(cn_api_id)` - Queries ChangeNow for actual USDT received
    - Used by `/payment-completed` to get final swap amounts
 
@@ -13289,7 +13289,7 @@ Instead, we verified:
    - All new configs added to status logging
 
 3. **Implemented Callback Routing in Main Service**
-   - File: `GCHostPay1-10-26/tphp1-10-26.py`
+   - File: `PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py`
    - Added ChangeNow client initialization (lines 74-85)
    - Created `_route_batch_callback()` helper function (lines 92-173)
    - Replaced TODO section in `/payment-completed` (lines 481-538):
@@ -13327,8 +13327,8 @@ The callback flow now works as follows:
 3. For batch context:
    - Queries ChangeNow API for actual USDT received
    - Encrypts response token with batch data
-   - Enqueues callback to GCMicroBatchProcessor `/swap-executed`
-4. GCMicroBatchProcessor receives callback and distributes USDT proportionally
+   - Enqueues callback to PGP_MICROBATCHPROCESSOR `/swap-executed`
+4. PGP_MICROBATCHPROCESSOR receives callback and distributes USDT proportionally
 
 **Impact:**
 🎯 Batch conversion callbacks now fully functional
@@ -13345,7 +13345,7 @@ The callback flow now works as follows:
 ### 🔧 Database Column Bug Fixed and Deployed
 
 **Critical Fix Applied:**
-✅ Fixed 3 database queries in `GCMicroBatchProcessor-10-26/database_manager.py`
+✅ Fixed 3 database queries in `PGP_MICROBATCHPROCESSOR_v1/database_manager.py`
 
 **Changes Made:**
 1. **Fixed `get_total_pending_usd()` (line 82)**
@@ -13367,7 +13367,7 @@ The callback flow now works as follows:
 - ✅ Verified no other incorrect SELECT queries in codebase
 - ✅ Confirmed UPDATE queries correctly use `accumulated_amount_usdt`
 - ✅ Built Docker image successfully
-- ✅ Deployed to Cloud Run: revision `gcmicrobatchprocessor-10-26-00005-vfd`
+- ✅ Deployed to Cloud Run: revision `pgp_microbatchprocessor-10-26-00005-vfd`
 - ✅ Health endpoint responds correctly
 - ✅ Cloud Scheduler executed successfully (HTTP 200)
 
@@ -13394,7 +13394,7 @@ The callback flow now works as follows:
 
 **Checklist Structure:**
 - **Phase 1:** Fix Critical Database Column Bug (IMMEDIATE - 15 min)
-  - Fix 3 database query methods in GCMicroBatchProcessor/database_manager.py
+  - Fix 3 database query methods in PGP_MICROBATCHPROCESSOR/database_manager.py
   - Change `accumulated_amount_usdt` to `accumulated_eth` in SELECT queries
   - Deploy and verify fix
 
@@ -13435,7 +13435,7 @@ The callback flow now works as follows:
 
 **Rollback Plan Included:**
 - Pause Cloud Scheduler
-- Revert GCAccumulator to instant swap
+- Revert PGP_ACCUMULATOR to instant swap
 - Process stuck pending records manually
 
 **Next Action:** Begin Phase 1 - Fix critical database column bug immediately
@@ -13456,7 +13456,7 @@ Comprehensive analysis of Micro-Batch Conversion Architecture implementation aga
 
 🔴 **CRITICAL BUG #1: Database Column Name Inconsistency**
 - **Severity:** CRITICAL - System will fail on threshold check
-- **Location:** `GCMicroBatchProcessor-10-26/database_manager.py` (3 methods)
+- **Location:** `PGP_MICROBATCHPROCESSOR_v1/database_manager.py` (3 methods)
 - **Issue:** Queries `accumulated_amount_usdt` instead of `accumulated_eth` in:
   - `get_total_pending_usd()` (lines 80-83)
   - `get_all_pending_records()` (lines 118-123)
@@ -13466,14 +13466,14 @@ Comprehensive analysis of Micro-Batch Conversion Architecture implementation aga
 
 🟡 **ISSUE #2: Missing ChangeNow USDT Query**
 - **Severity:** HIGH - Batch conversion callback incomplete
-- **Location:** `GCHostPay1-10-26/tphp1-10-26.py` `/payment-completed` endpoint
+- **Location:** `PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py` `/payment-completed` endpoint
 - **Issue:** TODO markers present, ChangeNow API query not implemented
 - **Impact:** Cannot determine actual USDT received for distribution
 - **Status:** ⚠️ NEEDS IMPLEMENTATION
 
 🟡 **ISSUE #3: Incomplete Callback Routing**
 - **Severity:** MEDIUM - Response flow incomplete
-- **Location:** `GCHostPay1-10-26/tphp1-10-26.py` `/payment-completed` endpoint
+- **Location:** `PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py` `/payment-completed` endpoint
 - **Issue:** No callback routing logic for batch vs threshold vs instant contexts
 - **Impact:** Callbacks won't reach MicroBatchProcessor
 - **Status:** ⚠️ NEEDS IMPLEMENTATION
@@ -13494,12 +13494,12 @@ Comprehensive analysis of Micro-Batch Conversion Architecture implementation aga
 
 The system is currently deployed but NON-FUNCTIONAL due to database query bugs. No batches will ever be created because threshold checks always return 0.
 
-## 2025-10-31 Session 4: CRITICAL FIX - GCMicroBatchProcessor Environment Variables ✅
+## 2025-10-31 Session 4: CRITICAL FIX - PGP_MICROBATCHPROCESSOR Environment Variables ✅
 
 ### 🔧 Emergency Fix: Service Now Fully Operational
 
 **Issue Identified:**
-GCMicroBatchProcessor-10-26 was deployed without environment variable configuration in Phase 7, causing complete service failure.
+PGP_MICROBATCHPROCESSOR_v1 was deployed without environment variable configuration in Phase 7, causing complete service failure.
 
 **Symptoms:**
 - 500 errors on every Cloud Scheduler invocation (every 15 minutes)
@@ -13527,14 +13527,14 @@ GCMicroBatchProcessor-10-26 was deployed without environment variable configurat
   - DATABASE_USER_SECRET
   - DATABASE_PASSWORD_SECRET
   - MICRO_BATCH_THRESHOLD_USD
-✅ Deployed new revision: `gcmicrobatchprocessor-10-26-00004-hbp`
+✅ Deployed new revision: `pgp_microbatchprocessor-10-26-00004-hbp`
 ✅ Verified all 10 other critical services have proper environment variable configuration
 
 **Verification:**
-- ✅ Health endpoint: `{"service":"GCMicroBatchProcessor-10-26","status":"healthy","timestamp":1761924798}`
+- ✅ Health endpoint: `{"service":"PGP_MICROBATCHPROCESSOR_v1","status":"healthy","timestamp":1761924798}`
 - ✅ No initialization errors in logs
 - ✅ Cloud Scheduler job now successful
-- ✅ All critical services verified healthy (GCWebhook1-2, GCSplit1-3, GCAccumulator, GCBatchProcessor, GCHostPay1-3)
+- ✅ All critical services verified healthy (GCWebhook1-2, GCSplit1-3, PGP_ACCUMULATOR, PGP_BATCHPROCESSOR, GCHostPay1-3)
 
 **Current Status:**
 🟢 **FULLY OPERATIONAL** - Micro-batch conversion architecture now working correctly
@@ -13560,9 +13560,9 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - Verified `microbatch-response-queue` (already existed)
 - Queue names stored in Secret Manager
 
-**Phase 7: GCMicroBatchProcessor-10-26 Deployed** ✅
+**Phase 7: PGP_MICROBATCHPROCESSOR_v1 Deployed** ✅
 - Built and deployed Docker image
-- Service URL: https://gcmicrobatchprocessor-10-26-pjxwjsdktq-uc.a.run.app
+- Service URL: https://pgp_microbatchprocessor-10-26-pjxwjsdktq-uc.a.run.app
 - URL stored in Secret Manager (MICROBATCH_URL)
 - Granted all secret access to service account
 - Health endpoint verified: ✅ HEALTHY
@@ -13574,22 +13574,22 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - Job is ENABLED and running
 
 **Phase 9: Redeployed Modified Services** ✅
-- GCAccumulator-10-26: Deployed with modified logic (no immediate swaps)
-- GCHostPay1-10-26: Deployed with batch token handling
+- PGP_ACCUMULATOR_v1: Deployed with modified logic (no immediate swaps)
+- PGP_HOSTPAY1_v1: Deployed with batch token handling
 - Both services verified healthy
 
 **System Status:**
 ```
-🟢 GCMicroBatchProcessor: RUNNING (checks threshold every 15 min)
-🟢 GCAccumulator: RUNNING (accumulates without triggering swaps)
+🟢 PGP_MICROBATCHPROCESSOR: RUNNING (checks threshold every 15 min)
+🟢 PGP_ACCUMULATOR: RUNNING (accumulates without triggering swaps)
 🟢 GCHostPay1: RUNNING (handles batch conversion tokens)
 🟢 Cloud Tasks Queues: READY
 🟢 Cloud Scheduler: ACTIVE
 ```
 
 **Architecture Flow Now Active:**
-1. Payments → GCAccumulator (accumulates in `payout_accumulation`)
-2. Every 15 min → GCMicroBatchProcessor checks threshold
+1. Payments → PGP_ACCUMULATOR (accumulates in `payout_accumulation`)
+2. Every 15 min → PGP_MICROBATCHPROCESSOR checks threshold
 3. If threshold met → Creates batch → Enqueues to GCHostPay1
 4. GCHostPay1 → Executes batch swap via ChangeNow
 5. On completion → Distributes USDT proportionally
@@ -13604,12 +13604,12 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
 ### ✅ Completed Tasks
 
-**Phase 4: Modified GCAccumulator-10-26**
+**Phase 4: Modified PGP_ACCUMULATOR_v1**
 - Created backup of original service
 - Removed immediate swap queuing logic
 - Modified to accumulate without triggering swaps
 
-**Phase 5: Modified GCHostPay1-10-26**
+**Phase 5: Modified PGP_HOSTPAY1_v1**
 - Added batch token handling in token_manager.py
 - Updated main webhook to handle batch context
 - Added TODO markers for callback implementation
@@ -13631,9 +13631,9 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - Set initial threshold value to $20.00
 - Verified secret is accessible and returns correct value
 
-**Phase 3: GCMicroBatchProcessor-10-26 Service**
+**Phase 3: PGP_MICROBATCHPROCESSOR_v1 Service**
 - Created complete new microservice with all required components:
-  - Main Flask application (`microbatch10-26.py`)
+  - Main Flask application (`micropgp_batchprocessor_v1.py`)
   - Database manager with proportional distribution logic
   - Config manager with threshold fetching from Secret Manager
   - Token manager for secure GCHostPay1 communication
@@ -13641,8 +13641,8 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - Docker configuration files
 - Service ready for deployment
 
-**Phase 4: Modified GCAccumulator-10-26**
-- Created backup of original service (GCAccumulator-10-26-BACKUP-20251031)
+**Phase 4: Modified PGP_ACCUMULATOR_v1**
+- Created backup of original service (PGP_ACCUMULATOR_v1-BACKUP-20251031)
 - Removed immediate swap queuing logic (lines 146-191)
 - Updated response message to indicate "micro-batch pending"
 - Removed `/swap-created` endpoint (no longer needed)
@@ -13654,15 +13654,15 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - ✅ Database schema updated for batch conversions
 - ✅ Dynamic threshold storage implemented
 - ✅ New microservice created following existing patterns
-- ✅ GCAccumulator modified to stop immediate swaps
+- ✅ PGP_ACCUMULATOR modified to stop immediate swaps
 - ⏳ Awaiting: GCHostPay1 batch context handling
 - ⏳ Awaiting: Cloud Tasks queues creation
 - ⏳ Awaiting: Deployment and testing
 
 ### 🎯 Next Actions
-1. Phase 5: Update GCHostPay1-10-26 for batch context handling
+1. Phase 5: Update PGP_HOSTPAY1_v1 for batch context handling
 2. Phase 6: Create Cloud Tasks queues (GCHOSTPAY1_BATCH_QUEUE, MICROBATCH_RESPONSE_QUEUE)
-3. Phase 7: Deploy GCMicroBatchProcessor-10-26
+3. Phase 7: Deploy PGP_MICROBATCHPROCESSOR_v1
 4. Phase 8: Create Cloud Scheduler job (15-minute interval)
 5. Phase 9-11: Redeploy modified services and test end-to-end
 
@@ -13682,19 +13682,19 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - Rollback procedures and monitoring setup
   - Final verification checklist with 15 items
 - **ARCHITECTURE OVERVIEW**:
-  - **New Service**: GCMicroBatchProcessor-10-26 (batch conversion orchestration)
-  - **Modified Services**: GCAccumulator-10-26 (remove immediate swap queuing), GCHostPay1-10-26 (batch context handling)
+  - **New Service**: PGP_MICROBATCHPROCESSOR_v1 (batch conversion orchestration)
+  - **Modified Services**: PGP_ACCUMULATOR_v1 (remove immediate swap queuing), PGP_HOSTPAY1_v1 (batch context handling)
   - **Dynamic Threshold**: $20 → $100 → $1000+ (no code changes required)
   - **Cost Savings**: 50-90% gas fee reduction via batch swaps
   - **Proportional Distribution**: Fair USDT allocation across multiple payments
 - **CHECKLIST SECTIONS**:
   - ✅ Phase 1: Database Migrations (2 tables modified)
   - ✅ Phase 2: Google Cloud Secret Setup (MICRO_BATCH_THRESHOLD_USD)
-  - ✅ Phase 3: Create GCMicroBatchProcessor Service (9 files: main, db, config, token, cloudtasks, changenow, docker, requirements)
-  - ✅ Phase 4: Modify GCAccumulator (remove 225+ lines of immediate swap logic)
+  - ✅ Phase 3: Create PGP_MICROBATCHPROCESSOR Service (9 files: main, db, config, token, cloudtasks, changenow, docker, requirements)
+  - ✅ Phase 4: Modify PGP_ACCUMULATOR (remove 225+ lines of immediate swap logic)
   - ✅ Phase 5: Modify GCHostPay1 (add batch context handling)
   - ✅ Phase 6: Cloud Tasks Queues (2 new queues)
-  - ✅ Phase 7: Deploy GCMicroBatchProcessor
+  - ✅ Phase 7: Deploy PGP_MICROBATCHPROCESSOR
   - ✅ Phase 8: Cloud Scheduler Setup (15-minute cron)
   - ✅ Phase 9: Redeploy Modified Services
   - ✅ Phase 10: Testing (4 test scenarios with verification)
@@ -13707,7 +13707,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - 🎯 Proven architecture patterns (CRON + QUEUES + TOKENS)
 - **FILES DOCUMENTED**:
   - Database: batch_conversions table, payout_accumulation.batch_conversion_id column
-  - Services: GCMicroBatchProcessor (new), GCAccumulator (modified), GCHostPay1 (modified)
+  - Services: PGP_MICROBATCHPROCESSOR (new), PGP_ACCUMULATOR (modified), GCHostPay1 (modified)
   - Infrastructure: 2 Cloud Tasks queues, 1 Cloud Scheduler job, 3+ secrets
 - **IMPLEMENTATION TIME**: Estimated 27-40 hours (3.5-5 work days) across 11 phases
 - **STATUS**: ✅ Checklist complete and ready for implementation
@@ -13719,14 +13719,14 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
 - **PHASE 8 STATUS: IN PROGRESS (30% complete)**
   - ✅ **Infrastructure Verification Complete**:
-    - All 5 refactored services healthy (GCAccumulator, GCSplit2, GCSplit3, GCHostPay1, GCHostPay3)
-    - All Cloud Tasks queues running (gcaccumulator-swap-response-queue, gcsplit-eth-client-swap-queue, etc.)
+    - All 5 refactored services healthy (PGP_ACCUMULATOR, GCSplit2, GCSplit3, GCHostPay1, GCHostPay3)
+    - All Cloud Tasks queues running (pgp_accumulator-swap-response-queue, gcsplit-eth-client-swap-queue, etc.)
     - All Secret Manager configurations verified
 
   - 🚨 **CRITICAL FIX DEPLOYED: GCHostPay3 Configuration Gap**:
     - **Problem**: GCHostPay3 config_manager.py missing GCACCUMULATOR secrets
     - **Impact**: Threshold payout routing would fail (context-based routing broken)
-    - **Root Cause**: Phase 4 code expected gcaccumulator_response_queue and gcaccumulator_url but config didn't load them
+    - **Root Cause**: Phase 4 code expected pgp_accumulator_response_queue and pgp_accumulator_url but config didn't load them
     - **Fix Applied**:
       - Added GCACCUMULATOR_RESPONSE_QUEUE and GCACCUMULATOR_URL to config_manager.py
       - Added secrets to config dictionary and logging
@@ -13737,14 +13737,14 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
   - 📊 **Infrastructure Verification Results**:
     - **Service Health**: All 5 services returning healthy status with all components operational
-    - **Queue Status**: 6 critical queues running (gcaccumulator-swap-response-queue, gcsplit-eth-client-swap-queue, gcsplit-hostpay-trigger-queue, etc.)
+    - **Queue Status**: 6 critical queues running (pgp_accumulator-swap-response-queue, gcsplit-eth-client-swap-queue, gcsplit-hostpay-trigger-queue, etc.)
     - **Secret Status**: All 7 Phase 6 & 7 secrets verified with correct values
     - **Service Revisions**:
-      - GCAccumulator: 00014-m8d (latest with wallet config)
+      - PGP_ACCUMULATOR: 00014-m8d (latest with wallet config)
       - GCSplit2: 00009-n2q (simplified)
       - GCSplit3: 00006-pdw (enhanced with /eth-to-usdt)
       - GCHostPay1: 00005-htc
-      - GCHostPay3: 00008-rfv (FIXED with GCAccumulator config)
+      - GCHostPay3: 00008-rfv (FIXED with PGP_ACCUMULATOR config)
 
   - 📝 **Integration Testing Documentation**:
     - Created SESSION_SUMMARY_10-31_PHASE8_INTEGRATION_TESTING.md
@@ -13756,7 +13756,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - **PROGRESS TRACKING**:
     - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
     - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-    - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+    - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
     - ✅ Phase 4: GCHostPay3 Response Routing (COMPLETE + FIX)
     - ✅ Phase 5: Database Schema Updates (COMPLETE)
     - ✅ Phase 6: Cloud Tasks Queue Setup (COMPLETE)
@@ -13785,23 +13785,23 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - **Result**: Database schema fully prepared for new architecture
 
 - **PHASE 6 COMPLETE: Cloud Tasks Queue Setup**
-  - ✅ **Created New Queue**: `gcaccumulator-swap-response-queue`
-    - Purpose: GCSplit3 → GCAccumulator swap creation responses
+  - ✅ **Created New Queue**: `pgp_accumulator-swap-response-queue`
+    - Purpose: GCSplit3 → PGP_ACCUMULATOR swap creation responses
     - Configuration: 10 dispatches/sec, 50 concurrent, infinite retry, 60s backoff
     - Location: us-central1
   - ✅ **Verified Existing Queues** can be reused:
-    - `gcsplit-eth-client-swap-queue` - For GCAccumulator → GCSplit3 (ETH→USDT requests)
-    - `gcsplit-hostpay-trigger-queue` - For GCAccumulator → GCHostPay1 (execution requests)
+    - `gcsplit-eth-client-swap-queue` - For PGP_ACCUMULATOR → GCSplit3 (ETH→USDT requests)
+    - `gcsplit-hostpay-trigger-queue` - For PGP_ACCUMULATOR → GCHostPay1 (execution requests)
   - **Architectural Decision**: Reuse existing queues where possible to minimize complexity
   - **Result**: All required queues now exist and configured
 
 - **PHASE 7 COMPLETE: Secret Manager Configuration**
   - ✅ **Created New Secrets**:
-    - `GCACCUMULATOR_RESPONSE_QUEUE` = `gcaccumulator-swap-response-queue`
+    - `GCACCUMULATOR_RESPONSE_QUEUE` = `pgp_accumulator-swap-response-queue`
     - `GCHOSTPAY1_QUEUE` = `gcsplit-hostpay-trigger-queue` (reuses existing queue)
     - `HOST_WALLET_USDT_ADDRESS` = `0x16bf79087671ff98c0b63a0b1970dbd5c4231bc4` ✅
   - ✅ **Verified Existing Secrets**:
-    - `GCACCUMULATOR_URL` = `https://gcaccumulator-10-26-291176869049.us-central1.run.app`
+    - `GCACCUMULATOR_URL` = `https://pgp_accumulator-10-26-291176869049.us-central1.run.app`
     - `GCSPLIT3_URL` = `https://gcsplit3-10-26-291176869049.us-central1.run.app`
     - `GCHOSTPAY1_URL` = `https://gchostpay1-10-26-291176869049.us-central1.run.app`
     - `GCSPLIT3_QUEUE` = `gcsplit-eth-client-swap-queue`
@@ -13812,13 +13812,13 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - 🎯 **Database**: Schema complete with conversion tracking fields
   - 🎯 **Cloud Tasks**: All queues created and configured
   - 🎯 **Secret Manager**: All secrets created (1 requires update)
-  - 🎯 **Services**: GCSplit2, GCSplit3, GCAccumulator, GCHostPay3 all deployed with refactored code
+  - 🎯 **Services**: GCSplit2, GCSplit3, PGP_ACCUMULATOR, GCHostPay3 all deployed with refactored code
   - 🎯 **Architecture**: ETH→USDT conversion flow fully implemented
 
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+  - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
   - ✅ Phase 4: GCHostPay3 Response Routing (COMPLETE)
   - ✅ Phase 5: Database Schema Updates (COMPLETE)
   - ✅ Phase 6: Cloud Tasks Queue Setup (COMPLETE)
@@ -13830,8 +13830,8 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **CONFIGURATION UPDATE (Post-Phase 7)**:
   - ✅ Renamed `PLATFORM_USDT_WALLET_ADDRESS` → `HOST_WALLET_USDT_ADDRESS`
   - ✅ Set value to `0x16bf79087671ff98c0b63a0b1970dbd5c4231bc4` (same as HOST_WALLET_ETH_ADDRESS)
-  - ✅ Updated GCAccumulator config_manager.py to fetch HOST_WALLET_USDT_ADDRESS
-  - ✅ Redeployed GCAccumulator (revision gcaccumulator-10-26-00014-m8d)
+  - ✅ Updated PGP_ACCUMULATOR config_manager.py to fetch HOST_WALLET_USDT_ADDRESS
+  - ✅ Redeployed PGP_ACCUMULATOR (revision pgp_accumulator-10-26-00014-m8d)
   - ✅ Health check: All components healthy
 
 - **NEXT STEPS (Phase 8)**:
@@ -13850,45 +13850,45 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
     - Added backward compatibility: defaults to 'instant' if context field missing (legacy tokens)
     - Token structure now includes: unique_id, cn_api_id, from_currency, from_network, from_amount, payin_address, **context**, timestamp
 
-  - ✅ **GCHostPay3 Conditional Routing** (lines 221-273 in tphp3-10-26.py):
-    - **Context = 'threshold'**: Routes to GCAccumulator `/swap-executed` endpoint
+  - ✅ **GCHostPay3 Conditional Routing** (lines 221-273 in pgp_hostpay3_v1.py):
+    - **Context = 'threshold'**: Routes to PGP_ACCUMULATOR `/swap-executed` endpoint
     - **Context = 'instant'**: Routes to GCHostPay1 `/payment-completed` (existing behavior)
-    - Uses config values: `gcaccumulator_response_queue`, `gcaccumulator_url` for threshold routing
+    - Uses config values: `pgp_accumulator_response_queue`, `pgp_accumulator_url` for threshold routing
     - Uses config values: `gchostpay1_response_queue`, `gchostpay1_url` for instant routing
     - Logs routing decision with clear indicators
 
-  - ✅ **GCAccumulator Token Manager Enhanced** (context field added):
+  - ✅ **PGP_ACCUMULATOR Token Manager Enhanced** (context field added):
     - Updated `encrypt_accumulator_to_gchostpay1_token()` to include `context='threshold'` (default)
     - Token structure now includes: accumulation_id, cn_api_id, from_currency, from_network, from_amount, payin_address, **context**, timestamp
     - Context always set to 'threshold' for accumulator payouts (distinguishes from instant payouts)
 
   - ✅ **Deployed**:
     - GCHostPay3 deployed as revision `gchostpay3-10-26-00007-q5k`
-    - GCAccumulator redeployed as revision `gcaccumulator-10-26-00013-vpg`
+    - PGP_ACCUMULATOR redeployed as revision `pgp_accumulator-10-26-00013-vpg`
     - Both services healthy and running
 
   - **Service URLs**:
     - GCHostPay3: https://gchostpay3-10-26-291176869049.us-central1.run.app
-    - GCAccumulator: https://gcaccumulator-10-26-291176869049.us-central1.run.app
+    - PGP_ACCUMULATOR: https://pgp_accumulator-10-26-291176869049.us-central1.run.app
 
   - **File Changes**:
-    - `GCHostPay3-10-26/token_manager.py`: +2 lines to encrypt method, +14 lines to decrypt method (context handling)
-    - `GCHostPay3-10-26/tphp3-10-26.py`: +52 lines (conditional routing logic), total ~355 lines
-    - `GCAccumulator-10-26/token_manager.py`: +3 lines (context parameter and packing)
+    - `PGP_HOSTPAY3_v1/token_manager.py`: +2 lines to encrypt method, +14 lines to decrypt method (context handling)
+    - `PGP_HOSTPAY3_v1/pgp_hostpay3_v1.py`: +52 lines (conditional routing logic), total ~355 lines
+    - `PGP_ACCUMULATOR_v1/token_manager.py`: +3 lines (context parameter and packing)
     - **Total**: ~71 lines of new code across 3 files
 
 - **ARCHITECTURAL TRANSFORMATION**:
   - **BEFORE**: GCHostPay3 always routed responses to GCHostPay1 (single path)
-  - **AFTER**: GCHostPay3 routes based on context: threshold → GCAccumulator, instant → GCHostPay1
+  - **AFTER**: GCHostPay3 routes based on context: threshold → PGP_ACCUMULATOR, instant → GCHostPay1
   - **IMPACT**: Response routing now context-aware, enabling separate flows for instant vs threshold payouts
 
 - **ROUTING FLOW**:
   - **Threshold Payouts** (NEW):
-    1. GCAccumulator → GCHostPay1 (with context='threshold')
+    1. PGP_ACCUMULATOR → GCHostPay1 (with context='threshold')
     2. GCHostPay1 → GCHostPay3 (passes context through)
     3. GCHostPay3 executes ETH payment
-    4. **GCHostPay3 → GCAccumulator /swap-executed** (based on context='threshold')
-    5. GCAccumulator finalizes conversion, stores final USDT amount
+    4. **GCHostPay3 → PGP_ACCUMULATOR /swap-executed** (based on context='threshold')
+    5. PGP_ACCUMULATOR finalizes conversion, stores final USDT amount
 
   - **Instant Payouts** (UNCHANGED):
     1. GCSplit1 → GCHostPay1 (with context='instant' or no context)
@@ -13899,7 +13899,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **KEY ACHIEVEMENTS**:
   - 🎯 **Context-Based Routing**: GCHostPay3 now intelligently routes responses based on payout type
   - 🎯 **Backward Compatibility**: Legacy tokens without context field default to 'instant' (safe fallback)
-  - 🎯 **Separation of Flows**: Threshold payouts now have complete end-to-end flow back to GCAccumulator
+  - 🎯 **Separation of Flows**: Threshold payouts now have complete end-to-end flow back to PGP_ACCUMULATOR
   - 🎯 **Zero Breaking Changes**: Instant payout flow remains unchanged and working
 
 - **IMPORTANT NOTE**:
@@ -13913,7 +13913,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+  - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
   - ✅ Phase 4: GCHostPay3 Response Routing (COMPLETE)
   - ⏳ Phase 5: Database Schema Updates (NEXT)
   - ⏳ Phase 6: Cloud Tasks Queue Setup (PENDING)
@@ -13929,7 +13929,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 ---
 
 ### October 31, 2025 - ARCHITECTURE REFACTORING IMPLEMENTATION: Phase 3 Complete ✅
-- **PHASE 3 COMPLETE: GCAccumulator Refactoring**
+- **PHASE 3 COMPLETE: PGP_ACCUMULATOR Refactoring**
   - ✅ **Token Manager Enhanced** (4 new methods, ~370 lines added):
     - `encrypt_accumulator_to_gcsplit3_token()` - Encrypt ETH→USDT swap requests to GCSplit3
     - `decrypt_gcsplit3_to_accumulator_token()` - Decrypt swap creation responses from GCSplit3
@@ -13959,7 +13959,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
     - Updates database: `conversion_status = 'swapping'`
     - Encrypts token for GCHostPay1 with execution request
     - Enqueues execution task to GCHostPay1
-    - Complete flow orchestration: GCSplit3 → GCAccumulator → GCHostPay1
+    - Complete flow orchestration: GCSplit3 → PGP_ACCUMULATOR → GCHostPay1
 
   - ✅ **Added `/swap-executed` Endpoint** (82 lines, lines 336-417):
     - Receives execution completion from GCHostPay1
@@ -13967,26 +13967,26 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
     - Finalizes database record: `accumulated_amount_usdt`, `conversion_status = 'completed'`
     - Logs success: "USDT locked in value - volatility protection active!"
 
-  - ✅ **Deployed** as revision `gcaccumulator-10-26-00012-qkw`
-  - **Service URL**: https://gcaccumulator-10-26-291176869049.us-central1.run.app
+  - ✅ **Deployed** as revision `pgp_accumulator-10-26-00012-qkw`
+  - **Service URL**: https://pgp_accumulator-10-26-291176869049.us-central1.run.app
   - **Health Status**: All 3 components healthy (database, token_manager, cloudtasks)
   - **File Changes**:
     - `token_manager.py`: 89 lines → 450 lines (+361 lines, +405% growth)
     - `cloudtasks_client.py`: 116 lines → 166 lines (+50 lines, +43% growth)
     - `database_manager.py`: 216 lines → 330 lines (+114 lines, +53% growth)
-    - `acc10-26.py`: 221 lines → 446 lines (+225 lines, +102% growth)
+    - `pgp_accumulator_v1.py`: 221 lines → 446 lines (+225 lines, +102% growth)
     - **Total**: ~750 lines of new code added
 
 - **ARCHITECTURAL TRANSFORMATION**:
-  - **BEFORE**: GCAccumulator → GCSplit2 (quotes only, no actual swaps)
-  - **AFTER**: GCAccumulator → GCSplit3 → GCHostPay1 (actual swap creation + execution)
+  - **BEFORE**: PGP_ACCUMULATOR → GCSplit2 (quotes only, no actual swaps)
+  - **AFTER**: PGP_ACCUMULATOR → GCSplit3 → GCHostPay1 (actual swap creation + execution)
   - **IMPACT**: Volatility protection NOW WORKS - actual ETH→USDT conversions happening!
   - **FLOW**:
-    1. Payment arrives → GCAccumulator stores with `conversion_status = 'pending'`
-    2. GCAccumulator → GCSplit3 (create ETH→USDT ChangeNow transaction)
-    3. GCSplit3 → GCAccumulator `/swap-created` (transaction details)
-    4. GCAccumulator → GCHostPay1 (execute ETH payment to ChangeNow)
-    5. GCHostPay1 → GCAccumulator `/swap-executed` (final USDT amount)
+    1. Payment arrives → PGP_ACCUMULATOR stores with `conversion_status = 'pending'`
+    2. PGP_ACCUMULATOR → GCSplit3 (create ETH→USDT ChangeNow transaction)
+    3. GCSplit3 → PGP_ACCUMULATOR `/swap-created` (transaction details)
+    4. PGP_ACCUMULATOR → GCHostPay1 (execute ETH payment to ChangeNow)
+    5. GCHostPay1 → PGP_ACCUMULATOR `/swap-executed` (final USDT amount)
     6. Database updated: `accumulated_amount_usdt` set, `conversion_status = 'completed'`
 
 - **KEY ACHIEVEMENTS**:
@@ -13999,7 +13999,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - ✅ Phase 3: GCAccumulator Refactoring (COMPLETE)
+  - ✅ Phase 3: PGP_ACCUMULATOR Refactoring (COMPLETE)
   - 🔄 Phase 4: GCHostPay3 Response Routing (NEXT)
   - ⏳ Phase 5: Database Schema Updates (PENDING)
   - ⏳ Phase 6: Cloud Tasks Queue Setup (PENDING)
@@ -14007,7 +14007,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
 - **NEXT STEPS (Phase 4)**:
   - Refactor GCHostPay3 to add conditional routing based on context
-  - Route threshold payout responses to GCAccumulator `/swap-executed`
+  - Route threshold payout responses to PGP_ACCUMULATOR `/swap-executed`
   - Route instant payout responses to GCHostPay1 (existing flow)
   - Verify GCHostPay1 can receive and process accumulator execution requests
 
@@ -14025,15 +14025,15 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
 - **PHASE 2 COMPLETE: GCSplit3 Enhancement**
   - ✅ Added 2 new token manager methods:
-    - `decrypt_accumulator_to_gcsplit3_token()` - Decrypt requests from GCAccumulator
-    - `encrypt_gcsplit3_to_accumulator_token()` - Encrypt responses to GCAccumulator
+    - `decrypt_accumulator_to_gcsplit3_token()` - Decrypt requests from PGP_ACCUMULATOR
+    - `encrypt_gcsplit3_to_accumulator_token()` - Encrypt responses to PGP_ACCUMULATOR
   - ✅ Added cloudtasks_client method:
-    - `enqueue_accumulator_swap_response()` - Queue responses to GCAccumulator
+    - `enqueue_accumulator_swap_response()` - Queue responses to PGP_ACCUMULATOR
   - ✅ Added new `/eth-to-usdt` endpoint (158 lines)
     - Receives accumulation_id, client_id, eth_amount, usdt_wallet_address
     - Creates ChangeNow ETH→USDT fixed-rate transaction with infinite retry
     - Encrypts response with transaction details
-    - Enqueues response back to GCAccumulator `/swap-created` endpoint
+    - Enqueues response back to PGP_ACCUMULATOR `/swap-created` endpoint
   - ✅ Deployed enhanced GCSplit3 as revision `gcsplit3-10-26-00006-pdw`
   - **Result**: Service now handles BOTH instant (ETH→ClientCurrency) AND threshold (ETH→USDT) swaps
   - **Health Status**: All 3 components healthy
@@ -14042,11 +14042,11 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **KEY ACHIEVEMENTS**:
   - 🎯 **Single Responsibility**: GCSplit2 = Estimator, GCSplit3 = Swap Creator
   - 🎯 **Infrastructure Reuse**: GCSplit3/GCHostPay now used for all swaps (not just instant)
-  - 🎯 **Foundation Laid**: Token encryption/decryption ready for GCAccumulator integration
+  - 🎯 **Foundation Laid**: Token encryption/decryption ready for PGP_ACCUMULATOR integration
   - 🎯 **Zero Downtime**: Both services deployed successfully without breaking existing flows
 
 - **NEXT STEPS (Phase 3)**:
-  - Refactor GCAccumulator to queue GCSplit3 instead of GCSplit2
+  - Refactor PGP_ACCUMULATOR to queue GCSplit3 instead of GCSplit2
   - Add `/swap-created` endpoint to receive swap creation confirmation
   - Add `/swap-executed` endpoint to receive execution confirmation
   - Update database manager methods for conversion tracking
@@ -14054,7 +14054,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **PROGRESS TRACKING**:
   - ✅ Phase 1: GCSplit2 Simplification (COMPLETE)
   - ✅ Phase 2: GCSplit3 Enhancement (COMPLETE)
-  - 🔄 Phase 3: GCAccumulator Refactoring (NEXT)
+  - 🔄 Phase 3: PGP_ACCUMULATOR Refactoring (NEXT)
   - ⏳ Phase 4: GCHostPay3 Response Routing (PENDING)
   - ⏳ Phase 5: Database Schema Updates (PENDING)
   - ⏳ Phase 6: Cloud Tasks Queue Setup (PENDING)
@@ -14073,13 +14073,13 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **PROPOSED SOLUTION**:
   - **GCSplit2**: ONLY USDT→ETH estimation (remove 168 lines, simplify by ~40%)
   - **GCSplit3**: ADD new `/eth-to-usdt` endpoint for creating actual ETH→USDT swaps (threshold payouts)
-  - **GCAccumulator**: Trigger actual swap creation via GCSplit3/GCHostPay (not just quotes)
-  - **GCBatchProcessor**: Remain as ONLY service checking thresholds (eliminate redundancy)
+  - **PGP_ACCUMULATOR**: Trigger actual swap creation via GCSplit3/GCHostPay (not just quotes)
+  - **PGP_BATCHPROCESSOR**: Remain as ONLY service checking thresholds (eliminate redundancy)
   - **GCHostPay2/3**: Already currency-agnostic, just add conditional routing (minimal changes)
 - **IMPLEMENTATION CHECKLIST**: 10-phase comprehensive plan with acceptance criteria:
   1. Phase 1: GCSplit2 Simplification (2-3 hours)
   2. Phase 2: GCSplit3 Enhancement (4-5 hours)
-  3. Phase 3: GCAccumulator Refactoring (6-8 hours)
+  3. Phase 3: PGP_ACCUMULATOR Refactoring (6-8 hours)
   4. Phase 4: GCHostPay3 Response Routing (2-3 hours)
   5. Phase 5: Database Schema Updates (1-2 hours)
   6. Phase 6: Cloud Tasks Queue Setup (1-2 hours)
@@ -14097,7 +14097,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **KEY ARCHITECTURAL CHANGES**:
   - GCSplit2: Remove `/estimate-and-update`, database manager, threshold checking (~40% code reduction)
   - GCSplit3: Add `/eth-to-usdt` endpoint (mirrors existing `/` for ETH→Client)
-  - GCAccumulator: Add `/swap-created` and `/swap-executed` endpoints, orchestrate via GCSplit3/GCHostPay
+  - PGP_ACCUMULATOR: Add `/swap-created` and `/swap-executed` endpoints, orchestrate via GCSplit3/GCHostPay
   - GCHostPay3: Add context-based routing (instant vs threshold payouts)
   - Database: Add `conversion_status` field if not exists (already done in earlier migration)
 - **ROLLBACK STRATEGY**: Documented for each service with specific triggers and procedures
@@ -14112,15 +14112,15 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 ---
 
 ### October 31, 2025 - ARCHITECTURE REFACTORING: Async ETH→USDT Conversion ✅
-- **CRITICAL REFACTORING**: Moved ChangeNow ETH→USDT conversion from GCAccumulator to GCSplit2 via Cloud Tasks
-- **Problem Identified:** GCAccumulator was making synchronous ChangeNow API calls in webhook endpoint, violating Cloud Tasks pattern
+- **CRITICAL REFACTORING**: Moved ChangeNow ETH→USDT conversion from PGP_ACCUMULATOR to GCSplit2 via Cloud Tasks
+- **Problem Identified:** PGP_ACCUMULATOR was making synchronous ChangeNow API calls in webhook endpoint, violating Cloud Tasks pattern
   - Created single point of failure (ChangeNow downtime blocks entire webhook)
   - Risk of Cloud Run timeout (60 min) causing data loss
   - Cascading failures to GCWebhook1
   - Only service in entire architecture violating non-blocking pattern
 - **Solution Implemented:** Move ChangeNow call to GCSplit2 queue handler (Option 1 from analysis document)
 - **Changes Made:**
-  1. **GCAccumulator-10-26 Refactoring**
+  1. **PGP_ACCUMULATOR_v1 Refactoring**
      - Removed synchronous ChangeNow API call from `/accumulate` endpoint
      - Now stores payment with `accumulated_eth` and `conversion_status='pending'`
      - Queues task to GCSplit2 `/estimate-and-update` endpoint
@@ -14129,12 +14129,12 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
      - Removed `CHANGENOW_API_KEY` from secrets
      - Added `insert_payout_accumulation_pending()` to database_manager
      - Added `enqueue_gcsplit2_conversion()` to cloudtasks_client
-  2. **GCSplit2-10-26 Enhancement**
+  2. **PGP_SPLIT2_v1 Enhancement**
      - Created new `/estimate-and-update` endpoint for ETH→USDT conversion
-     - Receives `accumulation_id`, `client_id`, `accumulated_eth` from GCAccumulator
+     - Receives `accumulation_id`, `client_id`, `accumulated_eth` from PGP_ACCUMULATOR
      - Calls ChangeNow API with infinite retry (in queue handler - non-blocking)
      - Updates payout_accumulation record with conversion data
-     - Checks if client threshold met, queues GCBatchProcessor if needed
+     - Checks if client threshold met, queues PGP_BATCHPROCESSOR if needed
      - Added database_manager.py for database operations
      - Added database configuration to config_manager
      - Created new secrets: `GCBATCHPROCESSOR_QUEUE`, `GCBATCHPROCESSOR_URL`
@@ -14147,24 +14147,24 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
      - Updated 3 existing records to `conversion_status='completed'`
 - **New Architecture Flow:**
   ```
-  GCWebhook1 → GCAccumulator → GCSplit2 → Updates DB → Checks Threshold → GCBatchProcessor
+  GCWebhook1 → PGP_ACCUMULATOR → GCSplit2 → Updates DB → Checks Threshold → PGP_BATCHPROCESSOR
      (queue)     (stores ETH)     (queue)    (converts)    (if met)         (queue)
        ↓               ↓                         ↓
     Returns 200   Returns 200            Calls ChangeNow
     immediately   immediately            (infinite retry)
   ```
 - **Key Benefits:**
-  - ✅ Non-blocking webhooks (GCAccumulator returns 200 immediately)
+  - ✅ Non-blocking webhooks (PGP_ACCUMULATOR returns 200 immediately)
   - ✅ Fault isolation (ChangeNow failure only affects GCSplit2 queue)
   - ✅ No data loss (payment persisted before conversion attempt)
   - ✅ Automatic retry via Cloud Tasks (up to 24 hours)
   - ✅ Better observability (conversion status in database + Cloud Tasks console)
   - ✅ Follows architectural pattern (all external APIs in queue handlers)
 - **Deployments:**
-  - GCAccumulator: `gcaccumulator-10-26-00011-cmt` ✅
+  - PGP_ACCUMULATOR: `pgp_accumulator-10-26-00011-cmt` ✅
   - GCSplit2: `gcsplit2-10-26-00008-znd` ✅
 - **Health Status:**
-  - GCAccumulator: ✅ (database, token_manager, cloudtasks)
+  - PGP_ACCUMULATOR: ✅ (database, token_manager, cloudtasks)
   - GCSplit2: ✅ (database, token_manager, cloudtasks, changenow)
 - **Documentation:**
   - Created `GCACCUMULATOR_CHANGENOW_ARCHITECTURE_ANALYSIS.md` (detailed analysis)
@@ -14173,18 +14173,18 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
 ---
 
-### October 31, 2025 (SUPERSEDED) - GCAccumulator Real ChangeNow ETH→USDT Conversion ❌
+### October 31, 2025 (SUPERSEDED) - PGP_ACCUMULATOR Real ChangeNow ETH→USDT Conversion ❌
 - **FEATURE IMPLEMENTATION**: Replaced mock 1:1 conversion with real ChangeNow API ETH→USDT conversion
 - **Context:** Previous implementation used `eth_to_usdt_rate = 1.0` and `accumulated_usdt = adjusted_amount_usd` (mock)
 - **Problem:** Mock conversion didn't protect against real market volatility - no actual USDT acquisition
 - **Implementation:**
-  1. **Created ChangeNow Client for GCAccumulator**
-     - New file: `GCAccumulator-10-26/changenow_client.py`
+  1. **Created ChangeNow Client for PGP_ACCUMULATOR**
+     - New file: `PGP_ACCUMULATOR_v1/changenow_client.py`
      - Method: `get_eth_to_usdt_estimate_with_retry()` with infinite retry logic
      - Fixed 60-second backoff on errors/rate limits (same pattern as GCSplit2)
      - Specialized for ETH→USDT conversion (opposite direction from GCSplit2's USDT→ETH)
-  2. **Updated GCAccumulator Main Service**
-     - File: `GCAccumulator-10-26/acc10-26.py`
+  2. **Updated PGP_ACCUMULATOR Main Service**
+     - File: `PGP_ACCUMULATOR_v1/pgp_accumulator_v1.py`
      - Replaced mock conversion (lines 111-121) with real ChangeNow API call
      - Added ChangeNow client initialization with CN_API_KEY from Secret Manager
      - Calculates pure market rate from ChangeNow response (excluding fees for audit trail)
@@ -14195,7 +14195,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
      - Added ChangeNow client to health check components
 - **API Flow:**
   ```
-  GCAccumulator receives payment ($9.70 after TP fee)
+  PGP_ACCUMULATOR receives payment ($9.70 after TP fee)
   → Calls ChangeNow API: ETH→USDT estimate
   → ChangeNow returns: {toAmount, rate, id, depositFee, withdrawalFee}
   → Stores USDT amount in database (locks value)
@@ -14214,25 +14214,25 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - ✅ Conversion timestamp for correlation with market data
   - ✅ Infinite retry ensures eventual success (up to 24h Cloud Tasks limit)
 - **Batch Payout System Verification:**
-  - Verified GCBatchProcessor already sends `total_amount_usdt` to GCSplit1
+  - Verified PGP_BATCHPROCESSOR already sends `total_amount_usdt` to GCSplit1
   - Verified GCSplit1 `/batch-payout` endpoint correctly forwards USDT→ClientCurrency
-  - Flow: GCBatchProcessor → GCSplit1 → GCSplit2 (USDT→ETH) → GCSplit3 (ETH→ClientCurrency)
+  - Flow: PGP_BATCHPROCESSOR → GCSplit1 → GCSplit2 (USDT→ETH) → GCSplit3 (ETH→ClientCurrency)
   - **No changes needed** - batch system already handles USDT correctly
 - **Files Modified:**
-  - Created: `GCAccumulator-10-26/changenow_client.py` (161 lines)
-  - Modified: `GCAccumulator-10-26/acc10-26.py` (replaced mock conversion with real API call)
-  - Modified: `GCAccumulator-10-26/requirements.txt` (added requests library)
-- **Deployment Status:** ✅ DEPLOYED to production (revision gcaccumulator-10-26-00010-q4l)
+  - Created: `PGP_ACCUMULATOR_v1/changenow_client.py` (161 lines)
+  - Modified: `PGP_ACCUMULATOR_v1/pgp_accumulator_v1.py` (replaced mock conversion with real API call)
+  - Modified: `PGP_ACCUMULATOR_v1/requirements.txt` (added requests library)
+- **Deployment Status:** ✅ DEPLOYED to production (revision pgp_accumulator-10-26-00010-q4l)
 - **Testing Required:**
   - Test with real ChangeNow API in staging
   - Verify eth_to_usdt_rate calculation accuracy
   - Confirm conversion_tx_hash stored correctly
   - Validate database writes with real conversion data
 - **Deployment Details:**
-  - Service: `gcaccumulator-10-26`
-  - Revision: `gcaccumulator-10-26-00010-q4l`
+  - Service: `pgp_accumulator-10-26`
+  - Revision: `pgp_accumulator-10-26-00010-q4l`
   - Region: `us-central1`
-  - URL: `https://gcaccumulator-10-26-291176869049.us-central1.run.app`
+  - URL: `https://pgp_accumulator-10-26-291176869049.us-central1.run.app`
   - Health Check: ✅ All components healthy (database, cloudtasks, token_manager, changenow)
   - Secrets Configured: CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET, SUCCESS_URL_SIGNING_KEY, TP_FLAT_FEE, CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION, CHANGENOW_API_KEY, GCSPLIT2_QUEUE, GCSPLIT2_URL
 - **Status:** ✅ Implementation complete, deployed to production, ready for real-world testing
@@ -14264,7 +14264,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
 ### October 29, 2025 - GCSplit1 /batch-payout Endpoint Implemented ✅
 - **CRITICAL FIX**: Implemented missing `/batch-payout` endpoint in GCSplit1 service
-- **Problem:** GCBatchProcessor was successfully creating batches and enqueueing tasks, but GCSplit1 returned 404 errors
+- **Problem:** PGP_BATCHPROCESSOR was successfully creating batches and enqueueing tasks, but GCSplit1 returned 404 errors
 - **Root Causes:**
   1. GCSplit1 only had instant payout endpoints (/, /usdt-eth-estimate, /eth-client-swap)
   2. Missing `decrypt_batch_token()` method in TokenManager
@@ -14276,18 +14276,18 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - Modified GCSplit1 initialization to pass TPS_HOSTPAY_SIGNING_KEY for batch decryption
   - Batch payouts use `user_id=0` (not tied to single user, aggregates multiple payments)
 - **Deployment:** GCSplit1 revision 00009-krs deployed successfully
-- **Batch Payout Flow:** GCBatchProcessor → GCSplit1 /batch-payout → GCSplit2 → GCSplit3 → GCHostPay
+- **Batch Payout Flow:** PGP_BATCHPROCESSOR → GCSplit1 /batch-payout → GCSplit2 → GCSplit3 → GCHostPay
 - **Status:** Batch payout endpoint now operational, ready to process threshold payment batches
 
 ### October 29, 2025 - Threshold Payout Batch System Now Working ✅
 - **CRITICAL FIX**: Identified and resolved batch payout system failure
 - **Root Causes:**
   1. GCSPLIT1_BATCH_QUEUE secret had trailing newline (`\n`) - Cloud Tasks rejected with "400 Queue ID" error
-  2. GCAccumulator queried wrong column (`open_channel_id` instead of `closed_channel_id`) for threshold lookup
+  2. PGP_ACCUMULATOR queried wrong column (`open_channel_id` instead of `closed_channel_id`) for threshold lookup
 - **Resolution:**
   - Fixed all queue/URL secrets using `fix_secret_newlines.sh` script
-  - Corrected GCAccumulator database query to use `closed_channel_id`
-  - Redeployed GCBatchProcessor (picks up new secrets) and GCAccumulator (query fix)
+  - Corrected PGP_ACCUMULATOR database query to use `closed_channel_id`
+  - Redeployed PGP_BATCHPROCESSOR (picks up new secrets) and PGP_ACCUMULATOR (query fix)
 - **Verification:** First batch successfully created (`bd90fadf-fdc8-4f9e-b575-9de7a7ff41e0`) with 2 payments totaling $2.295 USDT
 - **Status:** Batch payouts now fully operational - accumulations will be processed every 5 minutes by Cloud Scheduler
 - **Reference:** `THRESHOLD_PAYOUT_BUG_FIX_SUMMARY.md`
@@ -14296,7 +14296,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 
 ### Production Services (Deployed on Google Cloud Run)
 
-#### ✅ TelePay10-26 - Telegram Bot Service
+#### ✅ PGP_SERVER_v1 - Telegram Bot Service
 - **Status:** Production Ready
 - **Recent Changes:** New inline form UI for DATABASE functionality implemented
 - **Components:**
@@ -14308,7 +14308,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **Emoji Patterns:** 🚀 ✅ ❌ 💾 👤 📨 🕐 💰
 
 #### ✅ GCRegister10-26 - Channel Registration Web App (LEGACY)
-- **Status:** Legacy system (being replaced by GCRegisterWeb + GCRegisterAPI)
+- **Status:** Legacy system (being replaced by PGP_WEB + PGP_WEBAPI)
 - **Type:** Flask web application
 - **Features:**
   - Channel registration forms with validation
@@ -14318,7 +14318,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - Tier selection (1-3 subscription tiers)
 - **Emoji Patterns:** 🚀 ✅ ❌ 📝 💰 🔐 🔍
 
-#### ✅ GCRegisterAPI-10-26 - REST API Backend (NEW)
+#### ✅ PGP_WEBAPI_v1 - REST API Backend (NEW)
 - **Status:** Production Ready (Revision 00011-jsv)
 - **URL:** https://gcregisterapi-10-26-291176869049.us-central1.run.app
 - **Type:** Flask REST API (JWT authentication)
@@ -14337,7 +14337,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - ✅ Fixed tier_count column error in ChannelUpdateRequest (removed, calculated dynamically)
 - **Emoji Patterns:** 🔐 ✅ ❌ 👤 📊 🔍
 
-#### ✅ GCRegisterWeb-10-26 - React SPA Frontend (NEW)
+#### ✅ PGP_WEB_v1 - React SPA Frontend (NEW)
 - **Status:** Production Ready
 - **URL:** https://www.paygateprime.com
 - **Deployment:** Cloud Storage + Load Balancer + Cloud CDN
@@ -14360,7 +14360,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - ✅ Fixed tier_count not being sent in update payload (calculated dynamically)
 - **Emoji Patterns:** 🎨 ✅ 📱 🚀
 
-#### ✅ GCWebhook1-10-26 - Payment Processor Service
+#### ✅ PGP_ORCHESTRATOR_v1 - Payment Processor Service
 - **Status:** Production Ready
 - **Purpose:** Receives success_url from NOWPayments, writes to DB, enqueues tasks
 - **Flow:**
@@ -14372,7 +14372,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   6. Enqueues to GCSplit1 (payment split)
 - **Emoji Patterns:** 🎯 ✅ ❌ 💾 👤 💰 🏦 🌐 📅 🕒
 
-#### ✅ GCWebhook2-10-26 - Telegram Invite Sender
+#### ✅ PGP_INVITE_v1 - Telegram Invite Sender
 - **Status:** Production Ready
 - **Architecture:** Sync route with asyncio.run() for isolated event loops
 - **Purpose:** Sends one-time Telegram invite links to users
@@ -14380,7 +14380,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
 - **Retry:** Infinite retry via Cloud Tasks (60s backoff, 24h max)
 - **Emoji Patterns:** 🎯 ✅ ❌ 📨 👤 🔄
 
-#### ✅ GCSplit1-10-26 - Payment Split Orchestrator
+#### ✅ PGP_SPLIT1_v1 - Payment Split Orchestrator
 - **Status:** Production Ready
 - **Purpose:** Orchestrates 3-stage payment splitting workflow
 - **Endpoints:**
@@ -14392,7 +14392,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   - `split_payout_que` (stores swap transaction data)
 - **Emoji Patterns:** 🎯 ✅ ❌ 💰 🏦 🌐 💾 🆔 👤 🧮
 
-#### ✅ GCSplit2-10-26 - USDT→ETH Estimator
+#### ✅ PGP_SPLIT2_v1 - USDT→ETH Estimator
 - **Status:** Production Ready
 - **Purpose:** Calls ChangeNow API for USDT→ETH estimates
 - **Retry Logic:** Infinite retry with 60s backoff
@@ -14404,7 +14404,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   5. Enqueue back to GCSplit1
 - **Emoji Patterns:** 🎯 ✅ ❌ 👤 💰 🌐 🏦
 
-#### ✅ GCSplit3-10-26 - ETH→ClientCurrency Swapper
+#### ✅ PGP_SPLIT3_v1 - ETH→ClientCurrency Swapper
 - **Status:** Production Ready
 - **Purpose:** Creates ChangeNow fixed-rate transactions (ETH→ClientCurrency)
 - **Retry Logic:** Infinite retry with 60s backoff
@@ -14416,7 +14416,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   5. Enqueue back to GCSplit1
 - **Emoji Patterns:** 🎯 ✅ ❌ 🆔 👤 💰 🌐 🏦
 
-#### ✅ GCHostPay1-10-26 - Validator & Orchestrator
+#### ✅ PGP_HOSTPAY1_v1 - Validator & Orchestrator
 - **Status:** Production Ready
 - **Purpose:** Orchestrates 3-stage HostPay workflow
 - **Endpoints:**
@@ -14429,7 +14429,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   3. Orchestrates status check → payment execution
 - **Emoji Patterns:** 🎯 ✅ ❌ 🆔 💰 🏦 📊
 
-#### ✅ GCHostPay2-10-26 - ChangeNow Status Checker
+#### ✅ PGP_HOSTPAY2_v1 - ChangeNow Status Checker
 - **Status:** Production Ready
 - **Purpose:** Checks ChangeNow transaction status with infinite retry
 - **Retry Logic:** 60s fixed backoff, 24h max duration
@@ -14440,7 +14440,7 @@ All components of the Micro-Batch Conversion Architecture are now deployed and r
   4. Enqueue back to GCHostPay1 /status-verified
 - **Emoji Patterns:** 🎯 ✅ ❌ 🆔 📊 🌐 💰
 
-#### ✅ GCHostPay3-10-26 - ETH Payment Executor
+#### ✅ PGP_HOSTPAY3_v1 - ETH Payment Executor
 - **Status:** Production Ready
 - **Purpose:** Executes ETH payments with infinite retry
 - **Retry Logic:** 60s fixed backoff, 24h max duration
@@ -14593,19 +14593,19 @@ User → TelePay (Bot) → GCWebhook1 ┬→ GCWebhook2 → Telegram Invite
 ### Google Cloud Run Services
 | Service | Status | URL | Queue(s) |
 |---------|--------|-----|----------|
-| TelePay10-26 | ✅ Running | - | - |
+| PGP_SERVER_v1 | ✅ Running | - | - |
 | GCRegister10-26 | ✅ Running | www.paygateprime.com | - |
-| **GCRegisterAPI-10-26** | ✅ Running | https://gcregisterapi-10-26-291176869049.us-central1.run.app | - |
-| GCWebhook1-10-26 | ✅ Running (Rev 4) | https://gcwebhook1-10-26-291176869049.us-central1.run.app | - |
-| GCWebhook2-10-26 | ✅ Running | - | gcwebhook-telegram-invite-queue |
-| **GCAccumulator-10-26** | ✅ Running | https://gcaccumulator-10-26-291176869049.us-central1.run.app | accumulator-payment-queue |
-| **GCBatchProcessor-10-26** | ✅ Running | https://gcbatchprocessor-10-26-291176869049.us-central1.run.app | gcsplit1-batch-queue |
-| GCSplit1-10-26 | ✅ Running | - | gcsplit1-response-queue |
-| GCSplit2-10-26 | ✅ Running | - | gcsplit-usdt-eth-estimate-queue |
-| GCSplit3-10-26 | ✅ Running | - | gcsplit-eth-client-swap-queue |
-| GCHostPay1-10-26 | ✅ Running | - | gchostpay1-response-queue |
-| GCHostPay2-10-26 | ✅ Running | - | gchostpay-status-check-queue |
-| GCHostPay3-10-26 | ✅ Running | - | gchostpay-payment-exec-queue |
+| **PGP_WEBAPI_v1** | ✅ Running | https://gcregisterapi-10-26-291176869049.us-central1.run.app | - |
+| PGP_ORCHESTRATOR_v1 | ✅ Running (Rev 4) | https://gcwebhook1-10-26-291176869049.us-central1.run.app | - |
+| PGP_INVITE_v1 | ✅ Running | - | gcwebhook-telegram-invite-queue |
+| **PGP_ACCUMULATOR_v1** | ✅ Running | https://pgp_accumulator-10-26-291176869049.us-central1.run.app | accumulator-payment-queue |
+| **PGP_BATCHPROCESSOR_v1** | ✅ Running | https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app | gcsplit1-batch-queue |
+| PGP_SPLIT1_v1 | ✅ Running | - | gcsplit1-response-queue |
+| PGP_SPLIT2_v1 | ✅ Running | - | gcsplit-usdt-eth-estimate-queue |
+| PGP_SPLIT3_v1 | ✅ Running | - | gcsplit-eth-client-swap-queue |
+| PGP_HOSTPAY1_v1 | ✅ Running | - | gchostpay1-response-queue |
+| PGP_HOSTPAY2_v1 | ✅ Running | - | gchostpay-status-check-queue |
+| PGP_HOSTPAY3_v1 | ✅ Running | - | gchostpay-payment-exec-queue |
 
 ### Google Cloud Tasks Queues
 All queues configured with:
@@ -14620,7 +14620,7 @@ All queues configured with:
 ### Google Cloud Scheduler Jobs
 | Job Name | Schedule | Target | Status |
 |----------|----------|--------|--------|
-| **batch-processor-job** | Every 5 minutes (`*/5 * * * *`) | https://gcbatchprocessor-10-26-291176869049.us-central1.run.app/process | ✅ ENABLED |
+| **batch-processor-job** | Every 5 minutes (`*/5 * * * *`) | https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app/process | ✅ ENABLED |
 
 ---
 
@@ -14656,14 +14656,14 @@ All queues configured with:
 **Objective:** Convert GCRegister10-26 from monolithic Flask app to modern SPA architecture
 
 **Proposed Solution:**
-- **Frontend:** TypeScript + React SPA (GCRegisterWeb-10-26)
+- **Frontend:** TypeScript + React SPA (PGP_WEB_v1)
   - Hosted on Cloud Storage + CDN (zero cold starts)
   - Vite build system (instant HMR)
   - React Hook Form + Zod validation
   - React Query for API caching
   - Tailwind CSS for styling
 
-- **Backend:** Flask REST API (GCRegisterAPI-10-26)
+- **Backend:** Flask REST API (PGP_WEBAPI_v1)
   - JSON-only responses (no templates)
   - JWT authentication (stateless)
   - CORS-enabled for SPA

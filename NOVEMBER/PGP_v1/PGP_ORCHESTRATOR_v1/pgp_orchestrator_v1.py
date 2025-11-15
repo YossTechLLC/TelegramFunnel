@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-GCWebhook1-10-26: Payment Processor Service
+PGP_ORCHESTRATOR_v1: Payment Processor Service
 Receives success_url from NOWPayments API, processes payment confirmation,
 writes to database, and enqueues tasks to GCWebhook2 (Telegram invite)
 and GCSplit1 (payment split).
@@ -18,7 +18,7 @@ from cloudtasks_client import CloudTasksClient
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing GCWebhook1-10-26 Payment Processor Service")
+print(f"🚀 [APP] Initializing PGP_ORCHESTRATOR_v1 Payment Processor Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -210,7 +210,7 @@ def process_validated_payment():
     1. Receive validated payment data from np-webhook
     2. Extract outcome_amount_usd (ACTUAL USD value)
     3. Lookup payout strategy (instant vs threshold)
-    4. Route to GCSplit1 (instant) or GCAccumulator (threshold) with REAL amount
+    4. Route to GCSplit1 (instant) or PGP_ACCUMULATOR (threshold) with REAL amount
     5. Queue Telegram invite to GCWebhook2
 
     CRITICAL: This endpoint ensures all payments are processed with
@@ -393,27 +393,27 @@ def process_validated_payment():
 
         if payout_mode == "threshold":
             print(f"🎯 [VALIDATED] Threshold payout mode - ${payout_threshold} threshold")
-            print(f"📊 [VALIDATED] Routing to GCAccumulator for accumulation")
+            print(f"📊 [VALIDATED] Routing to PGP_ACCUMULATOR for accumulation")
 
             # Get subscription ID for accumulation record
             subscription_id = db_manager.get_subscription_id(user_id, closed_channel_id)
 
-            # Get GCAccumulator configuration
-            gcaccumulator_queue = config.get('gcaccumulator_queue')
-            gcaccumulator_url = config.get('gcaccumulator_url')
+            # Get PGP_ACCUMULATOR configuration
+            pgp_accumulator_queue = config.get('pgp_accumulator_queue')
+            pgp_accumulator_url = config.get('pgp_accumulator_url')
 
-            if not gcaccumulator_queue or not gcaccumulator_url:
-                print(f"❌ [VALIDATED] GCAccumulator configuration missing")
-                abort(500, "GCAccumulator configuration error")
+            if not pgp_accumulator_queue or not pgp_accumulator_url:
+                print(f"❌ [VALIDATED] PGP_ACCUMULATOR configuration missing")
+                abort(500, "PGP_ACCUMULATOR configuration error")
 
-            # Queue to GCAccumulator with ACTUAL outcome amount
+            # Queue to PGP_ACCUMULATOR with ACTUAL outcome amount
             print(f"")
-            print(f"🚀 [VALIDATED] Queuing to GCAccumulator...")
+            print(f"🚀 [VALIDATED] Queuing to PGP_ACCUMULATOR...")
             print(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
 
-            task_name = cloudtasks_client.enqueue_gcaccumulator_payment(
-                queue_name=gcaccumulator_queue,
-                target_url=gcaccumulator_url,
+            task_name = cloudtasks_client.enqueue_pgp_accumulator_payment(
+                queue_name=pgp_accumulator_queue,
+                target_url=pgp_accumulator_url,
                 user_id=user_id,
                 client_id=closed_channel_id,
                 wallet_address=wallet_address,
@@ -427,11 +427,11 @@ def process_validated_payment():
             )
 
             if task_name:
-                print(f"✅ [VALIDATED] Successfully enqueued to GCAccumulator")
+                print(f"✅ [VALIDATED] Successfully enqueued to PGP_ACCUMULATOR")
                 print(f"🆔 [VALIDATED] Task: {task_name}")
             else:
-                print(f"❌ [VALIDATED] Failed to enqueue to GCAccumulator")
-                abort(500, "Failed to enqueue to GCAccumulator")
+                print(f"❌ [VALIDATED] Failed to enqueue to PGP_ACCUMULATOR")
+                abort(500, "Failed to enqueue to PGP_ACCUMULATOR")
 
         else:  # instant payout
             print(f"⚡ [VALIDATED] Instant payout mode - processing immediately")
@@ -590,7 +590,7 @@ def health_check():
     try:
         return jsonify({
             "status": "healthy",
-            "service": "GCWebhook1-10-26 Payment Processor",
+            "service": "PGP_ORCHESTRATOR_v1 Payment Processor",
             "timestamp": int(time.time()),
             "components": {
                 "token_manager": "healthy" if token_manager else "unhealthy",
@@ -603,7 +603,7 @@ def health_check():
         print(f"❌ [HEALTH] Health check failed: {e}")
         return jsonify({
             "status": "unhealthy",
-            "service": "GCWebhook1-10-26 Payment Processor",
+            "service": "PGP_ORCHESTRATOR_v1 Payment Processor",
             "error": str(e)
         }), 503
 
@@ -613,5 +613,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting GCWebhook1-10-26 on port 8080")
+    print(f"🚀 [APP] Starting PGP_ORCHESTRATOR_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

@@ -1,4 +1,4 @@
-# Dockerfile for GCSplit2-10-26 (USDT→ETH Estimator Service)
+# Dockerfile for PGP_SPLIT2_v1 (USDT→ETH Estimator Service)
 # Multi-stage build for optimal image size
 
 FROM python:3.10-slim as builder

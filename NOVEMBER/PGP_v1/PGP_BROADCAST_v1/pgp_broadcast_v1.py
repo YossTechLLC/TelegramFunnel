@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GCBroadcastScheduler-10-26 - Main Application
+PGP_BROADCAST_v1 - Main Application
 Flask application for automated and manual broadcast management
 """
 
@@ -54,7 +54,7 @@ jwt = JWTManager(app)
 logger.info("✅ JWT authentication initialized")
 
 # Initialize components
-logger.info("🚀 Initializing GCBroadcastScheduler-10-26...")
+logger.info("🚀 Initializing PGP_BROADCAST_v1...")
 
 try:
     # 1. ConfigManager - fetch configuration from Secret Manager
@@ -109,7 +109,7 @@ def health_check():
     """
     return jsonify({
         'status': 'healthy',
-        'service': 'GCBroadcastScheduler-10-26',
+        'service': 'PGP_BROADCAST_v1',
         'timestamp': datetime.now().isoformat()
     }), 200
 

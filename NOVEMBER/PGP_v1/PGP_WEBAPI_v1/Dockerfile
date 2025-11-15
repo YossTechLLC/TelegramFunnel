@@ -1,4 +1,4 @@
-# GCRegisterAPI-10-26 Dockerfile
+# PGP_WEBAPI_v1 Dockerfile
 # Flask REST API for Channel Registration
 FROM python:3.11-slim
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Security modules for TelePay10-26.
+Security modules for PGP_SERVER_v1.
 Provides HMAC authentication, IP whitelisting, and rate limiting.
 """
 

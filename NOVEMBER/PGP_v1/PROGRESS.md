@@ -143,7 +143,7 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 **Performance Comparison Purpose:**
 - This deployment allows direct comparison between:
   - **Legacy Monolith:** gcregister10-26 (Flask server-side rendering, 4 CPU / 8 GiB)
-  - **Modern SPA:** GCRegisterWeb-10-26 (React) + GCRegisterAPI-10-26 (REST API, 1 CPU / 512 MiB)
+  - **Modern SPA:** PGP_WEB_v1 (React) + PGP_WEBAPI_v1 (REST API, 1 CPU / 512 MiB)
 - Testing hypothesis: Can enhanced resources on legacy architecture match modern SPA performance?
 
 **Cost Impact:**
@@ -157,10 +157,10 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 - NOT currently serving www.paygateprime.com production traffic (SPA architecture is active)
 - Deployment intended for performance benchmarking purposes
 
-## 2025-11-14: GCBroadcastScheduler-10-26 Flask JSON Handling Fix ✅
+## 2025-11-14: PGP_BROADCAST_v1 Flask JSON Handling Fix ✅
 
 **Action:** Fixed Flask `request.get_json()` error handling for Cloud Scheduler calls
-**Status:** ✅ **DEPLOYED & VERIFIED** (Revision: `gcbroadcastscheduler-10-26-00020-j6n`)
+**Status:** ✅ **DEPLOYED & VERIFIED** (Revision: `pgp_broadcastscheduler-10-26-00020-j6n`)
 
 **Root Cause:**
 - Flask `request.get_json()` was raising exceptions instead of returning `None`
@@ -175,7 +175,7 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 ```
 
 **Code Changes:**
-- ✅ Modified `GCBroadcastScheduler-10-26/main.py` line 143
+- ✅ Modified `PGP_BROADCAST_v1/pgp_broadcast_v1.py` line 143
 - ✅ Changed: `data = request.get_json() or {}`
 - ✅ To: `data = request.get_json(force=True, silent=True) or {}`
 - ✅ Added debug logging: `logger.debug(f"📦 Request data: {data}")`
@@ -210,10 +210,10 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 
 ---
 
-## 2025-11-14: GCBroadcastScheduler-10-26 Cursor Context Manager Fix ✅
+## 2025-11-14: PGP_BROADCAST_v1 Cursor Context Manager Fix ✅
 
 **Action:** Fixed pg8000 cursor context manager error and corrected ALL environment variable mappings
-**Status:** ✅ **DEPLOYED & VERIFIED** (Revision: `gcbroadcastscheduler-10-26-00019-nzk`)
+**Status:** ✅ **DEPLOYED & VERIFIED** (Revision: `pgp_broadcastscheduler-10-26-00019-nzk`)
 
 **Root Cause:**
 - pg8000 cursors do NOT support `with conn.cursor() as cur:` pattern
@@ -253,27 +253,27 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 **Status:** ✅ **CLEANUP COMPLETE**
 
 **Actions Completed:**
-1. ✅ Paused `gcbroadcastservice-daily` Cloud Scheduler job
-2. ✅ Verified GCBroadcastScheduler-10-26 continues working:
+1. ✅ Paused `pgp_broadcastservice-daily` Cloud Scheduler job
+2. ✅ Verified PGP_BROADCAST_v1 continues working:
    - Status: ENABLED, running every 5 minutes
    - Last execution: 2025-11-14T23:25:00Z
-   - Service health: HEALTHY (revision: gcbroadcastscheduler-10-26-00013-snr)
-3. ✅ Deleted `gcbroadcastservice-10-26` Cloud Run service
-4. ✅ Deleted `gcbroadcastservice-daily` scheduler job
+   - Service health: HEALTHY (revision: pgp_broadcastscheduler-10-26-00013-snr)
+3. ✅ Deleted `pgp_broadcastservice-10-26` Cloud Run service
+4. ✅ Deleted `pgp_broadcastservice-daily` scheduler job
 5. ✅ Archived code: `OCTOBER/ARCHIVES/GCBroadcastService-10-26-archived-2025-11-14`
 
 **Infrastructure Removed:**
-- ❌ Cloud Run Service: `gcbroadcastservice-10-26` (DELETED)
-- ❌ Scheduler Job: `gcbroadcastservice-daily` (DELETED)
+- ❌ Cloud Run Service: `pgp_broadcastservice-10-26` (DELETED)
+- ❌ Scheduler Job: `pgp_broadcastservice-daily` (DELETED)
 - ❌ Code Directory: `GCBroadcastService-10-26` (ARCHIVED)
 
 **Remaining Active Service:**
-- ✅ Cloud Run Service: `gcbroadcastscheduler-10-26`
+- ✅ Cloud Run Service: `pgp_broadcastscheduler-10-26`
 - ✅ Scheduler Job: `broadcast-scheduler-daily` (every 5 minutes)
-- ✅ Latest Revision: `gcbroadcastscheduler-10-26-00013-snr`
+- ✅ Latest Revision: `pgp_broadcastscheduler-10-26-00013-snr`
 
 **Verification:**
-- GCBroadcastScheduler is the ONLY broadcast service
+- PGP_BROADCAST is the ONLY broadcast service
 - No duplicate scheduler jobs remain
 - Code directory clean (only Scheduler in 10-26/)
 - Redundant service archived for reference
@@ -289,10 +289,10 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 
 ---
 
-## 2025-11-14: GCBroadcastScheduler Cursor Context Manager Fix ✅
+## 2025-11-14: PGP_BROADCAST Cursor Context Manager Fix ✅
 
 **Issue:** Production error - `'Cursor' object does not support the context manager protocol`
-**Service:** gcbroadcastscheduler-10-26
+**Service:** pgp_broadcastscheduler-10-26
 **Resolution:** Migrated to NEW_ARCHITECTURE SQLAlchemy text() pattern
 
 **Root Cause:**
@@ -320,8 +320,8 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 10. `update_message_ids()` - Dynamic UPDATE (broadcast_tracker) **[FIX FOR ORIGINAL ERROR]**
 
 **Deployment:**
-- ✅ Built: `gcr.io/telepay-459221/gcbroadcastscheduler-10-26:latest`
-- ✅ Deployed: Revision `gcbroadcastscheduler-10-26-00013-snr`
+- ✅ Built: `gcr.io/telepay-459221/pgp_broadcastscheduler-10-26:latest`
+- ✅ Deployed: Revision `pgp_broadcastscheduler-10-26-00013-snr`
 - ✅ Verified: No cursor errors in logs
 - ✅ Service: HEALTHY and OPERATIONAL
 
@@ -346,11 +346,11 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 **Findings:**
 - ✅ Completed comprehensive architectural analysis of both broadcast services
 - ✅ Confirmed 100% functional duplication between:
-  - GCBroadcastScheduler-10-26 (ACTIVE - every 5 minutes)
+  - PGP_BROADCAST_v1 (ACTIVE - every 5 minutes)
   - GCBroadcastService-10-26 (REDUNDANT - once daily)
 - ✅ Identified duplicate Cloud Scheduler jobs:
   - `broadcast-scheduler-daily` (every 5 min) → calls Scheduler
-  - `gcbroadcastservice-daily` (once daily) → calls Service
+  - `pgp_broadcastservice-daily` (once daily) → calls Service
 - ✅ All 4 API endpoints identical across both services
 - ✅ All 6 core modules identical (only code organization differs)
 - ✅ Both services hit same database table with same queries
@@ -377,12 +377,12 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 - Wastes cloud resources
 - Causes developer confusion
 - Potential database conflicts
-- GCBroadcastScheduler already working with all recent fixes
+- PGP_BROADCAST already working with all recent fixes
 
 **Awaiting User Approval for Cleanup:**
-1. Pause `gcbroadcastservice-daily` scheduler job
+1. Pause `pgp_broadcastservice-daily` scheduler job
 2. Verify Scheduler continues working
-3. Delete `gcbroadcastservice-10-26` Cloud Run service
+3. Delete `pgp_broadcastservice-10-26` Cloud Run service
 4. Delete scheduler job permanently
 5. Archive code directory
 
@@ -390,21 +390,21 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 
 ---
 
-## 2025-11-14: GCBroadcastScheduler Message Tracking Deployed ✅ CORRECT SERVICE
+## 2025-11-14: PGP_BROADCAST Message Tracking Deployed ✅ CORRECT SERVICE
 
 **Critical Discovery:** TWO separate services exist - deployed WRONG service first!
-**Root Cause:** GCBroadcastScheduler-10-26 (the actual scheduler) was running old code
-**Resolution:** Applied changes to correct service and deployed GCBroadcastScheduler-10-26
+**Root Cause:** PGP_BROADCAST_v1 (the actual scheduler) was running old code
+**Resolution:** Applied changes to correct service and deployed PGP_BROADCAST_v1
 
 **Service Duplication Found:**
 - ❌ GCBroadcastService-10-26: API-only service (deployed by mistake at 22:56 UTC)
-- ✅ GCBroadcastScheduler-10-26: ACTUAL scheduler executing broadcasts (deployed at 23:07 UTC)
+- ✅ PGP_BROADCAST_v1: ACTUAL scheduler executing broadcasts (deployed at 23:07 UTC)
 
 **Correct Deployment Details:**
-- Service: gcbroadcastscheduler-10-26 ← **THE CORRECT ONE**
-- Revision: gcbroadcastscheduler-10-26-00012-v7v
+- Service: pgp_broadcastscheduler-10-26 ← **THE CORRECT ONE**
+- Revision: pgp_broadcastscheduler-10-26-00012-v7v
 - Deployment Time: 2025-11-14 23:07:58 UTC
-- URL: https://gcbroadcastscheduler-10-26-291176869049.us-central1.run.app
+- URL: https://pgp_broadcastscheduler-10-26-291176869049.us-central1.run.app
 - Health Check: ✅ PASSED
 
 **Code Changes Applied to Scheduler:**
@@ -414,13 +414,13 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 4. ✅ Updated broadcast_executor.py with delete-then-send workflow
 
 **Evidence from Logs:**
-- gcbroadcastscheduler-10-26 logs showed: "Executing broadcast 34610fd8..."
-- gcbroadcastservice-10-26 logs showed: Only initialization, no execution
+- pgp_broadcastscheduler-10-26 logs showed: "Executing broadcast 34610fd8..."
+- pgp_broadcastservice-10-26 logs showed: Only initialization, no execution
 - User reported messages still not deleting → confirmed wrong service deployed
 
 **Actions Taken:**
 1. ✅ Reviewed logs from BOTH services (user's critical insight!)
-2. ✅ Identified GCBroadcastScheduler-10-26 as actual executor
+2. ✅ Identified PGP_BROADCAST_v1 as actual executor
 3. ✅ Applied all message tracking changes to scheduler
 4. ✅ Deployed scheduler with message tracking
 5. ✅ Verified health endpoint responding correctly
@@ -468,19 +468,19 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 - ✅ Updated `DatabaseClient` (GCBroadcastService-10-26/clients/database_client.py):
   - Updated `fetch_due_broadcasts()` to include message ID columns
 
-### Phase 3: TelePay10-26 Message Tracking ✅
-- ✅ Updated `DatabaseManager` (TelePay10-26/database.py):
+### Phase 3: PGP_SERVER_v1 Message Tracking ✅
+- ✅ Updated `DatabaseManager` (PGP_SERVER_v1/database.py):
   - Added `get_last_broadcast_message_ids()` method
   - Added `update_broadcast_message_ids()` method
   - Uses SQLAlchemy `text()` for parameterized queries
-- ✅ Updated `BroadcastManager` (TelePay10-26/broadcast_manager.py):
+- ✅ Updated `BroadcastManager` (PGP_SERVER_v1/broadcast_manager.py):
   - Added `Bot` instance for async operations
   - Added `delete_message_safe()` method
   - Converted `broadcast_hash_links()` to async
   - Replaced `requests.post()` with `Bot.send_message()`
   - Implemented delete-then-send workflow
   - Stores message IDs after send
-- ✅ Updated `ClosedChannelManager` (TelePay10-26/closed_channel_manager.py):
+- ✅ Updated `ClosedChannelManager` (PGP_SERVER_v1/closed_channel_manager.py):
   - Added message deletion logic to `send_donation_message_to_closed_channels()`
   - Queries old message ID before sending
   - Deletes old message if exists
@@ -562,7 +562,7 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 **Testing:** Will be verified on next payment - should receive only 1 invite link
 
 **Files Modified:**
-- `/OCTOBER/10-26/GCWebhook1-10-26/tph1-10-26.py` (added idempotency check, ~60 lines)
+- `/OCTOBER/10-26/PGP_ORCHESTRATOR_v1/pgp_orchestrator_v1.py` (added idempotency check, ~60 lines)
 
 **Documentation Created:**
 - `/OCTOBER/10-26/DUPLICATE_INVITE_INVESTIGATION_REPORT.md`
@@ -592,7 +592,7 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
    - Added emoji logging: `📺 [CHANNEL]` for channel lookups
 
 ### Message Format Update ✅
-2. **Updated invitation message in `tph2-10-26.py`** - Enhanced user experience:
+2. **Updated invitation message in `pgp_invite_v1.py`** - Enhanced user experience:
    - Added channel detail lookup before sending invite (lines 232-246)
    - Wrapped lookup in try-except to prevent blocking invite send
    - Updated message format with emojis and tree structure (lines 269-281):
@@ -624,8 +624,8 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
    - Returns "Unknown" if no exact match found (e.g., custom pricing)
 
 **Files Modified:**
-- `/OCTOBER/10-26/GCWebhook2-10-26/database_manager.py` (added 130 lines)
-- `/OCTOBER/10-26/GCWebhook2-10-26/tph2-10-26.py` (modified message format)
+- `/OCTOBER/10-26/PGP_INVITE_v1/database_manager.py` (added 130 lines)
+- `/OCTOBER/10-26/PGP_INVITE_v1/pgp_invite_v1.py` (modified message format)
 
 **Documentation Created:**
 - `/OCTOBER/10-26/CONFIRMATION_MESSAGE_UPDATE_CHECKLIST.md`
@@ -656,9 +656,9 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 
 ---
 
-## 2025-11-14 Session 159: GCNotificationService Event Loop Bug Fix ✅
+## 2025-11-14 Session 159: PGP_NOTIFICATIONS Event Loop Bug Fix ✅
 
-**Context:** Fixed critical "RuntimeError('Event loop is closed')" bug in GCNotificationService that caused second consecutive notification to fail. Root cause was creating/closing event loop for each request instead of reusing persistent loop.
+**Context:** Fixed critical "RuntimeError('Event loop is closed')" bug in PGP_NOTIFICATIONS that caused second consecutive notification to fail. Root cause was creating/closing event loop for each request instead of reusing persistent loop.
 
 **Changes Made:**
 
@@ -679,9 +679,9 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
    - Aligned with config_manager expected variable names
 
 **Deployment:**
-- Build: SUCCESS (gcr.io/telepay-459221/gcnotificationservice-10-26)
-- Deploy: SUCCESS (revision gcnotificationservice-10-26-00005-qk8)
-- Service URL: https://gcnotificationservice-10-26-291176869049.us-central1.run.app
+- Build: SUCCESS (gcr.io/telepay-459221/pgp_notificationservice-10-26)
+- Deploy: SUCCESS (revision pgp_notificationservice-10-26-00005-qk8)
+- Service URL: https://pgp_notificationservice-10-26-291176869049.us-central1.run.app
 
 **Testing Results:**
 - ✅ First notification sent successfully (20:51:33 UTC)
@@ -694,12 +694,12 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 - AFTER: Request 1 ✅ → Request 2 ✅ → Request N ✅
 
 **Files Modified:**
-- `/OCTOBER/10-26/GCNotificationService-10-26/telegram_client.py`
-- `/OCTOBER/10-26/GCNotificationService-10-26/requirements.txt`
+- `/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/telegram_client.py`
+- `/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/requirements.txt`
 
 **Documentation Created:**
-- `/OCTOBER/10-26/GCNotificationService-10-26/EVENT_LOOP_FIX_CHECKLIST.md`
-- `/OCTOBER/10-26/GCNotificationService-10-26/EVENT_LOOP_FIX_SUMMARY.md`
+- `/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/EVENT_LOOP_FIX_CHECKLIST.md`
+- `/OCTOBER/10-26/PGP_NOTIFICATIONS_v1/EVENT_LOOP_FIX_SUMMARY.md`
 
 ---
 
@@ -747,8 +747,8 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 - Single Source of Truth: All SQL queries now in DatabaseManager only
 
 **Files Modified:**
-- `TelePay10-26/subscription_manager.py` (224 → 196 lines: -96 duplicate +68 enhancements)
-- `TelePay10-26/app_initializer.py` (added configurable interval support)
+- `PGP_SERVER_v1/subscription_manager.py` (224 → 196 lines: -96 duplicate +68 enhancements)
+- `PGP_SERVER_v1/app_initializer.py` (added configurable interval support)
 
 **Testing Status:**
 - ⏳ Phase 4 Pending: Unit tests, integration tests, load tests
@@ -842,8 +842,8 @@ WHERE client_id = :open_channel_id AND is_paid_out = FALSE
 - Decimal precision: USD amounts (2 places), percentage (1 place)
 
 **Files Modified:**
-- `/GCNotificationService-10-26/database_manager.py` (+120 lines)
-- `/GCNotificationService-10-26/notification_handler.py` (+80 lines refactor)
+- `/PGP_NOTIFICATIONS_v1/database_manager.py` (+120 lines)
+- `/PGP_NOTIFICATIONS_v1/notification_handler.py` (+80 lines refactor)
 
 **Files Created:**
 - `/NOTIFICATION_MESSAGE_REFACTOR_CHECKLIST.md` (Architecture & verification checklist)
@@ -864,13 +864,13 @@ WHERE client_id = :open_channel_id AND is_paid_out = FALSE
 
 **Next Steps:**
 1. Resolve Cloud Run build failure (infrastructure/build config issue)
-2. Deploy updated GCNotificationService
+2. Deploy updated PGP_NOTIFICATIONS
 3. Run E2E test with threshold mode
 4. Verify notifications in production
 
-## 2025-11-14 Session 156: Migrated GCNotificationService to NEW_ARCHITECTURE Pattern (SQLAlchemy + Cloud SQL Connector) ✅
+## 2025-11-14 Session 156: Migrated PGP_NOTIFICATIONS to NEW_ARCHITECTURE Pattern (SQLAlchemy + Cloud SQL Connector) ✅
 
-**Context:** After comprehensive notification workflow analysis (NOTIFICATION_WORKFLOW_REPORT.md), identified that GCNotificationService was using old psycopg2 connection pattern inconsistent with TelePay10-26 NEW_ARCHITECTURE.
+**Context:** After comprehensive notification workflow analysis (NOTIFICATION_WORKFLOW_REPORT.md), identified that PGP_NOTIFICATIONS was using old psycopg2 connection pattern inconsistent with PGP_SERVER_v1 NEW_ARCHITECTURE.
 
 **Changes Made:**
 
@@ -888,7 +888,7 @@ WHERE client_id = :open_channel_id AND is_paid_out = FALSE
    - Updated `fetch_database_credentials()` to return `instance_connection_name`
    - Updated validation to check `instance_connection_name` instead of `host`
 
-3. **Updated `service.py`**:
+3. **Updated `pgp_notifications_v1.py`**:
    - Changed DatabaseManager initialization to use `instance_connection_name` param
    - Updated validation to check `instance_connection_name` instead of `host`
    - Added comment: "NEW_ARCHITECTURE pattern with SQLAlchemy + Cloud SQL Connector"
@@ -925,7 +925,7 @@ with self.engine.connect() as conn:
 ```
 
 **Benefits:**
-- ✅ Consistent with TelePay10-26 pattern (Session 154 architectural decision)
+- ✅ Consistent with PGP_SERVER_v1 pattern (Session 154 architectural decision)
 - ✅ Connection pooling reduces overhead for high-volume notifications
 - ✅ Automatic connection health checks (`pool_pre_ping=True`)
 - ✅ Named parameters improve readability and security
@@ -938,11 +938,11 @@ with self.engine.connect() as conn:
 - Connection pool sized appropriately for notification service (smaller than TelePay)
 
 **Files Modified:**
-- `GCNotificationService-10-26/database_manager.py`
-- `GCNotificationService-10-26/config_manager.py`
-- `GCNotificationService-10-26/service.py`
-- `GCNotificationService-10-26/.env.example`
-- `GCNotificationService-10-26/requirements.txt`
+- `PGP_NOTIFICATIONS_v1/database_manager.py`
+- `PGP_NOTIFICATIONS_v1/config_manager.py`
+- `PGP_NOTIFICATIONS_v1/pgp_notifications_v1.py`
+- `PGP_NOTIFICATIONS_v1/.env.example`
+- `PGP_NOTIFICATIONS_v1/requirements.txt`
 
 **Report Created:**
 - `NOTIFICATION_WORKFLOW_REPORT.md` - 600+ line comprehensive analysis of payment notification system
@@ -954,14 +954,14 @@ with self.engine.connect() as conn:
 **Issue:** User UUID 7e1018e4-5644-4031-a05c-4166cc877264 (and all new users) saw "Not Configured" button instead of "Resend Notification" after registering channels
 
 **Root Cause:**
-- Channel registration flow (`GCRegisterAPI-10-26`) only created `main_clients_database` entry
+- Channel registration flow (`PGP_WEBAPI_v1`) only created `main_clients_database` entry
 - NO `broadcast_manager` entry was created automatically
 - `populate_broadcast_manager.py` was a one-time migration tool, not automated
 - Frontend dashboard expects `broadcast_id` field to show "Resend Notification" button
 
 **Solution Implemented:**
 
-1. **Created BroadcastService Module** (`api/services/broadcast_service.py`)
+1. **Created BroadcastService Module** (`api/services/broadcast_pgp_notifications_v1.py`)
    - Separation of concerns (Channel logic vs Broadcast logic)
    - `create_broadcast_entry()` method with SQL INSERT RETURNING
    - `get_broadcast_by_channel_pair()` helper method
@@ -992,21 +992,21 @@ with self.engine.connect() as conn:
 - ✅ Verified user should see "Resend Notification" button on dashboard
 
 **Files Created:**
-- `GCRegisterAPI-10-26/api/services/broadcast_service.py` (NEW)
+- `PGP_WEBAPI_v1/api/services/broadcast_pgp_notifications_v1.py` (NEW)
 - `TOOLS_SCRIPTS_TESTS/tools/backfill_missing_broadcast_entries.py` (NEW)
 - `TOOLS_SCRIPTS_TESTS/scripts/verify_broadcast_integrity.sql` (NEW)
 - `BROADCAST_MANAGER_UPDATED_CHECKLIST.md` (NEW)
 - `BROADCAST_MANAGER_UPDATED_CHECKLIST_PROGRESS.md` (NEW)
 
 **Files Modified:**
-- `GCRegisterAPI-10-26/api/routes/channels.py` (Import BroadcastService, updated register_channel endpoint)
+- `PGP_WEBAPI_v1/api/routes/channels.py` (Import BroadcastService, updated register_channel endpoint)
 
 **Database Changes:**
 - 1 new row in `broadcast_manager` table for user 7e1018e4-5644-4031-a05c-4166cc877264
 - Fixed database name in backfill script: `client_table` (not `telepaydb`)
 
 **Testing Status:**
-- ✅ GCRegisterAPI health endpoint responding
+- ✅ PGP_WEBAPI health endpoint responding
 - ✅ Service deployed successfully (revision 00028)
 - ✅ Backfill script executed successfully
 - ⏳ End-to-end channel registration test (pending user testing)
@@ -1072,7 +1072,7 @@ with self.pool.engine.connect() as conn:
 6. Maintained backward compatibility (all return values unchanged)
 
 **Files Modified:**
-1. ✅ `TelePay10-26/database.py` - Fixed 6 methods:
+1. ✅ `PGP_SERVER_v1/database.py` - Fixed 6 methods:
    - `fetch_open_channel_list()` - SELECT query
    - `get_default_donation_channel()` - SELECT query
    - `fetch_channel_by_id()` - Parameterized SELECT query
@@ -1080,7 +1080,7 @@ with self.pool.engine.connect() as conn:
    - `fetch_expired_subscriptions()` - Complex SELECT with datetime parsing
    - `deactivate_subscription()` - UPDATE query with commit
 
-2. ✅ `TelePay10-26/subscription_manager.py` - Fixed 2 methods:
+2. ✅ `PGP_SERVER_v1/subscription_manager.py` - Fixed 2 methods:
    - `fetch_expired_subscriptions()` - Complex SELECT with datetime parsing
    - `deactivate_subscription()` - UPDATE query with commit
 
@@ -1167,7 +1167,7 @@ self.pool = init_connection_pool({
 ```
 
 **Files Modified:**
-- ✅ `TelePay10-26/database.py` - Added fetch function, module variable, updated init
+- ✅ `PGP_SERVER_v1/database.py` - Added fetch function, module variable, updated init
 - ✅ `BUGS.md` - Added detailed bug report (Session 153)
 - ✅ `PROGRESS.md` - This entry
 - ✅ `DECISIONS.md` - Architectural decision logged
@@ -1298,7 +1298,7 @@ if config and hmac_auth and ip_whitelist and rate_limiter:
 - Pool configuration via environment variables (DB_POOL_SIZE, DB_MAX_OVERFLOW, etc.)
 
 **2. Payment Service - Compatibility Wrapper:**
-- **File:** `services/payment_service.py`
+- **File:** `services/payment_pgp_notifications_v1.py`
 - Added `start_np_gateway_new()` compatibility wrapper method
 - Allows legacy code to use PaymentService without changes
 - Wrapper logs deprecation warning for future migration tracking
@@ -1391,16 +1391,16 @@ app_initializer.py
 5. ⏳ Gradually migrate old code to use new services
 
 **Files Modified:**
-- `TelePay10-26/database.py` - Connection pool integration
-- `TelePay10-26/services/payment_service.py` - Compatibility wrapper
-- `TelePay10-26/app_initializer.py` - Security + services integration
+- `PGP_SERVER_v1/database.py` - Connection pool integration
+- `PGP_SERVER_v1/services/payment_pgp_notifications_v1.py` - Compatibility wrapper
+- `PGP_SERVER_v1/app_initializer.py` - Security + services integration
 - `INTEGRATION_TEST_REPORT.md` - **NEW** Comprehensive testing documentation
 - `PROGRESS.md` - Session 150 integration + testing results
 - `DECISIONS.md` - Session 150 architectural decisions
 
 **Files Not Modified (Yet):**
-- `TelePay10-26/bot_manager.py` - Handler registration pending
-- `TelePay10-26/telepay10-26.py` - Entry point (may need Flask thread)
+- `PGP_SERVER_v1/bot_manager.py` - Handler registration pending
+- `PGP_SERVER_v1/pgp_server_v1.py` - Entry point (may need Flask thread)
 
 **Deployment Readiness:**
 - ✅ **Ready for deployment testing** (all syntax valid)
@@ -1424,10 +1424,10 @@ app_initializer.py
 - Deployment: ✅ **Ready for testing** (deployment instructions provided)
 
 **Files Modified (Total: 9 files):**
-- `TelePay10-26/database.py` - Connection pool integration
-- `TelePay10-26/services/payment_service.py` - Compatibility wrapper
-- `TelePay10-26/app_initializer.py` - Security + services integration
-- `TelePay10-26/telepay10-26.py` - **UPDATED** to use new Flask app
+- `PGP_SERVER_v1/database.py` - Connection pool integration
+- `PGP_SERVER_v1/services/payment_pgp_notifications_v1.py` - Compatibility wrapper
+- `PGP_SERVER_v1/app_initializer.py` - Security + services integration
+- `PGP_SERVER_v1/pgp_server_v1.py` - **UPDATED** to use new Flask app
 - `INTEGRATION_TEST_REPORT.md` - **NEW** comprehensive testing documentation
 - `DEPLOYMENT_SUMMARY.md` - **NEW** deployment instructions (corrected TELEGRAM_BOT_USERNAME)
 - `ENVIRONMENT_VARIABLES.md` - **NEW** complete environment variables reference
@@ -1436,7 +1436,7 @@ app_initializer.py
 
 **Deployment Ready:**
 - ✅ All code integration complete
-- ✅ Entry point updated (telepay10-26.py)
+- ✅ Entry point updated (pgp_server_v1.py)
 - ✅ Backward compatibility maintained
 - ✅ Deployment instructions provided (VM, Docker options)
 - ✅ Environment variables documented

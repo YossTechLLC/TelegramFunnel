@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-🗺️ Mappings Routes for GCRegisterAPI-10-26
+🗺️ Mappings Routes for PGP_WEBAPI_v1
 Provides currency and network mappings for frontend dropdowns
 """
 from flask import Blueprint, jsonify
