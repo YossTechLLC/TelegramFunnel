@@ -33,7 +33,7 @@ class TokenManager(BaseTokenManager):
         if batch_signing_key:
             print(f"🔐 [TOKEN_MANAGER] Batch signing key configured separately")
 
-    def encrypt_gcsplit1_to_gcsplit2_token(
+    def encrypt_pgp_split1_to_pgp_split2_token(
         self,
         user_id: int,
         closed_channel_id: str,
@@ -133,7 +133,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gcsplit1_to_gcsplit2_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_split1_to_pgp_split2_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from PGP_SPLIT1_v1 → PGP_SPLIT2_v1.
 
@@ -250,7 +250,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_DEC] Decryption error: {e}")
             return None
 
-    def encrypt_gcsplit2_to_gcsplit1_token(
+    def encrypt_pgp_split2_to_pgp_split1_token(
         self,
         user_id: int,
         closed_channel_id: str,
@@ -326,7 +326,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gcsplit2_to_gcsplit1_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_split2_to_pgp_split1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Decrypt token from PGP_SPLIT2_v1 → PGP_SPLIT1_v1."""
         try:
             print(f"🔓 [TOKEN_DEC] PGP_SPLIT2_v1→PGP_SPLIT1_v1: Decrypting estimate response")
@@ -440,7 +440,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_DEC] Decryption error: {e}")
             return None
 
-    def encrypt_gcsplit1_to_gcsplit3_token(
+    def encrypt_pgp_split1_to_pgp_split3_token(
         self,
         unique_id: str,
         user_id: int,
@@ -514,7 +514,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gcsplit1_to_gcsplit3_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_split1_to_pgp_split3_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Decrypt token from PGP_SPLIT1_v1 → PGP_SPLIT3_v1."""
         try:
             print(f"🔓 [TOKEN_DEC] PGP_SPLIT1_v1→PGP_SPLIT3_v1: Decrypting swap request")
@@ -621,7 +621,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_DEC] Decryption error: {e}")
             return None
 
-    def encrypt_gcsplit3_to_gcsplit1_token(
+    def encrypt_pgp_split3_to_pgp_split1_token(
         self,
         unique_id: str,
         user_id: int,
@@ -703,7 +703,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gcsplit3_to_gcsplit1_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_split3_to_pgp_split1_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Decrypt token from PGP_SPLIT3_v1 → PGP_SPLIT1_v1."""
         try:
             print(f"🔓 [TOKEN_DEC] PGP_SPLIT3_v1→PGP_SPLIT1_v1: Decrypting swap response")

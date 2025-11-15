@@ -99,7 +99,7 @@ def process_usdt_eth_estimate():
             print(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
 
-        decrypted_data = token_manager.decrypt_gcsplit1_to_gcsplit2_token(encrypted_token)
+        decrypted_data = token_manager.decrypt_pgp_split1_to_pgp_split2_token(encrypted_token)
         if not decrypted_data:
             print(f"❌ [ENDPOINT] Failed to decrypt token")
             abort(401, "Invalid token")
@@ -160,7 +160,7 @@ def process_usdt_eth_estimate():
         print(f"📊 [ENDPOINT] Withdrawal fee: {withdrawal_fee}")
 
         # Encrypt response token for PGP_SPLIT1_v1
-        encrypted_response_token = token_manager.encrypt_gcsplit2_to_gcsplit1_token(
+        encrypted_response_token = token_manager.encrypt_pgp_split2_to_pgp_split1_token(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
             wallet_address=wallet_address,

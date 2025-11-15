@@ -1016,7 +1016,7 @@ class TokenManager(BaseTokenManager):
     # TOKEN 8: PGP_HOSTPAY1_v1 → PGP_MICROBATCHPROCESSOR (Batch execution response)
     # ========================================================================
 
-    def encrypt_gchostpay1_to_microbatch_response_token(
+    def encrypt_pgp_hostpay1_to_microbatch_response_token(
         self,
         batch_conversion_id: str,
         cn_api_id: str,
@@ -1088,7 +1088,7 @@ class TokenManager(BaseTokenManager):
     # TOKEN 9: PGP_HOSTPAY1_v1 Retry Token (Internal delayed callback check)
     # ========================================================================
 
-    def encrypt_gchostpay1_retry_token(
+    def encrypt_pgp_hostpay1_retry_token(
         self,
         unique_id: str,
         cn_api_id: str,
@@ -1157,7 +1157,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Retry token encryption failed: {e}")
             return None
 
-    def decrypt_gchostpay1_retry_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_hostpay1_retry_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt retry token from delayed ChangeNow query.
 
