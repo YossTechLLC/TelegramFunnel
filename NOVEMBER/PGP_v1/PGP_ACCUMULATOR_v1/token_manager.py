@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Token Manager for GCAccumulator-10-26 (Payment Accumulation Service).
-Handles token encryption/decryption for communication with GCSplit3 and GCHostPay1.
+Token Manager for PGP_ACCUMULATOR_v1 (Payment Accumulation Service).
+Handles token encryption/decryption for communication with PGP Split and HostPay services.
 """
 import base64
 import hmac
@@ -9,11 +9,13 @@ import hashlib
 import struct
 import time
 from typing import Optional, Dict, Any, Tuple
+from PGP_COMMON.tokens import BaseTokenManager
 
 
-class TokenManager:
+class TokenManager(BaseTokenManager):
     """
-    Manages token encryption for GCAccumulator-10-26.
+    Manages token encryption for PGP_ACCUMULATOR_v1.
+    Inherits common methods from BaseTokenManager.
     """
 
     def __init__(self, signing_key: str):
@@ -23,8 +25,8 @@ class TokenManager:
         Args:
             signing_key: SUCCESS_URL_SIGNING_KEY for token encryption
         """
-        self.signing_key = signing_key
-        print(f"🔐 [TOKEN] TokenManager initialized")
+        super().__init__(signing_key=signing_key, service_name="PGP_ACCUMULATOR_v1")
+
 
     def encrypt_token_for_gcsplit2(
         self,
@@ -158,13 +160,13 @@ class TokenManager:
             payload.extend(struct.pack(">Q", accumulation_id))
 
             # Pack client_id (variable length string)
-            payload.extend(self._pack_string(client_id))
+            payload.extend(self.pack_string(client_id))
 
             # Pack eth_amount (8 bytes, double)
             payload.extend(struct.pack(">d", eth_amount))
 
             # Pack usdt_wallet_address (variable length string)
-            payload.extend(self._pack_string(usdt_wallet_address))
+            payload.extend(self.pack_string(usdt_wallet_address))
 
             # Pack timestamp (8 bytes, uint64)
             timestamp = int(time.time())
@@ -241,10 +243,10 @@ class TokenManager:
             offset += 8
 
             # Unpack client_id (variable length string)
-            client_id, offset = self._unpack_string(payload, offset)
+            client_id, offset = self.unpack_string(payload, offset)
 
             # Unpack cn_api_id (variable length string)
-            cn_api_id, offset = self._unpack_string(payload, offset)
+            cn_api_id, offset = self.unpack_string(payload, offset)
 
             # Unpack from_amount (8 bytes, double)
             from_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
@@ -255,10 +257,10 @@ class TokenManager:
             offset += 8
 
             # Unpack payin_address (variable length string)
-            payin_address, offset = self._unpack_string(payload, offset)
+            payin_address, offset = self.unpack_string(payload, offset)
 
             # Unpack payout_address (variable length string)
-            payout_address, offset = self._unpack_string(payload, offset)
+            payout_address, offset = self.unpack_string(payload, offset)
 
             # Unpack timestamp (8 bytes, uint64)
             timestamp = struct.unpack(">Q", payload[offset:offset + 8])[0]
@@ -333,22 +335,22 @@ class TokenManager:
             payload.extend(struct.pack(">Q", accumulation_id))
 
             # Pack cn_api_id (variable length string)
-            payload.extend(self._pack_string(cn_api_id))
+            payload.extend(self.pack_string(cn_api_id))
 
             # Pack from_currency (variable length string)
-            payload.extend(self._pack_string(from_currency))
+            payload.extend(self.pack_string(from_currency))
 
             # Pack from_network (variable length string)
-            payload.extend(self._pack_string(from_network))
+            payload.extend(self.pack_string(from_network))
 
             # Pack from_amount (8 bytes, double)
             payload.extend(struct.pack(">d", from_amount))
 
             # Pack payin_address (variable length string)
-            payload.extend(self._pack_string(payin_address))
+            payload.extend(self.pack_string(payin_address))
 
             # Pack context (variable length string) - NEW
-            payload.extend(self._pack_string(context.lower()))
+            payload.extend(self.pack_string(context.lower()))
 
             # Pack timestamp (8 bytes, uint64)
             timestamp = int(time.time())
@@ -422,10 +424,10 @@ class TokenManager:
             offset += 8
 
             # Unpack cn_api_id (variable length string)
-            cn_api_id, offset = self._unpack_string(payload, offset)
+            cn_api_id, offset = self.unpack_string(payload, offset)
 
             # Unpack tx_hash (variable length string)
-            tx_hash, offset = self._unpack_string(payload, offset)
+            tx_hash, offset = self.unpack_string(payload, offset)
 
             # Unpack to_amount (8 bytes, double)
             to_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
