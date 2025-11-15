@@ -113,7 +113,19 @@
       "Bash(/tmp/PROGRESS_ARCH_new.md)",
       "Bash(/tmp/BUGS_new.md)",
       "Bash(/tmp/BUGS_to_archive.md)",
-      "Bash(/tmp/BUGS_ARCH_new.md)"
+      "Bash(/tmp/BUGS_ARCH_new.md)",
+      "Bash(host:*)",
+      "Bash(gcloud beta run domain-mappings list:*)",
+      "Bash(gcloud beta run domain-mappings delete:*)",
+      "Bash(pip install:*)",
+      "mcp__playwright__browser_navigate",
+      "Bash(gcloud compute url-maps describe:*)",
+      "Bash(gcloud compute target-https-proxies describe:*)",
+      "Bash(gcloud compute forwarding-rules:*)",
+      "Bash(for i in {1..12})",
+      "Bash(do echo \"=== Check $i/12 ===\")",
+      "Bash(gcloud compute ssl-certificates delete:*)",
+      "Bash(gcloud compute ssl-certificates:*)"
     ],
     "deny": [],
     "ask": []

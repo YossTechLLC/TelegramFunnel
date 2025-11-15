@@ -1,0 +1,21 @@
+Defaulting to user installation because normal site-packages is not writeable
+Collecting zstandard
+  Downloading zstandard-0.25.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.6/5.6 MB 29.2 MB/s eta 0:00:00
+Requirement already satisfied: google-cloud-secret-manager in /home/perc/.local/lib/python3.10/site-packages (2.25.0)
+Requirement already satisfied: protobuf!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<7.0.0,>=3.20.2 in /home/perc/.local/lib/python3.10/site-packages (from google-cloud-secret-manager) (6.33.0)
+Requirement already satisfied: grpcio<2.0.0,>=1.33.2 in /home/perc/.local/lib/python3.10/site-packages (from google-cloud-secret-manager) (1.76.0)
+Requirement already satisfied: grpc-google-iam-v1<1.0.0,>=0.14.0 in /home/perc/.local/lib/python3.10/site-packages (from google-cloud-secret-manager) (0.14.3)
+Requirement already satisfied: google-api-core[grpc]!=2.0.*,!=2.1.*,!=2.10.*,!=2.2.*,!=2.3.*,!=2.4.*,!=2.5.*,!=2.6.*,!=2.7.*,!=2.8.*,!=2.9.*,<3.0.0,>=1.34.1 in /home/perc/.local/lib/python3.10/site-packages (from google-cloud-secret-manager) (2.28.1)
+Requirement already satisfied: google-auth!=2.24.0,!=2.25.0,<3.0.0,>=2.14.1 in /home/perc/.local/lib/python3.10/site-packages (from google-cloud-secret-manager) (2.42.0)
+Requirement already satisfied: proto-plus<2.0.0,>=1.22.3 in /home/perc/.local/lib/python3.10/site-packages (from google-cloud-secret-manager) (1.26.1)
+Requirement already satisfied: requests<3.0.0,>=2.18.0 in /usr/lib/python3/dist-packages (from google-api-core[grpc]!=2.0.*,!=2.1.*,!=2.10.*,!=2.2.*,!=2.3.*,!=2.4.*,!=2.5.*,!=2.6.*,!=2.7.*,!=2.8.*,!=2.9.*,<3.0.0,>=1.34.1->google-cloud-secret-manager) (2.25.1)
+Requirement already satisfied: googleapis-common-protos<2.0.0,>=1.56.2 in /home/perc/.local/lib/python3.10/site-packages (from google-api-core[grpc]!=2.0.*,!=2.1.*,!=2.10.*,!=2.2.*,!=2.3.*,!=2.4.*,!=2.5.*,!=2.6.*,!=2.7.*,!=2.8.*,!=2.9.*,<3.0.0,>=1.34.1->google-cloud-secret-manager) (1.71.0)
+Requirement already satisfied: grpcio-status<2.0.0,>=1.33.2 in /home/perc/.local/lib/python3.10/site-packages (from google-api-core[grpc]!=2.0.*,!=2.1.*,!=2.10.*,!=2.2.*,!=2.3.*,!=2.4.*,!=2.5.*,!=2.6.*,!=2.7.*,!=2.8.*,!=2.9.*,<3.0.0,>=1.34.1->google-cloud-secret-manager) (1.76.0)
+Requirement already satisfied: pyasn1-modules>=0.2.1 in /usr/lib/python3/dist-packages (from google-auth!=2.24.0,!=2.25.0,<3.0.0,>=2.14.1->google-cloud-secret-manager) (0.2.1)
+Requirement already satisfied: cachetools<7.0,>=2.0.0 in /home/perc/.local/lib/python3.10/site-packages (from google-auth!=2.24.0,!=2.25.0,<3.0.0,>=2.14.1->google-cloud-secret-manager) (6.2.1)
+Requirement already satisfied: rsa<5,>=3.1.4 in /home/perc/.local/lib/python3.10/site-packages (from google-auth!=2.24.0,!=2.25.0,<3.0.0,>=2.14.1->google-cloud-secret-manager) (4.9.1)
+Requirement already satisfied: typing-extensions~=4.12 in /home/perc/.local/lib/python3.10/site-packages (from grpcio<2.0.0,>=1.33.2->google-cloud-secret-manager) (4.15.0)
+Requirement already satisfied: pyasn1>=0.1.3 in /usr/lib/python3/dist-packages (from rsa<5,>=3.1.4->google-auth!=2.24.0,!=2.25.0,<3.0.0,>=2.14.1->google-cloud-secret-manager) (0.4.8)
+Installing collected packages: zstandard
+Successfully installed zstandard-0.25.0

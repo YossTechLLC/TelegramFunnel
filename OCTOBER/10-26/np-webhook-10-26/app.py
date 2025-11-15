@@ -13,6 +13,7 @@ from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 from google.cloud.sql.connector import Connector
 from typing import Optional
+from urllib.parse import urlparse, parse_qs
 
 app = Flask(__name__)
 
@@ -581,6 +582,39 @@ def verify_ipn_signature(payload: bytes, signature: str) -> bool:
         return False
 
 
+def extract_message_from_success_url(success_url: str) -> Optional[str]:
+    """
+    Extract encrypted message from success_url query parameter.
+
+    Args:
+        success_url: The success_url from NowPayments IPN
+
+    Returns:
+        Encrypted message string or None if not present
+    """
+    try:
+        if not success_url:
+            return None
+
+        # Parse URL and extract query parameters
+        parsed = urlparse(success_url)
+        query_params = parse_qs(parsed.query)
+
+        # Get 'msg' parameter (returns list, take first value)
+        encrypted_msg = query_params.get('msg', [None])[0]
+
+        if encrypted_msg:
+            print(f"💬 [IPN] Found encrypted message in success_url ({len(encrypted_msg)} chars)")
+            return encrypted_msg
+        else:
+            print(f"💬 [IPN] No message parameter in success_url")
+            return None
+
+    except Exception as e:
+        print(f"❌ [IPN] Error extracting message from success_url: {e}")
+        return None
+
+
 # ============================================================================
 # IPN ENDPOINT
 # ============================================================================
@@ -943,6 +977,14 @@ def handle_ipn():
                                                 # Determine payment type
                                                 payment_type = 'donation' if subscription_time_days == 0 else 'subscription'
 
+                                                # Extract encrypted message from success_url if donation
+                                                encrypted_message = None
+                                                if payment_type == 'donation':
+                                                    # Get success_url from IPN data
+                                                    success_url = ipn_data.get('success_url')
+                                                    if success_url:
+                                                        encrypted_message = extract_message_from_success_url(success_url)
+
                                                 # Prepare notification payload
                                                 notification_payload = {
                                                     'open_channel_id': str(open_channel_id),
@@ -956,6 +998,11 @@ def handle_ipn():
                                                         'timestamp': payment_data.get('created_at', 'N/A')
                                                     }
                                                 }
+
+                                                # Add encrypted message to payload for donations
+                                                if payment_type == 'donation' and encrypted_message:
+                                                    notification_payload['encrypted_message'] = encrypted_message
+                                                    print(f"💬 [IPN] Encrypted message included in notification payload")
 
                                                 # Add payment-type-specific data
                                                 if payment_type == 'subscription':

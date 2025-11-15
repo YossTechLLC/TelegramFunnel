@@ -13,6 +13,11 @@ import httpx
 from typing import Dict, Any, Optional
 from google.cloud import secretmanager
 import os
+import sys
+
+# Add shared_utils to path for message encryption
+sys.path.append('/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26')
+from shared_utils.message_encryption import encrypt_donation_message
 
 logger = logging.getLogger(__name__)
 
@@ -252,6 +257,65 @@ class PaymentService:
             return {
                 'success': False,
                 'error': f'Unexpected error: {str(e)}'
+            }
+
+    async def create_donation_invoice(
+        self,
+        user_id: int,
+        amount: float,
+        order_id: str,
+        description: str,
+        donation_message: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create payment invoice for donation with optional encrypted message.
+
+        Args:
+            user_id: Telegram user ID
+            amount: Donation amount in USD
+            order_id: Unique order identifier
+            description: Payment description
+            donation_message: Optional donation message (max 256 chars)
+
+        Returns:
+            Dictionary with invoice creation result
+        """
+        # Validate API key
+        if not self.api_key:
+            logger.error("❌ [PAYMENT] Cannot create invoice - API key not available")
+            return {
+                'success': False,
+                'error': 'Payment provider API key not configured'
+            }
+
+        try:
+            # Build base success URL
+            base_url = os.getenv('BASE_URL', 'https://www.paygateprime.com')
+            success_url = f"{base_url}/payment-processing?order_id={order_id}"
+
+            # Encrypt and append message if provided
+            if donation_message:
+                logger.info(f"💬 [PAYMENT] Including donation message in invoice")
+                encrypted_msg = encrypt_donation_message(donation_message)
+                success_url += f"&msg={encrypted_msg}"
+                logger.info(f"   Encrypted message length: {len(encrypted_msg)} chars")
+
+            # Call parent create_invoice method with constructed success_url
+            result = await self.create_invoice(
+                user_id=user_id,
+                amount=amount,
+                success_url=success_url,
+                order_id=order_id,
+                description=description
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ [PAYMENT] Donation invoice creation failed: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': f'Invoice creation failed: {str(e)}'
             }
 
     def generate_order_id(self, user_id: int, channel_id: str) -> str:

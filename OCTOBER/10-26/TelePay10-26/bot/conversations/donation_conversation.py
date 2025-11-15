@@ -4,12 +4,13 @@ Donation conversation handler using ConversationHandler.
 Multi-step conversation flow for processing donations with numeric keypad.
 """
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
     CallbackQueryHandler,
     MessageHandler,
+    CommandHandler,
     filters
 )
 from bot.utils.keyboards import create_donation_keypad
@@ -17,7 +18,7 @@ from bot.utils.keyboards import create_donation_keypad
 logger = logging.getLogger(__name__)
 
 # Conversation states
-AMOUNT_INPUT, CONFIRM_PAYMENT = range(2)
+AMOUNT_INPUT, MESSAGE_INPUT, CONFIRM_PAYMENT = range(3)
 
 
 async def start_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -152,16 +153,16 @@ async def handle_keypad_input(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def confirm_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Confirm donation and trigger payment gateway.
+    Confirm donation amount and ask for optional message.
 
-    Validates amount, creates payment invoice, and sends payment link to user.
+    Validates amount and prompts user for optional message.
 
     Args:
         update: Telegram update object
         context: Telegram context object
 
     Returns:
-        END state (conversation complete)
+        MESSAGE_INPUT state
     """
     query = update.callback_query
     user = update.effective_user
@@ -205,33 +206,186 @@ async def confirm_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         except Exception as e:
             logger.warning(f"⚠️ [DONATION] Could not delete keypad: {e}")
 
-    # Send confirmation message
+    # Ask for optional message
+    keyboard = [
+        [InlineKeyboardButton("💬 Add Message", callback_data="donation_add_message")],
+        [InlineKeyboardButton("⏭️ Skip Message", callback_data="donation_skip_message")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     await context.bot.send_message(
         chat_id=query.message.chat.id,
         text=f"✅ <b>Donation Amount Confirmed</b>\n\n"
+             f"💰 Amount: <b>${amount_float:.2f}</b>\n\n"
+             f"Would you like to include a message with your donation?\n"
+             f"(Optional, max 256 characters)",
+        parse_mode="HTML",
+        reply_markup=reply_markup
+    )
+
+    return MESSAGE_INPUT
+
+
+async def handle_message_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Handle user's choice to add or skip message.
+
+    Args:
+        update: Telegram update object
+        context: Telegram context object
+
+    Returns:
+        MESSAGE_INPUT state or calls finalize_payment
+    """
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "donation_skip_message":
+        # User chose to skip message
+        logger.info(f"💝 [DONATION] User {update.effective_user.id} skipped message")
+        context.user_data['donation_message'] = None
+        return await finalize_payment(update, context)
+
+    elif query.data == "donation_add_message":
+        # User wants to add a message
+        logger.info(f"💝 [DONATION] User {update.effective_user.id} adding message")
+
+        await query.edit_message_text(
+            "💬 <b>Enter Your Message</b>\n\n"
+            "Please type your message (max 256 characters).\n"
+            "This message will be delivered to the channel owner.\n\n"
+            "💡 <b>Tip:</b> Send /cancel to skip this step",
+            parse_mode="HTML"
+        )
+
+        return MESSAGE_INPUT
+
+
+async def handle_message_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Handle user's text message input.
+
+    Args:
+        update: Telegram update object
+        context: Telegram context object
+
+    Returns:
+        MESSAGE_INPUT state or calls finalize_payment
+    """
+    user = update.effective_user
+    message_text = update.message.text
+
+    # Validate length
+    if len(message_text) > 256:
+        logger.warning(f"⚠️ [DONATION] Message too long: {len(message_text)} chars")
+        await update.message.reply_text(
+            f"⚠️ Message too long ({len(message_text)} characters).\n"
+            f"Please keep it under 256 characters.",
+            parse_mode="HTML"
+        )
+        return MESSAGE_INPUT
+
+    # Store message
+    context.user_data['donation_message'] = message_text
+    logger.info(f"💝 [DONATION] User {user.id} entered message ({len(message_text)} chars)")
+
+    # Proceed to payment
+    return await finalize_payment(update, context)
+
+
+async def finalize_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Finalize payment creation with optional message.
+
+    Args:
+        update: Telegram update object
+        context: Telegram context object
+
+    Returns:
+        END state (conversation complete)
+    """
+    user = update.effective_user
+    amount_float = context.user_data.get('donation_amount')
+    open_channel_id = context.user_data.get('donation_channel_id')
+    donation_message = context.user_data.get('donation_message')
+
+    # Get chat_id (handle both callback query and message)
+    if update.callback_query:
+        chat_id = update.callback_query.message.chat.id
+    else:
+        chat_id = update.message.chat.id
+
+    logger.info(f"💝 [DONATION] Finalizing payment for user {user.id}")
+    logger.info(f"   Amount: ${amount_float:.2f}")
+    logger.info(f"   Channel: {open_channel_id}")
+    logger.info(f"   Message: {'Yes' if donation_message else 'No'}")
+
+    # Send processing message
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"✅ <b>Payment Processing</b>\n\n"
              f"💰 Amount: <b>${amount_float:.2f}</b>\n"
-             f"📍 Channel: <code>{open_channel_id}</code>\n\n"
-             f"⏳ Preparing your payment gateway...",
+             f"📍 Channel: <code>{open_channel_id}</code>\n"
+             f"💬 Message: {'✅ Included' if donation_message else '❌ None'}\n\n"
+             f"⏳ Creating your payment link...",
         parse_mode="HTML"
     )
 
-    # TODO: Trigger payment gateway
-    # Get payment service from bot_data
-    # payment_service = context.application.bot_data.get('payment_service')
-    # if payment_service:
-    #     result = await payment_service.create_invoice(
-    #         user_id=user.id,
-    #         amount=amount_float,
-    #         order_id=f"DONATE-{user.id}-{open_channel_id}",
-    #         description=f"Donation for {open_channel_id}"
-    #     )
-    #     if result['success']:
-    #         await context.bot.send_message(
-    #             chat_id=query.message.chat.id,
-    #             text=f"💳 Payment link ready!\n\n{result['invoice_url']}"
-    #         )
+    # Get payment service from application
+    payment_service = context.application.bot_data.get('payment_service')
 
-    logger.info(f"✅ [DONATION] Donation flow complete for user {user.id}")
+    if not payment_service:
+        logger.error("❌ [DONATION] Payment service not available")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="❌ Payment service temporarily unavailable. Please try again later."
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    # Create order_id
+    order_id = f"PGP-{user.id}|{open_channel_id}"
+
+    # Create invoice with encrypted message in success_url
+    try:
+        result = await payment_service.create_donation_invoice(
+            user_id=user.id,
+            amount=amount_float,
+            order_id=order_id,
+            description=f"Donation for {open_channel_id}",
+            donation_message=donation_message
+        )
+
+        if result['success']:
+            invoice_url = result['invoice_url']
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"💳 <b>Payment Link Ready!</b>\n\n"
+                     f"Click the link below to complete your donation:\n\n"
+                     f"{invoice_url}\n\n"
+                     f"✅ Secure payment via NowPayments",
+                parse_mode="HTML"
+            )
+
+            logger.info(f"✅ [DONATION] Invoice created: {invoice_url}")
+        else:
+            error_msg = result.get('error', 'Unknown error')
+            logger.error(f"❌ [DONATION] Invoice creation failed: {error_msg}")
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ Failed to create payment link.\n\n"
+                     f"Error: {error_msg}\n\n"
+                     f"Please try again or contact support."
+            )
+
+    except Exception as e:
+        logger.error(f"❌ [DONATION] Exception during invoice creation: {e}", exc_info=True)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="❌ An error occurred while creating your payment link. Please try again."
+        )
 
     # Clean up user data
     context.user_data.clear()
@@ -336,9 +490,16 @@ def create_donation_conversation_handler() -> ConversationHandler:
             AMOUNT_INPUT: [
                 CallbackQueryHandler(handle_keypad_input, pattern=r'^donate_')
             ],
+            MESSAGE_INPUT: [
+                # Handle button choices
+                CallbackQueryHandler(handle_message_choice, pattern=r'^donation_(add|skip)_message$'),
+                # Handle text input
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message_text)
+            ],
         },
         fallbacks=[
             CallbackQueryHandler(cancel_donation, pattern=r'^donate_cancel$'),
+            CommandHandler('cancel', cancel_donation)
         ],
         conversation_timeout=300,  # 5 minutes
         name='donation_conversation',

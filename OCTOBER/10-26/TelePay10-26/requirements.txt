@@ -37,3 +37,6 @@ google-cloud-logging>=3.5.0
 
 # Utilities
 pytz>=2023.3
+
+# Message Encryption
+zstandard>=0.22.0

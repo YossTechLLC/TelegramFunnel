@@ -167,13 +167,23 @@ class NotificationHandler:
 
         elif payment_type == 'donation':
             # Donation payment notification
+            donor_message = payment_data.get('donor_message')  # Get decrypted message
+
+            # Build message section
+            message_section = ""
+            if donor_message:
+                # Escape HTML special characters
+                import html
+                escaped_message = html.escape(donor_message)
+                message_section = f"\n<b>💬 Message from Donor:</b>\n<i>\"{escaped_message}\"</i>\n"
+
             message = f"""💝 <b>New Donation Received!</b>
 
 <b>Channel:</b> {channel_title}
 <b>Channel ID:</b> <code>{open_channel_id}</code>
 
 <b>Donor:</b> {user_display}
-
+{message_section}
 {payout_section}
 
 <b>Timestamp:</b> {timestamp}

@@ -12,6 +12,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
+# Copy shared_utils from local directory (copied during build)
+COPY shared_utils ./shared_utils
+
 # Copy the app code
 COPY cloudtasks_client.py .
 COPY app.py .

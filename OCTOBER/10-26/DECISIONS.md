@@ -1,12 +1,135 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-15 - **Domain Routing: Redirect Apex to WWW** ✅
+**Last Updated:** 2025-11-14 - **Donation Message Encryption Strategy** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: Donation Message Encryption Strategy ✅
+
+**Decision:** Use zstd compression + base64url encoding instead of full encryption for donation messages
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- Need to allow donors to include messages with donations
+- Messages must be passed through NowPayments success_url (URL parameter)
+- Messages should be obfuscated from casual inspection
+- Zero-persistence requirement - never store messages in database
+- Maximum message length: 256 characters
+
+**Options Considered:**
+
+1. **Fernet Symmetric Encryption**
+   - Pros: Strong encryption, built-in key derivation
+   - Cons: Adds 100+ chars overhead, not URL-safe by default, overkill for ephemeral messages
+
+2. **AES-GCM Encryption**
+   - Pros: Industry standard, authenticated encryption
+   - Cons: Complex key management, larger payload size, unnecessary for public donation messages
+
+3. **zstd Compression + base64url** ✅ CHOSEN
+   - Pros:
+     - Excellent compression ratio (5.71x for repetitive text)
+     - URL-safe encoding
+     - Fast compression/decompression
+     - Deterministic (same message = same output)
+     - Zero dependencies on secret keys
+   - Cons:
+     - Not true encryption (obfuscation only)
+     - Reversible if someone intercepts the message
+
+**Rationale:**
+1. **Ephemeral Nature**: Messages are single-delivery only, never stored
+2. **Low Sensitivity**: Public donation messages don't require military-grade encryption
+3. **URL Length Constraints**: NowPayments success_url has practical length limits
+4. **Simplicity**: No key management, rotation, or secret storage needed
+5. **Performance**: zstd level 10 is fast and achieves excellent compression
+6. **Acceptable Security**: Obfuscation sufficient for casual privacy
+
+**Implementation Details:**
+- **Compression**: zstd level 10 (max compression)
+- **Encoding**: base64url (URL-safe, no padding)
+- **Max Input**: 256 characters UTF-8
+- **Transport**: Embedded in success_url as `?msg=<compressed>`
+- **Delivery**: Single notification via GCNotificationService
+- **Persistence**: Zero - message discarded after delivery
+
+**Security Tradeoffs Accepted:**
+- ❌ Not end-to-end encrypted
+- ❌ Visible in NowPayments dashboard
+- ❌ No HMAC signature for tampering detection
+- ✅ Good enough for ephemeral, low-sensitivity content
+- ✅ Zero attack surface from stored messages
+- ✅ No secret key exposure risk
+
+**Compression Performance:**
+- Test message (256 chars repetitive): Compressed to ~26 chars (5.71x ratio)
+- Special characters/emojis: Preserved correctly
+- Empty messages: Handled gracefully
+- Oversized messages: Rejected at input validation
+
+**Architecture Benefits:**
+- ✅ Shared utility module (`shared_utils/message_encryption.py`)
+- ✅ Reusable across all services
+- ✅ Unit tested with 100% pass rate
+- ✅ Simple to maintain and debug
+- ✅ No external dependencies beyond zstandard library
+
+**Files Implementing Decision:**
+- `/shared_utils/message_encryption.py` - Core utility
+- `TelePay10-26/bot/conversations/donation_conversation.py` - Message collection
+- `TelePay10-26/services/payment_service.py` - Encryption before NowPayments
+- `np-webhook-10-26/app.py` - Extraction from IPN callback
+- `GCNotificationService-10-26/service.py` - Decryption for notification
+- `GCNotificationService-10-26/notification_handler.py` - Message formatting
+
+**Related Documentation:**
+- `DONATION_MESSAGE_ARCHITECTURE_CHECKLIST_PROGRESS.md` - Implementation progress
+- `TOOLS_SCRIPTS_TESTS/tests/test_message_encryption.py` - Unit tests
+
+---
+
+## 2025-11-15: Service Cleanup Strategy - Delete Deprecated Services ✅
+
+**Decision:** Immediately delete deprecated Cloud Run services instead of keeping them running
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- Found `gcregister10-26` still running with deprecated code
+- Service consuming 4CPU/8GB RAM (expensive resources)
+- Logs showed old CAPTCHA implementation
+- Newer service `gcregisterapi-10-26` already deployed with correct code
+
+**Rationale:**
+1. **Cost Optimization**: 4CPU/8GB instance is expensive for unused service
+2. **Code Confusion**: Having multiple versions of same service causes confusion
+3. **Security**: Old code may have vulnerabilities patched in newer versions
+4. **Operational Clarity**: One service = one source of truth
+5. **Resource Management**: Free up resources for active services
+
+**Implementation:**
+- Created deployment script that:
+  1. Checks for deprecated service existence
+  2. Deletes deprecated service if found
+  3. Builds fresh Docker image from current source
+  4. Deploys with correct configuration
+- Naming convention to track versions: `{service-name}-10-26` indicates October 26 codebase
+
+**Benefits Realized:**
+- ✅ Saved 4CPU/8GB RAM resources
+- ✅ Eliminated code version confusion
+- ✅ Single source of truth for registration API
+- ✅ Automated deployment process for future updates
+
+**Related Services:**
+- Deleted: `gcregister10-26` (deprecated Flask app with CAPTCHA)
+- Active: `gcregisterapi-10-26` (current REST API for registration)
+- Note: `GCRegisterWeb-10-26` is separate React frontend served from Cloud Storage
+
+---
 
 ## 2025-11-15: Domain Routing Strategy - Redirect Apex to WWW ✅
 

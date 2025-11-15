@@ -14,6 +14,9 @@ import logging
 import sys
 import os
 
+# Import message decryption from shared_utils (copied into container during build)
+from shared_utils.message_encryption import decrypt_donation_message
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -126,6 +129,7 @@ def create_app():
             open_channel_id = data['open_channel_id']
             payment_type = data['payment_type']
             payment_data = data['payment_data']
+            encrypted_message = data.get('encrypted_message')  # NEW: Optional encrypted message
 
             # Validate payment_type
             if payment_type not in ['subscription', 'donation']:
@@ -135,6 +139,22 @@ def create_app():
             logger.info(f"📬 [REQUEST] Notification request received")
             logger.info(f"   Channel ID: {open_channel_id}")
             logger.info(f"   Payment Type: {payment_type}")
+            logger.info(f"   Encrypted Message: {'Yes' if encrypted_message else 'No'}")
+
+            # Decrypt message if present
+            decrypted_message = None
+            if encrypted_message:
+                try:
+                    decrypted_message = decrypt_donation_message(encrypted_message)
+                    logger.info(f"✅ [DECRYPT] Successfully decrypted message ({len(decrypted_message)} chars)")
+                except Exception as e:
+                    logger.error(f"❌ [DECRYPT] Failed to decrypt message: {e}")
+                    # Continue without message rather than failing entire notification
+                    decrypted_message = None
+
+            # Add decrypted message to payment_data
+            if decrypted_message:
+                payment_data['donor_message'] = decrypted_message
 
             # Process notification
             handler = app.config['notification_handler']

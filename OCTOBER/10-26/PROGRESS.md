@@ -1,8 +1,201 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-15 - **Domain Routing Fix: paygateprime.com → www.paygateprime.com** ⏳
+**Last Updated:** 2025-11-14 - **Donation Message Feature Deployed** ✅
 
 ## Recent Updates
+
+## 2025-11-14: Donation Message Feature - Complete Implementation ✅
+
+**Action:** Implemented and deployed donation message feature allowing donors to include encrypted messages with donations
+**Status:** ✅ **FULLY DEPLOYED - PRODUCTION READY**
+
+**Feature Overview:**
+- Donors can include optional messages (up to 256 characters) with donations
+- Messages compressed with zstd (level 10) achieving 5.71x compression ratio
+- Zero-persistence architecture - messages never stored in database
+- Single delivery via GCNotificationService to channel owner
+- URL-safe base64url encoding for transport
+
+**Implementation Phases:**
+
+**Phase 1: Encryption Utility** ✅
+- Created `/shared_utils/message_encryption.py` with zstd compression
+- Functions: `encrypt_donation_message()`, `decrypt_donation_message()`
+- Added `zstandard>=0.22.0` dependency to all service requirements.txt
+
+**Phase 2: Donation Conversation Flow** ✅
+- Modified `TelePay10-26/bot/conversations/donation_conversation.py`
+- Added MESSAGE_INPUT state to conversation handler
+- Created handlers: `handle_message_choice()`, `handle_message_text()`, `finalize_payment()`
+- Users can choose to skip or include message after confirming donation amount
+
+**Phase 3: Payment Service Update** ✅
+- Updated `TelePay10-26/services/payment_service.py`
+- Created `create_donation_invoice()` method
+- Encrypts message and appends to success_url as `?msg=<encrypted>`
+
+**Phase 4: IPN Webhook Handler** ✅
+- Updated `np-webhook-10-26/app.py`
+- Added `extract_message_from_success_url()` helper function
+- Extracts encrypted message from IPN callback and includes in notification payload
+
+**Phase 5: Notification Service** ✅
+- Updated `GCNotificationService-10-26/service.py` to decrypt messages
+- Modified `notification_handler.py` to format donor messages in notifications
+- HTML escape special characters, display in notification to channel owner
+
+**Phase 6: Testing** ✅
+- Created comprehensive unit tests in `test_message_encryption.py`
+- All 6 tests passed:
+  - Basic encryption/decryption ✅
+  - Max length (256 chars) ✅
+  - Empty message handling ✅
+  - Special characters & emojis ✅
+  - Compression ratio (5.71x!) ✅
+  - Length validation (>256 chars rejected) ✅
+
+**Phase 7: Deployment** ✅
+- Deployed `np-webhook-10-26` (revision 00020-7lm)
+  - URL: https://np-webhook-10-26-pjxwjsdktq-uc.a.run.app
+- Deployed `gcnotificationservice-10-26` (revision 00007-sxt)
+  - URL: https://gcnotificationservice-10-26-pjxwjsdktq-uc.a.run.app
+- TelePay10-26 code updated (VM-based, manual restart may be required)
+
+**Deployment Issues Resolved:**
+- **Docker Build Context Issue:** Fixed `COPY ../shared_utils` by copying shared_utils into each service directory
+- **Updated Dockerfiles:** Changed to `COPY shared_utils ./shared_utils` (local copy)
+- Both services deployed successfully with shared utilities
+
+**Files Created:**
+- `/shared_utils/__init__.py`
+- `/shared_utils/message_encryption.py`
+- `/TOOLS_SCRIPTS_TESTS/tests/test_message_encryption.py`
+- `/DONATION_MESSAGE_ARCHITECTURE_CHECKLIST_PROGRESS.md`
+- `/GCNotificationService-10-26/shared_utils/` (local copy)
+- `/np-webhook-10-26/shared_utils/` (local copy)
+
+**Files Modified:**
+- `TelePay10-26/requirements.txt` - Added zstandard
+- `TelePay10-26/bot/conversations/donation_conversation.py` - Message flow
+- `TelePay10-26/services/payment_service.py` - Donation invoice encryption
+- `np-webhook-10-26/requirements.txt` - Added zstandard
+- `np-webhook-10-26/Dockerfile` - Copy shared_utils
+- `np-webhook-10-26/app.py` - Message extraction
+- `GCNotificationService-10-26/requirements.txt` - Added zstandard
+- `GCNotificationService-10-26/Dockerfile` - Copy shared_utils
+- `GCNotificationService-10-26/service.py` - Message decryption
+- `GCNotificationService-10-26/notification_handler.py` - Message formatting
+
+**Security Notes:**
+- ✅ Compression obfuscation (not encryption) - good enough for ephemeral messages
+- ✅ Zero-persistence - messages never stored
+- ✅ Single delivery - notification sent once
+- ✅ URL-safe encoding - compatible with NowPayments success_url
+- ⚠️ Not end-to-end encrypted (acceptable for public donation messages)
+
+**Next Steps:**
+- ⏳ Monitor logs for first donation with message in production
+- ⏳ Restart TelePay10-26 service if needed
+
+---
+
+## 2025-11-15: Emergency Site Restoration - SSL Certificate Fixed ✅
+
+**Action:** Diagnosed and fixed site outage caused by SSL certificate provisioning failure
+**Status:** ✅ **SITE RESTORED - BOTH DOMAINS WORKING**
+
+**Crisis Timeline:**
+- 01:41 PST: Discovered both `paygateprime.com` and `www.paygateprime.com` returning `ERR_CONNECTION_CLOSED`
+- 01:42-01:48 PST: Root cause analysis completed
+- 01:49 PST: Temporary fix deployed
+- 01:50 PST: **SITE BACK ONLINE** ✅
+
+**Root Cause:**
+- Deleting `gcregister10-26` Cloud Run service removed backend for old Cloud Run IPs (216.239.x.x)
+- SSL certificate `paygateprime-ssl-combined` was still provisioning
+- Google SSL verification couldn't reach apex domain → `paygateprime.com` status: `FAILED_NOT_VISIBLE`
+- Certificate stuck in `PROVISIONING` state
+- HTTPS connections failed with SSL handshake error
+- **Result:** Complete site outage
+
+**Solution Implemented:**
+1. ✅ Switched HTTPS proxy to use existing ACTIVE certificate (`www-paygateprime-ssl`)
+2. ✅ Deleted failed combined certificate (`paygateprime-ssl-combined`)
+3. ✅ Cleaned up temporary certificate (`www-paygateprime-temp`)
+4. ✅ Verified both domains working
+
+**Current Status:**
+- ✅ `www.paygateprime.com` - HTTPS working (HTTP/2 200 OK)
+- ✅ `paygateprime.com` - HTTP 301 redirect to www, then HTTPS
+- ✅ SSL Certificate: `www-paygateprime-ssl` (ACTIVE since Oct 28)
+- ✅ Full site functionality restored
+
+**Lesson Learned:**
+- **NEVER delete infrastructure (Cloud Run services with domain mappings) while SSL certificates are provisioning**
+- **ALWAYS verify SSL certificates are ACTIVE before removing old infrastructure**
+- **Order of operations matters:** Build new → Provision SSL → Wait for ACTIVE → Update DNS → Delete old
+
+**Documentation Created:**
+- `SITE_DOWN_ROOT_CAUSE_ANALYSIS.md` - Complete technical analysis and solution paths
+
+---
+
+## 2025-11-15: Deprecated Service Cleanup & GCRegisterAPI Redeployment ✅
+
+**Action:** Removed deprecated `gcregister10-26` service and redeployed `gcregisterapi-10-26` with correct configuration
+**Status:** ✅ **COMPLETED**
+
+**Problem Identified:**
+- `gcregister10-26` (deprecated) was still deployed at `https://gcregister10-26-291176869049.us-central1.run.app`
+- Service was using 4CPU/8GB RAM (expensive resources)
+- Logs showed deprecated CAPTCHA implementation (`What is 6 + 6?`)
+- This was the OLD registration code that should have been removed
+
+**Actions Taken:**
+
+1. **✅ Deleted Deprecated Service**
+   - Removed `gcregister10-26` from Cloud Run
+   - Freed up 4CPU/8GB RAM resources
+   - Eliminated confusion between old/new services
+
+2. **✅ Redeployed GCRegisterAPI-10-26**
+   - Built fresh Docker image from current source code
+   - Deployed with correct configuration:
+     - CPU: 4 vCPU
+     - Memory: 8Gi (8GB RAM)
+     - Concurrency: 80
+     - Max instances: 2 (quota limit: 4CPU×2=8 CPU total)
+     - Cloud SQL connection: telepay-459221:us-central1:telepaypsql
+   - All secrets properly configured:
+     - JWT_SECRET_KEY
+     - CORS_ORIGIN
+     - CLOUD_SQL_CONNECTION_NAME
+     - DATABASE_NAME_SECRET
+     - DATABASE_USER_SECRET
+     - DATABASE_PASSWORD_SECRET
+     - SIGNUP_SECRET_KEY
+     - SENDGRID_API_KEY
+     - FROM_EMAIL
+     - FROM_NAME
+     - BASE_URL
+   - Environment: production
+
+3. **✅ Created Deployment Script**
+   - Location: `TOOLS_SCRIPTS_TESTS/scripts/redeploy_gcregisterapi.sh`
+   - Automates deletion of deprecated service
+   - Builds and deploys fresh image
+   - Sets all environment variables and secrets
+
+**Verification:**
+- ✅ `gcregister10-26` returns `ERROR: Cannot find service` (successfully deleted)
+- ✅ `gcregisterapi-10-26` running at: https://gcregisterapi-10-26-291176869049.us-central1.run.app
+- ✅ Service logs show Flask app starting correctly
+- ✅ All secrets mounted correctly
+
+**Files Modified:**
+- Created: `OCTOBER/10-26/TOOLS_SCRIPTS_TESTS/scripts/redeploy_gcregisterapi.sh`
+
+---
 
 ## 2025-11-15: Domain Routing Fix - Apex Domain Redirect Configuration ⏳
 
