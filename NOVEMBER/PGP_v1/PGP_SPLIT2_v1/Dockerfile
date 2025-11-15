@@ -25,6 +25,10 @@ WORKDIR /app
 # Copy Python dependencies from builder
 COPY --from=builder /root/.local /root/.local
 
+# Install PGP_COMMON shared library
+COPY PGP_COMMON/ /app/PGP_COMMON/
+RUN pip install -e /app/PGP_COMMON
+
 # Copy application code
 COPY pgp_split2_v1.py .
 COPY config_manager.py .

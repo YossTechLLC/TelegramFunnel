@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 """
-Database Manager for GCSplit2-10-26 (ETH→USDT Conversion Service).
+Database Manager for PGP_SPLIT2_v1 (ETH→USDT Conversion Service).
 Handles database connections and operations for updating payout_accumulation records.
 """
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-from google.cloud.sql.connector import Connector
+from PGP_COMMON.database import BaseDatabaseManager
 
 
-class DatabaseManager:
+class DatabaseManager(BaseDatabaseManager):
     """
-    Manages database connections and operations for GCSplit2-10-26.
+    Manages database connections and operations for PGP_SPLIT2_v1.
+    Inherits common methods from BaseDatabaseManager.
     """
 
     def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str):
@@ -24,37 +25,13 @@ class DatabaseManager:
             db_user: Database user
             db_password: Database password
         """
-        self.instance_connection_name = instance_connection_name
-        self.db_name = db_name
-        self.db_user = db_user
-        self.db_password = db_password
-        self.connector = Connector()
-
-        print(f"🗄️ [DATABASE] DatabaseManager initialized")
-        print(f"📊 [DATABASE] Instance: {instance_connection_name}")
-        print(f"📊 [DATABASE] Database: {db_name}")
-
-    def get_connection(self):
-        """
-        Create and return a database connection using Cloud SQL Connector.
-
-        Returns:
-            Database connection object or None if failed
-        """
-        try:
-            connection = self.connector.connect(
-                self.instance_connection_name,
-                "pg8000",
-                user=self.db_user,
-                password=self.db_password,
-                db=self.db_name
-            )
-            print(f"🔗 [DATABASE] Connection established successfully")
-            return connection
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Connection failed: {e}")
-            return None
+        super().__init__(
+            instance_connection_name=instance_connection_name,
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password,
+            service_name="PGP_SPLIT2_v1"
+        )
 
     def update_accumulation_with_conversion(
         self,
