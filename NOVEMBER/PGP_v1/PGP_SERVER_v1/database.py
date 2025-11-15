@@ -2,114 +2,36 @@
 import psycopg2
 import os
 from typing import Optional, Tuple, List, Dict, Any
-from google.cloud import secretmanager
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
-# 🆕 NEW_ARCHITECTURE: Import ConnectionPool
+# 🆕 NEW_ARCHITECTURE: Import ConnectionPool and ConfigManager
 from models import init_connection_pool
+from config_manager import ConfigManager
 
-def fetch_database_host() -> str:
-    """Fetch database host from Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_path = os.getenv("DATABASE_HOST_SECRET")
-        if not secret_path:
-            raise ValueError("Environment variable DATABASE_HOST_SECRET is not set.")
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"❌ Error fetching DATABASE_HOST_SECRET: {e}")
-        raise
-
-def fetch_database_name() -> str:
-    """Fetch database name from Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_path = os.getenv("DATABASE_NAME_SECRET")
-        if not secret_path:
-            raise ValueError("Environment variable DATABASE_NAME_SECRET is not set.")
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"❌ Error fetching DATABASE_NAME_SECRET: {e}")
-        raise
-
-def fetch_database_user() -> str:
-    """Fetch database user from Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_path = os.getenv("DATABASE_USER_SECRET")
-        if not secret_path:
-            raise ValueError("Environment variable DATABASE_USER_SECRET is not set.")
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"❌ Error fetching DATABASE_USER_SECRET: {e}")
-        raise
-
-def fetch_database_password() -> str:
-    """Fetch database password from Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_path = os.getenv("DATABASE_PASSWORD_SECRET")
-        if not secret_path:
-            # 🔐 SECURITY FIX: Fail hard instead of returning None
-            raise ValueError("Environment variable DATABASE_PASSWORD_SECRET is not set.")
-        response = client.access_secret_version(request={"name": secret_path})
-        return response.payload.data.decode("UTF-8")
-    except Exception as e:
-        print(f"❌ Error fetching DATABASE_PASSWORD_SECRET: {e}")
-        # 🔐 SECURITY FIX: Fail hard instead of returning None
-        raise
-
-def fetch_cloud_sql_connection_name() -> str:
-    """Fetch Cloud SQL connection name from Secret Manager."""
-    try:
-        client = secretmanager.SecretManagerServiceClient()
-        secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
-        if not secret_path:
-            # 🔐 SECURITY FIX: Fail hard instead of silent fallback (keeping backward compatibility)
-            # Use default but warn loudly
-            print("⚠️ WARNING: CLOUD_SQL_CONNECTION_NAME not set, using default: telepay-459221:us-central1:telepaypsql")
-            print("⚠️ WARNING: This is deprecated. Please set CLOUD_SQL_CONNECTION_NAME environment variable.")
-            return "telepay-459221:us-central1:telepaypsql"
-
-        # Check if it's already in correct format (PROJECT:REGION:INSTANCE)
-        if ':' in secret_path and not secret_path.startswith('projects/'):
-            print(f"✅ CLOUD_SQL_CONNECTION_NAME already in correct format: {secret_path}")
-            return secret_path
-
-        # Otherwise, fetch from Secret Manager
-        response = client.access_secret_version(request={"name": secret_path})
-        connection_name = response.payload.data.decode("UTF-8").strip()
-        print(f"✅ Fetched Cloud SQL connection name from Secret Manager: {connection_name}")
-        return connection_name
-    except Exception as e:
-        print(f"❌ Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
-        # 🔐 SECURITY FIX: Raise exception instead of silent fallback
-        raise RuntimeError(f"Failed to fetch Cloud SQL connection name: {e}")
-
-# Database configuration - now using Secret Manager
-DB_HOST = fetch_database_host()
-DB_PORT = 5432  # This can remain hardcoded as it's not sensitive
-DB_NAME = fetch_database_name()
-DB_USER = fetch_database_user()
-DB_PASSWORD = fetch_database_password()
-DB_CLOUD_SQL_CONNECTION_NAME = fetch_cloud_sql_connection_name()
 
 class DatabaseManager:
-    def __init__(self):
+    def __init__(self, config_manager: Optional[ConfigManager] = None):
         """
         Initialize DatabaseManager with connection pooling.
 
-        🆕 NEW_ARCHITECTURE: Now uses ConnectionPool for better performance and resource management.
+        🆕 NEW_ARCHITECTURE: Now accepts ConfigManager for credential fetching.
+        Removes module-level secret fetching, uses ConfigManager instead.
+
+        Args:
+            config_manager: ConfigManager instance (creates new one if not provided)
         """
-        self.host = DB_HOST
-        self.port = DB_PORT
-        self.dbname = DB_NAME
-        self.user = DB_USER
-        self.password = DB_PASSWORD
+        # Initialize or use provided config manager
+        if config_manager is None:
+            config_manager = ConfigManager()
+
+        # Fetch database credentials from ConfigManager
+        self.host = config_manager.fetch_database_host()
+        self.port = 5432  # This can remain hardcoded as it's not sensitive
+        self.dbname = config_manager.fetch_database_name()
+        self.user = config_manager.fetch_database_user()
+        self.password = config_manager.fetch_database_password()
+        connection_name = config_manager.fetch_cloud_sql_connection_name()
 
         # Validate that critical credentials are available
         if not self.password:
@@ -120,7 +42,7 @@ class DatabaseManager:
         # 🆕 NEW_ARCHITECTURE: Initialize connection pool
         try:
             self.pool = init_connection_pool({
-                'instance_connection_name': DB_CLOUD_SQL_CONNECTION_NAME,
+                'instance_connection_name': connection_name,
                 'database': self.dbname,
                 'user': self.user,
                 'password': self.password,
@@ -133,6 +55,7 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ [DATABASE] Failed to initialize connection pool: {e}")
             raise
+
 
     def get_connection(self):
         """
