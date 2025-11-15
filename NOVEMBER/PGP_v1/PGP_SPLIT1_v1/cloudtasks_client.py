@@ -29,7 +29,7 @@ class CloudTasksClient(BaseCloudTasksClient):
             service_name="PGP_SPLIT1_v1"
         )
 
-    def enqueue_gcsplit2_estimate_request(
+    def enqueue_pgp_split2_estimate_request(
         self,
         queue_name: str,
         target_url: str,
@@ -63,7 +63,7 @@ class CloudTasksClient(BaseCloudTasksClient):
             print(f"❌ [CLOUD_TASKS] Error enqueueing estimate request: {e}")
             return None
 
-    def enqueue_gcsplit1_estimate_response(
+    def enqueue_pgp_split1_estimate_response(
         self,
         queue_name: str,
         target_url: str,
@@ -97,7 +97,7 @@ class CloudTasksClient(BaseCloudTasksClient):
             print(f"❌ [CLOUD_TASKS] Error enqueueing estimate response: {e}")
             return None
 
-    def enqueue_gcsplit3_swap_request(
+    def enqueue_pgp_split3_swap_request(
         self,
         queue_name: str,
         target_url: str,
@@ -131,7 +131,7 @@ class CloudTasksClient(BaseCloudTasksClient):
             print(f"❌ [CLOUD_TASKS] Error enqueueing swap request: {e}")
             return None
 
-    def enqueue_gcsplit1_swap_response(
+    def enqueue_pgp_split1_swap_response(
         self,
         queue_name: str,
         target_url: str,

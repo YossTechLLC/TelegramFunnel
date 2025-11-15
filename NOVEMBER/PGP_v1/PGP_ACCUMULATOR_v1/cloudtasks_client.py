@@ -33,7 +33,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCAccumulator → GCSplit2 (ETH→USDT Conversion Estimate)
     # ========================================================================
 
-    def enqueue_gcsplit2_conversion(
+    def enqueue_pgp_split2_conversion(
         self,
         queue_name: str,
         target_url: str,
@@ -74,7 +74,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCAccumulator → GCSplit3 (ETH→USDT Swap Creation)
     # ========================================================================
 
-    def enqueue_gcsplit3_eth_to_usdt_swap(
+    def enqueue_pgp_split3_eth_to_usdt_swap(
         self,
         queue_name: str,
         target_url: str,
@@ -105,7 +105,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCAccumulator → GCHostPay1 (Swap Execution)
     # ========================================================================
 
-    def enqueue_gchostpay1_execution(
+    def enqueue_pgp_hostpay1_execution(
         self,
         queue_name: str,
         target_url: str,

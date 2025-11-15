@@ -390,7 +390,7 @@ def execute_eth_payment():
                 print(f"📤 [ENDPOINT] Routing to: {target_url}")
 
             # Enqueue response to appropriate service
-            task_name = cloudtasks_client.enqueue_gchostpay1_payment_response(
+            task_name = cloudtasks_client.enqueue_pgp_hostpay1_payment_response(
                 queue_name=queue_name,
                 target_url=target_url,
                 encrypted_token=encrypted_response_token
@@ -470,7 +470,7 @@ def execute_eth_payment():
                         "unique_id": unique_id
                     }), 500
 
-                retry_task = cloudtasks_client.enqueue_gchostpay3_retry(
+                retry_task = cloudtasks_client.enqueue_pgp_hostpay3_retry(
                     queue_name=gchostpay3_retry_queue,
                     target_url=f"{gchostpay3_url}/",
                     encrypted_token=retry_token,

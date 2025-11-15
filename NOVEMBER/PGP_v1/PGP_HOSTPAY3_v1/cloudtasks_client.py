@@ -40,7 +40,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCHostPay1 → GCHostPay2 (Status Check Request)
     # ========================================================================
 
-    def enqueue_gchostpay2_status_check(
+    def enqueue_pgp_hostpay2_status_check(
         self,
         queue_name: str,
         target_url: str,
@@ -71,7 +71,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCHostPay1 → GCHostPay3 (Payment Execution Request)
     # ========================================================================
 
-    def enqueue_gchostpay3_payment_execution(
+    def enqueue_pgp_hostpay3_payment_execution(
         self,
         queue_name: str,
         target_url: str,
@@ -102,7 +102,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCHostPay2 → GCHostPay1 (Status Check Response)
     # ========================================================================
 
-    def enqueue_gchostpay1_status_response(
+    def enqueue_pgp_hostpay1_status_response(
         self,
         queue_name: str,
         target_url: str,
@@ -133,7 +133,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCHostPay3 → GCHostPay1 (Payment Execution Response)
     # ========================================================================
 
-    def enqueue_gchostpay1_payment_response(
+    def enqueue_pgp_hostpay1_payment_response(
         self,
         queue_name: str,
         target_url: str,
@@ -164,7 +164,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # GCHostPay3 → GCHostPay3 (Self-Retry After Failure)
     # ========================================================================
 
-    def enqueue_gchostpay3_retry(
+    def enqueue_pgp_hostpay3_retry(
         self,
         queue_name: str,
         target_url: str,

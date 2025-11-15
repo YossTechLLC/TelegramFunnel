@@ -296,7 +296,7 @@ def check_threshold():
                 "message": "Token encryption failed"
             }), 500
 
-        task_name = cloudtasks_client.enqueue_gchostpay1_batch_execution(
+        task_name = cloudtasks_client.enqueue_pgp_hostpay1_batch_execution(
             queue_name=gchostpay1_batch_queue,
             target_url=f"{gchostpay1_url}/",
             encrypted_token=encrypted_token

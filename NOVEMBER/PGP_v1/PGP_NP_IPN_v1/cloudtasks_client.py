@@ -33,7 +33,7 @@ class CloudTasksClient(BaseCloudTasksClient):
     # NP-IPN → Orchestrator (Validated Payment)
     # ========================================================================
 
-    def enqueue_gcwebhook1_validated_payment(
+    def enqueue_pgp_orchestrator_validated_payment(
         self,
         queue_name: str,
         target_url: str,

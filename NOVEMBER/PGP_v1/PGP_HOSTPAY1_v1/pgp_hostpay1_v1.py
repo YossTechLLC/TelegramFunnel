@@ -247,7 +247,7 @@ def _enqueue_delayed_callback_check(
         print(f"📡 [RETRY_ENQUEUE] Enqueueing retry to: {retry_url}")
 
         # Enqueue retry task with delay
-        task_name = cloudtasks_client.enqueue_gchostpay1_retry_callback(
+        task_name = cloudtasks_client.enqueue_pgp_hostpay1_retry_callback(
             queue_name=gchostpay1_response_queue,
             target_url=retry_url,
             encrypted_token=retry_token,
@@ -430,7 +430,7 @@ def main_webhook():
             print(f"❌ [ENDPOINT_1] GCHostPay2 configuration missing")
             abort(500, "Service configuration error")
 
-        task_name = cloudtasks_client.enqueue_gchostpay2_status_check(
+        task_name = cloudtasks_client.enqueue_pgp_hostpay2_status_check(
             queue_name=gchostpay2_queue,
             target_url=gchostpay2_url,
             encrypted_token=encrypted_token
@@ -567,7 +567,7 @@ def status_verified():
             print(f"❌ [ENDPOINT_2] GCHostPay3 configuration missing")
             abort(500, "Service configuration error")
 
-        task_name = cloudtasks_client.enqueue_gchostpay3_payment_execution(
+        task_name = cloudtasks_client.enqueue_pgp_hostpay3_payment_execution(
             queue_name=gchostpay3_queue,
             target_url=gchostpay3_url,
             encrypted_token=encrypted_token_payment

@@ -202,7 +202,7 @@ def process_eth_client_swap():
             print(f"❌ [ENDPOINT] GCSplit1 configuration missing")
             abort(500, "Service configuration error")
 
-        task_name = cloudtasks_client.enqueue_gcsplit1_swap_response(
+        task_name = cloudtasks_client.enqueue_pgp_split1_swap_response(
             queue_name=gcsplit1_response_queue,
             target_url=gcsplit1_url,
             encrypted_token=encrypted_response_token

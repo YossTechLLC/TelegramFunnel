@@ -175,7 +175,7 @@ def check_changenow_status():
         # Target the /status-verified endpoint
         target_url = f"{gchostpay1_url}/status-verified"
 
-        task_name = cloudtasks_client.enqueue_gchostpay1_status_response(
+        task_name = cloudtasks_client.enqueue_pgp_hostpay1_status_response(
             queue_name=gchostpay1_response_queue,
             target_url=target_url,
             encrypted_token=encrypted_response_token

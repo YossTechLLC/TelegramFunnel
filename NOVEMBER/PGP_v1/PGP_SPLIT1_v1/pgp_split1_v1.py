@@ -393,7 +393,7 @@ def initial_webhook():
             print(f"❌ [ENDPOINT_1] GCSplit2 configuration missing")
             abort(500, "Service configuration error")
 
-        task_name = cloudtasks_client.enqueue_gcsplit2_estimate_request(
+        task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
             queue_name=gcsplit2_queue,
             target_url=gcsplit2_url,
             encrypted_token=encrypted_token
@@ -554,7 +554,7 @@ def receive_usdt_eth_estimate():
             print(f"❌ [ENDPOINT_2] GCSplit3 configuration missing")
             abort(500, "Service configuration error")
 
-        task_name = cloudtasks_client.enqueue_gcsplit3_swap_request(
+        task_name = cloudtasks_client.enqueue_pgp_split3_swap_request(
             queue_name=gcsplit3_queue,
             target_url=gcsplit3_url,
             encrypted_token=encrypted_token_for_split3
@@ -952,7 +952,7 @@ def batch_payout():
             print(f"❌ [ENDPOINT_4] GCSplit2 configuration missing")
             abort(500, "Service configuration error")
 
-        task_name = cloudtasks_client.enqueue_gcsplit2_estimate_request(
+        task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
             queue_name=gcsplit2_queue,
             target_url=gcsplit2_url,
             encrypted_token=encrypted_token_for_split2

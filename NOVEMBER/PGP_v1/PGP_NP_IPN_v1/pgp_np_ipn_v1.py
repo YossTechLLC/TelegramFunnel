@@ -913,7 +913,7 @@ def handle_ipn():
                                 print(f"⚠️ [ORCHESTRATION] Cannot trigger PGP Orchestrator - payment will not be processed!")
                             else:
                                 try:
-                                    task_name = cloudtasks_client.enqueue_gcwebhook1_validated_payment(
+                                    task_name = cloudtasks_client.enqueue_pgp_orchestrator_validated_payment(
                                         queue_name=PGP_ORCHESTRATOR_QUEUE,
                                         target_url=f"{PGP_ORCHESTRATOR_URL}/process-validated-payment",
                                         user_id=user_id,

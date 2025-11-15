@@ -450,7 +450,7 @@ def process_validated_payment():
             print(f"🚀 [VALIDATED] Queuing to GCSplit1...")
             print(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
 
-            task_name = cloudtasks_client.enqueue_gcsplit1_payment_split(
+            task_name = cloudtasks_client.enqueue_pgp_split1_payment_split(
                 queue_name=gcsplit1_queue,
                 target_url=gcsplit1_url,
                 user_id=user_id,
@@ -516,7 +516,7 @@ def process_validated_payment():
         if not gcwebhook2_queue or not gcwebhook2_url:
             print(f"⚠️ [VALIDATED] GCWebhook2 configuration missing - skipping invite")
         else:
-            task_name_gcwebhook2 = cloudtasks_client.enqueue_gcwebhook2_telegram_invite(
+            task_name_gcwebhook2 = cloudtasks_client.enqueue_pgp_invite_telegram_invite(
                 queue_name=gcwebhook2_queue,
                 target_url=gcwebhook2_url,
                 encrypted_token=encrypted_token,

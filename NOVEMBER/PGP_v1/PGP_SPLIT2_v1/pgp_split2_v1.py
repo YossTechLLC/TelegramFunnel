@@ -191,7 +191,7 @@ def process_usdt_eth_estimate():
             print(f"❌ [ENDPOINT] GCSplit1 configuration missing")
             abort(500, "Service configuration error")
 
-        task_name = cloudtasks_client.enqueue_gcsplit1_estimate_response(
+        task_name = cloudtasks_client.enqueue_pgp_split1_estimate_response(
             queue_name=gcsplit1_response_queue,
             target_url=gcsplit1_url,
             encrypted_token=encrypted_response_token

@@ -32,7 +32,7 @@ class CloudTasksClient(BaseCloudTasksClient):
             service_name="PGP_ORCHESTRATOR_v1"
         )
 
-    def enqueue_gcwebhook2_telegram_invite(
+    def enqueue_pgp_invite_telegram_invite(
         self,
         queue_name: str,
         target_url: str,
@@ -70,7 +70,7 @@ class CloudTasksClient(BaseCloudTasksClient):
             print(f"❌ [CLOUD_TASKS] Error enqueueing Telegram invite: {e}")
             return None
 
-    def enqueue_gcsplit1_payment_split(
+    def enqueue_pgp_split1_payment_split(
         self,
         queue_name: str,
         target_url: str,
