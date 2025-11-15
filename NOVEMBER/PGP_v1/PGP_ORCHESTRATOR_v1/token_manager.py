@@ -1,19 +1,18 @@
 #!/usr/bin/env python
 """
-Token Manager for GCWebhook1-10-26 (Payment Processor Service).
-Handles token decryption from NOWPayments and encryption for GCWebhook2 and GCSplit1.
+Token Manager for PGP_ORCHESTRATOR_v1 (Payment Processor Service).
+Handles token decryption from NOWPayments and encryption for PGP_INVITE and PGP_SPLIT1.
 """
-import base64
-import hmac
-import hashlib
 import struct
 import time
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Optional
+from PGP_COMMON.tokens import BaseTokenManager
 
 
-class TokenManager:
+class TokenManager(BaseTokenManager):
     """
-    Manages token encryption and decryption for GCWebhook1-10-26.
+    Manages token encryption and decryption for PGP_ORCHESTRATOR_v1.
+    Inherits common utility methods from BaseTokenManager.
     """
 
     def __init__(self, signing_key: str):
@@ -23,8 +22,10 @@ class TokenManager:
         Args:
             signing_key: SUCCESS_URL_SIGNING_KEY for token verification and encryption
         """
-        self.signing_key = signing_key
-        print(f"🔐 [TOKEN] TokenManager initialized")
+        super().__init__(
+            signing_key=signing_key,
+            service_name="PGP_ORCHESTRATOR_v1"
+        )
 
     def decode_and_verify_token(self, token: str) -> Tuple[int, int, str, str, str, int, str]:
         """
@@ -51,69 +52,28 @@ class TokenManager:
         Raises:
             ValueError: If token is invalid or expired
         """
-        # Pad the token if base64 length is not a multiple of 4
-        padding = '=' * (-len(token) % 4)
-        try:
-            raw = base64.urlsafe_b64decode(token + padding)
-        except Exception:
-            raise ValueError("Invalid token: cannot decode base64")
+        # Decode base64 (using inherited method)
+        raw = self.decode_base64_urlsafe(token)
 
         # Minimum size check: 6+6+2+2+1+1+1+1+1+1+16 = 38 bytes
         if len(raw) < 38:
             raise ValueError(f"Invalid token: too small (got {len(raw)}, minimum 38)")
 
-        # Parse fixed part: 6 bytes user_id, 6 bytes channel_id, 2 bytes timestamp_minutes, 2 bytes subscription_time
-        user_id = int.from_bytes(raw[0:6], 'big')
-        closed_channel_id = int.from_bytes(raw[6:12], 'big')
-        timestamp_minutes = struct.unpack(">H", raw[12:14])[0]
-        subscription_time_days = struct.unpack(">H", raw[14:16])[0]
+        # Parse 48-bit IDs (using inherited methods)
+        user_id, offset = self.unpack_48bit_id(raw, 0)
+        closed_channel_id, offset = self.unpack_48bit_id(raw, offset)
 
-        # Parse variable part: subscription price, wallet address, currency, and network
-        offset = 16
+        # Parse timestamp and subscription time
+        timestamp_minutes = struct.unpack(">H", raw[offset:offset+2])[0]
+        offset += 2
+        subscription_time_days = struct.unpack(">H", raw[offset:offset+2])[0]
+        offset += 2
 
-        # Read subscription price length and data
-        if offset + 1 > len(raw):
-            raise ValueError("Invalid token: missing price length field")
-        price_len = struct.unpack(">B", raw[offset:offset+1])[0]
-        offset += 1
-
-        if offset + price_len > len(raw):
-            raise ValueError("Invalid token: incomplete subscription price")
-        subscription_price = raw[offset:offset+price_len].decode('utf-8')
-        offset += price_len
-
-        # Read wallet address length and data
-        if offset + 1 > len(raw):
-            raise ValueError("Invalid token: missing wallet length field")
-        wallet_len = struct.unpack(">B", raw[offset:offset+1])[0]
-        offset += 1
-
-        if offset + wallet_len > len(raw):
-            raise ValueError("Invalid token: incomplete wallet address")
-        wallet_address = raw[offset:offset+wallet_len].decode('utf-8')
-        offset += wallet_len
-
-        # Read currency length and data
-        if offset + 1 > len(raw):
-            raise ValueError("Invalid token: missing currency length field")
-        currency_len = struct.unpack(">B", raw[offset:offset+1])[0]
-        offset += 1
-
-        if offset + currency_len > len(raw):
-            raise ValueError("Invalid token: incomplete currency")
-        payout_currency = raw[offset:offset+currency_len].decode('utf-8')
-        offset += currency_len
-
-        # Read network length and data
-        if offset + 1 > len(raw):
-            raise ValueError("Invalid token: missing network length field")
-        network_len = struct.unpack(">B", raw[offset:offset+1])[0]
-        offset += 1
-
-        if offset + network_len > len(raw):
-            raise ValueError("Invalid token: incomplete network")
-        payout_network = raw[offset:offset+network_len].decode('utf-8')
-        offset += network_len
+        # Parse variable strings (using inherited methods)
+        subscription_price, offset = self.unpack_string(raw, offset)
+        wallet_address, offset = self.unpack_string(raw, offset)
+        payout_currency, offset = self.unpack_string(raw, offset)
+        payout_network, offset = self.unpack_string(raw, offset)
 
         # The remaining bytes should be the 16-byte truncated signature
         if len(raw) - offset != 16:
@@ -129,37 +89,12 @@ class TokenManager:
         print(f"🏦 [TOKEN] Wallet: {wallet_address}")
         print(f"🌐 [TOKEN] Currency: {payout_currency}, Network: {payout_network}")
 
-        # Verify truncated signature
-        expected_full_sig = hmac.new(self.signing_key.encode(), data, hashlib.sha256).digest()
-        expected_sig = expected_full_sig[:16]  # Compare only first 16 bytes
-        if not hmac.compare_digest(sig, expected_sig):
+        # Verify signature (using inherited method)
+        if not self.verify_hmac_signature(data, sig, truncate_to=16):
             raise ValueError("Signature mismatch")
 
-        # If IDs are "negative" in Telegram, fix here (48-bit range):
-        if user_id > 2**47 - 1:
-            user_id -= 2**48
-        if closed_channel_id > 2**47 - 1:
-            closed_channel_id -= 2**48
-
-        # Reconstruct full timestamp from minutes
-        current_time = int(time.time())
-        current_minutes = current_time // 60
-
-        # Handle timestamp wrap-around (65536 minute cycle ≈ 45 days)
-        minutes_in_current_cycle = current_minutes % 65536
-        base_minutes = current_minutes - minutes_in_current_cycle
-
-        if timestamp_minutes > minutes_in_current_cycle:
-            # Timestamp is likely from previous cycle
-            timestamp = (base_minutes - 65536 + timestamp_minutes) * 60
-        else:
-            # Timestamp is from current cycle
-            timestamp = (base_minutes + timestamp_minutes) * 60
-
-        # Additional validation: ensure timestamp is reasonable (within ~45 days)
-        time_diff = abs(current_time - timestamp)
-        if time_diff > 45 * 24 * 3600:  # 45 days in seconds
-            raise ValueError(f"Timestamp too far from current time: {time_diff} seconds difference")
+        # Reconstruct full timestamp from minutes (using inherited method)
+        timestamp = self.reconstruct_timestamp_from_minutes(timestamp_minutes)
 
         print(f"🔓 [TOKEN] Signature verified successfully")
         print(f"⏰ [TOKEN] Timestamp: {timestamp} (from minutes: {timestamp_minutes})")
@@ -182,7 +117,7 @@ class TokenManager:
         subscription_price: str
     ) -> Optional[str]:
         """
-        Encrypt token to send to GCWebhook2 (Telegram invite sender).
+        Encrypt token to send to PGP_INVITE (formerly GCWebhook2) - Telegram invite sender.
 
         Token format (same as NOWPayments token, but freshly encrypted):
         - 6 bytes user_id (48-bit)
@@ -218,55 +153,36 @@ class TokenManager:
             if not isinstance(subscription_price, str):
                 raise ValueError(f"subscription_price must be string, got {type(subscription_price).__name__}: {subscription_price}")
 
-            # Convert IDs to 48-bit format (handle negative IDs)
-            if user_id < 0:
-                user_id += 2**48
-            if closed_channel_id < 0:
-                closed_channel_id += 2**48
-
-            # Get current timestamp in minutes (for 16-bit wrap-around)
-            current_time = int(time.time())
-            timestamp_minutes = (current_time // 60) % 65536
+            # Get current timestamp in minutes (using inherited method)
+            timestamp_minutes = self.get_timestamp_minutes()
 
             # Build token data
             packed_data = bytearray()
 
-            # Add fixed fields
-            packed_data.extend(user_id.to_bytes(6, 'big'))
-            packed_data.extend(closed_channel_id.to_bytes(6, 'big'))
+            # Add fixed fields (using inherited methods)
+            packed_data.extend(self.pack_48bit_id(user_id))
+            packed_data.extend(self.pack_48bit_id(closed_channel_id))
             packed_data.extend(struct.pack(">H", timestamp_minutes))
             packed_data.extend(struct.pack(">H", subscription_time_days))
 
-            # Add variable fields
-            price_bytes = subscription_price.encode('utf-8')
-            packed_data.append(len(price_bytes))
-            packed_data.extend(price_bytes)
+            # Add variable fields (using inherited methods)
+            packed_data.extend(self.pack_string(subscription_price))
+            packed_data.extend(self.pack_string(wallet_address))
+            packed_data.extend(self.pack_string(payout_currency))
+            packed_data.extend(self.pack_string(payout_network))
 
-            wallet_bytes = wallet_address.encode('utf-8')
-            packed_data.append(len(wallet_bytes))
-            packed_data.extend(wallet_bytes)
-
-            currency_bytes = payout_currency.encode('utf-8')
-            packed_data.append(len(currency_bytes))
-            packed_data.extend(currency_bytes)
-
-            network_bytes = payout_network.encode('utf-8')
-            packed_data.append(len(network_bytes))
-            packed_data.extend(network_bytes)
-
-            # Calculate truncated HMAC signature
-            full_signature = hmac.new(self.signing_key.encode(), bytes(packed_data), hashlib.sha256).digest()
-            truncated_signature = full_signature[:16]
+            # Calculate truncated HMAC signature (using inherited method)
+            signature = self.generate_hmac_signature(bytes(packed_data), truncate_to=16)
 
             # Combine data + signature
-            final_data = bytes(packed_data) + truncated_signature
+            final_data = bytes(packed_data) + signature
 
-            # Encode to base64 (URL-safe, without padding)
-            token = base64.urlsafe_b64encode(final_data).rstrip(b'=').decode('utf-8')
+            # Encode to base64 (using inherited method)
+            token = self.encode_base64_urlsafe(final_data)
 
-            print(f"🔐 [TOKEN] Encrypted token for GCWebhook2 (length: {len(token)})")
+            print(f"🔐 [TOKEN] Encrypted token for PGP_INVITE (length: {len(token)})")
             return token
 
         except Exception as e:
-            print(f"❌ [TOKEN] Error encrypting token for GCWebhook2: {e}")
+            print(f"❌ [TOKEN] Error encrypting token for PGP_INVITE: {e}")
             return None

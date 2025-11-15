@@ -3,73 +3,38 @@
 Configuration Manager for PGP_ORCHESTRATOR_v1 (Payment Processor Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
-import os
-from google.cloud import secretmanager
-from typing import Optional
+from PGP_COMMON.config import BaseConfigManager
 
 
-class ConfigManager:
+class ConfigManager(BaseConfigManager):
     """
     Manages configuration and secrets for the PGP_ORCHESTRATOR_v1 service.
+    Inherits common methods from BaseConfigManager.
     """
 
     def __init__(self):
         """Initialize the ConfigManager."""
-        self.client = secretmanager.SecretManagerServiceClient()
-        print(f"⚙️ [CONFIG] ConfigManager initialized")
-
-    def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
-        """
-        Fetch a secret value from environment variable.
-        Cloud Run automatically injects secret values when using --set-secrets.
-
-        Args:
-            secret_name_env: Environment variable name containing the secret value
-            description: Description for logging purposes
-
-        Returns:
-            Secret value or None if failed
-        """
-        try:
-            # Defensive pattern: handle None, strip whitespace, return None if empty
-            secret_value = (os.getenv(secret_name_env) or '').strip() or None
-            if not secret_value:
-                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
-                return None
-
-            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
-            return secret_value
-
-        except Exception as e:
-            print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
-            return None
+        super().__init__(service_name="PGP_ORCHESTRATOR_v1")
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCWebhook1.
+        Initialize and return all configuration values for PGP_ORCHESTRATOR_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
         print(f"⚙️ [CONFIG] Initializing PGP_ORCHESTRATOR_v1 configuration")
 
-        # Fetch secrets from Secret Manager
+        # Fetch secrets from Secret Manager (using inherited fetch_secret method)
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
             "Success URL signing key (for token verification and encryption)"
         )
 
-        # Get Cloud Tasks configuration from Secret Manager
-        cloud_tasks_project_id = self.fetch_secret(
-            "CLOUD_TASKS_PROJECT_ID",
-            "Cloud Tasks project ID"
-        )
+        # Use base method to fetch Cloud Tasks configuration
+        ct_config = self.fetch_cloud_tasks_config()
 
-        cloud_tasks_location = self.fetch_secret(
-            "CLOUD_TASKS_LOCATION",
-            "Cloud Tasks location/region"
-        )
-
+        # Service-specific queue and URL configurations
         pgp_invite_queue = self.fetch_secret(
             "PGP_INVITE_QUEUE",
             "PGP Invite queue name"
@@ -101,40 +66,24 @@ class ConfigManager:
             "PGP Accumulator service URL"
         )
 
-        # Fetch database configuration from Secret Manager
-        cloud_sql_connection_name = self.fetch_secret(
-            "CLOUD_SQL_CONNECTION_NAME",
-            "Cloud SQL instance connection name"
-        )
-
-        database_name = self.fetch_secret(
-            "DATABASE_NAME_SECRET",
-            "Database name"
-        )
-
-        database_user = self.fetch_secret(
-            "DATABASE_USER_SECRET",
-            "Database user"
-        )
-
-        database_password = self.fetch_secret(
-            "DATABASE_PASSWORD_SECRET",
-            "Database password"
-        )
+        # Use base method to fetch database configuration
+        db_config = self.fetch_database_config()
 
         # Validate critical configurations
         if not success_url_signing_key:
             print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
-        if not cloud_tasks_project_id or not cloud_tasks_location:
+        if not ct_config['cloud_tasks_project_id'] or not ct_config['cloud_tasks_location']:
             print(f"⚠️ [CONFIG] Warning: Cloud Tasks configuration incomplete")
 
+        # Combine all configurations
         config = {
             # Secrets
             'success_url_signing_key': success_url_signing_key,
 
-            # Cloud Tasks configuration
-            'cloud_tasks_project_id': cloud_tasks_project_id,
-            'cloud_tasks_location': cloud_tasks_location,
+            # Cloud Tasks configuration (from base method)
+            **ct_config,
+
+            # Service-specific configurations
             'pgp_invite_queue': pgp_invite_queue,
             'pgp_invite_url': pgp_invite_url,
             'pgp_split1_queue': pgp_split1_queue,
@@ -142,11 +91,8 @@ class ConfigManager:
             'pgp_accumulator_queue': pgp_accumulator_queue,
             'pgp_accumulator_url': pgp_accumulator_url,
 
-            # Database configuration (all from Secret Manager)
-            'instance_connection_name': cloud_sql_connection_name,
-            'db_name': database_name,
-            'db_user': database_user,
-            'db_password': database_password
+            # Database configuration (from base method)
+            **db_config
         }
 
         # Log configuration status

@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 """
-Database Manager for GCWebhook1-10-26 (Payment Processor Service).
+Database Manager for PGP_ORCHESTRATOR_v1 (Payment Processor Service).
 Handles database connections and operations for private_channel_users_database table.
 """
-from datetime import datetime
 from typing import Optional
-from google.cloud.sql.connector import Connector
+from PGP_COMMON.database import BaseDatabaseManager
 
 
-class DatabaseManager:
+class DatabaseManager(BaseDatabaseManager):
     """
-    Manages database connections and operations for GCWebhook1-10-26.
+    Manages database connections and operations for PGP_ORCHESTRATOR_v1.
+    Inherits common methods from BaseDatabaseManager.
     """
 
     def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str):
@@ -23,57 +23,13 @@ class DatabaseManager:
             db_user: Database user
             db_password: Database password
         """
-        self.instance_connection_name = instance_connection_name
-        self.db_name = db_name
-        self.db_user = db_user
-        self.db_password = db_password
-        self.connector = Connector()
-
-        print(f"🗄️ [DATABASE] DatabaseManager initialized")
-        print(f"📊 [DATABASE] Instance: {instance_connection_name}")
-        print(f"📊 [DATABASE] Database: {db_name}")
-
-    def get_connection(self):
-        """
-        Create and return a database connection using Cloud SQL Connector.
-
-        Returns:
-            Database connection object or None if failed
-        """
-        try:
-            connection = self.connector.connect(
-                self.instance_connection_name,
-                "pg8000",
-                user=self.db_user,
-                password=self.db_password,
-                db=self.db_name
-            )
-            print(f"🔗 [DATABASE] Connection established successfully")
-            return connection
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Connection failed: {e}")
-            return None
-
-    def get_current_timestamp(self) -> str:
-        """
-        Get current time in PostgreSQL time format.
-
-        Returns:
-            String representation of current time (e.g., '22:55:30')
-        """
-        now = datetime.now()
-        return now.strftime('%H:%M:%S')
-
-    def get_current_datestamp(self) -> str:
-        """
-        Get current date in PostgreSQL date format.
-
-        Returns:
-            String representation of current date (e.g., '2025-06-20')
-        """
-        now = datetime.now()
-        return now.strftime('%Y-%m-%d')
+        super().__init__(
+            instance_connection_name=instance_connection_name,
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password,
+            service_name="PGP_ORCHESTRATOR_v1"
+        )
 
     def record_private_channel_user(
         self,
@@ -100,7 +56,7 @@ class DatabaseManager:
         Returns:
             True if successful, False otherwise
         """
-        # Get current timestamp and datestamp for PostgreSQL
+        # Get current timestamp and datestamp for PostgreSQL (inherited methods)
         current_timestamp = self.get_current_timestamp()
         current_datestamp = self.get_current_datestamp()
 

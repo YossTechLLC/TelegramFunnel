@@ -1,21 +1,19 @@
 #!/usr/bin/env python
 """
-Cloud Tasks Client for GCWebhook1-10-26 (Payment Processor Service).
-Handles creation and dispatch of Cloud Tasks to GCWebhook2, GCSplit1, and GCAccumulator.
+Cloud Tasks Client for PGP_ORCHESTRATOR_v1 (Payment Processor Service).
+Handles creation and dispatch of Cloud Tasks to PGP_INVITE, PGP_SPLIT1, and PGP_ACCUMULATOR.
 """
 import json
 import time
-import hmac
-import hashlib
 import datetime
 from typing import Optional
-from google.cloud import tasks_v2
-from google.protobuf import timestamp_pb2
+from PGP_COMMON.cloudtasks import BaseCloudTasksClient
 
 
-class CloudTasksClient:
+class CloudTasksClient(BaseCloudTasksClient):
     """
     Client for creating and dispatching Google Cloud Tasks.
+    Inherits common methods from BaseCloudTasksClient.
     """
 
     def __init__(self, project_id: str, location: str, signing_key: str):
@@ -27,76 +25,12 @@ class CloudTasksClient:
             location: Cloud region (e.g., "us-central1")
             signing_key: SUCCESS_URL_SIGNING_KEY for webhook signature
         """
-        if not project_id or not location:
-            raise ValueError("Project ID and location are required")
-
-        self.project_id = project_id
-        self.location = location
-        self.signing_key = signing_key
-        self.client = tasks_v2.CloudTasksClient()
-
-        print(f"☁️ [CLOUD_TASKS] Initialized client")
-        print(f"📍 [CLOUD_TASKS] Project: {project_id}, Location: {location}")
-
-    def create_task(
-        self,
-        queue_name: str,
-        target_url: str,
-        payload: dict,
-        schedule_delay_seconds: int = 0
-    ) -> Optional[str]:
-        """
-        Create and enqueue a Cloud Task.
-
-        Args:
-            queue_name: Name of the Cloud Tasks queue
-            target_url: Target service URL (full https:// URL)
-            payload: JSON payload to send (will be converted to bytes)
-            schedule_delay_seconds: Optional delay before task execution (default 0)
-
-        Returns:
-            Task name if successful, None if failed
-        """
-        try:
-            # Construct the fully qualified queue name
-            parent = self.client.queue_path(self.project_id, self.location, queue_name)
-
-            print(f"🚀 [CLOUD_TASKS] Creating task for queue: {queue_name}")
-            print(f"🎯 [CLOUD_TASKS] Target URL: {target_url}")
-            print(f"📦 [CLOUD_TASKS] Payload size: {len(json.dumps(payload))} bytes")
-
-            # Construct the task
-            task = {
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": target_url,
-                    "headers": {
-                        "Content-Type": "application/json"
-                    },
-                    "body": json.dumps(payload).encode()
-                }
-            }
-
-            # Add schedule time if delay is specified
-            if schedule_delay_seconds > 0:
-                d = datetime.datetime.utcnow() + datetime.timedelta(seconds=schedule_delay_seconds)
-                timestamp = timestamp_pb2.Timestamp()
-                timestamp.FromDatetime(d)
-                task["schedule_time"] = timestamp
-                print(f"⏰ [CLOUD_TASKS] Scheduled delay: {schedule_delay_seconds}s")
-
-            # Create the task
-            response = self.client.create_task(request={"parent": parent, "task": task})
-
-            task_name = response.name
-            print(f"✅ [CLOUD_TASKS] Task created successfully")
-            print(f"🆔 [CLOUD_TASKS] Task name: {task_name}")
-
-            return task_name
-
-        except Exception as e:
-            print(f"❌ [CLOUD_TASKS] Error creating task: {e}")
-            return None
+        super().__init__(
+            project_id=project_id,
+            location=location,
+            signing_key=signing_key,
+            service_name="PGP_ORCHESTRATOR_v1"
+        )
 
     def enqueue_gcwebhook2_telegram_invite(
         self,
@@ -106,11 +40,11 @@ class CloudTasksClient:
         payment_id: int
     ) -> Optional[str]:
         """
-        Enqueue a Telegram invite request to GCWebhook2.
+        Enqueue a Telegram invite request to PGP_INVITE (formerly GCWebhook2).
 
         Args:
-            queue_name: Queue name (e.g., "gcwebhook-telegram-invite-queue")
-            target_url: GCWebhook2 service URL
+            queue_name: Queue name (e.g., "pgp-invite-queue")
+            target_url: PGP_INVITE service URL
             encrypted_token: Encrypted token with user/channel data
             payment_id: NowPayments payment_id for idempotency tracking
 
@@ -118,13 +52,14 @@ class CloudTasksClient:
             Task name if successful, None if failed
         """
         try:
-            print(f"📨 [CLOUD_TASKS] Enqueueing Telegram invite to GCWebhook2")
+            print(f"📨 [CLOUD_TASKS] Enqueueing Telegram invite to PGP_INVITE")
 
             payload = {
                 "token": encrypted_token,
                 "payment_id": payment_id
             }
 
+            # Use inherited create_task method
             return self.create_task(
                 queue_name=queue_name,
                 target_url=target_url,
@@ -146,14 +81,14 @@ class CloudTasksClient:
         payout_network: str,
         subscription_price: str,
         actual_eth_amount: float = 0.0,
-        payout_mode: str = 'instant'  # ✅ NEW: 'instant' or 'threshold'
+        payout_mode: str = 'instant'
     ) -> Optional[str]:
         """
-        Enqueue a payment split request to GCSplit1.
+        Enqueue a payment split request to PGP_SPLIT1 (formerly GCSplit1).
 
         Args:
-            queue_name: Queue name (e.g., "gcsplit-webhook-queue")
-            target_url: GCSplit1 service URL
+            queue_name: Queue name (e.g., "pgp-split1-queue")
+            target_url: PGP_SPLIT1 service URL
             user_id: User's Telegram ID
             closed_channel_id: Channel ID
             wallet_address: Client's wallet address
@@ -167,11 +102,11 @@ class CloudTasksClient:
             Task name if successful, None if failed
         """
         try:
-            print(f"💰 [CLOUD_TASKS] Enqueueing payment split to GCSplit1")
+            print(f"💰 [CLOUD_TASKS] Enqueueing payment split to PGP_SPLIT1")
             print(f"👤 [CLOUD_TASKS] User: {user_id}, Channel: {closed_channel_id}")
             print(f"💵 [CLOUD_TASKS] Amount: ${subscription_price} → {payout_currency}")
             print(f"💰 [CLOUD_TASKS] ACTUAL ETH: {actual_eth_amount}")
-            print(f"🎯 [CLOUD_TASKS] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+            print(f"🎯 [CLOUD_TASKS] Payout Mode: {payout_mode}")
 
             # Prepare webhook payload (same format as old trigger_payment_split_webhook)
             webhook_data = {
@@ -182,43 +117,16 @@ class CloudTasksClient:
                 "payout_network": payout_network,
                 "sub_price": subscription_price,
                 "actual_eth_amount": actual_eth_amount,
-                "payout_mode": payout_mode,  # ✅ NEW: Pass payout_mode to GCSplit1
+                "payout_mode": payout_mode,
                 "timestamp": int(time.time())
             }
 
-            # Add webhook signature
-            payload_json = json.dumps(webhook_data)
-            signature = hmac.new(
-                self.signing_key.encode(),
-                payload_json.encode(),
-                hashlib.sha256
-            ).hexdigest()
-
-            print(f"🔐 [CLOUD_TASKS] Added webhook signature")
-
-            # Create task with signature in headers
-            parent = self.client.queue_path(self.project_id, self.location, queue_name)
-
-            task = {
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": target_url,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "X-Webhook-Signature": signature
-                    },
-                    "body": payload_json.encode()
-                }
-            }
-
-            # Create the task
-            response = self.client.create_task(request={"parent": parent, "task": task})
-
-            task_name = response.name
-            print(f"✅ [CLOUD_TASKS] Payment split task created")
-            print(f"🆔 [CLOUD_TASKS] Task name: {task_name}")
-
-            return task_name
+            # Use inherited create_signed_task method (handles signature automatically)
+            return self.create_signed_task(
+                queue_name=queue_name,
+                target_url=target_url,
+                payload=webhook_data
+            )
 
         except Exception as e:
             print(f"❌ [CLOUD_TASKS] Error enqueueing payment split: {e}")
@@ -240,11 +148,11 @@ class CloudTasksClient:
         nowpayments_outcome_amount: str = None
     ) -> Optional[str]:
         """
-        Enqueue a payment accumulation request to GCAccumulator.
+        Enqueue a payment accumulation request to PGP_ACCUMULATOR (formerly GCAccumulator).
 
         Args:
-            queue_name: Queue name (e.g., "accumulator-payment-queue")
-            target_url: GCAccumulator service URL
+            queue_name: Queue name (e.g., "pgp-accumulator-queue")
+            target_url: PGP_ACCUMULATOR service URL
             user_id: User's Telegram ID
             client_id: Client's channel ID
             wallet_address: Client's wallet address
@@ -260,7 +168,7 @@ class CloudTasksClient:
             Task name if successful, None if failed
         """
         try:
-            print(f"📊 [CLOUD_TASKS] Enqueueing payment accumulation to GCAccumulator")
+            print(f"📊 [CLOUD_TASKS] Enqueueing payment accumulation to PGP_ACCUMULATOR")
             print(f"👤 [CLOUD_TASKS] User: {user_id}, Client: {client_id}")
             print(f"💵 [CLOUD_TASKS] Amount: ${subscription_price} → USDT accumulation")
 
@@ -281,12 +189,13 @@ class CloudTasksClient:
                 "payment_amount_usd": subscription_price,
                 "subscription_id": subscription_id,
                 "payment_timestamp": datetime.datetime.now().isoformat(),
-                # NEW: NowPayments fields (optional)
+                # NowPayments fields (optional)
                 "nowpayments_payment_id": nowpayments_payment_id,
                 "nowpayments_pay_address": nowpayments_pay_address,
                 "nowpayments_outcome_amount": nowpayments_outcome_amount
             }
 
+            # Use inherited create_task method
             return self.create_task(
                 queue_name=queue_name,
                 target_url=target_url,
