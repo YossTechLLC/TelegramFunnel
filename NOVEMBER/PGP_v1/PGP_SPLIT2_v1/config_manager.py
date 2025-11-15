@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCSplit2-10-26 (USDT→ETH Estimator Service).
+Configuration Manager for PGP_SPLIT2_v1 (USDT→ETH Estimator Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCSplit2-10-26 service.
+    Manages configuration and secrets for the PGP_SPLIT2_v1 service.
     """
 
     def __init__(self):
@@ -69,12 +69,12 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCSplit2.
+        Initialize and return all configuration values for PGP_SPLIT2_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCSplit2-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_SPLIT2_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
@@ -98,14 +98,14 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        gcsplit1_response_queue = self.fetch_secret(
-            "GCSPLIT2_RESPONSE_QUEUE",
-            "GCSplit1 response queue name (GCSplit2 → GCSplit1)"
+        pgp_split1_response_queue = self.fetch_secret(
+            "PGP_SPLIT1_RESPONSE_QUEUE",
+            "PGP Split1 response queue name (PGP Split2 → PGP Split1)"
         )
 
-        gcsplit1_url = self.fetch_secret(
-            "GCSPLIT1_ESTIMATE_RESPONSE_URL",
-            "GCSplit1 /usdt-eth-estimate endpoint URL"
+        pgp_split1_url = self.fetch_secret(
+            "PGP_SPLIT1_URL",
+            "PGP Split1 service URL"
         )
 
         # Fetch database configuration from Secret Manager
@@ -129,15 +129,15 @@ class ConfigManager:
             "Database password"
         )
 
-        # GCBatchProcessor configuration (for threshold checking)
-        gcbatchprocessor_queue = self.fetch_secret(
-            "GCBATCHPROCESSOR_QUEUE",
-            "GCBatchProcessor queue name"
+        # PGP BatchProcessor configuration (for threshold checking)
+        pgp_batchprocessor_queue = self.fetch_secret(
+            "PGP_BATCHPROCESSOR_QUEUE",
+            "PGP BatchProcessor queue name"
         )
 
-        gcbatchprocessor_url = self.fetch_secret(
-            "GCBATCHPROCESSOR_URL",
-            "GCBatchProcessor service URL"
+        pgp_batchprocessor_url = self.fetch_secret(
+            "PGP_BATCHPROCESSOR_URL",
+            "PGP BatchProcessor service URL"
         )
 
         # Validate critical configurations
@@ -156,10 +156,10 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gcsplit1_response_queue': gcsplit1_response_queue,
-            'gcsplit1_url': gcsplit1_url,
-            'gcbatchprocessor_queue': gcbatchprocessor_queue,
-            'gcbatchprocessor_url': gcbatchprocessor_url,
+            'pgp_split1_response_queue': pgp_split1_response_queue,
+            'pgp_split1_url': pgp_split1_url,
+            'pgp_batchprocessor_queue': pgp_batchprocessor_queue,
+            'pgp_batchprocessor_url': pgp_batchprocessor_url,
 
             # Database configuration
             'instance_connection_name': cloud_sql_connection_name,
@@ -174,7 +174,9 @@ class ConfigManager:
         print(f"   CHANGENOW_API_KEY: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCSplit1 Response Queue: {'✅' if config['gcsplit1_response_queue'] else '❌'}")
-        print(f"   GCSplit1 URL: {'✅' if config['gcsplit1_url'] else '❌'}")
+        print(f"   PGP Split1 Response Queue: {'✅' if config['pgp_split1_response_queue'] else '❌'}")
+        print(f"   PGP Split1 URL: {'✅' if config['pgp_split1_url'] else '❌'}")
+        print(f"   PGP BatchProcessor Queue: {'✅' if config['pgp_batchprocessor_queue'] else '❌'}")
+        print(f"   PGP BatchProcessor URL: {'✅' if config['pgp_batchprocessor_url'] else '❌'}")
 
         return config

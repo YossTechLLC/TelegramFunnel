@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCSplit3-10-26 (ETH→ClientCurrency Swapper Service).
+Configuration Manager for PGP_SPLIT3_v1 (ETH→ClientCurrency Swapper Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCSplit3-10-26 service.
+    Manages configuration and secrets for the PGP_SPLIT3_v1 service.
     """
 
     def __init__(self):
@@ -69,12 +69,12 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCSplit3.
+        Initialize and return all configuration values for PGP_SPLIT3_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCSplit3-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_SPLIT3_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
@@ -98,14 +98,14 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        gcsplit1_response_queue = self.fetch_secret(
-            "GCSPLIT3_RESPONSE_QUEUE",
-            "GCSplit1 response queue name (GCSplit3 → GCSplit1)"
+        pgp_split1_response_queue = self.fetch_secret(
+            "PGP_SPLIT1_RESPONSE_QUEUE",
+            "PGP Split1 response queue name (PGP Split3 → PGP Split1)"
         )
 
-        gcsplit1_url = self.fetch_secret(
-            "GCSPLIT1_SWAP_RESPONSE_URL",
-            "GCSplit1 /eth-client-swap endpoint URL"
+        pgp_split1_url = self.fetch_secret(
+            "PGP_SPLIT1_URL",
+            "PGP Split1 service URL"
         )
 
         # Validate critical configurations
@@ -124,8 +124,8 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gcsplit1_response_queue': gcsplit1_response_queue,
-            'gcsplit1_url': gcsplit1_url
+            'pgp_split1_response_queue': pgp_split1_response_queue,
+            'pgp_split1_url': pgp_split1_url
         }
 
         # Log configuration status
@@ -134,7 +134,7 @@ class ConfigManager:
         print(f"   CHANGENOW_API_KEY: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCSplit1 Response Queue: {'✅' if config['gcsplit1_response_queue'] else '❌'}")
-        print(f"   GCSplit1 URL: {'✅' if config['gcsplit1_url'] else '❌'}")
+        print(f"   PGP Split1 Response Queue: {'✅' if config['pgp_split1_response_queue'] else '❌'}")
+        print(f"   PGP Split1 URL: {'✅' if config['pgp_split1_url'] else '❌'}")
 
         return config
