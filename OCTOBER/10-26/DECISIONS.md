@@ -1,12 +1,149 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-15 - **Unified Payment Landing Page Architecture (Cloud Storage)** ✅
+**Last Updated:** 2025-11-15 - **Donation UX: WebApp Button + Auto-Delete Pattern** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-15: Donation UX - WebApp Button + Auto-Delete Pattern ✅
+
+**Decision:** Use Telegram WebApp button for payment gateway AND auto-delete all donation messages after 60 seconds
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- Donation flow was using plain text URL for payment link
+- Subscription flow was correctly using WebApp button (opens in Telegram WebView)
+- Donation messages were remaining in closed channel permanently
+- Other bot features (like donation_input_handler) already use auto-delete pattern
+- Inconsistent UX between donation and subscription flows
+
+**Problem:**
+```python
+# BEFORE (Plain text URL - Poor UX)
+await context.bot.send_message(
+    chat_id=chat_id,
+    text=f"💳 Payment Link Ready!\n\n"
+         f"Click the link below:\n\n"
+         f"{invoice_url}\n\n"
+         f"✅ Secure payment via NowPayments",
+    parse_mode="HTML"
+)
+
+# ❌ Opens external browser (bad mobile experience)
+# ❌ Messages stay in channel forever (clutter)
+```
+
+**Solution:**
+```python
+# AFTER (WebApp button + Auto-delete - Better UX)
+
+# 1. Track all message IDs throughout conversation
+context.user_data['donation_messages_to_delete'] = []
+message_ids_to_delete.append(message.message_id)
+
+# 2. Send WebApp button
+reply_markup = ReplyKeyboardMarkup.from_button(
+    KeyboardButton(
+        text="💰 Complete Donation",
+        web_app=WebAppInfo(url=invoice_url)
+    )
+)
+
+# 3. Schedule auto-deletion
+asyncio.create_task(delete_messages_after_delay(
+    context, chat_id, message_ids, delay_seconds=60
+))
+
+# ✅ Opens in Telegram WebView (seamless experience)
+# ✅ Messages auto-delete after 60 seconds (clean channel)
+```
+
+**Rationale:**
+
+1. **Consistent UX:** Matches subscription flow pattern (WebApp button)
+2. **Better Conversion:** Payment in Telegram WebView is more seamless than external browser
+3. **Clean Channels:** Auto-delete keeps closed channels organized and professional
+4. **Proven Pattern:** Both WebApp and auto-delete patterns already used successfully elsewhere
+5. **Mobile-First:** WebView experience is superior on mobile devices
+
+**Implementation Pattern:**
+
+```python
+# Helper Functions Created:
+send_donation_payment_gateway()    # Sends WebApp button with payment link
+schedule_donation_messages_deletion()  # Schedules background deletion task
+
+# Message Tracking:
+context.user_data['donation_messages_to_delete'] = []  # Initialize list
+message_ids_to_delete.append(message_id)  # Track each message
+
+# Background Deletion:
+asyncio.create_task(delete_messages_after_delay())  # Non-blocking deletion
+```
+
+**Architecture Flow:**
+```
+User starts donation
+    ↓
+start_donation() → Initialize message_ids_to_delete = []
+    ↓
+confirm_donation() → Track confirmation message ID
+    ↓
+handle_message_choice() → Track message prompt ID
+    ↓
+handle_message_text() → Track user's text message ID
+    ↓
+finalize_payment() → Track processing message ID
+    ↓
+send_donation_payment_gateway() → Track WebApp button message ID
+    ↓
+schedule_donation_messages_deletion() → Create background task
+    ↓
+After 60 seconds → All messages deleted
+```
+
+**Files Modified:**
+- `TelePay10-26/bot/conversations/donation_conversation.py`
+  - Added `asyncio` import
+  - Added `send_donation_payment_gateway()` helper (lines 25-87)
+  - Added `schedule_donation_messages_deletion()` helper (lines 90-133)
+  - Updated 5 functions to track message IDs
+
+**Benefits:**
+- ✅ **User Experience:** Payment in Telegram WebView (no external browser)
+- ✅ **Professionalism:** Clean channels with auto-delete
+- ✅ **Consistency:** Matches subscription flow UX
+- ✅ **Mobile Optimization:** Better experience on mobile devices
+- ✅ **Conversion Rate:** Expected to improve with seamless payment flow
+
+**Considerations:**
+- Auto-delete timing: 60 seconds gives users time to review while keeping channel clean
+- Message tracking: Must track ALL messages sent during conversation
+- Error handling: Background deletion tasks handle failures gracefully
+
+**Alternatives Considered:**
+
+1. **Keep plain text URL:**
+   - ❌ Rejected: Inconsistent with subscription flow, poor mobile UX
+
+2. **No auto-delete:**
+   - ❌ Rejected: Channels become cluttered, unprofessional appearance
+
+3. **Different auto-delete timing:**
+   - 30 seconds: Too short, users may not finish reading
+   - 120 seconds: Too long, messages linger unnecessarily
+   - ✅ 60 seconds: Optimal balance
+
+**Testing Required:**
+1. Test WebApp button opens payment gateway correctly
+2. Verify auto-delete works for all message types
+3. Confirm 60-second timing is appropriate
+4. Test error handling in deletion task
+
+---
 
 ## 2025-11-15: Unified Payment Landing Page Architecture (Cloud Storage) ✅
 

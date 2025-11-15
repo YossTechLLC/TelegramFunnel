@@ -4,7 +4,8 @@ Donation conversation handler using ConversationHandler.
 Multi-step conversation flow for processing donations with numeric keypad.
 """
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -19,6 +20,117 @@ logger = logging.getLogger(__name__)
 
 # Conversation states
 AMOUNT_INPUT, MESSAGE_INPUT, CONFIRM_PAYMENT = range(3)
+
+
+async def send_donation_payment_gateway(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    invoice_url: str,
+    amount: float,
+    channel_id: str,
+    has_message: bool,
+    message_ids_to_delete: list = None
+) -> int:
+    """
+    Send donation payment gateway with WebApp button.
+
+    Creates a keyboard button that opens payment gateway in Telegram WebView
+    for seamless payment experience (matches subscription flow UX).
+
+    Args:
+        context: Telegram context object
+        chat_id: Chat ID to send message to
+        invoice_url: NowPayments invoice URL
+        amount: Donation amount in USD
+        channel_id: Target channel ID
+        has_message: Whether donation includes a message
+        message_ids_to_delete: List to track message IDs for auto-deletion
+
+    Returns:
+        Message ID of sent message
+    """
+    logger.info(f"💳 [DONATION] Sending payment gateway to chat {chat_id}")
+    logger.info(f"   Invoice URL: {invoice_url}")
+
+    # Create WebApp button (opens in Telegram WebView)
+    reply_markup = ReplyKeyboardMarkup.from_button(
+        KeyboardButton(
+            text="💰 Complete Donation",
+            web_app=WebAppInfo(url=invoice_url),
+        )
+    )
+
+    # Format message
+    text = (
+        f"💳 <b>Payment Gateway Ready!</b> 🚀\n\n"
+        f"💰 <b>Amount:</b> ${amount:.2f}\n"
+        f"📍 <b>Channel:</b> <code>{channel_id}</code>\n"
+        f"💬 <b>Message:</b> {'✅ Included' if has_message else '❌ None'}\n\n"
+        f"👇 <b>Tap the button below to complete your donation</b>\n\n"
+        f"✅ Secure payment via NowPayments"
+    )
+
+    # Send message with WebApp button
+    sent_message = await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode="HTML"
+    )
+
+    # Track message ID for auto-deletion
+    if message_ids_to_delete is not None:
+        message_ids_to_delete.append(sent_message.message_id)
+
+    logger.info(f"✅ [DONATION] Payment gateway sent (message_id: {sent_message.message_id})")
+
+    return sent_message.message_id
+
+
+async def schedule_donation_messages_deletion(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    message_ids: list,
+    delay_seconds: int = 60
+) -> None:
+    """
+    Schedule automatic deletion of donation flow messages after specified delay.
+
+    Deletes all messages generated during donation flow to keep channel clean.
+    Uses the same pattern as donation_input_handler._schedule_message_deletion().
+
+    Args:
+        context: Telegram context object
+        chat_id: Chat ID where messages are located
+        message_ids: List of message IDs to delete
+        delay_seconds: Delay in seconds before deletion (default: 60)
+    """
+    logger.info(f"🗑️ [DONATION] Scheduling deletion of {len(message_ids)} messages after {delay_seconds}s")
+    logger.info(f"   Chat ID: {chat_id}")
+    logger.info(f"   Message IDs: {message_ids}")
+
+    async def delete_messages_after_delay():
+        """Background task to delete messages after delay."""
+        try:
+            await asyncio.sleep(delay_seconds)
+
+            deleted_count = 0
+            for message_id in message_ids:
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                    deleted_count += 1
+                    logger.info(f"🗑️ [DONATION] Deleted message {message_id}")
+                except Exception as e:
+                    # Message may have been manually deleted or bot lost permissions
+                    logger.warning(f"⚠️ [DONATION] Failed to delete message {message_id}: {e}")
+
+            logger.info(f"✅ [DONATION] Auto-deleted {deleted_count}/{len(message_ids)} messages after {delay_seconds}s")
+
+        except Exception as e:
+            logger.error(f"❌ [DONATION] Error in message deletion task: {e}", exc_info=True)
+
+    # Create background task for deletion
+    asyncio.create_task(delete_messages_after_delay())
 
 
 async def start_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -55,6 +167,9 @@ async def start_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data['donation_amount_building'] = "0"
     context.user_data['chat_id'] = query.message.chat.id
 
+    # Initialize message tracking list for auto-deletion
+    context.user_data['donation_messages_to_delete'] = []
+
     # Send keypad message
     keypad_message = await context.bot.send_message(
         chat_id=query.message.chat.id,
@@ -69,6 +184,9 @@ async def start_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Store message ID for later updates/deletion
     context.user_data['keypad_message_id'] = keypad_message.message_id
+
+    # Track keypad message for auto-deletion
+    context.user_data['donation_messages_to_delete'].append(keypad_message.message_id)
 
     logger.info(f"✅ [DONATION] Keypad sent to user {user.id}")
 
@@ -213,7 +331,7 @@ async def confirm_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await context.bot.send_message(
+    confirmation_message = await context.bot.send_message(
         chat_id=query.message.chat.id,
         text=f"✅ <b>Donation Amount Confirmed</b>\n\n"
              f"💰 Amount: <b>${amount_float:.2f}</b>\n\n"
@@ -222,6 +340,10 @@ async def confirm_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         parse_mode="HTML",
         reply_markup=reply_markup
     )
+
+    # Track confirmation message for auto-deletion
+    message_ids_to_delete = context.user_data.get('donation_messages_to_delete', [])
+    message_ids_to_delete.append(confirmation_message.message_id)
 
     return MESSAGE_INPUT
 
@@ -257,7 +379,7 @@ async def handle_message_choice(update: Update, context: ContextTypes.DEFAULT_TY
 
         # CRITICAL FIX: Send message to user's PRIVATE CHAT, not channel
         # Users cannot send text messages in channels - they can only send in private chat with bot
-        await context.bot.send_message(
+        message_prompt = await context.bot.send_message(
             chat_id=user.id,  # Send to USER's private chat with bot
             text="💬 <b>Enter Your Message</b>\n\n"
                  "Please type your message here (max 256 characters).\n"
@@ -265,6 +387,10 @@ async def handle_message_choice(update: Update, context: ContextTypes.DEFAULT_TY
                  "💡 <b>Tip:</b> Send /cancel to skip this step",
             parse_mode="HTML"
         )
+
+        # Track message prompt for auto-deletion
+        message_ids_to_delete = context.user_data.get('donation_messages_to_delete', [])
+        message_ids_to_delete.append(message_prompt.message_id)
 
         # Also acknowledge the button press in the channel
         await query.answer("✅ Message prompt sent to your private chat with the bot!", show_alert=True)
@@ -297,16 +423,23 @@ async def handle_message_text(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Validate length
     if len(message_text) > 256:
         logger.warning(f"⚠️ [DONATION] Message too long: {len(message_text)} chars")
-        await update.message.reply_text(
+        error_message = await update.message.reply_text(
             f"⚠️ Message too long ({len(message_text)} characters).\n"
             f"Please keep it under 256 characters.",
             parse_mode="HTML"
         )
+        # Track error message for auto-deletion
+        message_ids_to_delete = context.user_data.get('donation_messages_to_delete', [])
+        message_ids_to_delete.append(error_message.message_id)
         return MESSAGE_INPUT
 
     # Store message
     context.user_data['donation_message'] = message_text
     logger.info(f"💝 [DONATION] User {user.id} entered message ({len(message_text)} chars)")
+
+    # Track user's text message for auto-deletion
+    message_ids_to_delete = context.user_data.get('donation_messages_to_delete', [])
+    message_ids_to_delete.append(update.message.message_id)
 
     # Proceed to payment
     return await finalize_payment(update, context)
@@ -340,7 +473,7 @@ async def finalize_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     logger.info(f"   Message: {'Yes' if donation_message else 'No'}")
 
     # Send processing message
-    await context.bot.send_message(
+    processing_message = await context.bot.send_message(
         chat_id=chat_id,
         text=f"✅ <b>Payment Processing</b>\n\n"
              f"💰 Amount: <b>${amount_float:.2f}</b>\n"
@@ -349,6 +482,10 @@ async def finalize_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -
              f"⏳ Creating your payment link...",
         parse_mode="HTML"
     )
+
+    # Track processing message for auto-deletion
+    message_ids_to_delete = context.user_data.get('donation_messages_to_delete', [])
+    message_ids_to_delete.append(processing_message.message_id)
 
     # Get payment service from application
     payment_service = context.application.bot_data.get('payment_service')
@@ -392,16 +529,26 @@ async def finalize_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             logger.info(f"   URL: {invoice_url}")
             logger.info(f"   URL length: {len(invoice_url)} chars")
 
-            await context.bot.send_message(
+            # Send WebApp button (opens payment in Telegram WebView)
+            gateway_message_id = await send_donation_payment_gateway(
+                context=context,
                 chat_id=chat_id,
-                text=f"💳 <b>Payment Link Ready!</b>\n\n"
-                     f"Click the link below to complete your donation:\n\n"
-                     f"{invoice_url}\n\n"
-                     f"✅ Secure payment via NowPayments",
-                parse_mode="HTML"
+                invoice_url=invoice_url,
+                amount=amount_float,
+                channel_id=open_channel_id,
+                has_message=bool(donation_message),
+                message_ids_to_delete=message_ids_to_delete
             )
 
             logger.info(f"✅ [DONATION] Invoice created: {invoice_url}")
+
+            # Schedule auto-deletion of all donation flow messages after 60 seconds
+            await schedule_donation_messages_deletion(
+                context=context,
+                chat_id=chat_id,
+                message_ids=message_ids_to_delete,
+                delay_seconds=60
+            )
         else:
             error_msg = result.get('error', 'Unknown error')
             logger.error(f"❌ [DONATION] Invoice creation failed: {error_msg}")

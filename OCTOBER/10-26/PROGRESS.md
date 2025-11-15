@@ -1,8 +1,90 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-15 - **FIXED: Donation success_url Architecture (Cloud Storage Landing Page)** ✅
+**Last Updated:** 2025-11-15 - **IMPLEMENTED: Donation UX Improvements (WebApp Button + Auto-Delete)** ✅
 
 ## Recent Updates
+
+## 2025-11-15: IMPLEMENTED - Donation UX Improvements (WebApp Button + 60-Second Auto-Delete) ✅
+
+**Action:** Implemented two critical UX improvements in donation flow
+**Status:** ✅ **CODE UPDATED - READY FOR DEPLOYMENT**
+
+**IMPROVEMENTS:**
+
+1. **WebApp Button for Payment Gateway**
+   - Replaced plain text URL with Telegram WebApp button
+   - Opens NowPayments in Telegram WebView (matches subscription flow UX)
+   - Better user experience - no external browser needed
+
+2. **60-Second Auto-Delete for Donation Messages**
+   - All donation flow messages now auto-delete after 60 seconds
+   - Keeps closed channel clean and organized
+   - Matches existing auto-delete pattern from other bot features
+
+**BEFORE:**
+```
+💳 Payment Link Ready!
+Click the link below to complete your donation:
+https://nowpayments.io/payment/?iid=123
+
+❌ Plain URL opens external browser
+❌ Messages stay in channel forever
+```
+
+**AFTER:**
+```
+💳 Payment Gateway Ready! 🚀
+💰 Amount: $5.00
+[💰 Complete Donation] <-- WebApp button
+
+✅ Opens in Telegram WebView
+✅ Auto-deletes after 60 seconds
+```
+
+**Files Modified:**
+- `TelePay10-26/bot/conversations/donation_conversation.py` (Multiple functions updated)
+
+**Changes Made:**
+1. Added `import asyncio` for background task scheduling
+2. Added `send_donation_payment_gateway()` helper function (lines 25-87)
+3. Added `schedule_donation_messages_deletion()` helper function (lines 90-133)
+4. Updated `start_donation()` to initialize message tracking list
+5. Updated `confirm_donation()` to track confirmation message ID
+6. Updated `handle_message_choice()` to track message prompt ID
+7. Updated `handle_message_text()` to track user's text message ID
+8. Updated `finalize_payment()` to use WebApp button and schedule deletion
+
+**Message Tracking Pattern:**
+- `context.user_data['donation_messages_to_delete']` - List of message IDs
+- All sent messages append their IDs to this list
+- After payment gateway sent, all messages scheduled for deletion
+
+**Architecture:**
+```
+User starts donation → Message IDs tracked in context.user_data
+                    ↓
+All conversation messages stored in list
+                    ↓
+Payment gateway sent with WebApp button
+                    ↓
+Background task created: asyncio.create_task()
+                    ↓
+After 60 seconds → All messages deleted
+```
+
+**Impact:**
+- ✅ Consistent UX with subscription flow (WebApp button)
+- ✅ Clean channel experience (auto-delete)
+- ✅ Better conversion rate (seamless payment in Telegram)
+- ✅ Professional appearance (no message clutter)
+
+**Testing Required:**
+1. Test donation WITHOUT message - verify WebApp button and auto-delete
+2. Test donation WITH message - verify WebApp button and auto-delete
+3. Verify all message types are tracked and deleted
+4. Confirm 60-second delay works correctly
+
+---
 
 ## 2025-11-15: FIXED - Donation success_url Architecture to Match Subscription Flow ✅
 
