@@ -91,10 +91,12 @@ Tracking the migration of all 17 PGP_v1 services to use the PGP_COMMON shared li
   - [x] Dockerfile → Add PGP_COMMON installation
   - **Total: Saved ~82 lines**
 
-- [ ] **PGP_NP_IPN_v1**
-  - [ ] config_manager.py → BaseConfigManager
-  - [ ] cloudtasks_client.py → BaseCloudTasksClient
-  - [ ] Dockerfile → Add PGP_COMMON installation
+- [x] **PGP_NP_IPN_v1** ✅ COMPLETE
+  - [x] cloudtasks_client.py → BaseCloudTasksClient (118 → 105 lines, saved 13)
+  - [x] database_manager.py → BaseDatabaseManager (358 → 340 lines, saved 18)
+  - [x] Dockerfile → Add PGP_COMMON installation
+  - **Total: Saved ~31 lines**
+  - **Note**: No config_manager.py or token_manager.py (embedded in main file)
 
 ### Supporting Services (5 services)
 - [ ] **PGP_NP_WEBHOOK_v1**
@@ -181,10 +183,11 @@ RUN pip install -e /app/PGP_COMMON
 
 ## Progress Summary
 
-- **Completed**: 11/17 services (PGP_ORCHESTRATOR_v1, PGP_INVITE_v1, PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1, PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1, PGP_ACCUMULATOR_v1, PGP_BATCHPROCESSOR_v1, PGP_MICROBATCHPROCESSOR_v1)
+- **Completed**: 12/17 services (ALL CORE SERVICES ✅)
+  - Core: PGP_ORCHESTRATOR_v1, PGP_INVITE_v1, PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1, PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1, PGP_ACCUMULATOR_v1, PGP_BATCHPROCESSOR_v1, PGP_MICROBATCHPROCESSOR_v1, PGP_NP_IPN_v1
 - **In Progress**: 0/17 services
-- **Pending**: 6/17 services
-- **Total Code Reduction So Far**: ~1,732 lines
+- **Pending**: 5/17 supporting services
+- **Total Code Reduction So Far**: ~1,763 lines
 
 ## Notes
 
@@ -199,5 +202,7 @@ RUN pip install -e /app/PGP_COMMON
 - ✅ PGP_ACCUMULATOR_v1 completed successfully (Payment Accumulation service)
 - ✅ PGP_BATCHPROCESSOR_v1 completed successfully (Batch Payout Processor service)
 - ✅ PGP_MICROBATCHPROCESSOR_v1 completed successfully (Micro-Batch Conversion service)
+- ✅ PGP_NP_IPN_v1 completed successfully (NowPayments IPN Handler service)
+- 🎉 **ALL 12 CORE SERVICES MIGRATED SUCCESSFULLY!** 🎉
 - Each migration reduces duplicate code by ~67-271 lines depending on service complexity
 - Total expected code reduction: ~7,250 lines
