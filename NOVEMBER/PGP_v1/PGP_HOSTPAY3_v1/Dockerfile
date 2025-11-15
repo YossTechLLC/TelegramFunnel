@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
+# Install PGP_COMMON shared library
+COPY PGP_COMMON/ /app/PGP_COMMON/
+RUN pip install -e /app/PGP_COMMON
+
 # Copy the app code and supporting modules
 COPY pgp_hostpay3_v1.py .
 COPY config_manager.py .

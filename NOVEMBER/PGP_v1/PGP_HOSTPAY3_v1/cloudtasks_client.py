@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Cloud Tasks Client for GCHostPay Services.
+Cloud Tasks Client for PGP_HOSTPAY3_v1.
 Handles creating and enqueueing Cloud Tasks for inter-service communication.
 
 Supports:
@@ -8,15 +8,16 @@ Supports:
 - GCHostPay1 → GCHostPay3 (payment execution request)
 - GCHostPay2 → GCHostPay1 (status check response)
 - GCHostPay3 → GCHostPay1 (payment execution response)
+- GCHostPay3 → GCHostPay3 (self-retry after failure)
 """
-import json
-from google.cloud import tasks_v2
 from typing import Optional
+from PGP_COMMON.cloudtasks import BaseCloudTasksClient
 
 
-class CloudTasksClient:
+class CloudTasksClient(BaseCloudTasksClient):
     """
-    Manages Cloud Tasks operations for GCHostPay services.
+    Manages Cloud Tasks operations for PGP_HOSTPAY3_v1.
+    Inherits common methods from BaseCloudTasksClient.
     """
 
     def __init__(self, project_id: str, location: str):
@@ -27,67 +28,13 @@ class CloudTasksClient:
             project_id: Google Cloud project ID
             location: Google Cloud region (e.g., "us-central1")
         """
-        self.client = tasks_v2.CloudTasksClient()
-        self.project_id = project_id
-        self.location = location
-        print(f"✅ [CLOUDTASKS] CloudTasksClient initialized")
-        print(f"📊 [CLOUDTASKS] Project: {project_id}, Location: {location}")
-
-    def create_task(
-        self,
-        queue_name: str,
-        target_url: str,
-        payload: dict,
-        schedule_delay_seconds: int = 0
-    ) -> Optional[str]:
-        """
-        Create and enqueue a Cloud Task.
-
-        Args:
-            queue_name: Name of the Cloud Tasks queue
-            target_url: Target service URL
-            payload: JSON payload to send
-            schedule_delay_seconds: Optional delay before execution (default: 0)
-
-        Returns:
-            Task name if successful, None if failed
-        """
-        try:
-            # Construct the queue path
-            parent = self.client.queue_path(self.project_id, self.location, queue_name)
-
-            # Construct the task
-            task = {
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": target_url,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps(payload).encode()
-                }
-            }
-
-            # Add schedule time if delay is specified
-            if schedule_delay_seconds > 0:
-                import datetime
-                schedule_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=schedule_delay_seconds)
-                task["schedule_time"] = schedule_time
-
-            print(f"📤 [CLOUDTASKS] Creating task to {target_url}")
-            print(f"📦 [CLOUDTASKS] Queue: {queue_name}")
-            if schedule_delay_seconds > 0:
-                print(f"⏰ [CLOUDTASKS] Scheduled delay: {schedule_delay_seconds}s")
-
-            # Create the task
-            response = self.client.create_task(request={"parent": parent, "task": task})
-
-            print(f"✅ [CLOUDTASKS] Task created successfully")
-            print(f"🆔 [CLOUDTASKS] Task name: {response.name}")
-
-            return response.name
-
-        except Exception as e:
-            print(f"❌ [CLOUDTASKS] Error creating task: {e}")
-            return None
+        # PGP_HOSTPAY3 doesn't use signed tasks, so pass empty signing_key
+        super().__init__(
+            project_id=project_id,
+            location=location,
+            signing_key="",
+            service_name="PGP_HOSTPAY3_v1"
+        )
 
     # ========================================================================
     # GCHostPay1 → GCHostPay2 (Status Check Request)
@@ -214,7 +161,7 @@ class CloudTasksClient:
         )
 
     # ========================================================================
-    # GCHostPay3 → GCHostPay3 (Self-Retry After Failure) [NEW]
+    # GCHostPay3 → GCHostPay3 (Self-Retry After Failure)
     # ========================================================================
 
     def enqueue_gchostpay3_retry(
@@ -225,7 +172,7 @@ class CloudTasksClient:
         retry_delay_seconds: int = 60
     ) -> Optional[str]:
         """
-        NEW METHOD: Enqueue retry task to GCHostPay3 itself after transient failure.
+        Enqueue retry task to GCHostPay3 itself after transient failure.
 
         This method is called when a payment fails with a retryable error (e.g., RATE_LIMIT_EXCEEDED).
         The retry is delayed by retry_delay_seconds to allow transient issues to resolve.
@@ -238,14 +185,6 @@ class CloudTasksClient:
 
         Returns:
             Task name if successful, None if failed
-
-        Example:
-            >>> tasks_client.enqueue_gchostpay3_retry(
-            ...     queue_name="gchostpay3-retry-queue",
-            ...     target_url="https://gchostpay3-10-26.run.app/",
-            ...     encrypted_token=retry_token,
-            ...     retry_delay_seconds=60
-            ... )
         """
         print(f"🔄 [CLOUDTASKS] Enqueueing self-retry to GCHostPay3")
         print(f"⏰ [CLOUDTASKS] Retry delay: {retry_delay_seconds}s")
