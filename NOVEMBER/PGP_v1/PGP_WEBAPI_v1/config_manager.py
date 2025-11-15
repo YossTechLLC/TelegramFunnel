@@ -11,7 +11,10 @@ class ConfigManager:
     """Manages configuration from Google Secret Manager"""
 
     def __init__(self):
-        self.project_id = "telepay-459221"
+        # 🔐 SECURITY FIX: Use environment variable for project ID instead of hardcoding
+        self.project_id = os.getenv("GCP_PROJECT_ID", "telepay-459221")
+        if os.getenv("GCP_PROJECT_ID") is None:
+            print("⚠️ GCP_PROJECT_ID not set, using default: telepay-459221")
         self.client = secretmanager.SecretManagerServiceClient()
 
     def access_secret(self, secret_name: str) -> str:

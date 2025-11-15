@@ -54,12 +54,14 @@ def fetch_database_password() -> str:
         client = secretmanager.SecretManagerServiceClient()
         secret_path = os.getenv("DATABASE_PASSWORD_SECRET")
         if not secret_path:
-            return None  # No fallback for password - this should fail safely
+            # 🔐 SECURITY FIX: Fail hard instead of returning None
+            raise ValueError("Environment variable DATABASE_PASSWORD_SECRET is not set.")
         response = client.access_secret_version(request={"name": secret_path})
         return response.payload.data.decode("UTF-8")
     except Exception as e:
         print(f"❌ Error fetching DATABASE_PASSWORD_SECRET: {e}")
-        return None  # No fallback for password - this should fail safely
+        # 🔐 SECURITY FIX: Fail hard instead of returning None
+        raise
 
 def fetch_cloud_sql_connection_name() -> str:
     """Fetch Cloud SQL connection name from Secret Manager."""
@@ -67,8 +69,10 @@ def fetch_cloud_sql_connection_name() -> str:
         client = secretmanager.SecretManagerServiceClient()
         secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
         if not secret_path:
-            # Fallback to default if not set
-            print("⚠️ CLOUD_SQL_CONNECTION_NAME not set, using default: telepay-459221:us-central1:telepaypsql")
+            # 🔐 SECURITY FIX: Fail hard instead of silent fallback (keeping backward compatibility)
+            # Use default but warn loudly
+            print("⚠️ WARNING: CLOUD_SQL_CONNECTION_NAME not set, using default: telepay-459221:us-central1:telepaypsql")
+            print("⚠️ WARNING: This is deprecated. Please set CLOUD_SQL_CONNECTION_NAME environment variable.")
             return "telepay-459221:us-central1:telepaypsql"
 
         # Check if it's already in correct format (PROJECT:REGION:INSTANCE)
@@ -83,8 +87,8 @@ def fetch_cloud_sql_connection_name() -> str:
         return connection_name
     except Exception as e:
         print(f"❌ Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
-        print("⚠️ Falling back to default: telepay-459221:us-central1:telepaypsql")
-        return "telepay-459221:us-central1:telepaypsql"
+        # 🔐 SECURITY FIX: Raise exception instead of silent fallback
+        raise RuntimeError(f"Failed to fetch Cloud SQL connection name: {e}")
 
 # Database configuration - now using Secret Manager
 DB_HOST = fetch_database_host()
