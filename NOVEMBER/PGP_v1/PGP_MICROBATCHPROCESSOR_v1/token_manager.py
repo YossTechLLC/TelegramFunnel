@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Token Manager for GCMicroBatchProcessor-10-26 (Micro-Batch Conversion Service).
-Handles token encryption/decryption for communication with GCHostPay1.
+Token Manager for PGP_MICROBATCHPROCESSOR_v1 (Micro-Batch Conversion Service).
+Handles token encryption/decryption for communication with PGP HostPay1.
 """
 import base64
 import hmac
@@ -9,11 +9,13 @@ import hashlib
 import struct
 import time
 from typing import Optional, Dict, Any, Tuple
+from PGP_COMMON.tokens import BaseTokenManager
 
 
-class TokenManager:
+class TokenManager(BaseTokenManager):
     """
-    Manages token encryption for GCMicroBatchProcessor-10-26.
+    Manages token encryption for PGP_MICROBATCHPROCESSOR_v1.
+    Inherits common methods from BaseTokenManager.
     """
 
     def __init__(self, signing_key: str):
@@ -23,8 +25,8 @@ class TokenManager:
         Args:
             signing_key: SUCCESS_URL_SIGNING_KEY for token encryption
         """
-        self.signing_key = signing_key
-        print(f"🔐 [TOKEN] TokenManager initialized")
+        super().__init__(signing_key=signing_key, service_name="PGP_MICROBATCHPROCESSOR_v1")
+
 
     def _pack_string(self, s: str) -> bytes:
         """Pack a string with 1-byte length prefix."""
@@ -60,25 +62,25 @@ class TokenManager:
             payload = bytearray()
 
             # Pack context
-            payload.extend(self._pack_string('batch'))
+            payload.extend(self.pack_string('batch'))
 
             # Pack batch_conversion_id (UUID as string)
-            payload.extend(self._pack_string(batch_conversion_id))
+            payload.extend(self.pack_string(batch_conversion_id))
 
             # Pack cn_api_id
-            payload.extend(self._pack_string(cn_api_id))
+            payload.extend(self.pack_string(cn_api_id))
 
             # Pack from_currency
-            payload.extend(self._pack_string(from_currency))
+            payload.extend(self.pack_string(from_currency))
 
             # Pack from_network
-            payload.extend(self._pack_string(from_network))
+            payload.extend(self.pack_string(from_network))
 
             # Pack from_amount (8 bytes, double)
             payload.extend(struct.pack(">d", from_amount))
 
             # Pack payin_address
-            payload.extend(self._pack_string(payin_address))
+            payload.extend(self.pack_string(payin_address))
 
             # Pack timestamp (8 bytes, uint64)
             timestamp = int(time.time())
@@ -135,13 +137,13 @@ class TokenManager:
             offset = 0
 
             # Unpack batch_conversion_id (variable length string)
-            batch_conversion_id, offset = self._unpack_string(payload, offset)
+            batch_conversion_id, offset = self.unpack_string(payload, offset)
 
             # Unpack cn_api_id (variable length string)
-            cn_api_id, offset = self._unpack_string(payload, offset)
+            cn_api_id, offset = self.unpack_string(payload, offset)
 
             # Unpack tx_hash (variable length string)
-            tx_hash, offset = self._unpack_string(payload, offset)
+            tx_hash, offset = self.unpack_string(payload, offset)
 
             # Unpack actual_usdt_received (8 bytes, double)
             actual_usdt_received = struct.unpack(">d", payload[offset:offset + 8])[0]

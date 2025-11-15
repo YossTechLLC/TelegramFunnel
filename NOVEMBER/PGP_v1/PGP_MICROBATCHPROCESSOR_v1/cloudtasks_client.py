@@ -1,30 +1,37 @@
 #!/usr/bin/env python
 """
-Cloud Tasks Client for GCMicroBatchProcessor-10-26.
-Handles enqueueing tasks to GCHostPay1 batch execution queue.
+Cloud Tasks Client for PGP_MICROBATCHPROCESSOR_v1 (Micro-Batch Conversion Service).
+Handles enqueueing tasks to PGP HostPay1 batch execution queue.
 """
-from google.cloud import tasks_v2
 from typing import Optional
+from PGP_COMMON.cloudtasks import BaseCloudTasksClient
 
 
-class CloudTasksClient:
+class CloudTasksClient(BaseCloudTasksClient):
     """
-    Manages Cloud Tasks operations for GCMicroBatchProcessor-10-26.
+    Manages Cloud Tasks operations for PGP_MICROBATCHPROCESSOR_v1.
+    Inherits common methods from BaseCloudTasksClient.
     """
 
     def __init__(self, project_id: str, location: str):
         """
-        Initialize the CloudTasksClient.
+        Initialize Cloud Tasks client.
 
         Args:
             project_id: Google Cloud project ID
-            location: Cloud Tasks location (e.g., us-central1)
+            location: Google Cloud region (e.g., "us-central1")
         """
-        self.project_id = project_id
-        self.location = location
-        self.client = tasks_v2.CloudTasksClient()
-        print(f"☁️ [CLOUDTASKS] CloudTasksClient initialized")
-        print(f"📊 [CLOUDTASKS] Project: {project_id}, Location: {location}")
+        # PGP_MICROBATCHPROCESSOR doesn't use signed tasks, so pass empty signing_key
+        super().__init__(
+            project_id=project_id,
+            location=location,
+            signing_key="",
+            service_name="PGP_MICROBATCHPROCESSOR_v1"
+        )
+
+    # ========================================================================
+    # GCMicroBatchProcessor → GCHostPay1 (Batch Execution)
+    # ========================================================================
 
     def enqueue_gchostpay1_batch_execution(
         self,
@@ -43,34 +50,14 @@ class CloudTasksClient:
         Returns:
             Task name if successful, None if failed
         """
-        try:
-            print(f"📤 [CLOUDTASKS] Enqueueing batch execution task to GCHostPay1")
-            print(f"🎯 [CLOUDTASKS] Queue: {queue_name}")
-            print(f"🌐 [CLOUDTASKS] Target: {target_url}")
+        print(f"📤 [CLOUDTASKS] Enqueueing batch execution task to GCHostPay1")
+        print(f"🎯 [CLOUDTASKS] Queue: {queue_name}")
+        print(f"🌐 [CLOUDTASKS] Target: {target_url}")
 
-            # Construct the fully qualified queue name
-            parent = self.client.queue_path(self.project_id, self.location, queue_name)
+        payload = {"token": encrypted_token}
 
-            # Construct the request body
-            task = {
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": target_url,
-                    "headers": {
-                        "Content-Type": "application/json"
-                    },
-                    "body": f'{{"token": "{encrypted_token}"}}'.encode()
-                }
-            }
-
-            # Create the task
-            response = self.client.create_task(request={"parent": parent, "task": task})
-
-            print(f"✅ [CLOUDTASKS] Task created successfully")
-            print(f"🆔 [CLOUDTASKS] Task name: {response.name}")
-
-            return response.name
-
-        except Exception as e:
-            print(f"❌ [CLOUDTASKS] Failed to create task: {e}")
-            return None
+        return self.create_task(
+            queue_name=queue_name,
+            target_url=target_url,
+            payload=payload
+        )
