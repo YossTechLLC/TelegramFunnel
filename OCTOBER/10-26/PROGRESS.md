@@ -1,8 +1,64 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-15 - **ENHANCED: Debug Logging for Donation Message Encryption Flow** ✅
+**Last Updated:** 2025-11-15 - **FIXED: Donation success_url Architecture (Cloud Storage Landing Page)** ✅
 
 ## Recent Updates
+
+## 2025-11-15: FIXED - Donation success_url Architecture to Match Subscription Flow ✅
+
+**Action:** Fixed critical architectural issue where donation flow used wrong success_url endpoint
+**Status:** ✅ **CODE UPDATED - READY FOR DEPLOYMENT**
+
+**ROOT CAUSE:**
+- Donation flow used `https://www.paygateprime.com/payment-processing` (endpoint doesn't exist)
+- Environment variable `BASE_URL` pointed to wrong domain
+- Subscription flow correctly uses `https://storage.googleapis.com/paygateprime-static/payment-processing.html`
+- Inconsistent architecture between donation and subscription flows
+
+**THE FIX:**
+- Replaced `base_url = os.getenv('BASE_URL', 'https://www.paygateprime.com')` with hardcoded Cloud Storage URL
+- Changed `landing_page_base_url = "https://storage.googleapis.com/paygateprime-static/payment-processing.html"`
+- Changed `quote(order_id)` to `quote(order_id, safe='')` to match subscription flow
+- Changed `quote(encrypted_msg)` to `quote(encrypted_msg, safe='')` to match subscription flow
+
+**BEFORE:**
+```
+https://www.paygateprime.com/payment-processing?order_id=PGP-6271402111%7C-1003377958897&msg=...
+❌ Endpoint doesn't exist
+```
+
+**AFTER:**
+```
+https://storage.googleapis.com/paygateprime-static/payment-processing.html?order_id=PGP-6271402111%7C-1003377958897&msg=...
+✅ Points to actual landing page that polls payment status
+```
+
+**Files Modified:**
+- `TelePay10-26/services/payment_service.py` (Lines 293-322)
+
+**Impact:**
+- ✅ Donation payments now redirect to proper landing page after payment
+- ✅ Landing page polls np-webhook for payment status (same as subscription flow)
+- ✅ Message encryption/decryption workflow unaffected
+- ✅ Consistent user experience across donation and subscription flows
+- ✅ No environment variable dependency
+
+**Architecture:**
+```
+User pays → NowPayments redirects to Cloud Storage landing page
+         ↓
+Landing page loads payment-processing.html
+         ↓
+JavaScript polls np-webhook /api/payment-status
+         ↓
+Shows payment confirmation to user
+         ↓
+IPN callback extracts encrypted message from success_url
+         ↓
+Sends notification to channel owner with decrypted message
+```
+
+---
 
 ## 2025-11-15: ENHANCED - Debug Logging for Donation Message Encryption/URL Encoding ✅
 

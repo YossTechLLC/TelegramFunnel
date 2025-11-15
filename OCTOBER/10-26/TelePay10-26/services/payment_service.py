@@ -290,16 +290,17 @@ class PaymentService:
             }
 
         try:
-            # Build base success URL with properly encoded order_id
-            # URL encode the pipe character (|) in order_id format: PGP-{user_id}|{channel_id}
-            base_url = os.getenv('BASE_URL', 'https://www.paygateprime.com')
+            # Build success URL pointing to static landing page in Cloud Storage
+            # This matches the subscription flow architecture from start_np_gateway.py (lines 297-298)
+            # The landing page polls np-webhook for payment status and handles message decryption
+            landing_page_base_url = "https://storage.googleapis.com/paygateprime-static/payment-processing.html"
 
             # DEBUG: Log order_id before and after URL encoding
             logger.info(f"🔑 [DEBUG] Order ID encoding:")
             logger.info(f"   Original order_id: '{order_id}'")
-            logger.info(f"   URL-encoded order_id: '{quote(order_id)}'")
+            logger.info(f"   URL-encoded order_id: '{quote(order_id, safe='')}'")
 
-            success_url = f"{base_url}/payment-processing?order_id={quote(order_id)}"
+            success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe='')}"
             logger.info(f"🔗 [DEBUG] Base success_url (before message): {success_url}")
 
             # Encrypt and append message if provided (with URL encoding)
@@ -313,9 +314,9 @@ class PaymentService:
                 encrypted_msg = encrypt_donation_message(donation_message)
 
                 logger.info(f"   Step 2 - After encryption (base64url): '{encrypted_msg}'")
-                logger.info(f"   Step 3 - URL-encoded encrypted msg: '{quote(encrypted_msg)}'")
+                logger.info(f"   Step 3 - URL-encoded encrypted msg: '{quote(encrypted_msg, safe='')}'")
 
-                success_url += f"&msg={quote(encrypted_msg)}"  # URL encode encrypted message
+                success_url += f"&msg={quote(encrypted_msg, safe='')}"  # URL encode encrypted message
 
                 logger.info(f"   Encrypted message length: {len(encrypted_msg)} chars")
                 logger.info(f"🔗 [DEBUG] Final success_url (with message): {success_url}")

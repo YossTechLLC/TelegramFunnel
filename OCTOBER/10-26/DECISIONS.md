@@ -1,12 +1,123 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-15 - **URL Encoding for NowPayments success_url Query Parameters** ✅
+**Last Updated:** 2025-11-15 - **Unified Payment Landing Page Architecture (Cloud Storage)** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-15: Unified Payment Landing Page Architecture (Cloud Storage) ✅
+
+**Decision:** Use Cloud Storage static landing page for BOTH donation and subscription payment flows
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- Donation flow was using `https://www.paygateprime.com/payment-processing` (endpoint doesn't exist)
+- Subscription flow was correctly using `https://storage.googleapis.com/paygateprime-static/payment-processing.html`
+- Inconsistent user experience and architecture between flows
+- BASE_URL environment variable pointed to wrong domain
+
+**Problem:**
+```python
+# BEFORE (Donation flow - BROKEN)
+base_url = os.getenv('BASE_URL', 'https://www.paygateprime.com')
+success_url = f"{base_url}/payment-processing?order_id={quote(order_id)}"
+
+# Result: https://www.paygateprime.com/payment-processing?order_id=...
+# ❌ Endpoint doesn't exist → User sees 404 after payment
+```
+
+**Solution:**
+```python
+# AFTER (Donation flow - FIXED)
+landing_page_base_url = "https://storage.googleapis.com/paygateprime-static/payment-processing.html"
+success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe='')}"
+
+# Result: https://storage.googleapis.com/paygateprime-static/payment-processing.html?order_id=...
+# ✅ Points to actual landing page → Polls payment status → Shows confirmation
+```
+
+**Rationale:**
+
+1. **Consistency:** Both donation and subscription flows now use identical landing page architecture
+2. **Proven Pattern:** Subscription flow has been working correctly with this approach
+3. **No Environment Variable Dependency:** Hardcoded URL eliminates misconfiguration risk
+4. **Payment Status Polling:** Landing page polls np-webhook `/api/payment-status` endpoint
+5. **Message Handling:** IPN callback extracts encrypted message from success_url, decrypts, and sends notification
+
+**Architecture Flow:**
+```
+User completes payment on NowPayments
+         ↓
+NowPayments redirects to success_url
+         ↓
+storage.googleapis.com/paygateprime-static/payment-processing.html?order_id=PGP-xxx&msg=yyy
+         ↓
+Landing page JavaScript polls: np-webhook-10-26.run.app/api/payment-status?order_id=PGP-xxx
+         ↓
+Shows "Payment Confirmed!" or "Processing..." to user
+         ↓
+Meanwhile: NowPayments sends IPN to np-webhook
+         ↓
+np-webhook extracts 'msg' parameter from success_url in IPN payload
+         ↓
+Decrypts message using decrypt_donation_message()
+         ↓
+Sends notification to channel owner via GCNotificationService
+```
+
+**Implementation Details:**
+
+**File:** `TelePay10-26/services/payment_service.py` (Lines 293-322)
+
+**Changes:**
+1. Removed `base_url = os.getenv('BASE_URL', ...)` dependency
+2. Hardcoded `landing_page_base_url = "https://storage.googleapis.com/paygateprime-static/payment-processing.html"`
+3. Changed `quote(order_id)` to `quote(order_id, safe='')` (matches subscription flow)
+4. Changed `quote(encrypted_msg)` to `quote(encrypted_msg, safe='')` (matches subscription flow)
+
+**Alternative Considered:**
+
+**Option 2:** np-webhook Same-Origin Architecture
+- Serve payment-processing.html from np-webhook service itself
+- URL: `https://np-webhook-10-26-*.run.app/payment-processing?order_id=...`
+- Benefits: No CORS, uses window.location.origin
+- Rejected: Inconsistent with subscription flow, requires environment variable parsing
+
+**Advantages of Chosen Solution:**
+
+✅ **Consistency:** Both flows use identical architecture
+✅ **Proven:** Subscription flow validates this approach works
+✅ **Simple:** No environment variable dependencies
+✅ **Reliable:** Cloud Storage is highly available
+✅ **Maintainable:** Single landing page for all payment types
+
+**Testing Requirements:**
+
+1. **Donation WITHOUT Message:**
+   - Expected success_url: `https://storage.googleapis.com/paygateprime-static/payment-processing.html?order_id=PGP-6271402111%7C-1003377958897`
+   - Landing page should load and poll payment status
+
+2. **Donation WITH Message:**
+   - Expected success_url: `...?order_id=PGP-xxx&msg=KLUv_SAXuQAA...`
+   - Landing page should load and poll payment status
+   - IPN should extract message from success_url
+   - Channel owner should receive notification with decrypted message
+
+**Rollback Plan:**
+- Revert to BASE_URL environment variable approach
+- No database changes (safe rollback)
+- No deployment dependencies
+
+**Related Files:**
+- `TelePay10-26/services/payment_service.py` (donation invoice creation)
+- `TelePay10-26/start_np_gateway.py` (subscription invoice creation - reference implementation)
+- `np-webhook-10-26/payment-processing.html` (landing page)
+- `np-webhook-10-26/app.py` (payment status API + IPN handler)
+
+---
 
 ## 2025-11-15: URL Encoding for NowPayments API Query Parameters ✅
 
