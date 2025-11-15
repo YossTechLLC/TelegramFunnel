@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-np-webhook-10-26: NowPayments IPN Webhook Handler
+PGP_NP_IPN_v1: NowPayments IPN Webhook Handler
 Receives Instant Payment Notification (IPN) callbacks from NowPayments.
 Verifies signature and updates database with payment_id and payment metadata.
 """
@@ -51,7 +51,7 @@ print(f"")
 # CONFIGURATION AND INITIALIZATION
 # ============================================================================
 
-print(f"🚀 [APP] Initializing np-webhook-10-26 - NowPayments IPN Handler")
+print(f"🚀 [APP] Initializing PGP_NP_IPN_v1 - NowPayments IPN Handler")
 print(f"📋 [APP] This service processes IPN callbacks from NowPayments")
 print(f"🔐 [APP] Verifies signatures and updates database with payment_id")
 print(f"")
@@ -117,19 +117,19 @@ else:
 print(f"")
 print(f"⚙️ [CONFIG] Loading Cloud Tasks configuration...")
 
-# Cloud Tasks configuration for triggering GCWebhook1
+# Cloud Tasks configuration for triggering PGP Orchestrator
 CLOUD_TASKS_PROJECT_ID = (os.getenv('CLOUD_TASKS_PROJECT_ID') or '').strip() or None
 CLOUD_TASKS_LOCATION = (os.getenv('CLOUD_TASKS_LOCATION') or '').strip() or None
-GCWEBHOOK1_QUEUE = (os.getenv('GCWEBHOOK1_QUEUE') or '').strip() or None
-GCWEBHOOK1_URL = (os.getenv('GCWEBHOOK1_URL') or '').strip() or None
+PGP_ORCHESTRATOR_QUEUE = (os.getenv('PGP_ORCHESTRATOR_QUEUE') or '').strip() or None
+PGP_ORCHESTRATOR_URL = (os.getenv('PGP_ORCHESTRATOR_URL') or '').strip() or None
 
 # 🆕 GCNotificationService URL for payment notifications (GCNotificationService_REFACTORING_ARCHITECTURE)
 GCNOTIFICATIONSERVICE_URL = (os.getenv('GCNOTIFICATIONSERVICE_URL') or '').strip() or None
 
 print(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
 print(f"   CLOUD_TASKS_LOCATION: {'✅ Loaded' if CLOUD_TASKS_LOCATION else '❌ Missing'}")
-print(f"   GCWEBHOOK1_QUEUE: {'✅ Loaded' if GCWEBHOOK1_QUEUE else '❌ Missing'}")
-print(f"   GCWEBHOOK1_URL: {'✅ Loaded' if GCWEBHOOK1_URL else '❌ Missing'}")
+print(f"   PGP_ORCHESTRATOR_QUEUE: {'✅ Loaded' if PGP_ORCHESTRATOR_QUEUE else '❌ Missing'}")
+print(f"   PGP_ORCHESTRATOR_URL: {'✅ Loaded' if PGP_ORCHESTRATOR_URL else '❌ Missing'}")
 print(f"   🆕 GCNOTIFICATIONSERVICE_URL: {'✅ Loaded' if GCNOTIFICATIONSERVICE_URL else '❌ Missing (notifications disabled)'}")
 
 # Initialize Cloud Tasks client
@@ -903,19 +903,19 @@ def handle_ipn():
                             subscription_price = str(sub_data[4])  # Ensure string type
 
                             print(f"")
-                            print(f"🚀 [ORCHESTRATION] Triggering GCWebhook1 for payment processing...")
+                            print(f"🚀 [ORCHESTRATION] Triggering PGP Orchestrator for payment processing...")
 
                             if not cloudtasks_client:
                                 print(f"❌ [ORCHESTRATION] Cloud Tasks client not initialized")
-                                print(f"⚠️ [ORCHESTRATION] Cannot trigger GCWebhook1 - payment will not be processed!")
-                            elif not GCWEBHOOK1_QUEUE or not GCWEBHOOK1_URL:
-                                print(f"❌ [ORCHESTRATION] GCWebhook1 configuration missing")
-                                print(f"⚠️ [ORCHESTRATION] Cannot trigger GCWebhook1 - payment will not be processed!")
+                                print(f"⚠️ [ORCHESTRATION] Cannot trigger PGP Orchestrator - payment will not be processed!")
+                            elif not PGP_ORCHESTRATOR_QUEUE or not PGP_ORCHESTRATOR_URL:
+                                print(f"❌ [ORCHESTRATION] PGP Orchestrator configuration missing")
+                                print(f"⚠️ [ORCHESTRATION] Cannot trigger PGP Orchestrator - payment will not be processed!")
                             else:
                                 try:
                                     task_name = cloudtasks_client.enqueue_gcwebhook1_validated_payment(
-                                        queue_name=GCWEBHOOK1_QUEUE,
-                                        target_url=f"{GCWEBHOOK1_URL}/process-validated-payment",
+                                        queue_name=PGP_ORCHESTRATOR_QUEUE,
+                                        target_url=f"{PGP_ORCHESTRATOR_URL}/process-validated-payment",
                                         user_id=user_id,
                                         closed_channel_id=closed_channel_id,
                                         wallet_address=wallet_address,
