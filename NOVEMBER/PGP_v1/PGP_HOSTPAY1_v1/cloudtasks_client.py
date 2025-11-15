@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Cloud Tasks Client for GCHostPay Services.
+Cloud Tasks Client for PGP_HOSTPAY1_v1.
 Handles creating and enqueueing Cloud Tasks for inter-service communication.
 
 Supports:
@@ -9,16 +9,14 @@ Supports:
 - GCHostPay2 → GCHostPay1 (status check response)
 - GCHostPay3 → GCHostPay1 (payment execution response)
 """
-import json
-import datetime
-from google.cloud import tasks_v2
-from google.protobuf import timestamp_pb2
 from typing import Optional
+from PGP_COMMON.cloudtasks import BaseCloudTasksClient
 
 
-class CloudTasksClient:
+class CloudTasksClient(BaseCloudTasksClient):
     """
-    Manages Cloud Tasks operations for GCHostPay services.
+    Manages Cloud Tasks operations for PGP_HOSTPAY1_v1.
+    Inherits common methods from BaseCloudTasksClient.
     """
 
     def __init__(self, project_id: str, location: str):
@@ -29,67 +27,13 @@ class CloudTasksClient:
             project_id: Google Cloud project ID
             location: Google Cloud region (e.g., "us-central1")
         """
-        self.client = tasks_v2.CloudTasksClient()
-        self.project_id = project_id
-        self.location = location
-        print(f"✅ [CLOUDTASKS] CloudTasksClient initialized")
-        print(f"📊 [CLOUDTASKS] Project: {project_id}, Location: {location}")
-
-    def create_task(
-        self,
-        queue_name: str,
-        target_url: str,
-        payload: dict,
-        schedule_delay_seconds: int = 0
-    ) -> Optional[str]:
-        """
-        Create and enqueue a Cloud Task.
-
-        Args:
-            queue_name: Name of the Cloud Tasks queue
-            target_url: Target service URL
-            payload: JSON payload to send
-            schedule_delay_seconds: Optional delay before execution (default: 0)
-
-        Returns:
-            Task name if successful, None if failed
-        """
-        try:
-            # Construct the queue path
-            parent = self.client.queue_path(self.project_id, self.location, queue_name)
-
-            # Construct the task
-            task = {
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": target_url,
-                    "headers": {"Content-Type": "application/json"},
-                    "body": json.dumps(payload).encode()
-                }
-            }
-
-            # Add schedule time if delay is specified
-            if schedule_delay_seconds > 0:
-                d = datetime.datetime.utcnow() + datetime.timedelta(seconds=schedule_delay_seconds)
-                timestamp = timestamp_pb2.Timestamp()
-                timestamp.FromDatetime(d)
-                task["schedule_time"] = timestamp
-                print(f"⏰ [CLOUDTASKS] Task scheduled for {schedule_delay_seconds}s from now")
-
-            print(f"📤 [CLOUDTASKS] Creating task to {target_url}")
-            print(f"📦 [CLOUDTASKS] Queue: {queue_name}")
-
-            # Create the task
-            response = self.client.create_task(request={"parent": parent, "task": task})
-
-            print(f"✅ [CLOUDTASKS] Task created successfully")
-            print(f"🆔 [CLOUDTASKS] Task name: {response.name}")
-
-            return response.name
-
-        except Exception as e:
-            print(f"❌ [CLOUDTASKS] Error creating task: {e}")
-            return None
+        # PGP_HOSTPAY1 doesn't use signed tasks, so pass empty signing_key
+        super().__init__(
+            project_id=project_id,
+            location=location,
+            signing_key="",
+            service_name="PGP_HOSTPAY1_v1"
+        )
 
     # ========================================================================
     # GCHostPay1 → GCHostPay2 (Status Check Request)

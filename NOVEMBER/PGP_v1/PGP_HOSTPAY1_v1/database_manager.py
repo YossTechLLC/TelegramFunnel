@@ -1,26 +1,15 @@
 #!/usr/bin/env python
 """
-Database Manager for GCHostPay10-26 Host Wallet Payment Service.
+Database Manager for PGP_HOSTPAY1_v1 Host Wallet Payment Service.
 Handles database operations for the split_payout_hostpay table.
-Uses Google Cloud SQL Connector (mirroring GCSplit10-26 pattern).
 """
 from typing import Optional
+from PGP_COMMON.database import BaseDatabaseManager
 
-# Import Cloud SQL Connector for database functionality
-try:
-    from google.cloud.sql.connector import Connector
-    CLOUD_SQL_AVAILABLE = True
-    print("✅ [INFO] Cloud SQL Connector imported successfully")
-except ImportError as e:
-    print(f"❌ [ERROR] Cloud SQL Connector import failed: {e}")
-    CLOUD_SQL_AVAILABLE = False
-    Connector = None
-
-class DatabaseManager:
+class DatabaseManager(BaseDatabaseManager):
     """
-    Manages database connections and operations for GCHostPay10-26 service.
-    Uses the same database as the main TelePay application.
-    Uses Google Cloud SQL Connector (no connection pooling).
+    Manages database connections and operations for PGP_HOSTPAY1_v1 service.
+    Inherits common methods from BaseDatabaseManager.
     """
 
     def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str):
@@ -33,49 +22,11 @@ class DatabaseManager:
             db_user: Database user
             db_password: Database password
         """
-        self.connection_name = instance_connection_name
-        self.db_name = db_name
-        self.db_user = db_user
-        self.db_password = db_password
-
-        print(f"🗄️ [DATABASE] DatabaseManager initialized")
-        print(f"📊 [DATABASE] Instance: {instance_connection_name}")
-        print(f"📊 [DATABASE] Database: {db_name}")
-        print(f"📊 [DATABASE] User: {db_user}")
+        super().__init__(instance_connection_name, db_name, db_user, db_password, service_name="PGP_HOSTPAY1_v1")
 
     def get_database_connection(self):
-        """
-        Create and return a database connection using Cloud SQL Connector.
-        This mirrors the pattern from GCSplit10-26.
-
-        Returns:
-            Database connection object or None if failed
-        """
-        if not CLOUD_SQL_AVAILABLE:
-            print("❌ [DATABASE] Cloud SQL Connector not available")
-            return None
-
-        if not all([self.db_name, self.db_user, self.db_password, self.connection_name]):
-            print("❌ [DATABASE] Missing database credentials")
-            return None
-
-        try:
-            # Create connection using Cloud SQL Connector
-            connector = Connector()
-            connection = connector.connect(
-                self.connection_name,
-                "pg8000",
-                user=self.db_user,
-                password=self.db_password,
-                db=self.db_name
-            )
-            print("🔗 [DATABASE] ✅ Cloud SQL Connector connection successful!")
-            return connection
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Database connection failed: {e}")
-            return None
-
+        """Alias for get_connection() for backward compatibility"""
+        return self.get_connection()
     def insert_hostpay_transaction(self, unique_id: str, cn_api_id: str, from_currency: str,
                                    from_network: str, from_amount: float, payin_address: str,
                                    is_complete: bool = True, tx_hash: str = None, tx_status: str = None,
