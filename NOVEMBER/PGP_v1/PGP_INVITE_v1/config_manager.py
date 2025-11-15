@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCWebhook2-10-26 (Telegram Invite Sender Service).
+Configuration Manager for PGP_INVITE_v1 (Telegram Invite Sender Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCWebhook2-10-26 service.
+    Manages configuration and secrets for the PGP_INVITE_v1 service.
     """
 
     def __init__(self):
@@ -77,12 +77,12 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCWebhook2.
+        Initialize and return all configuration values for PGP_INVITE_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCWebhook2-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_INVITE_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(

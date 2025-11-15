@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCAccumulator-10-26 (Payment Accumulation Service).
+Configuration Manager for PGP_ACCUMULATOR_v1 (Payment Accumulation Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCAccumulator-10-26 service.
+    Manages configuration and secrets for the PGP_ACCUMULATOR_v1 service.
     """
 
     def __init__(self):
@@ -46,12 +46,12 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCAccumulator.
+        Initialize and return all configuration values for PGP_ACCUMULATOR_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCAccumulator-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_ACCUMULATOR_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
@@ -70,37 +70,37 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        # GCSplit2 configuration (for USDT conversion estimates)
-        gcsplit2_queue = self.fetch_secret(
-            "GCSPLIT2_QUEUE",
-            "GCSplit2 queue name"
+        # PGP Split2 configuration (for USDT conversion estimates)
+        pgp_split2_queue = self.fetch_secret(
+            "PGP_SPLIT2_ESTIMATE_QUEUE",
+            "PGP Split2 estimate queue name"
         )
 
-        gcsplit2_url = self.fetch_secret(
-            "GCSPLIT2_URL",
-            "GCSplit2 service URL"
+        pgp_split2_url = self.fetch_secret(
+            "PGP_SPLIT2_URL",
+            "PGP Split2 service URL"
         )
 
-        # GCSplit3 configuration (for ETH→USDT swap creation)
-        gcsplit3_queue = self.fetch_secret(
-            "GCSPLIT3_QUEUE",
-            "GCSplit3 queue name"
+        # PGP Split3 configuration (for ETH→USDT swap creation)
+        pgp_split3_queue = self.fetch_secret(
+            "PGP_SPLIT3_SWAP_QUEUE",
+            "PGP Split3 swap queue name"
         )
 
-        gcsplit3_url = self.fetch_secret(
-            "GCSPLIT3_URL",
-            "GCSplit3 service URL"
+        pgp_split3_url = self.fetch_secret(
+            "PGP_SPLIT3_URL",
+            "PGP Split3 service URL"
         )
 
-        # GCHostPay1 configuration (for swap execution)
-        gchostpay1_queue = self.fetch_secret(
-            "GCHOSTPAY1_QUEUE",
-            "GCHostPay1 queue name"
+        # PGP HostPay1 configuration (for swap execution)
+        pgp_hostpay1_queue = self.fetch_secret(
+            "PGP_HOSTPAY_TRIGGER_QUEUE",
+            "PGP HostPay trigger queue name"
         )
 
-        gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
-            "GCHostPay1 service URL"
+        pgp_hostpay1_url = self.fetch_secret(
+            "PGP_HOSTPAY1_URL",
+            "PGP HostPay1 service URL"
         )
 
         # Host wallet configuration
@@ -149,12 +149,12 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gcsplit2_queue': gcsplit2_queue,
-            'gcsplit2_url': gcsplit2_url,
-            'gcsplit3_queue': gcsplit3_queue,
-            'gcsplit3_url': gcsplit3_url,
-            'gchostpay1_queue': gchostpay1_queue,
-            'gchostpay1_url': gchostpay1_url,
+            'pgp_split2_queue': pgp_split2_queue,
+            'pgp_split2_url': pgp_split2_url,
+            'pgp_split3_queue': pgp_split3_queue,
+            'pgp_split3_url': pgp_split3_url,
+            'pgp_hostpay1_queue': pgp_hostpay1_queue,
+            'pgp_hostpay1_url': pgp_hostpay1_url,
 
             # Wallet configuration
             'host_wallet_usdt_address': host_wallet_usdt_address,
@@ -174,12 +174,12 @@ class ConfigManager:
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCSplit2 Queue: {'✅' if config['gcsplit2_queue'] else '❌'}")
-        print(f"   GCSplit2 URL: {'✅' if config['gcsplit2_url'] else '❌'}")
-        print(f"   GCSplit3 Queue: {'✅' if config['gcsplit3_queue'] else '❌'}")
-        print(f"   GCSplit3 URL: {'✅' if config['gcsplit3_url'] else '❌'}")
-        print(f"   GCHostPay1 Queue: {'✅' if config['gchostpay1_queue'] else '❌'}")
-        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
+        print(f"   PGP Split2 Queue: {'✅' if config['pgp_split2_queue'] else '❌'}")
+        print(f"   PGP Split2 URL: {'✅' if config['pgp_split2_url'] else '❌'}")
+        print(f"   PGP Split3 Queue: {'✅' if config['pgp_split3_queue'] else '❌'}")
+        print(f"   PGP Split3 URL: {'✅' if config['pgp_split3_url'] else '❌'}")
+        print(f"   PGP HostPay1 Queue: {'✅' if config['pgp_hostpay1_queue'] else '❌'}")
+        print(f"   PGP HostPay1 URL: {'✅' if config['pgp_hostpay1_url'] else '❌'}")
         print(f"   Host USDT Wallet: {'✅' if config['host_wallet_usdt_address'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
