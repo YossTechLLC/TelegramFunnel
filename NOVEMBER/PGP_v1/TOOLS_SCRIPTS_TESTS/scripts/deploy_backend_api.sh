@@ -1,23 +1,23 @@
 #!/bin/bash
 ################################################################################
-# Deploy GCRegisterAPI-10-26 (Backend API)
+# Deploy pgp-webapi-v1 (Backend API)
 # Purpose: Deploy updated backend API with notification fields support
-# Version: 1.0
-# Date: 2025-11-11
+# Version: 2.0
+# Date: 2025-11-15
 ################################################################################
 
 set -e  # Exit on error
 
 echo ""
 echo "========================================================================"
-echo "🚀 Deploying GCRegisterAPI-10-26 (Backend API)"
+echo "🚀 Deploying pgp-webapi-v1 (Backend API)"
 echo "========================================================================"
 echo ""
 
 # Configuration
-SERVICE_NAME="gcregisterapi-10-26"
+SERVICE_NAME="pgp-webapi-v1"
 REGION="us-central1"
-SOURCE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCRegisterAPI-10-26"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../PGP_WEBAPI_v1"
 
 echo "📋 Configuration:"
 echo "   Service: $SERVICE_NAME"
@@ -52,7 +52,7 @@ gcloud run deploy $SERVICE_NAME \
 if [ $? -eq 0 ]; then
     echo ""
     echo "========================================================================"
-    echo "✅ GCRegisterAPI-10-26 deployed successfully!"
+    echo "✅ pgp-webapi-v1 deployed successfully!"
     echo "========================================================================"
     echo ""
 

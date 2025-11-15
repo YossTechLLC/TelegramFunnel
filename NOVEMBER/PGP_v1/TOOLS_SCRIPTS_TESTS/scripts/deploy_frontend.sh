@@ -1,22 +1,22 @@
 #!/bin/bash
 ################################################################################
-# Deploy GCRegisterWeb-10-26 (Frontend)
+# Deploy pgp-web-v1 (Frontend)
 # Purpose: Build and deploy frontend with notification settings UI
-# Version: 1.0
-# Date: 2025-11-11
+# Version: 2.0
+# Date: 2025-11-15
 ################################################################################
 
 set -e  # Exit on error
 
 echo ""
 echo "========================================================================"
-echo "🚀 Deploying GCRegisterWeb-10-26 (Frontend)"
+echo "🚀 Deploying pgp-web-v1 (Frontend)"
 echo "========================================================================"
 echo ""
 
 # Configuration
 BUCKET_NAME="www-paygateprime-com"
-SOURCE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/GCRegisterWeb-10-26"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../PGP_WEB_v1"
 
 echo "📋 Configuration:"
 echo "   Bucket: $BUCKET_NAME"

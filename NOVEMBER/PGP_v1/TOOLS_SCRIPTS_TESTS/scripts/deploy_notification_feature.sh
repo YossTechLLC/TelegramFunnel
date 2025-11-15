@@ -10,17 +10,17 @@ set -e  # Exit on error
 
 echo ""
 echo "════════════════════════════════════════════════════════════════════════"
-echo "🚀 NOTIFICATION MANAGEMENT FEATURE - DEPLOYMENT ORCHESTRATOR"
+echo "🚀 PGP_v1 NOTIFICATION MANAGEMENT - DEPLOYMENT ORCHESTRATOR"
 echo "════════════════════════════════════════════════════════════════════════"
 echo ""
 echo "This script will deploy all components for the notification management"
 echo "feature in the correct order:"
 echo ""
 echo "  1. ✅ Database Migration (Already completed)"
-echo "  2. 📦 Backend API (GCRegisterAPI-10-26)"
-echo "  3. 🎨 Frontend (GCRegisterWeb-10-26)"
-echo "  4. 🤖 TelePay Bot (TelePay10-26)"
-echo "  5. 📬 IPN Webhook (np-webhook-10-26)"
+echo "  2. 📦 Backend API (pgp-webapi-v1)"
+echo "  3. 🎨 Frontend (pgp-web-v1)"
+echo "  4. 🤖 Server Bot (pgp-server-v1)"
+echo "  5. 📬 IPN Webhook (pgp-np-ipn-v1)"
 echo ""
 echo "════════════════════════════════════════════════════════════════════════"
 echo ""
@@ -109,28 +109,28 @@ echo "  • notification_id (BIGINT, DEFAULT NULL)"
 echo ""
 
 # Step 2: Backend API
-if ! log_and_execute "deploy_backend_api.sh" "Step 2: Deploying Backend API (GCRegisterAPI-10-26)"; then
+if ! log_and_execute "deploy_backend_api.sh" "Step 2: Deploying Backend API (pgp-webapi-v1)"; then
     DEPLOYMENT_FAILED=true
     echo "❌ Backend API deployment failed!"
     prompt_continue "Continue with remaining deployments?"
 fi
 
 # Step 3: Frontend
-if ! log_and_execute "deploy_frontend.sh" "Step 3: Deploying Frontend (GCRegisterWeb-10-26)"; then
+if ! log_and_execute "deploy_frontend.sh" "Step 3: Deploying Frontend (pgp-web-v1)"; then
     DEPLOYMENT_FAILED=true
     echo "❌ Frontend deployment failed!"
     prompt_continue "Continue with remaining deployments?"
 fi
 
-# Step 4: TelePay Bot
-if ! log_and_execute "deploy_telepay_bot.sh" "Step 4: Deploying TelePay Bot (TelePay10-26)"; then
+# Step 4: Server Bot
+if ! log_and_execute "deploy_telepay_bot.sh" "Step 4: Deploying Server Bot (pgp-server-v1)"; then
     DEPLOYMENT_FAILED=true
-    echo "❌ TelePay Bot deployment failed!"
+    echo "❌ Server Bot deployment failed!"
     prompt_continue "Continue with remaining deployments?"
 fi
 
 # Step 5: IPN Webhook
-if ! log_and_execute "deploy_np_webhook.sh" "Step 5: Deploying IPN Webhook (np-webhook-10-26)"; then
+if ! log_and_execute "deploy_np_webhook.sh" "Step 5: Deploying IPN Webhook (pgp-np-ipn-v1)"; then
     DEPLOYMENT_FAILED=true
     echo "❌ IPN Webhook deployment failed!"
 fi
@@ -154,7 +154,7 @@ if [ "$DEPLOYMENT_FAILED" = true ]; then
 else
     echo "✅ ALL COMPONENTS DEPLOYED SUCCESSFULLY!"
     echo ""
-    echo "🎉 Notification Management Feature is now live!"
+    echo "🎉 PGP_v1 Notification Management Feature is now live!"
     echo ""
     echo "Next steps:"
     echo "  1. Test channel registration with notifications enabled"
