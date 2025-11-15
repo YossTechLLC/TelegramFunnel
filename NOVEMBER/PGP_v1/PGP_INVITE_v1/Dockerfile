@@ -12,6 +12,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
+# Install PGP_COMMON shared library
+COPY PGP_COMMON/ /app/PGP_COMMON/
+RUN pip install -e /app/PGP_COMMON
+
 # Copy the app code
 COPY config_manager.py .
 COPY token_manager.py .

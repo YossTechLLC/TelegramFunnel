@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 """
-Database Manager for GCWebhook2-10-26 (Telegram Invite Sender Service).
+Database Manager for PGP_INVITE_v1 (Telegram Invite Sender Service).
 Validates payment status before sending Telegram invitation links.
 Queries private_channel_users_database to verify payment completion via IPN.
 """
 from typing import Optional
 import requests
-from google.cloud.sql.connector import Connector
+from PGP_COMMON.database import BaseDatabaseManager
 
 
-class DatabaseManager:
+class DatabaseManager(BaseDatabaseManager):
     """
-    Manages database connections and payment validation for GCWebhook2-10-26.
+    Manages database connections and payment validation for PGP_INVITE_v1.
+    Inherits common methods from BaseDatabaseManager.
     """
 
     def __init__(
@@ -34,41 +35,19 @@ class DatabaseManager:
             payment_min_tolerance: Minimum tolerance for outcome_amount validation (default: 0.50)
             payment_fallback_tolerance: Minimum tolerance for price_amount fallback (default: 0.75)
         """
-        self.instance_connection_name = instance_connection_name
-        self.db_name = db_name
-        self.db_user = db_user
-        self.db_password = db_password
+        super().__init__(
+            instance_connection_name=instance_connection_name,
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password,
+            service_name="PGP_INVITE_v1"
+        )
         self.payment_min_tolerance = payment_min_tolerance
         self.payment_fallback_tolerance = payment_fallback_tolerance
-        self.connector = Connector()
 
         print(f"🗄️ [DATABASE] DatabaseManager initialized for payment validation")
-        print(f"📊 [DATABASE] Instance: {instance_connection_name}")
-        print(f"📊 [DATABASE] Database: {db_name}")
         print(f"📊 [DATABASE] Min tolerance: {payment_min_tolerance} ({payment_min_tolerance*100}%)")
         print(f"📊 [DATABASE] Fallback tolerance: {payment_fallback_tolerance} ({payment_fallback_tolerance*100}%)")
-
-    def get_connection(self):
-        """
-        Create and return a database connection using Cloud SQL Connector.
-
-        Returns:
-            Database connection object or None if failed
-        """
-        try:
-            connection = self.connector.connect(
-                self.instance_connection_name,
-                "pg8000",
-                user=self.db_user,
-                password=self.db_password,
-                db=self.db_name
-            )
-            print(f"🔗 [DATABASE] Connection established successfully")
-            return connection
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Connection failed: {e}")
-            return None
 
     def get_nowpayments_data(self, user_id: int, closed_channel_id: int) -> Optional[dict]:
         """

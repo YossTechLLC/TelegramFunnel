@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Token Manager for GCWebhook2-10-26 (Telegram Invite Sender Service).
-Handles token decryption from GCWebhook1.
+Token Manager for PGP_INVITE_v1 (Telegram Invite Sender Service).
+Handles token decryption from PGP_ORCHESTRATOR_v1.
 """
 import base64
 import hmac
@@ -9,11 +9,13 @@ import hashlib
 import struct
 import time
 from typing import Tuple, Dict, Any, Optional
+from PGP_COMMON.tokens import BaseTokenManager
 
 
-class TokenManager:
+class TokenManager(BaseTokenManager):
     """
-    Manages token decryption for GCWebhook2-10-26.
+    Manages token decryption for PGP_INVITE_v1.
+    Inherits common methods from BaseTokenManager.
     """
 
     def __init__(self, signing_key: str):
@@ -23,8 +25,7 @@ class TokenManager:
         Args:
             signing_key: SUCCESS_URL_SIGNING_KEY for token verification
         """
-        self.signing_key = signing_key
-        print(f"🔐 [TOKEN] TokenManager initialized")
+        super().__init__(signing_key, service_name="PGP_INVITE_v1")
 
     def decode_and_verify_token(self, token: str) -> Tuple[int, int, str, str, str, int, str]:
         """

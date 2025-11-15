@@ -4,45 +4,18 @@ Configuration Manager for PGP_INVITE_v1 (Telegram Invite Sender Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
-from google.cloud import secretmanager
-from typing import Optional
+from PGP_COMMON.config import BaseConfigManager
 
 
-class ConfigManager:
+class ConfigManager(BaseConfigManager):
     """
     Manages configuration and secrets for the PGP_INVITE_v1 service.
+    Inherits common methods from BaseConfigManager.
     """
 
     def __init__(self):
         """Initialize the ConfigManager."""
-        self.client = secretmanager.SecretManagerServiceClient()
-        print(f"⚙️ [CONFIG] ConfigManager initialized")
-
-    def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
-        """
-        Fetch a secret value from environment variable.
-        Cloud Run automatically injects secret values when using --set-secrets.
-
-        Args:
-            secret_name_env: Environment variable name containing the secret value
-            description: Description for logging purposes
-
-        Returns:
-            Secret value or None if failed
-        """
-        try:
-            # Defensive pattern: handle None, strip whitespace, return None if empty
-            secret_value = (os.getenv(secret_name_env) or '').strip() or None
-            if not secret_value:
-                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
-                return None
-
-            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
-            return secret_value
-
-        except Exception as e:
-            print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
-            return None
+        super().__init__(service_name="PGP_INVITE_v1")
 
     def get_payment_tolerances(self) -> dict:
         """
@@ -84,7 +57,7 @@ class ConfigManager:
         """
         print(f"⚙️ [CONFIG] Initializing PGP_INVITE_v1 configuration")
 
-        # Fetch secrets from Secret Manager
+        # Fetch secrets from Secret Manager (using inherited fetch_secret method)
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
             "Success URL signing key (for token decryption)"
@@ -95,53 +68,35 @@ class ConfigManager:
             "Telegram bot token"
         )
 
-        # Fetch database credentials for payment validation
-        instance_connection_name = self.fetch_secret(
-            "CLOUD_SQL_CONNECTION_NAME",
-            "Cloud SQL connection name"
-        )
-
-        db_name = self.fetch_secret(
-            "DATABASE_NAME_SECRET",
-            "Database name"
-        )
-
-        db_user = self.fetch_secret(
-            "DATABASE_USER_SECRET",
-            "Database user"
-        )
-
-        db_password = self.fetch_secret(
-            "DATABASE_PASSWORD_SECRET",
-            "Database password"
-        )
+        # Use base method to fetch database configuration
+        db_config = self.fetch_database_config()
 
         # Validate critical configurations
         if not success_url_signing_key:
             print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
         if not telegram_bot_token:
             print(f"⚠️ [CONFIG] Warning: TELEGRAM_BOT_SECRET_NAME not available")
-        if not instance_connection_name:
+        if not db_config['instance_connection_name']:
             print(f"⚠️ [CONFIG] Warning: CLOUD_SQL_CONNECTION_NAME not available")
-        if not db_name:
+        if not db_config['db_name']:
             print(f"⚠️ [CONFIG] Warning: DATABASE_NAME_SECRET not available")
-        if not db_user:
+        if not db_config['db_user']:
             print(f"⚠️ [CONFIG] Warning: DATABASE_USER_SECRET not available")
-        if not db_password:
+        if not db_config['db_password']:
             print(f"⚠️ [CONFIG] Warning: DATABASE_PASSWORD_SECRET not available")
 
-        # Fetch payment validation tolerances
+        # Fetch payment validation tolerances (service-specific)
         payment_tolerances = self.get_payment_tolerances()
 
+        # Combine all configurations
         config = {
             # Secrets
             'success_url_signing_key': success_url_signing_key,
             'telegram_bot_token': telegram_bot_token,
-            # Database credentials
-            'instance_connection_name': instance_connection_name,
-            'db_name': db_name,
-            'db_user': db_user,
-            'db_password': db_password,
+
+            # Database configuration (from base method)
+            **db_config,
+
             # Payment validation tolerances
             'payment_min_tolerance': payment_tolerances['min_tolerance'],
             'payment_fallback_tolerance': payment_tolerances['fallback_tolerance']
@@ -151,7 +106,7 @@ class ConfigManager:
         print(f"📊 [CONFIG] Configuration status:")
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
         print(f"   TELEGRAM_BOT_TOKEN: {'✅' if config['telegram_bot_token'] else '❌'}")
-        print(f"   DATABASE_CREDENTIALS: {'✅' if all([db_name, db_user, db_password, instance_connection_name]) else '❌'}")
+        print(f"   DATABASE_CREDENTIALS: {'✅' if all([db_config['db_name'], db_config['db_user'], db_config['db_password'], db_config['instance_connection_name']]) else '❌'}")
         print(f"   PAYMENT_MIN_TOLERANCE: {config['payment_min_tolerance']} ({config['payment_min_tolerance']*100}%)")
         print(f"   PAYMENT_FALLBACK_TOLERANCE: {config['payment_fallback_tolerance']} ({config['payment_fallback_tolerance']*100}%)")
 
