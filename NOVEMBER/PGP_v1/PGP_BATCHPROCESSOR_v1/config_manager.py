@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCBatchProcessor-10-26 (Batch Payout Processor Service).
+Configuration Manager for PGP_BATCHPROCESSOR_v1 (Batch Payout Processor Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCBatchProcessor-10-26 service.
+    Manages configuration and secrets for the PGP_BATCHPROCESSOR_v1 service.
     """
 
     def __init__(self):
@@ -46,12 +46,12 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCBatchProcessor.
+        Initialize and return all configuration values for PGP_BATCHPROCESSOR_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCBatchProcessor-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_BATCHPROCESSOR_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
@@ -75,15 +75,15 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        # GCSplit1 configuration (for batch payout execution)
-        gcsplit1_batch_queue = self.fetch_secret(
-            "GCSPLIT1_BATCH_QUEUE",
-            "GCSplit1 batch queue name"
+        # PGP Split1 configuration (for batch payout execution)
+        pgp_split1_batch_queue = self.fetch_secret(
+            "PGP_SPLIT1_BATCH_QUEUE",
+            "PGP Split1 batch queue name"
         )
 
-        gcsplit1_url = self.fetch_secret(
-            "GCSPLIT1_URL",
-            "GCSplit1 service URL"
+        pgp_split1_url = self.fetch_secret(
+            "PGP_SPLIT1_URL",
+            "PGP Split1 service URL"
         )
 
         # Fetch database configuration from Secret Manager
@@ -121,8 +121,8 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gcsplit1_batch_queue': gcsplit1_batch_queue,
-            'gcsplit1_url': gcsplit1_url,
+            'pgp_split1_batch_queue': pgp_split1_batch_queue,
+            'pgp_split1_url': pgp_split1_url,
 
             # Database configuration (all from Secret Manager)
             'instance_connection_name': cloud_sql_connection_name,
@@ -137,8 +137,8 @@ class ConfigManager:
         print(f"   TPS_HOSTPAY_SIGNING_KEY: {'✅' if config['tps_hostpay_signing_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCSplit1 Batch Queue: {'✅' if config['gcsplit1_batch_queue'] else '❌'}")
-        print(f"   GCSplit1 URL: {'✅' if config['gcsplit1_url'] else '❌'}")
+        print(f"   PGP Split1 Batch Queue: {'✅' if config['pgp_split1_batch_queue'] else '❌'}")
+        print(f"   PGP Split1 URL: {'✅' if config['pgp_split1_url'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")

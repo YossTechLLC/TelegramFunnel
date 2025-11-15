@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCMicroBatchProcessor-10-26 (Micro-Batch Conversion Service).
+Configuration Manager for PGP_MICROBATCHPROCESSOR_v1 (Micro-Batch Conversion Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -11,7 +11,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCMicroBatchProcessor-10-26 service.
+    Manages configuration and secrets for the PGP_MICROBATCHPROCESSOR_v1 service.
     """
 
     def __init__(self):
@@ -76,12 +76,12 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCMicroBatchProcessor.
+        Initialize and return all configuration values for PGP_MICROBATCHPROCESSOR_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCMicroBatchProcessor-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_MICROBATCHPROCESSOR_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
@@ -100,15 +100,15 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        # GCHostPay1 batch configuration
-        gchostpay1_batch_queue = self.fetch_secret(
-            "GCHOSTPAY1_BATCH_QUEUE",
-            "GCHostPay1 batch queue name"
+        # PGP HostPay1 batch configuration
+        pgp_hostpay1_batch_queue = self.fetch_secret(
+            "PGP_HOSTPAY1_BATCH_QUEUE",
+            "PGP HostPay1 batch queue name"
         )
 
-        gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
-            "GCHostPay1 service URL"
+        pgp_hostpay1_url = self.fetch_secret(
+            "PGP_HOSTPAY1_URL",
+            "PGP HostPay1 service URL"
         )
 
         # ChangeNow API key
@@ -163,8 +163,8 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gchostpay1_batch_queue': gchostpay1_batch_queue,
-            'gchostpay1_url': gchostpay1_url,
+            'pgp_hostpay1_batch_queue': pgp_hostpay1_batch_queue,
+            'pgp_hostpay1_url': pgp_hostpay1_url,
 
             # ChangeNow configuration
             'changenow_api_key': changenow_api_key,
@@ -185,8 +185,8 @@ class ConfigManager:
         print(f"   Micro-Batch Threshold: {'✅' if config['micro_batch_threshold'] else '❌'} (${config['micro_batch_threshold']})")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCHostPay1 Batch Queue: {'✅' if config['gchostpay1_batch_queue'] else '❌'}")
-        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
+        print(f"   PGP HostPay1 Batch Queue: {'✅' if config['pgp_hostpay1_batch_queue'] else '❌'}")
+        print(f"   PGP HostPay1 URL: {'✅' if config['pgp_hostpay1_url'] else '❌'}")
         print(f"   ChangeNow API Key: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Host USDT Wallet: {'✅' if config['host_wallet_usdt_address'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
