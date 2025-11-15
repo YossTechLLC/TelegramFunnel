@@ -218,10 +218,10 @@ def _enqueue_delayed_callback_check(
             return False
 
         # Get queue configuration
-        gchostpay1_response_queue = config.get('gchostpay1_response_queue')
-        gchostpay1_url = config.get('gchostpay1_url')
+        pgp_hostpay1_response_queue = config.get('pgp_hostpay1_response_queue')
+        pgp_hostpay1_url = config.get('pgp_hostpay1_url')
 
-        if not gchostpay1_response_queue or not gchostpay1_url:
+        if not pgp_hostpay1_response_queue or not pgp_hostpay1_url:
             print(f"❌ [RETRY_ENQUEUE] PGP_HOSTPAY1_v1 response queue config missing")
             return False
 
@@ -243,12 +243,12 @@ def _enqueue_delayed_callback_check(
             return False
 
         # Prepare retry URL
-        retry_url = f"{gchostpay1_url}/retry-callback-check"
+        retry_url = f"{pgp_hostpay1_url}/retry-callback-check"
         print(f"📡 [RETRY_ENQUEUE] Enqueueing retry to: {retry_url}")
 
         # Enqueue retry task with delay
         task_name = cloudtasks_client.enqueue_pgp_hostpay1_retry_callback(
-            queue_name=gchostpay1_response_queue,
+            queue_name=pgp_hostpay1_response_queue,
             target_url=retry_url,
             encrypted_token=retry_token,
             delay_seconds=retry_after_seconds
@@ -424,15 +424,15 @@ def main_webhook():
             abort(500, "Cloud Tasks unavailable")
 
         gchostpay2_queue = config.get('gchostpay2_queue')
-        gchostpay2_url = config.get('gchostpay2_url')
+        pgp_hostpay2_url = config.get('pgp_hostpay2_url')
 
-        if not gchostpay2_queue or not gchostpay2_url:
+        if not gchostpay2_queue or not pgp_hostpay2_url:
             print(f"❌ [ENDPOINT_1] PGP_HOSTPAY2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay2_status_check(
             queue_name=gchostpay2_queue,
-            target_url=gchostpay2_url,
+            target_url=pgp_hostpay2_url,
             encrypted_token=encrypted_token
         )
 
@@ -561,15 +561,15 @@ def status_verified():
             abort(500, "Cloud Tasks unavailable")
 
         gchostpay3_queue = config.get('gchostpay3_queue')
-        gchostpay3_url = config.get('gchostpay3_url')
+        pgp_hostpay3_url = config.get('pgp_hostpay3_url')
 
-        if not gchostpay3_queue or not gchostpay3_url:
+        if not gchostpay3_queue or not pgp_hostpay3_url:
             print(f"❌ [ENDPOINT_2] PGP_HOSTPAY3_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay3_payment_execution(
             queue_name=gchostpay3_queue,
-            target_url=gchostpay3_url,
+            target_url=pgp_hostpay3_url,
             encrypted_token=encrypted_token_payment
         )
 

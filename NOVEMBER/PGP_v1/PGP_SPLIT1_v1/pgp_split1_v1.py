@@ -387,15 +387,15 @@ def initial_webhook():
             abort(500, "Cloud Tasks unavailable")
 
         gcsplit2_queue = config.get('gcsplit2_queue')
-        gcsplit2_url = config.get('gcsplit2_url')
+        pgp_split2_url = config.get('pgp_split2_url')
 
-        if not gcsplit2_queue or not gcsplit2_url:
+        if not gcsplit2_queue or not pgp_split2_url:
             print(f"❌ [ENDPOINT_1] PGP_SPLIT2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
             queue_name=gcsplit2_queue,
-            target_url=gcsplit2_url,
+            target_url=pgp_split2_url,
             encrypted_token=encrypted_token
         )
 
@@ -548,15 +548,15 @@ def receive_usdt_eth_estimate():
             abort(500, "Cloud Tasks unavailable")
 
         gcsplit3_queue = config.get('gcsplit3_queue')
-        gcsplit3_url = config.get('gcsplit3_url')
+        pgp_split3_url = config.get('pgp_split3_url')
 
-        if not gcsplit3_queue or not gcsplit3_url:
+        if not gcsplit3_queue or not pgp_split3_url:
             print(f"❌ [ENDPOINT_2] PGP_SPLIT3_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split3_swap_request(
             queue_name=gcsplit3_queue,
-            target_url=gcsplit3_url,
+            target_url=pgp_split3_url,
             encrypted_token=encrypted_token_for_split3
         )
 
@@ -946,15 +946,15 @@ def batch_payout():
             abort(500, "Cloud Tasks unavailable")
 
         gcsplit2_queue = config.get('gcsplit2_queue')
-        gcsplit2_url = config.get('gcsplit2_url')
+        pgp_split2_url = config.get('pgp_split2_url')
 
-        if not gcsplit2_queue or not gcsplit2_url:
+        if not gcsplit2_queue or not pgp_split2_url:
             print(f"❌ [ENDPOINT_4] PGP_SPLIT2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
             queue_name=gcsplit2_queue,
-            target_url=gcsplit2_url,
+            target_url=pgp_split2_url,
             encrypted_token=encrypted_token_for_split2
         )
 

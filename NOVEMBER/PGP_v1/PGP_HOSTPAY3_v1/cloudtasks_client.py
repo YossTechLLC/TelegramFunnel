@@ -178,7 +178,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         The retry is delayed by retry_delay_seconds to allow transient issues to resolve.
 
         Args:
-            queue_name: PGP_HOSTPAY3_v1 retry queue name (e.g., "gchostpay3-retry-queue")
+            queue_name: PGP_HOSTPAY3_v1 retry queue name (e.g., "pgp-hostpay3-retry-queue")
             target_url: PGP_HOSTPAY3_v1 service URL (same as original endpoint)
             encrypted_token: Retry token with incremented attempt_count
             retry_delay_seconds: Delay before retry execution (default: 60s)

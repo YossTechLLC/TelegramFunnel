@@ -1143,10 +1143,10 @@ Logs showed donation callbacks falling through to "Unknown callback_data":
 
 **Decision Made:**
 - ✅ PGP_NP_IPN_v1: Sends notification after IPN validation
-- ❌ gcwebhook1-10-26: No notification (handles payment routing)
-- ❌ gcwebhook2-10-26: No notification (handles Telegram invites)
-- ❌ gcsplit1-10-26: No notification (handles payouts)
-- ❌ gchostpay1-10-26: No notification (handles crypto transfers)
+- ❌ pgp-orchestrator-v1: No notification (handles payment routing)
+- ❌ pgp-invite-v1: No notification (handles Telegram invites)
+- ❌ pgp-split1-v1: No notification (handles payouts)
+- ❌ pgp-hostpay1-v1: No notification (handles crypto transfers)
 
 **Rationale:**
 - **Single point of truth:** One notification per payment, triggered at validation
@@ -5828,7 +5828,7 @@ if not db_manager:
 - File: PGP_HOSTPAY1_v1/token_manager.py
 - Line 238: from_amount = estimated_eth_amount
 - Comment: "Use fee-adjusted amount (instant) or single amount (threshold)"
-- Deployment: gchostpay1-10-26 revision 00022-h54
+- Deployment: pgp-hostpay1-v1 revision 00022-h54
 
 **Consequences:**
 - ✅ Platform retains 15% TP fee on instant payouts
@@ -6048,7 +6048,7 @@ if not db_manager:
 
 **Deployment:**
 - Build ID: 35f8cdc1-16ec-47ba-a764-5dfa94ae7129
-- Revision: gcsplit1-10-26-00019-dw4
+- Revision: pgp-split1-v1-00019-dw4
 - Time: 2025-11-07 15:57:58 UTC
 - Total fix time: ~8 minutes
 
@@ -6086,7 +6086,7 @@ if not db_manager:
 
 **Deployment:**
 - Build: `c47c15cf-d154-445e-b207-4afa6c9c0150`
-- Revision: `gcsplit2-10-26-00014-4qn`
+- Revision: `pgp-split2-v1-00014-4qn`
 - Traffic: 100%
 - Health: All components healthy
 
@@ -7334,7 +7334,7 @@ transaction = changenow_client.create_fixed_rate_transaction_with_retry(
 
 **Implementation:**
 - ✅ Updated config_manager.py to load GCHOSTPAY1_URL and GCHOSTPAY1_RESPONSE_QUEUE
-- ✅ Deployed revision gchostpay1-10-26-00017-rdp
+- ✅ Deployed revision pgp-hostpay1-v1-00017-rdp
 - ⏳ Future: Create GCHOSTPAY1_RETRY_QUEUE and migrate retry logic to use it
 
 **Impact:**
@@ -7524,7 +7524,7 @@ When users report time-related errors, verify the actual timestamps being read -
 - Added `actual_eth_amount: float = 0.0` parameter to `encrypt_gcsplit3_to_gcsplit1_token()`
 - Added 8-byte packing before timestamp: `packed_data.extend(struct.pack(">d", actual_eth_amount))`
 - Updated token structure docstring to reflect new field
-- Deployed as revision `gcsplit1-10-26-00015-jpz`
+- Deployed as revision `pgp-split1-v1-00015-jpz`
 
 **Long-term Plan:**
 - Add version byte to all inter-service tokens for explicit format detection
@@ -7995,8 +7995,8 @@ Payment Success Page Polling
 
 **Deployment:**
 - PGP_NP_IPN_v1-00006-9xs ✅
-- gcwebhook1-10-26-00019-zbs ✅
-- gcwebhook2-10-26-00016-p7q ✅
+- pgp-orchestrator-v1-00019-zbs ✅
+- pgp-invite-v1-00016-p7q ✅
 
 **Testing Plan:**
 - Phase 8: User creates test payment, verify single invite
@@ -8034,8 +8034,8 @@ Payment Success Page Polling
 
 2. **Internal Processing Queues (HIGH PRIORITY):**
    - `gcwebhook-telegram-invite-queue` - PGP_ORCHESTRATOR_v1 → PGP_INVITE_v1 (invites)
-   - `gcsplit-usdt-eth-estimate-queue` - PGP_SPLIT1_v1 → PGP_SPLIT2_v1 (conversions)
-   - `gcsplit-eth-client-swap-queue` - PGP_SPLIT2_v1 → PGP_SPLIT3_v1 (swaps)
+   - `pgp-split-usdt-eth-estimate-queue` - PGP_SPLIT1_v1 → PGP_SPLIT2_v1 (conversions)
+   - `pgp-split-eth-client-swap-queue` - PGP_SPLIT2_v1 → PGP_SPLIT3_v1 (swaps)
 
 3. **HostPay Orchestration Queues (MEDIUM PRIORITY):**
    - `gchostpay1-batch-queue` - Batch payment initiation
@@ -8045,7 +8045,7 @@ Payment Success Page Polling
 4. **Response & Retry Queues (LOW PRIORITY):**
    - `gchostpay1-response-queue` - Payment completion responses
    - `pgp_accumulator-response-queue` - Accumulator responses
-   - `gchostpay3-retry-queue` - Failed payment retries
+   - `pgp-hostpay3-retry-queue` - Failed payment retries
 
 **Implementation Guidelines:**
 
@@ -8337,7 +8337,7 @@ if not hostpay_queue or not hostpay_webhook_url:
 
 **Solution Chosen:** Deployment Configuration Fix
 ```bash
-gcloud run services update gcsplit1-10-26 \
+gcloud run services update pgp-split1-v1 \
   --update-secrets=HOSTPAY_WEBHOOK_URL=HOSTPAY_WEBHOOK_URL:latest,HOSTPAY_QUEUE=HOSTPAY_QUEUE:latest
 ```
 
@@ -8353,7 +8353,7 @@ gcloud run services update gcsplit1-10-26 \
 
 2. **Add pre-deployment validation script** ⚠️ Considered for future
    ```bash
-   ./scripts/verify_service_config.sh gcsplit1-10-26
+   ./scripts/verify_service_config.sh pgp-split1-v1
    ```
    - Pros: Catches issues before deployment
    - Cons: Requires maintaining separate validation logic
@@ -8377,7 +8377,7 @@ gcloud run services update gcsplit1-10-26 \
 Always check startup logs for ❌ indicators:
 ```bash
 gcloud logging read \
-  "resource.labels.service_name=gcsplit1-10-26 AND textPayload:CONFIG" \
+  "resource.labels.service_name=pgp-split1-v1 AND textPayload:CONFIG" \
   --limit=20
 ```
 
@@ -9294,7 +9294,7 @@ WHERE user_id = %s AND private_channel_id = %s
 - `/PGP_INVITE_v1/requirements.txt` (dependencies)
 - `/PGP_INVITE_v1/Dockerfile` (copy database_manager.py)
 
-**Status:** ✅ Implemented and deployed (gcwebhook2-10-26-00011-w2t)
+**Status:** ✅ Implemented and deployed (pgp-invite-v1-00011-w2t)
 
 ---
 
@@ -9494,7 +9494,7 @@ This document tracks all major architectural decisions made during the ETH→USD
   - `PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py` - Added try/fallback decryption logic, context detection
 - **Deployment:**
   - PGP_HOSTPAY1_v1 revision 00006-zcq
-  - Service URL: https://gchostpay1-10-26-291176869049.us-central1.run.app
+  - Service URL: https://pgp-hostpay1-v1-291176869049.us-central1.run.app
   - Status: ✅ Healthy
 
 ### Decision: Synthetic unique_id Format for Accumulator Tokens
@@ -9570,7 +9570,7 @@ This document tracks all major architectural decisions made during the ETH→USD
       encrypted_response = token_manager.encrypt_gchostpay3_to_accumulator_token(...)
   else:
       # Route to PGP_HOSTPAY1_v1 (existing behavior)
-      target_url = f"{gchostpay1_url}/payment-completed"
+      target_url = f"{pgp_hostpay1_url}/payment-completed"
       encrypted_response = token_manager.encrypt_gchostpay3_to_gchostpay1_token(...)
 
   # Enqueue response to appropriate service
@@ -11264,14 +11264,14 @@ PGP_BATCHPROCESSOR (cron) → Checks threshold (ONLY SERVICE) → Creates batch 
    - Deleted `/estimate-and-update` endpoint (169 lines)
    - Removed database manager initialization and imports
    - Updated health check endpoint
-   - Deployed as revision `gcsplit2-10-26-00009-n2q`
+   - Deployed as revision `pgp-split2-v1-00009-n2q`
    - **Result**: 43% code reduction (434 → 247 lines)
 
 2. ✅ **Phase 2**: PGP_SPLIT3_v1 Enhancement (COMPLETE)
    - Added 2 token manager methods for PGP_ACCUMULATOR communication
    - Added cloudtasks_client method `enqueue_accumulator_swap_response()`
    - Added `/eth-to-usdt` endpoint (158 lines)
-   - Deployed as revision `gcsplit3-10-26-00006-pdw`
+   - Deployed as revision `pgp-split3-v1-00006-pdw`
    - **Result**: Now handles both instant AND threshold swaps
 
 3. ✅ **Phase 3**: PGP_ACCUMULATOR Refactoring (COMPLETE)
@@ -11299,7 +11299,7 @@ PGP_BATCHPROCESSOR (cron) → Checks threshold (ONLY SERVICE) → Creates batch 
      - Context='threshold' → routes to PGP_ACCUMULATOR `/swap-executed`
      - Context='instant' → routes to PGP_HOSTPAY1_v1 `/payment-completed` (existing)
      - ~52 lines of routing logic added
-   - Deployed PGP_HOSTPAY3_v1 as revision `gchostpay3-10-26-00007-q5k`
+   - Deployed PGP_HOSTPAY3_v1 as revision `pgp-hostpay3-v1-00007-q5k`
    - Redeployed PGP_ACCUMULATOR as revision `pgp_accumulator-10-26-00013-vpg`
    - **Result**: Context-based routing implemented, infrastructure ready for threshold flow
    - **Note**: PGP_HOSTPAY1_v1 integration required to pass context through (not yet implemented)
@@ -11314,7 +11314,7 @@ PGP_BATCHPROCESSOR (cron) → Checks threshold (ONLY SERVICE) → Creates batch 
 
 6. ✅ **Phase 6**: Cloud Tasks Queue Setup (COMPLETE)
    - Created new queue: `pgp_accumulator-swap-response-queue`
-   - Reused existing queues: `gcsplit-eth-client-swap-queue`, `gcsplit-hostpay-trigger-queue`
+   - Reused existing queues: `pgp-split-eth-client-swap-queue`, `pgp-split-hostpay-trigger-queue`
    - All queues configured with standard retry settings (infinite retry, 60s backoff)
    - **Result**: All required queues exist and configured
 
@@ -11476,9 +11476,9 @@ gcloud run services update-traffic SERVICE_NAME \
 ```bash
 # Rollback all services in reverse deployment order
 gcloud run services update-traffic pgp_accumulator-10-26 --to-revisions=PREVIOUS=100
-gcloud run services update-traffic gchostpay3-10-26 --to-revisions=PREVIOUS=100
-gcloud run services update-traffic gcsplit3-10-26 --to-revisions=PREVIOUS=100
-gcloud run services update-traffic gcsplit2-10-26 --to-revisions=PREVIOUS=100
+gcloud run services update-traffic pgp-hostpay3-v1 --to-revisions=PREVIOUS=100
+gcloud run services update-traffic pgp-split3-v1 --to-revisions=PREVIOUS=100
+gcloud run services update-traffic pgp-split2-v1 --to-revisions=PREVIOUS=100
 ```
 
 **Option 3: Database Rollback (Last Resort)**
@@ -11668,7 +11668,7 @@ PGP_ORCHESTRATOR_v1 → PGP_ACCUMULATOR → PGP_SPLIT2_v1 /estimate-and-update
 ### Deployment
 
 - **PGP_ACCUMULATOR**: `pgp_accumulator-10-26-00011-cmt` (deployed 2025-10-31)
-- **PGP_SPLIT2_v1**: `gcsplit2-10-26-00008-znd` (deployed 2025-10-31)
+- **PGP_SPLIT2_v1**: `pgp-split2-v1-00008-znd` (deployed 2025-10-31)
 - **Database**: Migration executed successfully (3 records updated)
 - **Health Checks**: ✅ All services healthy
 
@@ -11750,9 +11750,9 @@ if not (current_time - 300 <= timestamp <= current_time + 5):
 - PGP_HOSTPAY2_v1 TokenManager: Copied from PGP_HOSTPAY1_v1 (identical structure)
 - PGP_HOSTPAY3_v1 TokenManager: Copied from PGP_HOSTPAY1_v1 (identical structure)
 **Deployment:**
-- PGP_HOSTPAY1_v1: `gchostpay1-10-26-00005-htc`
-- PGP_HOSTPAY2_v1: `gchostpay2-10-26-00005-hb9`
-- PGP_HOSTPAY3_v1: `gchostpay3-10-26-00006-ndl`
+- PGP_HOSTPAY1_v1: `pgp-hostpay1-v1-00005-htc`
+- PGP_HOSTPAY2_v1: `pgp-hostpay2-v1-00005-hb9`
+- PGP_HOSTPAY3_v1: `pgp-hostpay3-v1-00006-ndl`
 **Trade-offs:**
 - **Pro:** Payment processing now resilient to Cloud Tasks delays and retries
 - **Pro:** No more "Token expired" errors on legitimate requests
@@ -11967,18 +11967,18 @@ Phase 4 implementation added context-based routing code to `pgp_hostpay3_v1.py` 
    ```
 
 4. **Redeployed PGP_HOSTPAY3_v1**:
-   - Previous revision: `gchostpay3-10-26-00007-q5k`
-   - New revision: `gchostpay3-10-26-00008-rfv`
+   - Previous revision: `pgp-hostpay3-v1-00007-q5k`
+   - New revision: `pgp-hostpay3-v1-00008-rfv`
    - Added 2 new secrets to --set-secrets configuration
 
 **Verification:**
 ```bash
 # Health check - All components healthy
-curl https://gchostpay3-10-26-pjxwjsdktq-uc.a.run.app/health
+curl https://pgp-hostpay3-v1-pjxwjsdktq-uc.a.run.app/health
 # Output: {"status": "healthy", "components": {"cloudtasks": "healthy", "database": "healthy", "token_manager": "healthy", "wallet": "healthy"}}
 
 # Logs show configuration loaded
-gcloud run services logs read gchostpay3-10-26 --region=us-central1 --limit=10 | grep PGP_ACCUMULATOR
+gcloud run services logs read pgp-hostpay3-v1 --region=us-central1 --limit=10 | grep PGP_ACCUMULATOR
 # Output:
 # 2025-10-31 11:52:30 ✅ [CONFIG] Successfully loaded PGP_ACCUMULATOR response queue name
 # 2025-10-31 11:52:30 ✅ [CONFIG] Successfully loaded PGP_ACCUMULATOR service URL
@@ -12013,7 +12013,7 @@ gcloud run services logs read gchostpay3-10-26 --region=us-central1 --limit=10 |
    - Rejected: Blocks all threshold payout testing
    - Critical for Phase 8 integration testing
 
-**Status:** ✅ DEPLOYED and verified (revision gchostpay3-10-26-00008-rfv)
+**Status:** ✅ DEPLOYED and verified (revision pgp-hostpay3-v1-00008-rfv)
 
 **Files Modified:**
 - `PGP_HOSTPAY3_v1/config_manager.py` (added 14 lines)
@@ -12634,7 +12634,7 @@ Total: 1 swap, 1× gas fees (66% savings!)
   - Status: 🟢 HEALTHY
   - Function: Accumulates payments without triggering immediate swaps
 
-- **PGP_HOSTPAY1_v1** (Modified): https://gchostpay1-10-26-291176869049.us-central1.run.app
+- **PGP_HOSTPAY1_v1** (Modified): https://pgp-hostpay1-v1-291176869049.us-central1.run.app
   - Status: 🟢 HEALTHY
   - Function: Executes batch swaps via ChangeNow, handles batch tokens
 
@@ -12823,14 +12823,14 @@ PGP_BATCHPROCESSOR (cron) → Checks threshold (ONLY SERVICE) → Creates batch 
    - Deleted `/estimate-and-update` endpoint (169 lines)
    - Removed database manager initialization and imports
    - Updated health check endpoint
-   - Deployed as revision `gcsplit2-10-26-00009-n2q`
+   - Deployed as revision `pgp-split2-v1-00009-n2q`
    - **Result**: 43% code reduction (434 → 247 lines)
 
 2. ✅ **Phase 2**: PGP_SPLIT3_v1 Enhancement (COMPLETE)
    - Added 2 token manager methods for PGP_ACCUMULATOR communication
    - Added cloudtasks_client method `enqueue_accumulator_swap_response()`
    - Added `/eth-to-usdt` endpoint (158 lines)
-   - Deployed as revision `gcsplit3-10-26-00006-pdw`
+   - Deployed as revision `pgp-split3-v1-00006-pdw`
    - **Result**: Now handles both instant AND threshold swaps
 
 3. ✅ **Phase 3**: PGP_ACCUMULATOR Refactoring (COMPLETE)
@@ -12858,7 +12858,7 @@ PGP_BATCHPROCESSOR (cron) → Checks threshold (ONLY SERVICE) → Creates batch 
      - Context='threshold' → routes to PGP_ACCUMULATOR `/swap-executed`
      - Context='instant' → routes to PGP_HOSTPAY1_v1 `/payment-completed` (existing)
      - ~52 lines of routing logic added
-   - Deployed PGP_HOSTPAY3_v1 as revision `gchostpay3-10-26-00007-q5k`
+   - Deployed PGP_HOSTPAY3_v1 as revision `pgp-hostpay3-v1-00007-q5k`
    - Redeployed PGP_ACCUMULATOR as revision `pgp_accumulator-10-26-00013-vpg`
    - **Result**: Context-based routing implemented, infrastructure ready for threshold flow
    - **Note**: PGP_HOSTPAY1_v1 integration required to pass context through (not yet implemented)
@@ -12873,7 +12873,7 @@ PGP_BATCHPROCESSOR (cron) → Checks threshold (ONLY SERVICE) → Creates batch 
 
 6. ✅ **Phase 6**: Cloud Tasks Queue Setup (COMPLETE)
    - Created new queue: `pgp_accumulator-swap-response-queue`
-   - Reused existing queues: `gcsplit-eth-client-swap-queue`, `gcsplit-hostpay-trigger-queue`
+   - Reused existing queues: `pgp-split-eth-client-swap-queue`, `pgp-split-hostpay-trigger-queue`
    - All queues configured with standard retry settings (infinite retry, 60s backoff)
    - **Result**: All required queues exist and configured
 
@@ -13035,9 +13035,9 @@ gcloud run services update-traffic SERVICE_NAME \
 ```bash
 # Rollback all services in reverse deployment order
 gcloud run services update-traffic pgp_accumulator-10-26 --to-revisions=PREVIOUS=100
-gcloud run services update-traffic gchostpay3-10-26 --to-revisions=PREVIOUS=100
-gcloud run services update-traffic gcsplit3-10-26 --to-revisions=PREVIOUS=100
-gcloud run services update-traffic gcsplit2-10-26 --to-revisions=PREVIOUS=100
+gcloud run services update-traffic pgp-hostpay3-v1 --to-revisions=PREVIOUS=100
+gcloud run services update-traffic pgp-split3-v1 --to-revisions=PREVIOUS=100
+gcloud run services update-traffic pgp-split2-v1 --to-revisions=PREVIOUS=100
 ```
 
 **Option 3: Database Rollback (Last Resort)**
@@ -13227,7 +13227,7 @@ PGP_ORCHESTRATOR_v1 → PGP_ACCUMULATOR → PGP_SPLIT2_v1 /estimate-and-update
 ### Deployment
 
 - **PGP_ACCUMULATOR**: `pgp_accumulator-10-26-00011-cmt` (deployed 2025-10-31)
-- **PGP_SPLIT2_v1**: `gcsplit2-10-26-00008-znd` (deployed 2025-10-31)
+- **PGP_SPLIT2_v1**: `pgp-split2-v1-00008-znd` (deployed 2025-10-31)
 - **Database**: Migration executed successfully (3 records updated)
 - **Health Checks**: ✅ All services healthy
 
@@ -13309,9 +13309,9 @@ if not (current_time - 300 <= timestamp <= current_time + 5):
 - PGP_HOSTPAY2_v1 TokenManager: Copied from PGP_HOSTPAY1_v1 (identical structure)
 - PGP_HOSTPAY3_v1 TokenManager: Copied from PGP_HOSTPAY1_v1 (identical structure)
 **Deployment:**
-- PGP_HOSTPAY1_v1: `gchostpay1-10-26-00005-htc`
-- PGP_HOSTPAY2_v1: `gchostpay2-10-26-00005-hb9`
-- PGP_HOSTPAY3_v1: `gchostpay3-10-26-00006-ndl`
+- PGP_HOSTPAY1_v1: `pgp-hostpay1-v1-00005-htc`
+- PGP_HOSTPAY2_v1: `pgp-hostpay2-v1-00005-hb9`
+- PGP_HOSTPAY3_v1: `pgp-hostpay3-v1-00006-ndl`
 **Trade-offs:**
 - **Pro:** Payment processing now resilient to Cloud Tasks delays and retries
 - **Pro:** No more "Token expired" errors on legitimate requests
@@ -13526,18 +13526,18 @@ Phase 4 implementation added context-based routing code to `pgp_hostpay3_v1.py` 
    ```
 
 4. **Redeployed PGP_HOSTPAY3_v1**:
-   - Previous revision: `gchostpay3-10-26-00007-q5k`
-   - New revision: `gchostpay3-10-26-00008-rfv`
+   - Previous revision: `pgp-hostpay3-v1-00007-q5k`
+   - New revision: `pgp-hostpay3-v1-00008-rfv`
    - Added 2 new secrets to --set-secrets configuration
 
 **Verification:**
 ```bash
 # Health check - All components healthy
-curl https://gchostpay3-10-26-pjxwjsdktq-uc.a.run.app/health
+curl https://pgp-hostpay3-v1-pjxwjsdktq-uc.a.run.app/health
 # Output: {"status": "healthy", "components": {"cloudtasks": "healthy", "database": "healthy", "token_manager": "healthy", "wallet": "healthy"}}
 
 # Logs show configuration loaded
-gcloud run services logs read gchostpay3-10-26 --region=us-central1 --limit=10 | grep PGP_ACCUMULATOR
+gcloud run services logs read pgp-hostpay3-v1 --region=us-central1 --limit=10 | grep PGP_ACCUMULATOR
 # Output:
 # 2025-10-31 11:52:30 ✅ [CONFIG] Successfully loaded PGP_ACCUMULATOR response queue name
 # 2025-10-31 11:52:30 ✅ [CONFIG] Successfully loaded PGP_ACCUMULATOR service URL
@@ -13572,7 +13572,7 @@ gcloud run services logs read gchostpay3-10-26 --region=us-central1 --limit=10 |
    - Rejected: Blocks all threshold payout testing
    - Critical for Phase 8 integration testing
 
-**Status:** ✅ DEPLOYED and verified (revision gchostpay3-10-26-00008-rfv)
+**Status:** ✅ DEPLOYED and verified (revision pgp-hostpay3-v1-00008-rfv)
 
 **Files Modified:**
 - `PGP_HOSTPAY3_v1/config_manager.py` (added 14 lines)

@@ -548,9 +548,9 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
    - Compatible with Cloud Tasks retry behavior
 
 **Deployment:**
-- Build: SUCCESS (gcr.io/telepay-459221/gcwebhook1-10-26:latest)
-- Deploy: SUCCESS (revision gcwebhook1-10-26-00024-tfb)
-- Service URL: https://gcwebhook1-10-26-pjxwjsdktq-uc.a.run.app
+- Build: SUCCESS (gcr.io/telepay-459221/pgp-orchestrator-v1:latest)
+- Deploy: SUCCESS (revision pgp-orchestrator-v1-00024-tfb)
+- Service URL: https://pgp-orchestrator-v1-pjxwjsdktq-uc.a.run.app
 - Status: Ready ✅
 
 **Verification:**
@@ -635,11 +635,11 @@ curl https://gcregister10-26-pjxwjsdktq-uc.a.run.app/
 - AFTER: Professional 8-line confirmation with channel name, tier, price, duration
 
 **Deployment:**
-- Build: SUCCESS (gcr.io/telepay-459221/gcwebhook2-10-26:latest)
+- Build: SUCCESS (gcr.io/telepay-459221/pgp-invite-v1:latest)
 - Build ID: a7603114-8158-41e5-a1f7-5d8798965db9
 - Build Duration: 36 seconds
-- Deploy: SUCCESS (revision gcwebhook2-10-26-00019-vbj)
-- Service URL: https://gcwebhook2-10-26-pjxwjsdktq-uc.a.run.app
+- Deploy: SUCCESS (revision pgp-invite-v1-00019-vbj)
+- Service URL: https://pgp-invite-v1-pjxwjsdktq-uc.a.run.app
 - Status: Ready ✅
 
 **Verification:**

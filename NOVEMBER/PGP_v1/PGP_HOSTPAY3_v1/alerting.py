@@ -101,7 +101,7 @@ class AlertingService:
 
 **Database Query:**
 ```bash
-gcloud run services logs read gchostpay3-10-26 --region=us-central1 --filter="jsonPayload.unique_id={unique_id}"
+gcloud run services logs read pgp-hostpay3-v1 --region=us-central1 --filter="jsonPayload.unique_id={unique_id}"
 ```
         """
 

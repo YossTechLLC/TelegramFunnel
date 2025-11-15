@@ -859,8 +859,8 @@ After fixing token decryption field ordering (Session 66), discovered that endpo
 
 **Deployment:**
 - Build: 3de64cbd-98ad-41de-a515-08854d30039e (44s)
-- Image: gcr.io/telepay-459221/gcsplit1-10-26:endpoint2-keyerror-fix
-- Revision: gcsplit1-10-26-00020-rnq
+- Image: gcr.io/telepay-459221/pgp-split1-v1:endpoint2-keyerror-fix
+- Revision: pgp-split1-v1-00020-rnq
 - Time: 2025-11-07 16:33 UTC
 - Health: All systems operational
 
@@ -942,7 +942,7 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 **Resolution Applied:**
 1. ✅ Applied ordering fix to PGP_SPLIT1_v1 token_manager.py (lines 399-432)
 2. ✅ Built Docker image: Build ID 35f8cdc1-16ec-47ba-a764-5dfa94ae7129
-3. ✅ Deployed to Cloud Run: Revision gcsplit1-10-26-00019-dw4
+3. ✅ Deployed to Cloud Run: Revision pgp-split1-v1-00019-dw4
 4. ✅ Health check passed: All components healthy
 5. ⏳ Awaiting test transaction for end-to-end validation
 
@@ -1011,8 +1011,8 @@ from_amount → to_amount → deposit_fee → withdrawal_fee → swap_currency �
 - Updated progress documentation
 
 **Deployment:**
-- Image: `gcr.io/telepay-459221/gcsplit2-10-26:dual-currency-fixed`
-- Revision: `gcsplit2-10-26-00014-4qn`
+- Image: `gcr.io/telepay-459221/pgp-split2-v1:dual-currency-fixed`
+- Revision: `pgp-split2-v1-00014-4qn`
 - Status: Healthy and serving traffic
 
 ---
@@ -1107,7 +1107,7 @@ What System Tries:
 - `PGP_HOSTPAY3_v1/tph3-10-26.py` - Added currency routing
 
 **Verification:**
-- Service URL: https://gchostpay3-10-26-291176869049.us-central1.run.app
+- Service URL: https://pgp-hostpay3-v1-291176869049.us-central1.run.app
 - Next USDT payment will validate the fix
 - Monitor logs for "Currency type: ERC-20 TOKEN (Tether USD)"
 
@@ -1189,8 +1189,8 @@ encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
 
 **Deployment:**
 - ✅ Code fixed: PGP_SPLIT1_v1/pgp_split1_v1.py:507
-- ✅ Build: gcr.io/telepay-459221/gcsplit1-10-26:latest (Build ID: 6f1af128)
-- ✅ Deployed: gcsplit1-10-26 (revision 00017-vcq)
+- ✅ Build: gcr.io/telepay-459221/pgp-split1-v1:latest (Build ID: 6f1af128)
+- ✅ Deployed: pgp-split1-v1 (revision 00017-vcq)
 - ✅ Health check: All components healthy
 - ✅ Production ready: 2025-11-04
 
@@ -1479,9 +1479,9 @@ PGP_MICROBATCHPROCESSOR
 
 **Deployment Details:**
 - ✅ PGP_HOSTPAY3_v1 Build ID: **115e4976-bf8c-402b-b7fc-977086d0e01b**
-- ✅ PGP_HOSTPAY3_v1 Revision: **gchostpay3-10-26-00015-d79** (serving 100% traffic)
+- ✅ PGP_HOSTPAY3_v1 Revision: **pgp-hostpay3-v1-00015-d79** (serving 100% traffic)
 - ✅ PGP_HOSTPAY1_v1 Build ID: **914fd171-5ff0-4e1f-bea0-bcb10e57b796**
-- ✅ PGP_HOSTPAY1_v1 Revision: **gchostpay1-10-26-00019-9r5** (serving 100% traffic)
+- ✅ PGP_HOSTPAY1_v1 Revision: **pgp-hostpay1-v1-00019-9r5** (serving 100% traffic)
 
 **Verification Checklist:**
 - ⏳ Monitor PGP_HOSTPAY3_v1 logs: Verify token encryption includes full UUID
@@ -1658,9 +1658,9 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 
 **Deployment:**
 - ✅ PGP_SPLIT2_v1 Build ID: a23bc7d5-b8c5-4aaf-b83a-641ee7d74daf
-- ✅ PGP_SPLIT2_v1 Deployed: Revision **gcsplit2-10-26-00012-575** (100% traffic)
+- ✅ PGP_SPLIT2_v1 Deployed: Revision **pgp-split2-v1-00012-575** (100% traffic)
 - ✅ PGP_SPLIT3_v1 Build ID: a23bc7d5-b8c5-4aaf-b83a-641ee7d74daf
-- ✅ PGP_SPLIT3_v1 Deployed: Revision **gcsplit3-10-26-00009-2jt** (100% traffic)
+- ✅ PGP_SPLIT3_v1 Deployed: Revision **pgp-split3-v1-00009-2jt** (100% traffic)
 - ✅ Health checks: All components healthy
 - ⏳ End-to-end validation: Pending test batch payout
 
@@ -1734,7 +1734,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 - ✅ Updated return value handling (task_name → boolean conversion)
 - ✅ Added task name logging for debugging (line 168)
 - ✅ Rebuilt Docker image: 5f962fce-deed-4df9-b63a-f7e85968682e
-- ✅ Deployed revision: gchostpay1-10-26-00018-8s7
+- ✅ Deployed revision: pgp-hostpay1-v1-00018-8s7
 
 **Verification:**
 - ✅ Build successful
@@ -1775,7 +1775,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 
 **Root Cause:**
 1. Session 52 Phase 2 implemented retry logic with `_enqueue_delayed_callback_check()` helper (pgp_hostpay1_v1.py lines 220-225)
-2. Helper function requires `config.get('gchostpay1_response_queue')` and `config.get('gchostpay1_url')`
+2. Helper function requires `config.get('pgp_hostpay1_response_queue')` and `config.get('pgp_hostpay1_url')`
 3. **config_manager.py did NOT load these secrets** (oversight in Phase 2 implementation)
 4. Secrets exist in Secret Manager and queue exists, but weren't being loaded
 5. Retry task enqueue fails immediately with "config missing" error
@@ -1796,7 +1796,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 - ✅ Updated config_manager.py to fetch GCHOSTPAY1_RESPONSE_QUEUE (lines 106-109)
 - ✅ Added both to config dictionary (lines 166-167)
 - ✅ Added both to config status logging (lines 189-190)
-- ✅ Rebuilt Docker image and deployed revision gchostpay1-10-26-00017-rdp
+- ✅ Rebuilt Docker image and deployed revision pgp-hostpay1-v1-00017-rdp
 
 **Verification:**
 ```
@@ -1859,7 +1859,7 @@ print(f"💰 [ENDPOINT] From: {api_from_amount} USDT")
 - `/10-26/PGP_HOSTPAY1_v1/changenow_client.py` (added safe_decimal)
 - `/10-26/PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py` (enhanced query logic)
 
-**Deployed:** Revision gchostpay1-10-26-00015-kgl
+**Deployed:** Revision pgp-hostpay1-v1-00015-kgl
 
 **Status:** ✅ Phase 1 complete (crash prevention)
 **Next:** ⏳ Phase 2 needed (retry logic to query when swap finishes)
@@ -1939,8 +1939,8 @@ offset += 4
 - Enhanced error handling for extraction failures
 
 **Deployment:**
-- Built: `gcr.io/telepay-459221/gcsplit1-10-26:latest` (SHA256: 318b0ca50c9899a4...)
-- Deployed: Cloud Run revision `gcsplit1-10-26-00016-dnm`
+- Built: `gcr.io/telepay-459221/pgp-split1-v1:latest` (SHA256: 318b0ca50c9899a4...)
+- Deployed: Cloud Run revision `pgp-split1-v1-00016-dnm`
 - Time: 2025-11-03 18:57:36 UTC (13:57:36 EST)
 - Status: Healthy, serving 100% traffic
 
@@ -2011,7 +2011,7 @@ def encrypt_gcsplit3_to_gcsplit1_token(
 **Validation:**
 - ✅ Token structure now matches PGP_SPLIT3_v1's format
 - ✅ Decryption method already had backward compatibility code (no changes needed)
-- ✅ Deployed as `gcsplit1-10-26-00015-jpz`
+- ✅ Deployed as `pgp-split1-v1-00015-jpz`
 - ⏳ Awaiting new payment to validate end-to-end
 
 **Prevention Measures:**
@@ -2237,8 +2237,8 @@ if result and result[0]:  # Tuple access ✅ (pg8000 returns tuples)
 
 **Verification:**
 - ✅ Syntax verified: `python3 -m py_compile` passed for both services
-- ✅ PGP_INVITE_v1 deployed: `gcwebhook2-10-26-00017-hfq` (32s build)
-- ✅ PGP_ORCHESTRATOR_v1 deployed: `gcwebhook1-10-26-00020-lq8` (38s build)
+- ✅ PGP_INVITE_v1 deployed: `pgp-invite-v1-00017-hfq` (32s build)
+- ✅ PGP_ORCHESTRATOR_v1 deployed: `pgp-orchestrator-v1-00020-lq8` (38s build)
 - ✅ Both services healthy (status: True)
 
 **Files Modified:**
@@ -2454,20 +2454,20 @@ HOSTPAY_WEBHOOK_URL  # ✅ Exists
 HOSTPAY_QUEUE        # ✅ Exists
 
 # But NOT mounted on Cloud Run:
-$ gcloud run services describe gcsplit1-10-26 | grep HOSTPAY
+$ gcloud run services describe pgp-split1-v1 | grep HOSTPAY
 # Only showed: GCHOSTPAY1_QUEUE, GCHOSTPAY1_URL, TPS_HOSTPAY_SIGNING_KEY
 # Missing: HOSTPAY_WEBHOOK_URL, HOSTPAY_QUEUE
 ```
 
 **Fix Applied:**
 ```bash
-gcloud run services update gcsplit1-10-26 \
+gcloud run services update pgp-split1-v1 \
   --region=us-central1 \
   --update-secrets=HOSTPAY_WEBHOOK_URL=HOSTPAY_WEBHOOK_URL:latest,HOSTPAY_QUEUE=HOSTPAY_QUEUE:latest
 ```
 
 **Verification:**
-- ✅ New revision deployed: `gcsplit1-10-26-00012-j7w`
+- ✅ New revision deployed: `pgp-split1-v1-00012-j7w`
 - ✅ Configuration logs now show:
   ```
   HOSTPAY_WEBHOOK_URL: ✅
@@ -2532,8 +2532,8 @@ payout_network = (webhook_data.get('payout_network') or '').strip().lower()
 - Updated PGP_SPLIT1_v1/pgp_split1_v1.py lines 296-304
 - Added null-safe handling using `(value or '')` pattern
 - Added explanatory comments for future maintainers
-- Built and deployed: `gcr.io/telepay-459221/gcsplit1-10-26:latest`
-- Deployed revision: `gcsplit1-10-26-00011-xn4`
+- Built and deployed: `gcr.io/telepay-459221/pgp-split1-v1:latest`
+- Deployed revision: `pgp-split1-v1-00011-xn4`
 
 **Verification:**
 - Service health check: ✅ Healthy
@@ -2638,7 +2638,7 @@ Validation using `price_amount` (invoice) instead of `outcome_amount` (actual re
 
 **Testing:**
 - ✅ Docker image built successfully
-- ✅ Deployed to Cloud Run: `gcwebhook2-10-26-00013-5ns`
+- ✅ Deployed to Cloud Run: `pgp-invite-v1-00013-5ns`
 - ✅ Health check: All components healthy
 - ⏳ Pending: End-to-end test with real payment
 
@@ -2647,9 +2647,9 @@ Validation using `price_amount` (invoice) instead of `outcome_amount` (actual re
 - `PGP_INVITE_v1/requirements.txt` (line 6)
 
 **Deployment:**
-- gcwebhook2-10-26: Revision `gcwebhook2-10-26-00013-5ns`
+- pgp-invite-v1: Revision `pgp-invite-v1-00013-5ns`
 - Region: us-central1
-- URL: `https://gcwebhook2-10-26-291176869049.us-central1.run.app`
+- URL: `https://pgp-invite-v1-291176869049.us-central1.run.app`
 
 **Impact:**
 - ✅ Payment validation now checks actual USD received
@@ -2772,7 +2772,7 @@ Currency type mismatch in validation logic:
 
 **Deployment:**
 - np-webhook: Revision `np-webhook-00007-rf2`
-- gcwebhook2-10-26: Revision `gcwebhook2-10-26-00012-9m5`
+- pgp-invite-v1: Revision `pgp-invite-v1-00012-9m5`
 - Region: np-webhook (us-east1), gcwebhook2 (us-central1)
 
 **Impact:**
@@ -3138,11 +3138,11 @@ Increased token TTL from 300 seconds (5 minutes) to 7200 seconds (2 hours) acros
 
 **Deployments:**
 ```bash
-gcloud run deploy gchostpay1-10-26 --source . --region us-central1
-# Revision: gchostpay1-10-26-00012-shr
+gcloud run deploy pgp-hostpay1-v1 --source . --region us-central1
+# Revision: pgp-hostpay1-v1-00012-shr
 
-gcloud run deploy gchostpay3-10-26 --source . --region us-central1
-# Revision: gchostpay3-10-26-00009-x44
+gcloud run deploy pgp-hostpay3-v1 --source . --region us-central1
+# Revision: pgp-hostpay3-v1-00009-x44
 ```
 
 **Verification (06:43:30 UTC):**
@@ -3660,7 +3660,7 @@ No validation for zero amount before ChangeNow swap creation. Could occur in rac
 - **Severity:** HIGH - Batch conversion flow was incomplete
 - **Status:** ✅ FIXED AND DEPLOYED
 - **Location:** `PGP_HOSTPAY1_v1/pgp_hostpay1_v1.py`, `config_manager.py`, `changenow_client.py`
-- **Deployed Revision:** `gchostpay1-10-26-00011-svz`
+- **Deployed Revision:** `pgp-hostpay1-v1-00011-svz`
 
 **Description:**
 The `/payment-completed` endpoint had TODO markers and missing callback implementation. Batch conversions would execute but callbacks would never reach PGP_MICROBATCHPROCESSOR.
@@ -3899,9 +3899,9 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - `PGP_HOSTPAY2_v1/token_manager.py` - Copied from PGP_HOSTPAY1_v1
   - `PGP_HOSTPAY3_v1/token_manager.py` - Copied from PGP_HOSTPAY1_v1
 - **Deployment:**
-  - PGP_HOSTPAY1_v1: revision `gchostpay1-10-26-00005-htc`
-  - PGP_HOSTPAY2_v1: revision `gchostpay2-10-26-00005-hb9`
-  - PGP_HOSTPAY3_v1: revision `gchostpay3-10-26-00006-ndl`
+  - PGP_HOSTPAY1_v1: revision `pgp-hostpay1-v1-00005-htc`
+  - PGP_HOSTPAY2_v1: revision `pgp-hostpay2-v1-00005-hb9`
+  - PGP_HOSTPAY3_v1: revision `pgp-hostpay3-v1-00006-ndl`
 - **Verification:**
   - All services deployed successfully (status: True)
   - Token validation now allows 5-minute window
@@ -3918,7 +3918,7 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   3. **Incorrect signing key** - PGP_SPLIT1_v1 TokenManager initialized with SUCCESS_URL_SIGNING_KEY but batch tokens encrypted with TPS_HOSTPAY_SIGNING_KEY
 - **Example Error:**
   - PGP_BATCHPROCESSOR successfully created batch and enqueued task to `gcsplit1-batch-queue`
-  - Cloud Tasks sent POST to `https://gcsplit1-10-26.../batch-payout`
+  - Cloud Tasks sent POST to `https://pgp-split1-v1.../batch-payout`
   - PGP_SPLIT1_v1 returned 404 - endpoint not found
   - Cloud Tasks retried with exponential backoff
 - **Impact:**
@@ -3939,7 +3939,7 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - Endpoint now exists and returns proper responses
   - Token decryption uses correct signing key
   - Batch payout flow: PGP_BATCHPROCESSOR → PGP_SPLIT1_v1 /batch-payout → PGP_SPLIT2_v1 → PGP_SPLIT3_v1 → GCHostPay
-- **Status:** ✅ FIXED and deployed (revision gcsplit1-10-26-00009-krs)
+- **Status:** ✅ FIXED and deployed (revision pgp-split1-v1-00009-krs)
 
 ### 🐛 Batch Payout System Not Processing Due to Secret Newlines and Query Bug
 - **Date Fixed:** October 29, 2025
@@ -3988,10 +3988,10 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - Secrets were created with `echo` instead of `echo -n`, adding unwanted newlines
   - Affected secrets:
     - `GCACCUMULATOR_QUEUE` = `"accumulator-payment-queue\n"`
-    - `GCSPLIT3_QUEUE` = `"gcsplit-eth-client-swap-queue\n"`
+    - `GCSPLIT3_QUEUE` = `"pgp-split-eth-client-swap-queue\n"`
     - `GCHOSTPAY1_RESPONSE_QUEUE` = `"gchostpay1-response-queue\n"`
     - `GCACCUMULATOR_URL` = `"https://pgp_accumulator-10-26-291176869049.us-central1.run.app\n"`
-    - `GCWEBHOOK2_URL` = `"https://gcwebhook2-10-26-291176869049.us-central1.run.app\n"`
+    - `GCWEBHOOK2_URL` = `"https://pgp-invite-v1-291176869049.us-central1.run.app\n"`
   - When `config_manager.py` loaded these via `os.getenv()`, it included the `\n`
   - Cloud Tasks queue creation failed validation
 - **Impact:**
@@ -4036,10 +4036,10 @@ MICRO_BATCH_THRESHOLD_USD=MICRO_BATCH_THRESHOLD_USD:latest
   - Rebuilt service from source to ensure latest code deployed
   - Removed invalid VPC connector configuration
 - **Files/Commands Modified:**
-  - Deployment: `gcloud run deploy gcwebhook1-10-26 --set-secrets="DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,..."`
+  - Deployment: `gcloud run deploy pgp-orchestrator-v1 --set-secrets="DATABASE_NAME_SECRET=DATABASE_NAME_SECRET:latest,..."`
   - Cleared old env vars and VPC connector
 - **Verification:**
-  - Revision `gcwebhook1-10-26-00011-npq` logs show all credentials loading correctly
+  - Revision `pgp-orchestrator-v1-00011-npq` logs show all credentials loading correctly
   - Health check shows `"database":"healthy"`
   - DatabaseManager initialized with correct database: `client_table`
 - **Reference Document:** `THRESHOLD_PAYOUT_BUG_FIX_CHECKLIST.md`

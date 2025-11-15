@@ -165,18 +165,18 @@ def check_changenow_status():
             print(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        gchostpay1_response_queue = config.get('gchostpay1_response_queue')
-        gchostpay1_url = config.get('gchostpay1_url')
+        pgp_hostpay1_response_queue = config.get('pgp_hostpay1_response_queue')
+        pgp_hostpay1_url = config.get('pgp_hostpay1_url')
 
-        if not gchostpay1_response_queue or not gchostpay1_url:
+        if not pgp_hostpay1_response_queue or not pgp_hostpay1_url:
             print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
             abort(500, "Service configuration error")
 
         # Target the /status-verified endpoint
-        target_url = f"{gchostpay1_url}/status-verified"
+        target_url = f"{pgp_hostpay1_url}/status-verified"
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay1_status_response(
-            queue_name=gchostpay1_response_queue,
+            queue_name=pgp_hostpay1_response_queue,
             target_url=target_url,
             encrypted_token=encrypted_response_token
         )

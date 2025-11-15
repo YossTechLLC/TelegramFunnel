@@ -81,7 +81,7 @@ python3 pgp_server_v1.py
 | Variable | Description | Usage |
 |----------|-------------|-------|
 | `SUCCESS_URL_SIGNING_KEY` | Path to URL signing key | Encrypts payment redirect URLs |
-| `WEBHOOK_BASE_URL` | Path to webhook base URL | Example: `https://gcwebhook1-10-26-*.run.app` |
+| `WEBHOOK_BASE_URL` | Path to webhook base URL | Example: `https://pgp-orchestrator-v1-*.run.app` |
 
 ### Database Configuration
 

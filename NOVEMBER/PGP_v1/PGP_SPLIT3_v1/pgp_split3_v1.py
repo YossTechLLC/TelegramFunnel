@@ -196,15 +196,15 @@ def process_eth_client_swap():
             abort(500, "Cloud Tasks unavailable")
 
         gcsplit1_response_queue = config.get('gcsplit1_response_queue')
-        gcsplit1_url = config.get('gcsplit1_url')
+        pgp_split1_url = config.get('pgp_split1_url')
 
-        if not gcsplit1_response_queue or not gcsplit1_url:
+        if not gcsplit1_response_queue or not pgp_split1_url:
             print(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split1_swap_response(
             queue_name=gcsplit1_response_queue,
-            target_url=gcsplit1_url,
+            target_url=pgp_split1_url,
             encrypted_token=encrypted_response_token
         )
 

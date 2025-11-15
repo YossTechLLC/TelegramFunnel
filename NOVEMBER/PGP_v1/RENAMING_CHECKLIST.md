@@ -131,19 +131,19 @@
 ### 2.1 Service URL References
 
 #### ☐ Update Google Cloud Run Service Names
-**Old naming pattern:** `pgp_server-10-26`, `gcwebhook1-10-26`, etc.
+**Old naming pattern:** `pgp_server-10-26`, `pgp-orchestrator-v1`, etc.
 **New naming pattern:** TBD - Need to define
 
 Potential new service names:
 - [ ] `pgp_server-10-26` → `pgp-server-v1` or `pgp_server-server-v1`?
-- [ ] `gcwebhook1-10-26` → `pgp-orchestrator-v1`?
-- [ ] `gcwebhook2-10-26` → `pgp-invite-v1`?
-- [ ] `gchostpay1-10-26` → `pgp-hostpay1-v1`?
-- [ ] `gchostpay2-10-26` → `pgp-hostpay2-v1`?
-- [ ] `gchostpay3-10-26` → `pgp-hostpay3-v1`?
-- [ ] `gcsplit1-10-26` → `pgp-split1-v1`?
-- [ ] `gcsplit2-10-26` → `pgp-split2-v1`?
-- [ ] `gcsplit3-10-26` → `pgp-split3-v1`?
+- [ ] `pgp-orchestrator-v1` → `pgp-orchestrator-v1`?
+- [ ] `pgp-invite-v1` → `pgp-invite-v1`?
+- [ ] `pgp-hostpay1-v1` → `pgp-hostpay1-v1`?
+- [ ] `pgp-hostpay2-v1` → `pgp-hostpay2-v1`?
+- [ ] `pgp-hostpay3-v1` → `pgp-hostpay3-v1`?
+- [ ] `pgp-split1-v1` → `pgp-split1-v1`?
+- [ ] `pgp-split2-v1` → `pgp-split2-v1`?
+- [ ] `pgp-split3-v1` → `pgp-split3-v1`?
 - [ ] `pgp_batchprocessor-10-26` → `pgp-batchprocessor-v1`?
 - [ ] `pgp_accumulator-10-26` → `pgp-accumulator-v1`?
 - [ ] `pgp_microbatchprocessor-10-26` → `pgp-microbatchprocessor-v1`?

@@ -16,12 +16,12 @@ BASE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26"
 # Service order (downstream first for backward compatibility)
 # Format: "directory:service-name"
 SERVICES=(
-    "PGP_HOSTPAY3_v1:gchostpay3-10-26"
-    "PGP_HOSTPAY1_v1:gchostpay1-10-26"
-    "PGP_SPLIT3_v1:gcsplit3-10-26"
-    "PGP_SPLIT2_v1:gcsplit2-10-26"
-    "PGP_SPLIT1_v1:gcsplit1-10-26"
-    "PGP_ORCHESTRATOR_v1:gcwebhook1-10-26"
+    "PGP_HOSTPAY3_v1:pgp-hostpay3-v1"
+    "PGP_HOSTPAY1_v1:pgp-hostpay1-v1"
+    "PGP_SPLIT3_v1:pgp-split3-v1"
+    "PGP_SPLIT2_v1:pgp-split2-v1"
+    "PGP_SPLIT1_v1:pgp-split1-v1"
+    "PGP_ORCHESTRATOR_v1:pgp-orchestrator-v1"
     "PGP_BATCHPROCESSOR_v1:pgp_batchprocessor-10-26"
     "PGP_MICROBATCHPROCESSOR_v1:pgp_microbatchprocessor-10-26"
 )

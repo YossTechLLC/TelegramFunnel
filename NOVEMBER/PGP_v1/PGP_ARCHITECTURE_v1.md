@@ -11,14 +11,14 @@
 | Component | Old Service Name | New Service Name | Purpose |
 |-----------|------------------|------------------|---------|
 | Server | `pgp_server-10-26` | `pgp-server-v1` | Main Telegram bot server |
-| Orchestrator | `gcwebhook1-10-26` | `pgp-orchestrator-v1` | Payment orchestration webhook |
-| Invite | `gcwebhook2-10-26` | `pgp-invite-v1` | Invitation handling webhook |
-| HostPay1 | `gchostpay1-10-26` | `pgp-hostpay1-v1` | Host payment processor 1 |
-| HostPay2 | `gchostpay2-10-26` | `pgp-hostpay2-v1` | Host payment processor 2 |
-| HostPay3 | `gchostpay3-10-26` | `pgp-hostpay3-v1` | Host payment processor 3 |
-| Split1 | `gcsplit1-10-26` | `pgp-split1-v1` | Payment splitter 1 |
-| Split2 | `gcsplit2-10-26` | `pgp-split2-v1` | Payment splitter 2 |
-| Split3 | `gcsplit3-10-26` | `pgp-split3-v1` | Payment splitter 3 |
+| Orchestrator | `pgp-orchestrator-v1` | `pgp-orchestrator-v1` | Payment orchestration webhook |
+| Invite | `pgp-invite-v1` | `pgp-invite-v1` | Invitation handling webhook |
+| HostPay1 | `pgp-hostpay1-v1` | `pgp-hostpay1-v1` | Host payment processor 1 |
+| HostPay2 | `pgp-hostpay2-v1` | `pgp-hostpay2-v1` | Host payment processor 2 |
+| HostPay3 | `pgp-hostpay3-v1` | `pgp-hostpay3-v1` | Host payment processor 3 |
+| Split1 | `pgp-split1-v1` | `pgp-split1-v1` | Payment splitter 1 |
+| Split2 | `pgp-split2-v1` | `pgp-split2-v1` | Payment splitter 2 |
+| Split3 | `pgp-split3-v1` | `pgp-split3-v1` | Payment splitter 3 |
 | Accumulator | `pgp_accumulator-10-26` | `pgp-accumulator-v1` | Payment accumulator |
 | BatchProcessor | `pgp_batchprocessor-10-26` | `pgp-batchprocessor-v1` | Batch payment processor |
 | MicroBatch | `pgp_microbatchprocessor-10-26` | `pgp-microbatch-v1` | Micro batch processor |
@@ -105,7 +105,7 @@ PGP_v1/
 
 **Old Pattern:**
 ```
-hardcoded URL: https://gcwebhook1-10-26-xyz.run.app
+hardcoded URL: https://pgp-orchestrator-v1-xyz.run.app
 ```
 
 **New Pattern:**
@@ -119,7 +119,7 @@ hardcoded URL: https://gcwebhook1-10-26-xyz.run.app
 **Example:**
 ```python
 # Old
-WEBHOOK_URL = "https://gcwebhook1-10-26-xyz.run.app"
+WEBHOOK_URL = "https://pgp-orchestrator-v1-xyz.run.app"
 
 # New
 ORCHESTRATOR_URL = os.getenv("PGP_ORCHESTRATOR_URL")  # Set during deployment

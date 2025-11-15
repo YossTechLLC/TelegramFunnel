@@ -166,9 +166,9 @@ def process_batches():
 
                 # Enqueue to PGP_SPLIT1_v1 for batch payout
                 gcsplit1_queue = config.get('gcsplit1_batch_queue')
-                gcsplit1_url = config.get('gcsplit1_url')
+                pgp_split1_url = config.get('pgp_split1_url')
 
-                if not gcsplit1_queue or not gcsplit1_url:
+                if not gcsplit1_queue or not pgp_split1_url:
                     print(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
                     db_manager.update_batch_status(batch_id, 'failed')
                     errors.append(f"Client {client_id}: PGP_SPLIT1_v1 config missing")
@@ -183,7 +183,7 @@ def process_batches():
 
                 task_name = cloudtasks_client.create_task(
                     queue_name=gcsplit1_queue,
-                    target_url=f"{gcsplit1_url}/batch-payout",
+                    target_url=f"{pgp_split1_url}/batch-payout",
                     payload=task_payload
                 )
 

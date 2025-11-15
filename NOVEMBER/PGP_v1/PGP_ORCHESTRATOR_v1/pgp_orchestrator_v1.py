@@ -439,9 +439,9 @@ def process_validated_payment():
 
             # Get PGP_SPLIT1_v1 configuration
             gcsplit1_queue = config.get('gcsplit1_queue')
-            gcsplit1_url = config.get('gcsplit1_url')
+            pgp_split1_url = config.get('pgp_split1_url')
 
-            if not gcsplit1_queue or not gcsplit1_url:
+            if not gcsplit1_queue or not pgp_split1_url:
                 print(f"❌ [VALIDATED] PGP_SPLIT1_v1 configuration missing")
                 abort(500, "PGP_SPLIT1_v1 configuration error")
 
@@ -452,7 +452,7 @@ def process_validated_payment():
 
             task_name = cloudtasks_client.enqueue_pgp_split1_payment_split(
                 queue_name=gcsplit1_queue,
-                target_url=gcsplit1_url,
+                target_url=pgp_split1_url,
                 user_id=user_id,
                 closed_channel_id=closed_channel_id,
                 wallet_address=wallet_address,
@@ -511,14 +511,14 @@ def process_validated_payment():
             abort(500, "Token encryption failed")
 
         gcwebhook2_queue = config.get('gcwebhook2_queue')
-        gcwebhook2_url = config.get('gcwebhook2_url')
+        pgp_invite_url = config.get('pgp_invite_url')
 
-        if not gcwebhook2_queue or not gcwebhook2_url:
+        if not gcwebhook2_queue or not pgp_invite_url:
             print(f"⚠️ [VALIDATED] PGP_INVITE_v1 configuration missing - skipping invite")
         else:
             task_name_gcwebhook2 = cloudtasks_client.enqueue_pgp_invite_telegram_invite(
                 queue_name=gcwebhook2_queue,
-                target_url=gcwebhook2_url,
+                target_url=pgp_invite_url,
                 encrypted_token=encrypted_token,
                 payment_id=nowpayments_payment_id
             )

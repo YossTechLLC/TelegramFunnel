@@ -38,31 +38,31 @@
 | `GCBATCHPROCESSOR_QUEUE` | `pgp_batchprocessor-10-26-queue` | Batch processor queue |
 | `GCBATCHPROCESSOR_URL` | `https://pgp_batchprocessor-10-26-291176869049.us-central1.run.app` | Batch processor service |
 | `GCHOSTPAY1_BATCH_QUEUE` | `gchostpay1-batch-queue` | HostPay1 batch queue |
-| `GCHOSTPAY1_QUEUE` | `gcsplit-hostpay-trigger-queue` | HostPay1 trigger queue |
+| `GCHOSTPAY1_QUEUE` | `pgp-split-hostpay-trigger-queue` | HostPay1 trigger queue |
 | `GCHOSTPAY1_RESPONSE_QUEUE` | `gchostpay1-response-queue` | HostPay1 response |
-| `GCHOSTPAY1_URL` | `https://gchostpay1-10-26-291176869049.us-central1.run.app` | HostPay1 service |
+| `GCHOSTPAY1_URL` | `https://pgp-hostpay1-v1-291176869049.us-central1.run.app` | HostPay1 service |
 | `GCHOSTPAY2_QUEUE` | `gchostpay2-status-check-queue` | HostPay2 status queue |
-| `GCHOSTPAY2_URL` | `https://gchostpay2-10-26-291176869049.us-central1.run.app` | HostPay2 service |
+| `GCHOSTPAY2_URL` | `https://pgp-hostpay2-v1-291176869049.us-central1.run.app` | HostPay2 service |
 | `GCHOSTPAY3_QUEUE` | `gchostpay3-payment-exec-queue` | HostPay3 exec queue |
-| `GCHOSTPAY3_RETRY_QUEUE` | `gchostpay3-retry-queue` | HostPay3 retry |
-| `GCHOSTPAY3_URL` | `https://gchostpay3-10-26-291176869049.us-central1.run.app` | HostPay3 service |
+| `GCHOSTPAY3_RETRY_QUEUE` | `pgp-hostpay3-retry-queue` | HostPay3 retry |
+| `GCHOSTPAY3_URL` | `https://pgp-hostpay3-v1-291176869049.us-central1.run.app` | HostPay3 service |
 | `GCSPLIT1_BATCH_QUEUE` | `gcsplit1-batch-queue` | Split1 batch queue |
-| `GCSPLIT1_ESTIMATE_RESPONSE_URL` | `https://gcsplit1-10-26-291176869049.us-central1.run.app/usdt-eth-estimate` | Split1 estimate callback |
+| `GCSPLIT1_ESTIMATE_RESPONSE_URL` | `https://pgp-split1-v1-291176869049.us-central1.run.app/usdt-eth-estimate` | Split1 estimate callback |
 | `GCSPLIT1_QUEUE` | `gcsplit-webhook-queue` | Split1 webhook queue |
-| `GCSPLIT1_SWAP_RESPONSE_URL` | `https://gcsplit1-10-26-291176869049.us-central1.run.app/eth-client-swap` | Split1 swap callback |
-| `GCSPLIT1_URL` | `https://gcsplit1-10-26-291176869049.us-central1.run.app` | Split1 service |
-| `GCSPLIT2_QUEUE` | `gcsplit-usdt-eth-estimate-queue` | Split2 estimate queue |
-| `GCSPLIT2_RESPONSE_QUEUE` | `gcsplit-usdt-eth-response-queue` | Split2 response |
-| `GCSPLIT2_URL` | `https://gcsplit2-10-26-291176869049.us-central1.run.app` | Split2 service |
-| `GCSPLIT3_QUEUE` | `gcsplit-eth-client-swap-queue` | Split3 swap queue |
-| `GCSPLIT3_RESPONSE_QUEUE` | `gcsplit-eth-client-response-queue` | Split3 response |
-| `GCSPLIT3_URL` | `https://gcsplit3-10-26-291176869049.us-central1.run.app` | Split3 service |
+| `GCSPLIT1_SWAP_RESPONSE_URL` | `https://pgp-split1-v1-291176869049.us-central1.run.app/eth-client-swap` | Split1 swap callback |
+| `GCSPLIT1_URL` | `https://pgp-split1-v1-291176869049.us-central1.run.app` | Split1 service |
+| `GCSPLIT2_QUEUE` | `pgp-split-usdt-eth-estimate-queue` | Split2 estimate queue |
+| `GCSPLIT2_RESPONSE_QUEUE` | `pgp-split-usdt-eth-response-queue` | Split2 response |
+| `GCSPLIT2_URL` | `https://pgp-split2-v1-291176869049.us-central1.run.app` | Split2 service |
+| `GCSPLIT3_QUEUE` | `pgp-split-eth-client-swap-queue` | Split3 swap queue |
+| `GCSPLIT3_RESPONSE_QUEUE` | `pgp-split-eth-client-response-queue` | Split3 response |
+| `GCSPLIT3_URL` | `https://pgp-split3-v1-291176869049.us-central1.run.app` | Split3 service |
 | `GCWEBHOOK1_QUEUE` | `gcwebhook1-queue` | Webhook1 queue |
-| `GCWEBHOOK1_URL` | `https://gcwebhook1-10-26-pjxwjsdktq-uc.a.run.app` | Webhook1 service |
+| `GCWEBHOOK1_URL` | `https://pgp-orchestrator-v1-pjxwjsdktq-uc.a.run.app` | Webhook1 service |
 | `GCWEBHOOK2_QUEUE` | `gcwebhook-telegram-invite-queue` | Webhook2 invite queue |
-| `GCWEBHOOK2_URL` | `https://gcwebhook2-10-26-291176869049.us-central1.run.app` | Webhook2 service |
-| `HOSTPAY_QUEUE` | `gcsplit-hostpay-trigger-queue` | ⚠️ Duplicate of GCHOSTPAY1_QUEUE |
-| `HOSTPAY_WEBHOOK_URL` | `https://gchostpay1-10-26-291176869049.us-central1.run.app` | ⚠️ Duplicate of GCHOSTPAY1_URL |
+| `GCWEBHOOK2_URL` | `https://pgp-invite-v1-291176869049.us-central1.run.app` | Webhook2 service |
+| `HOSTPAY_QUEUE` | `pgp-split-hostpay-trigger-queue` | ⚠️ Duplicate of GCHOSTPAY1_QUEUE |
+| `HOSTPAY_WEBHOOK_URL` | `https://pgp-hostpay1-v1-291176869049.us-central1.run.app` | ⚠️ Duplicate of GCHOSTPAY1_URL |
 | `HOST_WALLET_ETH_ADDRESS` | `0x16...1bc4` | Host wallet ETH address |
 | `HOST_WALLET_PRIVATE_KEY` | `7273...8f2e` (64 chars) | 🔴 CRITICAL: Wallet private key |
 | `HOST_WALLET_USDT_ADDRESS` | `0x16...1bc4` | Host wallet USDT (same as ETH) |
@@ -84,9 +84,9 @@
 | `TELEGRAM_BOT_USERNAME` | `PayGatePrime_bot` | Telegram bot username |
 | `TELEPAY_BOT_URL` | `http://34.58.80.152:8080` | TelePay bot VM (HTTP) |
 | `TPS_HOSTPAY_SIGNING_KEY` | `6b5f...df5a` (64 chars) | TelePay→HostPay signing |
-| `TPS_WEBHOOK_URL` | `https://gcsplit1-10-26-291176869049.us-central1.run.app` | TelePay webhook callback |
+| `TPS_WEBHOOK_URL` | `https://pgp-split1-v1-291176869049.us-central1.run.app` | TelePay webhook callback |
 | `TP_FLAT_FEE` | `15` | TelePay flat fee % |
-| `WEBHOOK_BASE_URL` | `https://gcwebhook1-10-26-291176869049.us-central1.run.app` | Webhook base URL |
+| `WEBHOOK_BASE_URL` | `https://pgp-orchestrator-v1-291176869049.us-central1.run.app` | Webhook base URL |
 | `WEBHOOK_SIGNING_KEY` | `f4e7...2345` (64 chars) | Webhook payload signing |
 
 ---

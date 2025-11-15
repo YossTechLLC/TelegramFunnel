@@ -376,16 +376,16 @@ def execute_eth_payment():
                 # Route to PGP_HOSTPAY1_v1 for instant payouts (existing behavior)
                 print(f"🎯 [ENDPOINT] Context: instant → Routing to PGP_HOSTPAY1_v1")
 
-                gchostpay1_response_queue = config.get('gchostpay1_response_queue')
-                gchostpay1_url = config.get('gchostpay1_url')
+                pgp_hostpay1_response_queue = config.get('pgp_hostpay1_response_queue')
+                pgp_hostpay1_url = config.get('pgp_hostpay1_url')
 
-                if not gchostpay1_response_queue or not gchostpay1_url:
+                if not pgp_hostpay1_response_queue or not pgp_hostpay1_url:
                     print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
                     abort(500, "Service configuration error")
 
                 # Target the /payment-completed endpoint
-                target_url = f"{gchostpay1_url}/payment-completed"
-                queue_name = gchostpay1_response_queue
+                target_url = f"{pgp_hostpay1_url}/payment-completed"
+                queue_name = pgp_hostpay1_response_queue
 
                 print(f"📤 [ENDPOINT] Routing to: {target_url}")
 
@@ -459,10 +459,10 @@ def execute_eth_payment():
                     }), 500
 
                 # Enqueue self-retry with 60s delay
-                gchostpay3_retry_queue = config.get('gchostpay3_retry_queue')
-                gchostpay3_url = config.get('gchostpay3_url')
+                pgp_hostpay3_retry_queue = config.get('pgp_hostpay3_retry_queue')
+                pgp_hostpay3_url = config.get('pgp_hostpay3_url')
 
-                if not gchostpay3_retry_queue or not gchostpay3_url:
+                if not pgp_hostpay3_retry_queue or not pgp_hostpay3_url:
                     print(f"❌ [ENDPOINT] PGP_HOSTPAY3_v1 retry configuration missing")
                     return jsonify({
                         "status": "error",
@@ -471,8 +471,8 @@ def execute_eth_payment():
                     }), 500
 
                 retry_task = cloudtasks_client.enqueue_pgp_hostpay3_retry(
-                    queue_name=gchostpay3_retry_queue,
-                    target_url=f"{gchostpay3_url}/",
+                    queue_name=pgp_hostpay3_retry_queue,
+                    target_url=f"{pgp_hostpay3_url}/",
                     encrypted_token=retry_token,
                     retry_delay_seconds=60
                 )

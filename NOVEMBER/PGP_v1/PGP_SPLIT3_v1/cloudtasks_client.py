@@ -39,7 +39,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         Enqueue a USDT→ETH estimate request to PGP_SPLIT2_v1.
 
         Args:
-            queue_name: Queue name (e.g., "gcsplit-usdt-eth-estimate-queue")
+            queue_name: Queue name (e.g., "pgp-split-usdt-eth-estimate-queue")
             target_url: PGP_SPLIT2_v1 service URL
             encrypted_token: Encrypted token with request data
 
@@ -73,7 +73,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         Enqueue a USDT→ETH estimate response back to PGP_SPLIT1_v1.
 
         Args:
-            queue_name: Queue name (e.g., "gcsplit-usdt-eth-response-queue")
+            queue_name: Queue name (e.g., "pgp-split-usdt-eth-response-queue")
             target_url: PGP_SPLIT1_v1 /usdt-eth-estimate endpoint URL
             encrypted_token: Encrypted token with estimate data
 
@@ -107,7 +107,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         Enqueue an ETH→ClientCurrency swap request to PGP_SPLIT3_v1.
 
         Args:
-            queue_name: Queue name (e.g., "gcsplit-eth-client-swap-queue")
+            queue_name: Queue name (e.g., "pgp-split-eth-client-swap-queue")
             target_url: PGP_SPLIT3_v1 service URL
             encrypted_token: Encrypted token with swap request data
 
@@ -141,7 +141,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         Enqueue an ETH→ClientCurrency swap response back to PGP_SPLIT1_v1.
 
         Args:
-            queue_name: Queue name (e.g., "gcsplit-eth-client-response-queue")
+            queue_name: Queue name (e.g., "pgp-split-eth-client-response-queue")
             target_url: PGP_SPLIT1_v1 /eth-client-swap endpoint URL
             encrypted_token: Encrypted token with swap transaction data
 
@@ -175,7 +175,7 @@ class CloudTasksClient(BaseCloudTasksClient):
         Enqueue a GCHostPay trigger request.
 
         Args:
-            queue_name: Queue name (e.g., "gcsplit-hostpay-trigger-queue")
+            queue_name: Queue name (e.g., "pgp-split-hostpay-trigger-queue")
             target_url: GCHostPay webhook URL
             encrypted_token: Encrypted token with HostPay data
 
