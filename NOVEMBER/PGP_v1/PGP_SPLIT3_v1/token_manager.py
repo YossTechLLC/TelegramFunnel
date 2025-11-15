@@ -1,20 +1,16 @@
 #!/usr/bin/env python
 """
-Token Manager for GCSplit Services (GCSplit1, GCSplit2, GCSplit3)
+Token Manager for PGP_SPLIT3_v1
 Handles encryption and decryption of tokens for secure inter-service communication via Cloud Tasks.
 """
-import hmac
-import hashlib
-import struct
-import base64
-import time
 from typing import Dict, Any, Optional, Tuple
+from PGP_COMMON.tokens import BaseTokenManager
 
 
-class TokenManager:
+class TokenManager(BaseTokenManager):
     """
-    Manages token encryption and decryption for GCSplit services.
-    Uses binary packing and HMAC-SHA256 signatures for security.
+    Manages token encryption and decryption for PGP_SPLIT3_v1.
+    Inherits common methods from BaseTokenManager.
     """
 
     def __init__(self, signing_key: str):
@@ -24,12 +20,7 @@ class TokenManager:
         Args:
             signing_key: SECRET key for HMAC signing (SUCCESS_URL_SIGNING_KEY)
         """
-        if not signing_key:
-            raise ValueError("Signing key cannot be empty")
-
-        self.signing_key = signing_key
-        print(f"🔐 [TOKEN_MANAGER] Initialized with signing key")
-
+        super().__init__(signing_key, service_name="PGP_SPLIT3_v1")
     def _pack_string(self, s: str) -> bytes:
         """
         Pack a string with 1-byte length prefix.
@@ -103,9 +94,9 @@ class TokenManager:
             packed_data.extend(closed_channel_id_bytes)
 
             # Variable length strings
-            packed_data.extend(self._pack_string(wallet_address))
-            packed_data.extend(self._pack_string(payout_currency))
-            packed_data.extend(self._pack_string(payout_network))
+            packed_data.extend(self.pack_string(wallet_address))
+            packed_data.extend(self.pack_string(payout_currency))
+            packed_data.extend(self.pack_string(payout_network))
 
             # adjusted_amount_usdt (8 bytes double)
             packed_data.extend(struct.pack(">d", adjusted_amount_usdt))
@@ -178,9 +169,9 @@ class TokenManager:
             offset += 16
 
             # Variable strings
-            wallet_address, offset = self._unpack_string(payload, offset)
-            payout_currency, offset = self._unpack_string(payload, offset)
-            payout_network, offset = self._unpack_string(payload, offset)
+            wallet_address, offset = self.unpack_string(payload, offset)
+            payout_currency, offset = self.unpack_string(payload, offset)
+            payout_network, offset = self.unpack_string(payload, offset)
 
             # adjusted_amount_usdt (8 bytes double)
             adjusted_amount_usdt = struct.unpack(">d", payload[offset:offset + 8])[0]
@@ -245,9 +236,9 @@ class TokenManager:
             packed_data = bytearray()
             packed_data.extend(struct.pack(">Q", user_id))
             packed_data.extend(closed_channel_id_bytes)
-            packed_data.extend(self._pack_string(wallet_address))
-            packed_data.extend(self._pack_string(payout_currency))
-            packed_data.extend(self._pack_string(payout_network))
+            packed_data.extend(self.pack_string(wallet_address))
+            packed_data.extend(self.pack_string(payout_currency))
+            packed_data.extend(self.pack_string(payout_network))
             packed_data.extend(struct.pack(">d", from_amount_usdt))
             packed_data.extend(struct.pack(">d", to_amount_eth_post_fee))
             packed_data.extend(struct.pack(">d", deposit_fee))
@@ -305,9 +296,9 @@ class TokenManager:
             closed_channel_id = closed_channel_id_bytes.rstrip(b'\x00').decode('utf-8')
             offset += 16
 
-            wallet_address, offset = self._unpack_string(payload, offset)
-            payout_currency, offset = self._unpack_string(payload, offset)
-            payout_network, offset = self._unpack_string(payload, offset)
+            wallet_address, offset = self.unpack_string(payload, offset)
+            payout_currency, offset = self.unpack_string(payload, offset)
+            payout_network, offset = self.unpack_string(payload, offset)
 
             from_amount_usdt = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
@@ -379,9 +370,9 @@ class TokenManager:
             packed_data.extend(unique_id_bytes)
             packed_data.extend(struct.pack(">Q", user_id))
             packed_data.extend(closed_channel_id_bytes)
-            packed_data.extend(self._pack_string(wallet_address))
-            packed_data.extend(self._pack_string(payout_currency))
-            packed_data.extend(self._pack_string(payout_network))
+            packed_data.extend(self.pack_string(wallet_address))
+            packed_data.extend(self.pack_string(payout_currency))
+            packed_data.extend(self.pack_string(payout_network))
             packed_data.extend(struct.pack(">d", eth_amount))
 
             current_timestamp = int(time.time())
@@ -441,9 +432,9 @@ class TokenManager:
             closed_channel_id = closed_channel_id_bytes.rstrip(b'\x00').decode('utf-8')
             offset += 16
 
-            wallet_address, offset = self._unpack_string(payload, offset)
-            payout_currency, offset = self._unpack_string(payload, offset)
-            payout_network, offset = self._unpack_string(payload, offset)
+            wallet_address, offset = self.unpack_string(payload, offset)
+            payout_currency, offset = self.unpack_string(payload, offset)
+            payout_network, offset = self.unpack_string(payload, offset)
 
             eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
@@ -452,7 +443,7 @@ class TokenManager:
             swap_currency = 'usdt'  # Default for old tokens (this won't be used in GCSplit3)
             if offset + 1 <= len(payload) - 4:  # Check if there's room before timestamp
                 try:
-                    swap_currency, offset = self._unpack_string(payload, offset)
+                    swap_currency, offset = self.unpack_string(payload, offset)
                     print(f"💱 [TOKEN_DEC] Swap currency extracted: {swap_currency}")
                 except Exception:
                     print(f"⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')")
@@ -464,7 +455,7 @@ class TokenManager:
             payout_mode = 'instant'  # Default for old tokens
             if offset + 1 <= len(payload) - 4:  # Check if there's room before timestamp
                 try:
-                    payout_mode, offset = self._unpack_string(payload, offset)
+                    payout_mode, offset = self.unpack_string(payload, offset)
                     print(f"🎯 [TOKEN_DEC] Payout mode extracted: {payout_mode}")
                 except Exception:
                     print(f"⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')")
@@ -561,18 +552,18 @@ class TokenManager:
             packed_data.extend(unique_id_bytes)
             packed_data.extend(struct.pack(">Q", user_id))
             packed_data.extend(closed_channel_id_bytes)
-            packed_data.extend(self._pack_string(cn_api_id))
-            packed_data.extend(self._pack_string(from_currency))
-            packed_data.extend(self._pack_string(to_currency))
-            packed_data.extend(self._pack_string(from_network))
-            packed_data.extend(self._pack_string(to_network))
+            packed_data.extend(self.pack_string(cn_api_id))
+            packed_data.extend(self.pack_string(from_currency))
+            packed_data.extend(self.pack_string(to_currency))
+            packed_data.extend(self.pack_string(from_network))
+            packed_data.extend(self.pack_string(to_network))
             packed_data.extend(struct.pack(">d", from_amount))
             packed_data.extend(struct.pack(">d", to_amount))
-            packed_data.extend(self._pack_string(payin_address))
-            packed_data.extend(self._pack_string(payout_address))
-            packed_data.extend(self._pack_string(refund_address))
-            packed_data.extend(self._pack_string(flow))
-            packed_data.extend(self._pack_string(type_))
+            packed_data.extend(self.pack_string(payin_address))
+            packed_data.extend(self.pack_string(payout_address))
+            packed_data.extend(self.pack_string(refund_address))
+            packed_data.extend(self.pack_string(flow))
+            packed_data.extend(self.pack_string(type_))
             packed_data.extend(struct.pack(">d", actual_eth_amount))  # ✅ ADD ACTUAL
 
             current_timestamp = int(time.time())
@@ -632,22 +623,22 @@ class TokenManager:
             closed_channel_id = closed_channel_id_bytes.rstrip(b'\x00').decode('utf-8')
             offset += 16
 
-            cn_api_id, offset = self._unpack_string(payload, offset)
-            from_currency, offset = self._unpack_string(payload, offset)
-            to_currency, offset = self._unpack_string(payload, offset)
-            from_network, offset = self._unpack_string(payload, offset)
-            to_network, offset = self._unpack_string(payload, offset)
+            cn_api_id, offset = self.unpack_string(payload, offset)
+            from_currency, offset = self.unpack_string(payload, offset)
+            to_currency, offset = self.unpack_string(payload, offset)
+            from_network, offset = self.unpack_string(payload, offset)
+            to_network, offset = self.unpack_string(payload, offset)
 
             from_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
             to_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
 
-            payin_address, offset = self._unpack_string(payload, offset)
-            payout_address, offset = self._unpack_string(payload, offset)
-            refund_address, offset = self._unpack_string(payload, offset)
-            flow, offset = self._unpack_string(payload, offset)
-            type_, offset = self._unpack_string(payload, offset)
+            payin_address, offset = self.unpack_string(payload, offset)
+            payout_address, offset = self.unpack_string(payload, offset)
+            refund_address, offset = self.unpack_string(payload, offset)
+            flow, offset = self.unpack_string(payload, offset)
+            type_, offset = self.unpack_string(payload, offset)
 
             # ✅ ADDED: actual_eth_amount with backward compatibility
             actual_eth_amount = 0.0
@@ -741,14 +732,14 @@ class TokenManager:
             offset += 8
 
             # Unpack client_id (variable length string)
-            client_id, offset = self._unpack_string(payload, offset)
+            client_id, offset = self.unpack_string(payload, offset)
 
             # Unpack eth_amount (8 bytes, double)
             eth_amount = struct.unpack(">d", payload[offset:offset + 8])[0]
             offset += 8
 
             # Unpack usdt_wallet_address (variable length string)
-            usdt_wallet_address, offset = self._unpack_string(payload, offset)
+            usdt_wallet_address, offset = self.unpack_string(payload, offset)
 
             # Unpack timestamp (8 bytes, int64)
             timestamp = struct.unpack(">Q", payload[offset:offset + 8])[0]
@@ -799,10 +790,10 @@ class TokenManager:
             payload.extend(struct.pack(">Q", accumulation_id))
 
             # Pack client_id (variable length string)
-            payload.extend(self._pack_string(client_id))
+            payload.extend(self.pack_string(client_id))
 
             # Pack cn_api_id (variable length string)
-            payload.extend(self._pack_string(cn_api_id))
+            payload.extend(self.pack_string(cn_api_id))
 
             # Pack from_amount (8 bytes, double)
             payload.extend(struct.pack(">d", from_amount))
@@ -811,10 +802,10 @@ class TokenManager:
             payload.extend(struct.pack(">d", to_amount))
 
             # Pack payin_address (variable length string)
-            payload.extend(self._pack_string(payin_address))
+            payload.extend(self.pack_string(payin_address))
 
             # Pack payout_address (variable length string)
-            payload.extend(self._pack_string(payout_address))
+            payload.extend(self.pack_string(payout_address))
 
             # Pack timestamp (8 bytes, int64)
             timestamp = int(time.time())
