@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from api.models.channel import ChannelRegistrationRequest, ChannelUpdateRequest
 from api.services.channel_service import ChannelService
+from api.services.broadcast_service import BroadcastService
 from database.connection import db_manager
 
 channels_bp = Blueprint('channels', __name__)
@@ -42,21 +43,41 @@ def register_channel():
                     'error': 'Maximum 10 channels per account'
                 }), 400
 
-        # Register channel
+        # Register channel + create broadcast entry (transactional)
         with db_manager.get_db() as conn:
-            ChannelService.register_channel(
-                conn,
-                user_id=user_id,
-                username=username,
-                channel_data=channel_data
-            )
+            try:
+                # Step 1: Register channel in main_clients_database
+                ChannelService.register_channel(
+                    conn,
+                    user_id=user_id,
+                    username=username,
+                    channel_data=channel_data
+                )
 
-        print(f"✅ Channel {channel_data.open_channel_id} registered by {username}")
-        return jsonify({
-            'success': True,
-            'message': 'Channel registered successfully',
-            'channel_id': channel_data.open_channel_id
-        }), 201
+                # Step 2: Create broadcast_manager entry for this channel
+                broadcast_id = BroadcastService.create_broadcast_entry(
+                    conn,
+                    client_id=user_id,
+                    open_channel_id=channel_data.open_channel_id,
+                    closed_channel_id=channel_data.closed_channel_id
+                )
+
+                # Step 3: Commit transaction (both operations succeed)
+                conn.commit()
+
+                print(f"✅ Channel {channel_data.open_channel_id} + Broadcast {broadcast_id} registered by {username}")
+                return jsonify({
+                    'success': True,
+                    'message': 'Channel registered successfully',
+                    'channel_id': channel_data.open_channel_id,
+                    'broadcast_id': broadcast_id
+                }), 201
+
+            except Exception as e:
+                # Rollback on any failure (ensures data consistency)
+                conn.rollback()
+                print(f"❌ Channel + Broadcast registration failed, rolled back: {e}")
+                raise
 
     except ValidationError as e:
         print(f"❌ Channel registration validation error: {e.errors()}")
@@ -250,10 +271,10 @@ def delete_channel(channel_id):
                     'error': 'Unauthorized'
                 }), 403
 
-            # Delete channel
+            # Delete channel (CASCADE will auto-delete broadcast_manager entry)
             ChannelService.delete_channel(conn, channel_id)
 
-        print(f"✅ Channel {channel_id} deleted successfully")
+        print(f"✅ Channel {channel_id} deleted successfully (broadcast_manager entry CASCADE deleted)")
         return jsonify({
             'success': True,
             'message': 'Channel deleted successfully'

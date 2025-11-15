@@ -43,12 +43,29 @@ def main():
         # Initialize the application
         app = AppInitializer()
         app.initialize()
-        
-        # Start Flask server in background thread
-        server = ServerManager()
-        flask_thread = Thread(target=server.start, daemon=True)
-        flask_thread.start()
-        
+
+        # 🆕 NEW_ARCHITECTURE: Start Flask server with security and services
+        managers = app.get_managers()
+        flask_app = managers.get('flask_app')
+
+        if flask_app:
+            print("✅ Starting Flask server with NEW_ARCHITECTURE (security enabled)")
+            # Run Flask in separate thread
+            def run_flask():
+                flask_app.run(host='0.0.0.0', port=int(os.getenv('PORT', '5000')))
+
+            flask_thread = Thread(target=run_flask, daemon=True)
+            flask_thread.start()
+        else:
+            # Fallback to old ServerManager if flask_app not available
+            print("⚠️ Flask app not found - using legacy ServerManager")
+            server = ServerManager()
+            if hasattr(app, 'notification_service') and app.notification_service:
+                server.set_notification_service(app.notification_service)
+                print("✅ Notification service configured in Flask server")
+            flask_thread = Thread(target=server.start, daemon=True)
+            flask_thread.start()
+
         # Run the Telegram bot and subscription monitoring
         asyncio.run(run_application(app))
         

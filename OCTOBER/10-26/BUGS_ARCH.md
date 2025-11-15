@@ -1,3 +1,909 @@
+- ⚠️ Lower conversion rate (some users abandon at confirmation)
+- ✅ Payments still functional (not blocking)
+
+**Root Cause:**
+URL buttons in groups/channels ALWAYS show Telegram's security confirmation dialog. This is an intentional anti-phishing feature per Telegram Bot API documentation and CANNOT be bypassed when using URL buttons in groups.
+
+**Initial Fix (Session 142.5):**
+Replaced WebApp button with URL button to avoid `Button_type_invalid` error:
+```python
+# Fixed Button_type_invalid but introduced confirmation dialog
+button = InlineKeyboardButton(
+    text="💰 Complete Donation Payment",
+    url=invoice_url  # ❌ URL buttons in groups show confirmation
+)
+```
+
+**Final Fix (Session 143):**
+Send payment to user's private chat using WebApp button:
+```python
+# Group notification
+group_notification = "📨 A secure payment link has been sent to your private messages."
+self.telegram_client.send_message(chat_id=chat_id, text=group_notification)
+
+# Private chat with WebApp button
+button = InlineKeyboardButton(
+    text="💳 Open Payment Gateway",
+    web_app=WebAppInfo(url=invoice_url)  # ✅ Opens instantly in DMs
+)
+self.telegram_client.send_message(
+    chat_id=user_id,  # ✅ User's private chat (DM)
+    text=private_text,
+    reply_markup=InlineKeyboardMarkup([[button]])
+)
+```
+
+**Error Handling Added:**
+```python
+if not dm_result['success']:
+    # User hasn't started bot - send fallback to group
+    fallback_text = (
+        f"⚠️ <b>Cannot Send Payment Link</b>\n\n"
+        f"Please <b>start a private chat</b> with me first:\n"
+        f"1. Click my username above\n"
+        f"2. Press \"Start\" button\n"
+        f"3. Return here and try again\n\n"
+        f"Your payment link: {invoice_url}"
+    )
+    self.telegram_client.send_message(chat_id=chat_id, text=fallback_text)
+```
+
+**Deployment:**
+- ✅ Built and deployed GCDonationHandler revision: gcdonationhandler-10-26-00008-5k4
+- ✅ Service deployed and serving 100% traffic
+- ✅ Build ID: 9851b106-f997-485b-827d-bb1094edeefd (SUCCESS)
+
+**Expected Behavior After Fix:**
+- ✅ Payment gateway opens INSTANTLY without confirmation dialog
+- ✅ Better UX (users expect payments in private)
+- ✅ More secure (payment details not visible in group)
+- ✅ Clear error recovery if user hasn't started bot
+
+**Verification Status:**
+- ⏳ Awaiting user testing of payment flow
+- 📋 Expected: Payment button appears in user's private chat
+- 📋 Expected: WebApp button opens seamlessly (no confirmation)
+
+**Lessons Learned:**
+1. **Telegram Button Restrictions:** URL buttons in groups ALWAYS show confirmation (anti-phishing feature)
+2. **Best Practices:** Send payment links to private chat (industry standard per @DurgerKingBot, @PizzaHut_Bot)
+3. **Documentation Research:** Context7 MCP revealed Telegram official recommendations for payment flows
+4. **Error Handling:** Must handle users who haven't started bot (graceful degradation)
+
+**Related Documentation:**
+- PAYMENT_LINK_DM_FIX_CHECKLIST.md: Comprehensive solution plan
+- WEBAPP_BUTTON_FIX_CHECKLIST.md: Initial fix attempt (URL button)
+- Telegram Bot API Docs: Button types and restrictions
+
+---
+
+### ✅ [FIXED] WebApp Button Invalid in Groups - Payment Link Not Appearing
+
+**Date Discovered:** 2025-11-13 Session 142.5
+**Date Resolved:** 2025-11-13 Session 142.5
+**File:** `GCDonationHandler-10-26/keypad_handler.py`
+**Severity:** 🔴 CRITICAL - Payment workflow completely broken
+**Resolution Time:** Same session (15 minutes)
+
+**Issue:**
+After donation confirmation, users saw "✅ Donation Confirmed / 💰 Amount: $584.00 / Preparing your payment gateway..." but no payment button appeared. Workflow terminated without sending payment link.
+
+**User Impact:**
+- ❌ 100% payment link delivery failure
+- ❌ Users couldn't complete donation after confirming amount
+- ❌ Revenue completely blocked
+
+**Root Cause:**
+WebApp buttons (`web_app` parameter) only work in private chats, NOT in groups/channels. Telegram rejects WebApp buttons in groups with `Button_type_invalid` error.
+
+**Logs Evidence:**
+```
+2025-11-13 22:22:47,400 - telegram_client - ERROR - ❌ Failed to send message to chat -1003111266231: Button_type_invalid
+```
+
+Chat ID `-1003111266231` is a group/channel (negative ID). WebApp buttons are only allowed in private chats (positive user IDs).
+
+**Fix Applied:**
+**Location:** `GCDonationHandler-10-26/keypad_handler.py` lines 498-510
+
+**Changed from WebApp button:**
+```python
+self.telegram_client.send_message_with_webapp_button(
+    chat_id=chat_id,
+    text=text,
+    button_text="💰 Complete Donation Payment",
+    webapp_url=invoice_url  # ❌ FAILS: WebApp not allowed in groups
+)
+```
+
+**To URL button:**
+```python
+button = InlineKeyboardButton(
+    text="💰 Complete Donation Payment",
+    url=invoice_url  # ✅ Works everywhere (including groups)
+)
+keyboard = InlineKeyboardMarkup([[button]])
+
+self.telegram_client.send_message(
+    chat_id=chat_id,
+    text=text,
+    reply_markup=keyboard,
+    parse_mode="HTML"
+)
+```
+
+**Deployment:**
+- ✅ Built and deployed GCDonationHandler revision: gcdonationhandler-10-26-00007-ghm
+- ✅ Service deployed successfully
+
+**Verification:**
+- ✅ Payment button now appears after donation confirmation
+- ✅ No more `Button_type_invalid` errors in logs
+- ⚠️ Introduced new issue: URL buttons show "Open this link?" confirmation (fixed in Session 143)
+
+**Lessons Learned:**
+1. **WebApp Button Restrictions:** Only work in private chats, not groups/channels
+2. **URL Buttons:** Work everywhere but show confirmation dialog in groups
+3. **Testing Gap:** Didn't test button types in group context before deployment
+
+**Related Documentation:**
+- WEBAPP_BUTTON_FIX_CHECKLIST.md: Initial fix documentation
+
+---
+
+### ✅ [FIXED] Donation Flow Database Connection Timeout - GCDonationHandler Missing Cloud SQL Socket
+
+**Date Discovered:** 2025-11-13 Session 141
+**Date Resolved:** 2025-11-13 Session 141
+**File:** `GCDonationHandler-10-26/database_manager.py`
+**Severity:** 🔴 CRITICAL - Blocks ALL donation functionality
+**Resolution Time:** Same session (30 minutes)
+
+**Issue:**
+After deploying Session 140's callback routing fix, users clicking "💝 Donate" button received error: "❌ Failed to start donation flow. Please try again or contact support." after 60 second wait. ALL donation attempts failed.
+
+**User Impact:**
+- ❌ 100% donation failure rate
+- ⏱️ 60 second timeout on every attempt
+- ❌ Zero donation revenue possible
+- 😞 Poor user experience (long wait → generic error)
+
+**Root Cause:**
+GCDonationHandler was using raw TCP connection to Cloud SQL instead of Unix socket. Cloud Run's security sandbox blocks direct TCP connections to external IPs, causing all database queries to timeout after 60 seconds.
+
+**Database Connection Attempted:**
+```python
+# BROKEN: Direct TCP connection
+psycopg2.connect(
+    host="34.58.246.248",  # ❌ Public IP blocked from Cloud Run
+    port=5432,
+    dbname="telepaydb",
+    user="postgres",
+    password="***"
+)
+```
+
+**Logs Evidence:**
+```
+2025-11-13 20:34:36 - ❌ Database connection error: connection to server at "34.58.246.248", port 5432 failed: Connection timed out
+2025-11-13 20:34:36 - ❌ Error checking channel existence: Connection timed out
+2025-11-13 20:34:36 - ⚠️ Invalid channel ID (misleading - actual cause: database timeout)
+HTTP 504 Gateway Timeout (latency: 60.000665692s)
+```
+
+**Fix Applied:**
+**Location:** `GCDonationHandler-10-26/database_manager.py`
+
+**Changes:**
+1. Added `import os` (line 11)
+2. Modified `__init__()` to detect Cloud SQL connection mode (lines 55-67):
+   ```python
+   # Check if running in Cloud Run (use Unix socket) or locally (use TCP)
+   cloud_sql_connection_name = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+
+   if cloud_sql_connection_name:
+       # Cloud Run mode - use Unix socket
+       self.db_host = f"/cloudsql/{cloud_sql_connection_name}"
+       self.db_port = None
+       logger.info(f"🔌 Using Cloud SQL Unix socket: {self.db_host}")
+   else:
+       # Local/VM mode - use TCP connection
+       self.db_host = db_host
+       self.db_port = db_port
+       logger.info(f"🔌 Using TCP connection to: {self.db_host}:{self.db_port}")
+   ```
+
+3. Updated `_get_connection()` to handle Unix socket (lines 88-105):
+   ```python
+   # Build connection parameters
+   conn_params = {
+       "host": self.db_host,
+       "dbname": self.db_name,
+       "user": self.db_user,
+       "password": self.db_password
+   }
+
+   # Only include port for TCP connections (not Unix socket)
+   if self.db_port is not None:
+       conn_params["port"] = self.db_port
+
+   conn = psycopg2.connect(**conn_params)
+   ```
+
+4. Added `CLOUD_SQL_CONNECTION_NAME` environment variable to Cloud Run service:
+   ```bash
+   CLOUD_SQL_CONNECTION_NAME=telepay-459221:us-central1:telepaypsql
+   ```
+
+**Deployment:**
+- ✅ Built and deployed GCDonationHandler revision: gcdonationhandler-10-26-00003-q5z
+- ✅ Deployment succeeded in ~45 seconds
+- ✅ Service healthy and serving 100% traffic
+- ✅ Environment variable properly configured
+
+**Expected Behavior After Fix:**
+- ⚡ Database queries complete in < 100ms (vs 60 second timeout)
+- ✅ Keypad appears within 2-3 seconds of button click
+- ✅ No more "Invalid channel ID" errors for valid channels
+- 📋 Logs show "🔌 Using Cloud SQL Unix socket: /cloudsql/telepay-459221:us-central1:telepaypsql"
+
+**Verification Status:**
+- ⏳ Awaiting user testing of donation button flow
+- 📋 Expected log on first request: "🔌 Using Cloud SQL Unix socket"
+
+**Lessons Learned:**
+1. **Cloud Run requires Cloud SQL Unix socket** - TCP connections to public IPs are blocked by security sandbox
+2. **Deployment success ≠ functional correctness** - health checks passed, but business logic was broken
+3. **Integration testing gap** - tested callback routing, but not database connectivity from GCDonationHandler
+4. **Misleading error messages** - "Invalid channel ID" was actually "database timeout"
+5. **Standardize database patterns** - GCBotCommand had Unix socket support, GCDonationHandler didn't
+
+**Related Documentation:**
+- WORKFLOW_ERROR_MONEYFLOW.md: 45-page comprehensive root cause analysis
+- WORKFLOW_ERROR_REVIEW.md: Initial callback routing issue (Session 140)
+- WORKFLOW_ERROR_REVIEW_CHECKLIST.md: Implementation plan
+
+**Follow-Up Actions:**
+1. Create shared database module for all services (prevent recurrence)
+2. Add integration tests covering database operations
+3. Implement startup database connectivity check (fail-fast)
+4. Audit other services for Cloud SQL configuration
+
+---
+
+### ✅ [FIXED] Donation Button Not Working - GCBotCommand Missing Callback Handlers
+
+**Date Discovered:** 2025-11-13 Session 140
+**Date Resolved:** 2025-11-13 Session 140
+**File:** `GCBotCommand-10-26/handlers/callback_handler.py`
+**Severity:** 🔴 CRITICAL - Core business functionality broken
+**Resolution Time:** Same session
+
+**Issue:**
+Donation buttons in closed channel broadcasts were completely non-functional. When users clicked the "💝 Donate" button, nothing happened - no keypad appeared, no error message shown to user.
+
+**User Impact:**
+- ❌ ALL donation attempts failed silently
+- ❌ Users couldn't complete donation flow
+- ❌ No visual feedback - buttons appeared to do nothing
+- ✅ Subscription workflow unaffected (uses different code path)
+
+**Root Cause:**
+GCBotCommand `callback_handler.py` was missing routing logic for donation callbacks. The refactored microservice architecture moved donation handling to GCDonationHandler service, but GCBotCommand (the Telegram webhook receiver) had no code to forward donation callbacks to that service.
+
+**Logs Evidence:**
+```
+2025-11-13 18:40:32 - 🔘 Callback: donate_start_-1003268562225 from user 6271402111
+2025-11-13 18:40:33 - ⚠️ Unknown callback_data: donate_start_-1003268562225
+```
+
+Callbacks were received but fell through to the `else` block and were silently ignored.
+
+**Fix Applied:**
+**Location:** `GCBotCommand-10-26/handlers/callback_handler.py`
+
+**Changes:**
+1. Added routing for `donate_start_*` callbacks (lines 70-71):
+   ```python
+   elif callback_data.startswith("donate_start_"):
+       return self._handle_donate_start(chat_id, user_id, callback_data, callback_query)
+   ```
+
+2. Added routing for `donate_*` keypad callbacks (lines 73-75):
+   ```python
+   elif callback_data.startswith("donate_"):
+       return self._handle_donate_keypad(chat_id, user_id, callback_data, callback_query)
+   ```
+
+3. Implemented `_handle_donate_start()` method (lines 240-307):
+   - Extracts `open_channel_id` from callback_data
+   - Calls GCDonationHandler `/start-donation-input` endpoint
+   - Includes error handling and user-friendly error messages
+
+4. Implemented `_handle_donate_keypad()` method (lines 309-369):
+   - Forwards all keypad actions to GCDonationHandler `/keypad-input` endpoint
+   - Handles digits, backspace, clear, confirm, cancel, noop
+   - Fails silently to avoid disrupting keypad interaction
+
+**Deployment:**
+- ✅ Built and deployed GCBotCommand revision: gcbotcommand-10-26-00004-26n
+- ✅ Deployment succeeded in 29 seconds
+- ✅ Service healthy and serving 100% traffic
+- ✅ Build ID: 1a7dfc9b-b18f-4ca9-a73f-80ef6ead9233
+
+**Verification:**
+- ⏳ Awaiting user testing of donation button flow
+- ⏳ Need to confirm keypad appears on button click
+- ⏳ Need to confirm keypad interactions work correctly
+- 📋 Logs should now show: "💝 Donate button clicked" and "🌐 Calling GCDonationHandler"
+
+**Lessons Learned:**
+1. When refactoring to microservices, ensure ALL callback patterns are routed
+2. Missing routing can cause silent failures (callbacks ignored with no error to user)
+3. Integration testing should cover all button interaction flows
+4. Log analysis crucial for identifying missing handler patterns
+
+**Related:**
+- WORKFLOW_ERROR_REVIEW.md: Documented root cause analysis
+- WORKFLOW_ERROR_REVIEW_CHECKLIST.md: Implementation plan
+- WORKFLOW_ERROR_REVIEW_CHECKLIST_PROGRESS.md: Execution tracking
+
+---
+
+## Active Bugs
+
+### 🐛 Documentation: Invalid Example EVM Address (Low Priority)
+
+**Date Discovered:** 2025-11-08 Session 83
+**File:** WALLET_ADDRESS_VALIDATION_ANALYSIS.md
+**Severity:** LOW - Documentation only, no production impact
+**Status:** 🔍 **DOCUMENTED - NOT URGENT**
+
+**Issue:**
+Example EVM address used throughout documentation has only 39 hex characters instead of required 40.
+
+**Invalid Address:**
+```
+0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb  ← Only 39 hex chars (should be 40)
+```
+
+**Locations:**
+- Line 43: Input placeholder example
+- Line 56: Address format explanation
+- Line 788: Test addresses object
+- Line 847: User scenario example
+
+**Expected Format:**
+- EVM addresses: `0x` + exactly 40 hexadecimal characters
+- Total length: 42 characters
+- Example of valid address: `0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0` (added one char)
+
+**Impact:**
+- ✅ Production code unaffected - validation working correctly
+- ✅ Rejects invalid addresses as expected
+- ⚠️ Documentation examples misleading (shows invalid address as example)
+- ⚠️ Could confuse developers reading the docs
+
+**Fix Required:**
+Replace all instances with valid 40-hex-char EVM address like:
+`0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0`
+
+**Priority:** Low - Can be fixed during next documentation update
+
+---
+
+## Recently Resolved
+
+### ✅ [FIXED] Database Query Error - sub_value Column in Donation Workflow
+
+**Date Discovered:** 2025-11-11 Session 105g
+**Date Resolved:** 2025-11-11 Session 105g
+**File:** `database.py`
+**Severity:** HIGH - Blocked all donation attempts
+**Resolution Time:** Immediate
+
+**Issue:**
+Donation workflow crashed when users tried to make donations due to database column error.
+
+**Error Message:**
+```
+❌ Error fetching channel details: column "sub_value" does not exist
+LINE 5:                     sub_value
+```
+
+**Root Cause:**
+- `get_channel_details_by_open_id()` method queried `sub_value` column
+- This method was created in Session 105e for donation message formatting
+- `sub_value` is subscription pricing data, not relevant for donations
+- Donations use user-entered amounts from numeric keypad
+- Mixing donation and subscription logic caused database query failure
+
+**Impact:**
+- ❌ ALL donation attempts failed
+- ❌ Users couldn't complete donation flow
+- ✅ Subscription workflow unaffected (uses different methods)
+
+**Fix Applied:**
+**Location:** `database.py::get_channel_details_by_open_id()` lines 314-367
+
+**Changes:**
+1. Removed `sub_value` from SELECT query
+2. Updated method to only fetch:
+   - `closed_channel_title`
+   - `closed_channel_description`
+3. Updated docstring to clarify "exclusively for donation workflow"
+4. Verified only title/description are used in `donation_input_handler.py`
+
+**Before:**
+```sql
+SELECT
+    closed_channel_title,
+    closed_channel_description,
+    sub_value  -- ❌ Doesn't exist / not needed
+FROM main_clients_database
+WHERE open_channel_id = %s
+```
+
+**After:**
+```sql
+SELECT
+    closed_channel_title,
+    closed_channel_description  -- ✅ Only what's needed
+FROM main_clients_database
+WHERE open_channel_id = %s
+```
+
+**Verification:**
+- ✅ Method only used by donation workflow
+- ✅ Donation flow only needs title/description for display
+- ✅ Donation amount comes from user keypad input (not database)
+- ✅ Subscription workflow uses separate methods (unaffected)
+
+**Lessons Learned:**
+1. Separate donation and subscription logic - they're different business flows
+2. Don't assume column existence - verify schema before querying
+3. Document method scope clearly - added "donation-specific" to docstring
+4. Test all user-facing flows after database changes
+
+**Related:**
+- Session 105e: Created `get_channel_details_by_open_id()` method (introduced bug)
+- Session 105g: Fixed by removing subscription-specific column query
+
+---
+
+### ✅ RESOLVED: Signup Validation Error Causes 500 Internal Server Error (CRITICAL)
+
+**Date Discovered:** 2025-11-09 Session 101
+**Date Resolved:** 2025-11-09 Session 101 (same session)
+**Service:** GCRegisterAPI-10-26
+**Severity:** CRITICAL - Production signup completely broken for users with weak passwords
+**Status:** ✅ **RESOLVED**
+
+**User Report:**
+User attempted to create account with credentials:
+- Username: `slickjunt`
+- Email: `slickjunt@gmail.com`
+- Password: `herpderp123`
+
+Result: "Internal server error" displayed on signup page
+
+**Root Causes Identified:**
+
+**1. Password Validation Failure (Expected Behavior):**
+- Password `herpderp123` failed validation requirements
+- Missing required uppercase letter (all lowercase)
+- Pydantic validator in `SignupRequest` model correctly raised `ValueError`
+- File: `api/models/auth.py` lines 27-39
+
+**2. JSON Serialization Bug in Error Handler (Actual Bug):**
+- ValidationError handler attempted to return `e.errors()` directly in JSON response
+- Pydantic's `ValidationError.errors()` contains non-serializable Python exception objects
+- Flask's `jsonify()` crashed with: `TypeError: Object of type ValueError is not JSON serializable`
+- This converted a proper 400 validation error into a 500 server error
+- File: `api/routes/auth.py` lines 108-125
+
+**Error Flow:**
+1. User submits password without uppercase letter
+2. Line 55: `SignupRequest(**request.json)` raises `ValidationError`
+3. Line 108: Caught by `except ValidationError as e:` handler
+4. Line 121-125: Handler tries to jsonify `e.errors()` containing ValueError objects
+5. Flask JSON encoder crashes → Returns 500 instead of 400
+
+**Cloud Logging Evidence:**
+```
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/flask/json/provider.py", line 120, in _default
+    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+TypeError: Object of type ValueError is not JSON serializable
+```
+
+**Resolution:**
+
+**File Modified:** `api/routes/auth.py` lines 108-134
+
+**Before (Broken):**
+```python
+except ValidationError as e:
+    print(f"❌ Signup validation error: {e.errors()}")
+    # ... audit logging ...
+    return jsonify({
+        'success': False,
+        'error': 'Validation failed',
+        'details': e.errors()  # ← CRASHES: Contains ValueError objects
+    }), 400
+```
+
+**After (Fixed):**
+```python
+except ValidationError as e:
+    print(f"❌ Signup validation error: {e.errors()}")
+    # ... audit logging ...
+
+    # Convert validation errors to JSON-safe format
+    error_details = []
+    for error in e.errors():
+        error_details.append({
+            'field': '.'.join(str(loc) for loc in error['loc']),
+            'message': error['msg'],
+            'type': error['type']
+        })
+
+    return jsonify({
+        'success': False,
+        'error': 'Validation failed',
+        'details': error_details  # ← SAFE: Pure dict/str/int types
+    }), 400
+```
+
+**Deployment:**
+- Build ID: Auto-generated by Cloud Build
+- Revision: `gcregisterapi-10-26-00022-d2n`
+- Deployed: 2025-11-09 Session 101
+- Service URL: https://gcregisterapi-10-26-pjxwjsdktq-uc.a.run.app
+
+**Testing Performed:**
+
+**Test 1: Invalid Password (No Uppercase)**
+```bash
+# Input: username=slickjunt, email=slickjunt@gmail.com, password=herpderp123
+# Expected: 400 Bad Request with validation error message
+# Result: ✅ Returns 400 with "Validation failed" message
+# Frontend displays: "Validation failed" (not "Internal server error")
+```
+
+**Test 2: Valid Password (With Uppercase)**
+```bash
+# Input: username=slickjunt2, email=slickjunt2@gmail.com, password=Herpderp123
+# Expected: 201 Created, account created, auto-login
+# Result: ✅ Account created successfully
+# Redirected to dashboard with "Please Verify E-Mail" button
+```
+
+**Impact:**
+- ✅ Signup errors now return proper 400 status codes (not 500)
+- ✅ Users receive clear validation error messages
+- ✅ Frontend can display specific field errors
+- ✅ Server no longer crashes on validation failures
+- ✅ Audit logging still works correctly
+- ✅ Password validation requirements enforced properly
+
+**Password Requirements:**
+- Minimum 8 characters
+- At least one uppercase letter (A-Z)
+- At least one lowercase letter (a-z)
+- At least one digit (0-9)
+
+**Files Changed:**
+1. `GCRegisterAPI-10-26/api/routes/auth.py` (lines 121-128 added)
+
+**Lessons Learned:**
+- Always serialize exception objects to strings before JSON encoding
+- Test error handlers with actual failing inputs
+- Pydantic validation errors need special handling for JSON responses
+- 500 errors mask underlying validation issues - always return appropriate status codes
+
+---
+
+### 🔒 Database: Missing UNIQUE Constraints + Duplicate User Accounts (CRITICAL)
+
+**Date Discovered:** 2025-11-09 Session 91
+**Date Resolved:** 2025-11-09 Session 91
+**Severity:** CRITICAL - Login completely broken for affected users
+**Status:** ✅ **RESOLVED**
+
+**User Report:**
+- Cannot login with user1 (user1TEST$) or user2 (user2TEST$)
+- Verification link clicked successfully showing "Email already verified"
+- Login fails with error: "Invalid username or password"
+
+**Root Cause:**
+1. **Missing UNIQUE Constraints**: Database table `registered_users` had no UNIQUE constraints on username or email columns
+2. **Duplicate Accounts Created**: user2 was registered TWICE:
+   - First: 2025-11-09 13:55:15 (revision 00015-hrc) with password hash A
+   - Second: 2025-11-09 14:09:16 (revision 00016-kds) with password hash B
+3. **Password Mismatch**: User tried to login with password from first registration, but database had second registration with different hash
+4. **Application-Level Only**: Duplicate checks existed in `auth_service.py` but no database-level enforcement
+
+**Investigation Timeline:**
+1. Used Playwright to test login → Captured 401 Unauthorized errors
+2. Analyzed Cloud Logging → Found "Invalid username or password" in audit logs
+3. Tested API directly with curl → Confirmed backend returning 401
+4. Reviewed auth_service.py → Authentication logic correct (lines 135-198)
+5. Checked database records → Discovered multiple user2 entries with different created_at timestamps
+
+**Technical Analysis:**
+```sql
+-- BEFORE FIX: This query would return multiple rows
+SELECT username, COUNT(*) as count, array_agg(user_id ORDER BY created_at)
+FROM registered_users
+GROUP BY username
+HAVING COUNT(*) > 1;
+
+-- user2 appeared twice with different user_ids and password_hashes
+```
+
+**Resolution:**
+
+**1. Created Migration Script:**
+- File: `database/migrations/fix_duplicate_users_add_unique_constraints.sql`
+- Deleted duplicate username records (kept most recent by created_at DESC)
+- Deleted duplicate email records (kept most recent by created_at DESC)
+- Added UNIQUE constraint on username column
+- Added UNIQUE constraint on email column
+
+**2. Created Migration Executor:**
+- File: `run_migration.py`
+- Uses application's DatabaseManager for connection
+- Executes migration with transaction safety
+- Reports deleted records and constraint additions
+- Verifies constraints after migration
+
+**3. Migration Execution:**
+```bash
+python3 run_migration.py
+```
+
+**Migration Results:**
+- Deleted: 0 duplicate username records (already cleaned up)
+- Deleted: 0 duplicate email records (already cleaned up)
+- Added: UNIQUE constraint "unique_username" on username column
+- Added: UNIQUE constraint "unique_email" on email column
+- Database now has 4 total UNIQUE constraints
+
+**Files Changed:**
+1. `database/migrations/fix_duplicate_users_add_unique_constraints.sql` - NEW FILE (comprehensive migration)
+2. `run_migration.py` - NEW FILE (migration executor script)
+
+**Current State:**
+- ✅ Database has UNIQUE constraints on username and email
+- ✅ Duplicate registration now IMPOSSIBLE at database level
+- ✅ Application-level checks backed by DB constraints
+- ✅ user2 account verified and exists (created 14:09:16)
+- ⚠️ user2 password hash is from SECOND registration (not first)
+
+**User Impact:**
+- **user2**: Account exists and verified, but password is from second registration (may need reset)
+- **user1**: Should work with original password (if remembered)
+- **Future users**: Protected from duplicate account issues
+
+**Testing Performed:**
+```bash
+# Test duplicate username - BLOCKED
+curl -X POST /api/auth/signup \
+  -d '{"username":"user2","email":"new@test.com","password":"Test1234$"}'
+# Response: {"error":"Username already exists","success":false}
+
+# Test duplicate email - BLOCKED
+curl -X POST /api/auth/signup \
+  -d '{"username":"newuser","email":"user4test@test.com","password":"Test1234$"}'
+# Response: {"error":"Email already exists","success":false}
+
+# Test new registration - WORKS
+curl -X POST /api/auth/signup \
+  -d '{"username":"user4","email":"user4test@test.com","password":"user4TEST$"}'
+# Response: {"success":true,"verification_required":true,...}
+```
+
+**Prevention Measures:**
+1. ✅ UNIQUE constraints enforce uniqueness at database level
+2. ✅ PostgreSQL will reject INSERT/UPDATE that violates constraints
+3. ✅ Application code already handles constraint violations gracefully
+4. ✅ Constraint violations return proper error messages to users
+
+**Lessons Learned:**
+- Always add UNIQUE constraints for fields that must be unique
+- Database constraints provide critical safety net beyond application-level checks
+- Test duplicate scenarios thoroughly before production
+- Monitor for duplicate data patterns in logs
+
+### ✅ Email Verification Link Not Working (CRITICAL - RESOLVED)
+
+**Date Discovered:** 2025-11-09 Session 90
+**Date Resolved:** 2025-11-09 Session 90
+**Severity:** CRITICAL - Production functionality broken
+**Status:** ✅ **RESOLVED**
+
+**User Report:**
+User 'user2' registered but couldn't verify email. Verification link had space in URL and clicking it caused sign out with error "Email not verified. Please check your email for the verification link."
+
+**Root Causes Identified:**
+1. **URL Whitespace Bug**: CORS_ORIGIN secret in Secret Manager had trailing newline character, causing URLs like `https://www.paygateprime.com /verify-email?token=...` (space after .com)
+2. **Missing Frontend Routes**: No `/verify-email` or `/reset-password` routes in React app - links went to 404
+3. **Missing AuthService Methods**: No `verifyEmail()` or `resetPassword()` methods to call backend API
+
+**Fixes Applied:**
+
+**Backend (GCRegisterAPI-10-26):**
+- Fixed `config_manager.py` line 30: Added `.strip()` to remove whitespace from all secrets
+- Deployed revision `gcregisterapi-10-26-00016-kds`
+
+**Frontend (GCRegisterWeb-10-26):**
+- Created `VerifyEmailPage.tsx` - Handles `/verify-email?token=...` route
+- Created `ResetPasswordPage.tsx` - Handles `/reset-password?token=...` route
+- Updated `authService.ts` - Added 4 methods: `verifyEmail()`, `resendVerification()`, `requestPasswordReset()`, `resetPassword()`
+- Updated `App.tsx` - Added 2 routes: `/verify-email` and `/reset-password`
+- Deployed to `gs://www-paygateprime-com/` with CDN cache invalidation
+
+**Testing:**
+- Verification links now have clean URLs (no spaces)
+- `/verify-email` route loads properly
+- Backend API verification works correctly
+- User can successfully verify email and login
+
+**Impact:**
+- ✅ Email verification now fully functional
+- ✅ Password reset flow complete
+- ✅ User 'user2' (and all future users) can verify emails
+
+**Prevention:**
+- All secrets now stripped of whitespace automatically
+- Frontend routes complete for all auth flows
+- Comprehensive error handling in place
+
+---
+
+### ✅ RESOLVED: Wallet Address Paste Duplication
+
+**Date Discovered:** 2025-11-08 Session 84
+**Date Resolved:** 2025-11-08 Session 84 (same session)
+**Component:** GCRegisterWeb-10-26 (RegisterChannelPage & EditChannelPage)
+**Severity:** MEDIUM - UX Issue (affects all users pasting wallet addresses)
+**Status:** ✅ **FIXED - DEPLOYED TO PRODUCTION**
+
+**Issue:**
+When users copy/pasted a wallet address into the "Your Wallet Address" field, the value appeared twice (duplicated).
+
+**Example:**
+- User copies: `EQD2NmD_lH5f5u1Kj3KfGyTvhZSX0Eg6qp2a5IQUKXxrJcvP`
+- After paste: `EQD2NmD_lH5f5u1Kj3KfGyTvhZSX0Eg6qp2a5IQUKXxrJcvPEQD2NmD_lH5f5u1Kj3KfGyTvhZSX0Eg6qp2a5IQUKXxrJcvP`
+
+**Root Cause:**
+The `onPaste` event handler was calling `setClientWalletAddress(pastedText)` but NOT preventing the browser's default paste behavior. This resulted in:
+1. Custom handler setting the state with pasted text
+2. Browser's default paste also inserting the text
+3. Value appearing twice in the input field
+
+**Code Location:**
+- `RegisterChannelPage.tsx` lines 668-672
+- `EditChannelPage.tsx` lines 734-738
+
+**Fix:**
+Added `e.preventDefault()` at the start of both onPaste handlers:
+
+```typescript
+onPaste={(e) => {
+  e.preventDefault();  // ← ADDED THIS LINE
+  const pastedText = e.clipboardData.getData('text');
+  setClientWalletAddress(pastedText);
+  debouncedDetection(pastedText);
+}}
+```
+
+**Testing:**
+- ✅ Tested on production with TON address
+- ✅ Single paste (no duplication)
+- ✅ Validation still working correctly
+- ✅ Network auto-detection functional
+
+**Deployment:**
+- Build: `index-BFZtVN_a.js` (311.87 kB)
+- Deployed: 2025-11-08 Session 84
+- Production URL: https://www.paygateprime.com/register
+
+**Impact:**
+- All users pasting wallet addresses now get correct behavior
+- No breaking changes
+- Validation system unaffected
+
+---
+
+### ✅ RESOLVED: GCSplit1 Endpoint_2 Dictionary Key Naming Mismatch
+
+**Date Discovered:** 2025-11-07 Session 67
+**Date Resolved:** 2025-11-07 Session 67 (same day)
+**Service:** GCSplit1-10-26 (endpoint_2 code)
+**Severity:** CRITICAL - BLOCKING PRODUCTION (instant AND threshold payouts)
+**Status:** ✅ **FIXED - DEPLOYED TO PRODUCTION**
+
+**Context:**
+After fixing token decryption field ordering (Session 66), discovered that endpoint_2 code was trying to access wrong dictionary key, causing KeyError that blocked both instant and threshold payment flows.
+
+**Error Evidence:**
+```
+2025-11-07 11:18:36.849 EST
+✅ [TOKEN_DEC] Estimate response decrypted successfully  ← Token decryption WORKS
+🎯 [TOKEN_DEC] Payout Mode: instant, Swap Currency: eth  ← Fields extracted correctly
+💰 [TOKEN_DEC] ACTUAL ETH extracted: 0.0010582  ← All data present
+❌ [ENDPOINT_2] Unexpected error: 'to_amount_eth_post_fee'  ← KeyError
+```
+
+**Root Cause:**
+**Dictionary key naming inconsistency**:
+- GCSplit1 decrypt method returns: `"to_amount_post_fee"` (generic dual-currency name) ✅
+- GCSplit1 endpoint_2 code expected: `"to_amount_eth_post_fee"` (legacy ETH-only name) ❌
+- Result: KeyError on line 476 when accessing non-existent dictionary key
+
+**Why It Happened:**
+- Token decrypt method was updated for dual-currency support (generic naming)
+- Endpoint code still used legacy ETH-specific naming from single-currency era
+- No cross-reference check between decrypt method and endpoint code
+
+**Fix Applied:**
+- Updated `calculate_pure_market_conversion()` function signature (lines 199-204)
+- Updated all internal variable names (lines 226-255)
+- **CRITICAL:** Fixed dictionary key access on line 476: `to_amount_post_fee = decrypted_data['to_amount_post_fee']`
+- Updated print statement (line 487)
+- Updated function call (line 492)
+
+**Total Changes:** 10 lines modified in `/GCSplit1-10-26/tps1-10-26.py`
+
+**Deployment:**
+- Build: 3de64cbd-98ad-41de-a515-08854d30039e (44s)
+- Image: gcr.io/telepay-459221/gcsplit1-10-26:endpoint2-keyerror-fix
+- Revision: gcsplit1-10-26-00020-rnq
+- Time: 2025-11-07 16:33 UTC
+- Health: All systems operational
+
+**Impact:**
+- ✅ Both instant (ETH) and threshold (USDT) payouts now unblocked
+- ✅ No changes needed to GCSplit2 or GCSplit3
+- ✅ Maintains dual-currency architecture naming consistency
+- ✅ System ready for end-to-end testing
+
+**Lesson Learned:**
+When updating data structures (token fields), verify ALL code paths that access those structures, not just the serialization/deserialization methods.
+
+**Documentation:**
+- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST.md` (original issue analysis)
+- `/10-26/GCSPLIT1_ENDPOINT_2_CHECKLIST_PROGRESS.md` (fix implementation tracker)
+
+---
+
+### ✅ RESOLVED: GCSplit1 Token Decryption Field Ordering Mismatch
+
+**Date Discovered:** 2025-11-07 Session 66
+**Date Resolved:** 2025-11-07 Session 66 (same day)
+**Service:** GCSplit1-10-26 (affects GCSplit2 token decryption)
+**Severity:** CRITICAL - BLOCKING PRODUCTION (instant AND threshold payouts)
+**Status:** ✅ **FIXED - DEPLOYED TO PRODUCTION**
+
+**Context:**
+Dual-currency implementation (instant payouts via ETH, threshold payouts via USDT) is completely blocked due to token field ordering mismatch between GCSplit2's encryption and GCSplit1's decryption.
+
+**Error Log Evidence:**
+```
+2025-11-07 10:40:46.084 EST
+🔓 [TOKEN_DEC] GCSplit2→GCSplit1: Decrypting estimate response
+⚠️ [TOKEN_DEC] No swap_currency in token (backward compat - defaulting to 'usdt')
+⚠️ [TOKEN_DEC] No payout_mode in token (backward compat - defaulting to 'instant')
+💰 [TOKEN_DEC] ACTUAL ETH extracted: 2.6874284797920923e-292  ❌ CORRUPTED
+❌ [TOKEN_DEC] Decryption error: Token expired
+❌ [ENDPOINT_2] Failed to decrypt token
+❌ [ENDPOINT_2] Unexpected error: 401 Unauthorized: Invalid token
+```
+
+**Root Cause:**
+**Binary struct unpacking order mismatch** between GCSplit2's packing and GCSplit1's unpacking:
 
 - **GCSplit2 packs (CORRECT):**
   `[user_id][closed_channel_id][strings...][from_amount][to_amount][deposit_fee][withdrawal_fee][swap_currency][payout_mode][actual_eth_amount][timestamp]`
