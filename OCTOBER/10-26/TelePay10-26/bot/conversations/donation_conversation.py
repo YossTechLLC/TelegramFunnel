@@ -503,7 +503,8 @@ def create_donation_conversation_handler() -> ConversationHandler:
         ],
         conversation_timeout=300,  # 5 minutes
         name='donation_conversation',
-        persistent=False  # Set to True when adding persistence layer
+        persistent=False,  # Set to True when adding persistence layer
+        per_message=False  # CRITICAL: Track conversation per user, not per message
     )
 
 

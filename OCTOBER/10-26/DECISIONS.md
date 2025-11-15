@@ -8,6 +8,85 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
+## 2025-11-14: ConversationHandler per_message Parameter ✅
+
+**Decision:** Use `per_message=False` for all ConversationHandlers that accept text input
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- ConversationHandler has two tracking modes:
+  - `per_message=True` (default): Tracks conversation per (chat_id, message_id) pair
+  - `per_message=False`: Tracks conversation per chat_id only
+- Donation conversation handler accepts text input for messages
+- User sends text as a NEW message (different message_id from the keypad interaction)
+
+**Problem:**
+- Donation ConversationHandler was missing `per_message` parameter → defaulted to `True`
+- When user clicked "Add Message" button → conversation tracked with message_id of keypad
+- When user sent text message → NEW message_id → treated as completely different conversation!
+- MessageHandler for text input never triggered because conversation context didn't match
+
+**Debugging Evidence:**
+```
+Log shows: 💝 [DONATION] User adding message
+User types: "Hello this is a test !"
+No log from handle_message_text() → Handler not triggered
+```
+
+**Why per_message=True Failed:**
+```
+1. User clicks donate button → (chat_id=123, message_id=456)
+2. ConversationHandler tracks: conversation[123][456] = AMOUNT_INPUT
+3. User confirms amount → conversation[123][456] = MESSAGE_INPUT
+4. User types text → NEW message (chat_id=123, message_id=789)
+5. ConversationHandler looks for: conversation[123][789] → NOT FOUND
+6. Text message ignored ❌
+```
+
+**Why per_message=False Works:**
+```
+1. User clicks donate button → (chat_id=123)
+2. ConversationHandler tracks: conversation[123] = AMOUNT_INPUT
+3. User confirms amount → conversation[123] = MESSAGE_INPUT
+4. User types text → Same chat_id=123
+5. ConversationHandler looks for: conversation[123] → FOUND: MESSAGE_INPUT
+6. Text message processed ✅
+```
+
+**Implementation:**
+```python
+# donation_conversation.py - create_donation_conversation_handler()
+return ConversationHandler(
+    entry_points=[...],
+    states={...},
+    fallbacks=[...],
+    conversation_timeout=300,
+    name='donation_conversation',
+    persistent=False,
+    per_message=False  # CRITICAL: Track per user, not per message
+)
+```
+
+**Consistency Check:**
+- `database_v2_handler` (bot_manager.py:48): ✅ `per_message=False`
+- `database_handler_old` (bot_manager.py:67): ✅ `per_message=False`
+- `donation_conversation_handler` (donation_conversation.py:507): ✅ `per_message=False` **NOW FIXED**
+
+**Rationale:**
+1. **Text Input Compatibility**: Any handler accepting user text input MUST use `per_message=False`
+2. **User-Centric Flow**: Conversation should follow the user, not individual messages
+3. **Consistency**: All other ConversationHandlers in codebase use `per_message=False`
+4. **Pattern**: Button callbacks → Text input requires `per_message=False`
+
+**Impact:**
+- ✅ Text message input now works in donation flow
+- ✅ Consistent behavior across all ConversationHandlers
+- ✅ User can type message after clicking "Add Message"
+- ✅ Pattern established for future ConversationHandlers with text input
+
+**Lesson Learned:**
+When creating ConversationHandler with text input, ALWAYS set `per_message=False` unless you have a specific reason to track per-message (rare).
+
 ## 2025-11-14: Payment Service Bot Data Registration ✅
 
 **Decision:** Register payment_service in application.bot_data for access by conversation handlers

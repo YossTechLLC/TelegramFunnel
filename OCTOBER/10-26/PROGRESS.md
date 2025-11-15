@@ -4,16 +4,22 @@
 
 ## Recent Updates
 
-## 2025-11-14: Fixed Donation Message Text Input (payment_service Registration) ✅
+## 2025-11-14: Fixed Donation Message Text Input (TWO Root Causes) ✅
 
-**Action:** Fixed missing payment_service registration in bot_data causing message text input to be ignored
+**Action:** Fixed TWO critical bugs preventing message text input from working
 **Status:** ✅ **READY FOR VM DEPLOYMENT**
 
-**Problem Identified:**
-- Users could click "Add Message" button but typing message text had no effect
-- Root cause: `payment_service` not registered in `application.bot_data`
+**Root Cause #1: Missing payment_service in bot_data** ✅ FIXED
+- `payment_service` not registered in `application.bot_data`
 - `finalize_payment()` in donation_conversation.py couldn't find payment_service and exited early
 - No error shown to user - conversation just hung silently
+
+**Root Cause #2: per_message=True (wrong conversation tracking)** ✅ FIXED
+- ConversationHandler defaulted to `per_message=True`
+- This tracks conversation per (chat_id, **message_id**) pair
+- When user sent text message, it was a NEW message_id → treated as NEW conversation
+- Handler didn't recognize text as part of donation conversation → **IGNORED**
+- All other ConversationHandlers use `per_message=False` - donation handler was missing this
 
 **Log Evidence:**
 ```
@@ -22,16 +28,22 @@
 [NO RESPONSE - handle_message_text() never completes because payment_service=None]
 ```
 
-**Fix Applied:**
+**Fixes Applied:**
+
+**Fix #1: payment_service Registration**
 1. ✅ `bot_manager.py` Line 16: Added `payment_service=None` parameter to constructor
 2. ✅ `bot_manager.py` Line 24: Store as instance variable: `self.payment_service = payment_service`
 3. ✅ `bot_manager.py` Line 104: Register in bot_data: `application.bot_data['payment_service'] = self.payment_service`
 4. ✅ `bot_manager.py` Line 105: Updated debug log to show payment_service status
 5. ✅ `app_initializer.py` Line 148: Pass `self.payment_service` to BotManager constructor
 
+**Fix #2: per_message Parameter** 🎯 THE CRITICAL FIX
+6. ✅ `donation_conversation.py` Line 507: Added `per_message=False` to ConversationHandler
+
 **Files Modified:**
 - `TelePay10-26/bot_manager.py` - Added payment_service parameter, registration, logging
 - `TelePay10-26/app_initializer.py` - Pass payment_service to BotManager
+- `TelePay10-26/bot/conversations/donation_conversation.py` - Added per_message=False
 - `DONATION_MESSAGE_TEXT_INPUT_FIX_CHECKLIST.md` - Created diagnostic checklist
 
 **Verification:**

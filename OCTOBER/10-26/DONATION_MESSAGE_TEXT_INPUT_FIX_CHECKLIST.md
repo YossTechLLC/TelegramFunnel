@@ -2,7 +2,8 @@
 
 **Date:** 2025-11-14
 **Issue:** User can click "Add Message" button, but typing message text does nothing
-**Root Cause:** `payment_service` not registered in `application.bot_data`
+**Root Cause #1:** `payment_service` not registered in `application.bot_data` ✅ FIXED
+**Root Cause #2:** `per_message=True` (default) instead of `per_message=False` in ConversationHandler ✅ FIXED
 
 ---
 
@@ -141,32 +142,44 @@ self.bot_manager = BotManager(
 
 ---
 
-### Phase 5: Verify donation_conversation.py (No Changes Needed) ✅
+### Phase 5: Fix per_message Parameter ✅ CRITICAL FIX
 
 **File:** `TelePay10-26/bot/conversations/donation_conversation.py`
 
-**Line 335:**
+**Problem Identified:**
+- ConversationHandler default is `per_message=True`
+- This tracks conversation per (chat_id, **message_id**) pair
+- When user sends text message, it's a NEW message_id → NEW conversation context
+- Handler doesn't recognize text as part of donation conversation → Ignored!
+
+**Current (Line 506):**
 ```python
-payment_service = context.application.bot_data.get('payment_service')
+return ConversationHandler(
+    ...
+    persistent=False  # Set to True when adding persistence layer
+)
 ```
 
-This line is already correct. Once `payment_service` is added to `bot_data`, this will work.
-
-**Line 336-344:**
+**Updated (Lines 506-507):**
 ```python
-if not payment_service:
-    logger.error("❌ [DONATION] Payment service not available")
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text="❌ Payment service temporarily unavailable. Please try again later."
-    )
-    context.user_data.clear()
-    return ConversationHandler.END
+return ConversationHandler(
+    ...
+    persistent=False,  # Set to True when adding persistence layer
+    per_message=False  # CRITICAL: Track conversation per user, not per message
+)
 ```
 
-This error handling is already in place. This is why nothing happens when user types message - the function exits early because payment_service is None.
+**Why This Matters:**
+- `per_message=True`: Tracks conversation per (chat_id, message_id) - WRONG for text input
+- `per_message=False`: Tracks conversation per chat_id only - CORRECT for user input flow
 
-**No changes needed to donation_conversation.py** ✅
+**All other ConversationHandlers use `per_message=False`:**
+- `database_v2_handler` (bot_manager.py:48): `per_message=False`
+- `database_handler_old` (bot_manager.py:67): `per_message=False`
+- `donation_conversation_handler` was missing this → **NOW FIXED** ✅
+
+**Changes:**
+- [x] Add `per_message=False` to donation ConversationHandler (Line 507)
 
 ---
 
