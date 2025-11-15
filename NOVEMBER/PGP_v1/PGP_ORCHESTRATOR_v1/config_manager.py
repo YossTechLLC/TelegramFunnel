@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCWebhook1-10-26 (Payment Processor Service).
+Configuration Manager for PGP_ORCHESTRATOR_v1 (Payment Processor Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCWebhook1-10-26 service.
+    Manages configuration and secrets for the PGP_ORCHESTRATOR_v1 service.
     """
 
     def __init__(self):
@@ -51,7 +51,7 @@ class ConfigManager:
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCWebhook1-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_ORCHESTRATOR_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
@@ -70,35 +70,35 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        gcwebhook2_queue = self.fetch_secret(
-            "GCWEBHOOK2_QUEUE",
-            "GCWebhook2 queue name"
+        pgp_invite_queue = self.fetch_secret(
+            "PGP_INVITE_QUEUE",
+            "PGP Invite queue name"
         )
 
-        gcwebhook2_url = self.fetch_secret(
-            "GCWEBHOOK2_URL",
-            "GCWebhook2 service URL"
+        pgp_invite_url = self.fetch_secret(
+            "PGP_INVITE_URL",
+            "PGP Invite service URL"
         )
 
-        gcsplit1_queue = self.fetch_secret(
-            "GCSPLIT1_QUEUE",
-            "GCSplit1 queue name"
+        pgp_split1_queue = self.fetch_secret(
+            "PGP_SPLIT1_QUEUE",
+            "PGP Split1 queue name"
         )
 
-        gcsplit1_url = self.fetch_secret(
-            "GCSPLIT1_URL",
-            "GCSplit1 service URL"
+        pgp_split1_url = self.fetch_secret(
+            "PGP_SPLIT1_URL",
+            "PGP Split1 service URL"
         )
 
-        # GCAccumulator configuration (for threshold payout)
-        gcaccumulator_queue = self.fetch_secret(
-            "GCACCUMULATOR_QUEUE",
-            "GCAccumulator queue name"
+        # PGP Accumulator configuration (for threshold payout)
+        pgp_accumulator_queue = self.fetch_secret(
+            "PGP_ACCUMULATOR_QUEUE",
+            "PGP Accumulator queue name"
         )
 
-        gcaccumulator_url = self.fetch_secret(
-            "GCACCUMULATOR_URL",
-            "GCAccumulator service URL"
+        pgp_accumulator_url = self.fetch_secret(
+            "PGP_ACCUMULATOR_URL",
+            "PGP Accumulator service URL"
         )
 
         # Fetch database configuration from Secret Manager
@@ -135,12 +135,12 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gcwebhook2_queue': gcwebhook2_queue,
-            'gcwebhook2_url': gcwebhook2_url,
-            'gcsplit1_queue': gcsplit1_queue,
-            'gcsplit1_url': gcsplit1_url,
-            'gcaccumulator_queue': gcaccumulator_queue,
-            'gcaccumulator_url': gcaccumulator_url,
+            'pgp_invite_queue': pgp_invite_queue,
+            'pgp_invite_url': pgp_invite_url,
+            'pgp_split1_queue': pgp_split1_queue,
+            'pgp_split1_url': pgp_split1_url,
+            'pgp_accumulator_queue': pgp_accumulator_queue,
+            'pgp_accumulator_url': pgp_accumulator_url,
 
             # Database configuration (all from Secret Manager)
             'instance_connection_name': cloud_sql_connection_name,
@@ -154,12 +154,12 @@ class ConfigManager:
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCWebhook2 Queue: {'✅' if config['gcwebhook2_queue'] else '❌'}")
-        print(f"   GCWebhook2 URL: {'✅' if config['gcwebhook2_url'] else '❌'}")
-        print(f"   GCSplit1 Queue: {'✅' if config['gcsplit1_queue'] else '❌'}")
-        print(f"   GCSplit1 URL: {'✅' if config['gcsplit1_url'] else '❌'}")
-        print(f"   GCAccumulator Queue: {'✅' if config['gcaccumulator_queue'] else '❌'}")
-        print(f"   GCAccumulator URL: {'✅' if config['gcaccumulator_url'] else '❌'}")
+        print(f"   PGP Invite Queue: {'✅' if config['pgp_invite_queue'] else '❌'}")
+        print(f"   PGP Invite URL: {'✅' if config['pgp_invite_url'] else '❌'}")
+        print(f"   PGP Split1 Queue: {'✅' if config['pgp_split1_queue'] else '❌'}")
+        print(f"   PGP Split1 URL: {'✅' if config['pgp_split1_url'] else '❌'}")
+        print(f"   PGP Accumulator Queue: {'✅' if config['pgp_accumulator_queue'] else '❌'}")
+        print(f"   PGP Accumulator URL: {'✅' if config['pgp_accumulator_url'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCHostPay2-10-26 (ChangeNow Status Checker Service).
+Configuration Manager for PGP_HOSTPAY2_v1 (ChangeNow Status Checker Service).
 Handles fetching configuration values from Google Cloud Secret Manager.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCHostPay2-10-26 service.
+    Manages configuration and secrets for the PGP_HOSTPAY2_v1 service.
     """
 
     def __init__(self):
@@ -46,17 +46,17 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCHostPay2.
+        Initialize and return all configuration values for PGP_HOSTPAY2_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCHostPay2-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_HOSTPAY2_v1 configuration")
 
         # Fetch signing key for internal communication
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
-            "Success URL signing key (for internal GCHostPay communication)"
+            "Success URL signing key (for internal PGP HostPay communication)"
         )
 
         # Fetch ChangeNow API key
@@ -76,15 +76,15 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        # Get GCHostPay1 response queue configuration
-        gchostpay1_response_queue = self.fetch_secret(
-            "GCHOSTPAY1_RESPONSE_QUEUE",
-            "GCHostPay1 response queue name"
+        # Get PGP HostPay1 response queue configuration
+        pgp_hostpay1_response_queue = self.fetch_secret(
+            "PGP_HOSTPAY1_RESPONSE_QUEUE",
+            "PGP HostPay1 response queue name"
         )
 
-        gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
-            "GCHostPay1 service URL"
+        pgp_hostpay1_url = self.fetch_secret(
+            "PGP_HOSTPAY1_URL",
+            "PGP HostPay1 service URL"
         )
 
         # Validate critical configurations
@@ -105,8 +105,8 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gchostpay1_response_queue': gchostpay1_response_queue,
-            'gchostpay1_url': gchostpay1_url
+            'pgp_hostpay1_response_queue': pgp_hostpay1_response_queue,
+            'pgp_hostpay1_url': pgp_hostpay1_url
         }
 
         # Log configuration status
@@ -115,7 +115,7 @@ class ConfigManager:
         print(f"   CHANGENOW_API_KEY: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCHostPay1 Response Queue: {'✅' if config['gchostpay1_response_queue'] else '❌'}")
-        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
+        print(f"   PGP HostPay1 Response Queue: {'✅' if config['pgp_hostpay1_response_queue'] else '❌'}")
+        print(f"   PGP HostPay1 URL: {'✅' if config['pgp_hostpay1_url'] else '❌'}")
 
         return config

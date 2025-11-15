@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCSplit1-10-26 (Orchestrator Service).
+Configuration Manager for PGP_SPLIT1_v1 (Orchestrator Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCSplit1-10-26 service.
+    Manages configuration and secrets for the PGP_SPLIT1_v1 service.
     """
 
     def __init__(self):
@@ -74,7 +74,7 @@ class ConfigManager:
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCSplit1-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_SPLIT1_v1 configuration")
 
         # Fetch secrets from Secret Manager
         success_url_signing_key = self.fetch_secret(
@@ -92,9 +92,9 @@ class ConfigManager:
             "TelePay flat fee percentage"
         )
 
-        hostpay_webhook_url = self.fetch_secret(
-            "HOSTPAY_WEBHOOK_URL",
-            "GCHostPay webhook URL"
+        pgp_hostpay1_url = self.fetch_secret(
+            "PGP_HOSTPAY1_URL",
+            "PGP HostPay1 webhook URL"
         )
 
         # Get Cloud Tasks configuration from Secret Manager
@@ -108,29 +108,29 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        gcsplit2_queue = self.fetch_secret(
-            "GCSPLIT2_QUEUE",
-            "GCSplit2 queue name"
+        pgp_split2_queue = self.fetch_secret(
+            "PGP_SPLIT2_ESTIMATE_QUEUE",
+            "PGP Split2 estimate queue name"
         )
 
-        gcsplit2_url = self.fetch_secret(
-            "GCSPLIT2_URL",
-            "GCSplit2 service URL"
+        pgp_split2_url = self.fetch_secret(
+            "PGP_SPLIT2_URL",
+            "PGP Split2 service URL"
         )
 
-        gcsplit3_queue = self.fetch_secret(
-            "GCSPLIT3_QUEUE",
-            "GCSplit3 queue name"
+        pgp_split3_queue = self.fetch_secret(
+            "PGP_SPLIT3_SWAP_QUEUE",
+            "PGP Split3 swap queue name"
         )
 
-        gcsplit3_url = self.fetch_secret(
-            "GCSPLIT3_URL",
-            "GCSplit3 service URL"
+        pgp_split3_url = self.fetch_secret(
+            "PGP_SPLIT3_URL",
+            "PGP Split3 service URL"
         )
 
-        hostpay_queue = self.fetch_secret(
-            "HOSTPAY_QUEUE",
-            "HostPay trigger queue name"
+        pgp_hostpay_trigger_queue = self.fetch_secret(
+            "PGP_HOSTPAY_TRIGGER_QUEUE",
+            "PGP HostPay trigger queue name"
         )
 
         # Fetch database configuration from Secret Manager
@@ -167,16 +167,16 @@ class ConfigManager:
             'success_url_signing_key': success_url_signing_key,
             'tps_hostpay_signing_key': tps_hostpay_signing_key,
             'tp_flat_fee': tp_flat_fee,
-            'hostpay_webhook_url': hostpay_webhook_url,
+            'pgp_hostpay1_url': pgp_hostpay1_url,
 
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gcsplit2_queue': gcsplit2_queue,
-            'gcsplit2_url': gcsplit2_url,
-            'gcsplit3_queue': gcsplit3_queue,
-            'gcsplit3_url': gcsplit3_url,
-            'hostpay_queue': hostpay_queue,
+            'pgp_split2_queue': pgp_split2_queue,
+            'pgp_split2_url': pgp_split2_url,
+            'pgp_split3_queue': pgp_split3_queue,
+            'pgp_split3_url': pgp_split3_url,
+            'pgp_hostpay_trigger_queue': pgp_hostpay_trigger_queue,
 
             # Database configuration (all from Secret Manager)
             'instance_connection_name': cloud_sql_connection_name,
@@ -190,14 +190,14 @@ class ConfigManager:
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
         print(f"   TPS_HOSTPAY_SIGNING_KEY: {'✅' if config['tps_hostpay_signing_key'] else '❌'}")
         print(f"   TP_FLAT_FEE: {'✅' if config['tp_flat_fee'] else '❌'}")
-        print(f"   HOSTPAY_WEBHOOK_URL: {'✅' if config['hostpay_webhook_url'] else '❌'}")
+        print(f"   PGP HostPay1 URL: {'✅' if config['pgp_hostpay1_url'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCSplit2 Queue: {'✅' if config['gcsplit2_queue'] else '❌'}")
-        print(f"   GCSplit2 URL: {'✅' if config['gcsplit2_url'] else '❌'}")
-        print(f"   GCSplit3 Queue: {'✅' if config['gcsplit3_queue'] else '❌'}")
-        print(f"   GCSplit3 URL: {'✅' if config['gcsplit3_url'] else '❌'}")
-        print(f"   HostPay Queue: {'✅' if config['hostpay_queue'] else '❌'}")
+        print(f"   PGP Split2 Queue: {'✅' if config['pgp_split2_queue'] else '❌'}")
+        print(f"   PGP Split2 URL: {'✅' if config['pgp_split2_url'] else '❌'}")
+        print(f"   PGP Split3 Queue: {'✅' if config['pgp_split3_queue'] else '❌'}")
+        print(f"   PGP Split3 URL: {'✅' if config['pgp_split3_url'] else '❌'}")
+        print(f"   PGP HostPay Trigger Queue: {'✅' if config['pgp_hostpay_trigger_queue'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")

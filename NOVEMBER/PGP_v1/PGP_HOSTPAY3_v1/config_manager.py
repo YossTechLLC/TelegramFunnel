@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCHostPay3-10-26 (ETH Payment Executor Service).
+Configuration Manager for PGP_HOSTPAY3_v1 (ETH Payment Executor Service).
 Handles fetching configuration values from Google Cloud Secret Manager.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCHostPay3-10-26 service.
+    Manages configuration and secrets for the PGP_HOSTPAY3_v1 service.
     """
 
     def __init__(self):
@@ -46,17 +46,17 @@ class ConfigManager:
 
     def initialize_config(self) -> dict:
         """
-        Initialize and return all configuration values for GCHostPay3.
+        Initialize and return all configuration values for PGP_HOSTPAY3_v1.
 
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCHostPay3-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_HOSTPAY3_v1 configuration")
 
         # Fetch signing key for internal communication
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
-            "Success URL signing key (for internal GCHostPay communication)"
+            "Success URL signing key (for internal PGP HostPay communication)"
         )
 
         # Fetch wallet credentials
@@ -92,37 +92,37 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        # Get GCHostPay1 response queue configuration
-        gchostpay1_response_queue = self.fetch_secret(
-            "GCHOSTPAY1_RESPONSE_QUEUE",
-            "GCHostPay1 response queue name"
+        # Get PGP HostPay1 response queue configuration
+        pgp_hostpay1_response_queue = self.fetch_secret(
+            "PGP_HOSTPAY1_RESPONSE_QUEUE",
+            "PGP HostPay1 response queue name"
         )
 
-        gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
-            "GCHostPay1 service URL"
+        pgp_hostpay1_url = self.fetch_secret(
+            "PGP_HOSTPAY1_URL",
+            "PGP HostPay1 service URL"
         )
 
-        # Get GCAccumulator response queue configuration (for threshold payouts)
-        gcaccumulator_response_queue = self.fetch_secret(
-            "GCACCUMULATOR_RESPONSE_QUEUE",
-            "GCAccumulator response queue name"
+        # Get PGP Accumulator response queue configuration (for threshold payouts)
+        pgp_accumulator_response_queue = self.fetch_secret(
+            "PGP_ACCUMULATOR_RESPONSE_QUEUE",
+            "PGP Accumulator response queue name"
         )
 
-        gcaccumulator_url = self.fetch_secret(
-            "GCACCUMULATOR_URL",
-            "GCAccumulator service URL"
+        pgp_accumulator_url = self.fetch_secret(
+            "PGP_ACCUMULATOR_URL",
+            "PGP Accumulator service URL"
         )
 
-        # NEW: Get GCHostPay3 self-retry configuration (for error handling)
-        gchostpay3_retry_queue = self.fetch_secret(
-            "GCHOSTPAY3_RETRY_QUEUE",
-            "GCHostPay3 self-retry queue name"
+        # NEW: Get PGP HostPay3 self-retry configuration (for error handling)
+        pgp_hostpay3_retry_queue = self.fetch_secret(
+            "PGP_HOSTPAY3_RETRY_QUEUE",
+            "PGP HostPay3 self-retry queue name"
         )
 
-        gchostpay3_url = self.fetch_secret(
-            "GCHOSTPAY3_URL",
-            "GCHostPay3 service URL"
+        pgp_hostpay3_url = self.fetch_secret(
+            "PGP_HOSTPAY3_URL",
+            "PGP HostPay3 service URL"
         )
 
         # NEW: Get alerting configuration (optional)
@@ -182,14 +182,14 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gchostpay1_response_queue': gchostpay1_response_queue,
-            'gchostpay1_url': gchostpay1_url,
-            'gcaccumulator_response_queue': gcaccumulator_response_queue,
-            'gcaccumulator_url': gcaccumulator_url,
+            'pgp_hostpay1_response_queue': pgp_hostpay1_response_queue,
+            'pgp_hostpay1_url': pgp_hostpay1_url,
+            'pgp_accumulator_response_queue': pgp_accumulator_response_queue,
+            'pgp_accumulator_url': pgp_accumulator_url,
 
             # NEW: Self-retry configuration (error handling)
-            'gchostpay3_retry_queue': gchostpay3_retry_queue,
-            'gchostpay3_url': gchostpay3_url,
+            'pgp_hostpay3_retry_queue': pgp_hostpay3_retry_queue,
+            'pgp_hostpay3_url': pgp_hostpay3_url,
 
             # NEW: Alerting configuration (optional)
             'alerting_enabled': alerting_enabled,
@@ -211,12 +211,12 @@ class ConfigManager:
         print(f"   ETHEREUM_RPC_URL_API: {'✅' if config['ethereum_rpc_url_api'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCHostPay1 Response Queue: {'✅' if config['gchostpay1_response_queue'] else '❌'}")
-        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
-        print(f"   GCAccumulator Response Queue: {'✅' if config['gcaccumulator_response_queue'] else '❌'}")
-        print(f"   GCAccumulator URL: {'✅' if config['gcaccumulator_url'] else '❌'}")
-        print(f"   GCHostPay3 Retry Queue: {'✅' if config['gchostpay3_retry_queue'] else '❌'}")
-        print(f"   GCHostPay3 URL: {'✅' if config['gchostpay3_url'] else '❌'}")
+        print(f"   PGP HostPay1 Response Queue: {'✅' if config['pgp_hostpay1_response_queue'] else '❌'}")
+        print(f"   PGP HostPay1 URL: {'✅' if config['pgp_hostpay1_url'] else '❌'}")
+        print(f"   PGP Accumulator Response Queue: {'✅' if config['pgp_accumulator_response_queue'] else '❌'}")
+        print(f"   PGP Accumulator URL: {'✅' if config['pgp_accumulator_url'] else '❌'}")
+        print(f"   PGP HostPay3 Retry Queue: {'✅' if config['pgp_hostpay3_retry_queue'] else '❌'}")
+        print(f"   PGP HostPay3 URL: {'✅' if config['pgp_hostpay3_url'] else '❌'}")
         print(f"   Alerting Enabled: {'✅' if config['alerting_enabled'] else '⚠️ (optional)'}")
         print(f"   Slack Alert Webhook: {'✅' if config['slack_alert_webhook'] else '⚠️ (optional)'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")

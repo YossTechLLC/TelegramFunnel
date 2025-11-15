@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Configuration Manager for GCHostPay1-10-26 (Validator & Orchestrator Service).
+Configuration Manager for PGP_HOSTPAY1_v1 (Validator & Orchestrator Service).
 Handles fetching configuration values from Google Cloud Secret Manager.
 """
 import os
@@ -10,7 +10,7 @@ from typing import Optional
 
 class ConfigManager:
     """
-    Manages configuration and secrets for the GCHostPay1-10-26 service.
+    Manages configuration and secrets for the PGP_HOSTPAY1_v1 service.
     """
 
     def __init__(self):
@@ -51,7 +51,7 @@ class ConfigManager:
         Returns:
             Dictionary containing all configuration values
         """
-        print(f"⚙️ [CONFIG] Initializing GCHostPay1-10-26 configuration")
+        print(f"⚙️ [CONFIG] Initializing PGP_HOSTPAY1_v1 configuration")
 
         # Fetch signing keys
         tps_hostpay_signing_key = self.fetch_secret(
@@ -61,7 +61,7 @@ class ConfigManager:
 
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
-            "Success URL signing key (for internal GCHostPay communication)"
+            "Success URL signing key (for internal PGP HostPay communication)"
         )
 
         # Get Cloud Tasks configuration from Secret Manager
@@ -75,37 +75,37 @@ class ConfigManager:
             "Cloud Tasks location/region"
         )
 
-        # Get GCHostPay2 (Status Checker) configuration
-        gchostpay2_queue = self.fetch_secret(
-            "GCHOSTPAY2_QUEUE",
-            "GCHostPay2 queue name"
+        # Get PGP HostPay2 (Status Checker) configuration
+        pgp_hostpay2_queue = self.fetch_secret(
+            "PGP_HOSTPAY2_STATUS_QUEUE",
+            "PGP HostPay2 status queue name"
         )
 
-        gchostpay2_url = self.fetch_secret(
-            "GCHOSTPAY2_URL",
-            "GCHostPay2 service URL"
+        pgp_hostpay2_url = self.fetch_secret(
+            "PGP_HOSTPAY2_URL",
+            "PGP HostPay2 service URL"
         )
 
-        # Get GCHostPay3 (Payment Executor) configuration
-        gchostpay3_queue = self.fetch_secret(
-            "GCHOSTPAY3_QUEUE",
-            "GCHostPay3 queue name"
+        # Get PGP HostPay3 (Payment Executor) configuration
+        pgp_hostpay3_queue = self.fetch_secret(
+            "PGP_HOSTPAY3_PAYMENT_QUEUE",
+            "PGP HostPay3 payment queue name"
         )
 
-        gchostpay3_url = self.fetch_secret(
-            "GCHOSTPAY3_URL",
-            "GCHostPay3 service URL"
+        pgp_hostpay3_url = self.fetch_secret(
+            "PGP_HOSTPAY3_URL",
+            "PGP HostPay3 service URL"
         )
 
-        # Get GCHostPay1 (Self) configuration for retry callbacks
-        gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
-            "GCHostPay1 service URL (for self-callbacks)"
+        # Get PGP HostPay1 (Self) configuration for retry callbacks
+        pgp_hostpay1_url = self.fetch_secret(
+            "PGP_HOSTPAY1_URL",
+            "PGP HostPay1 service URL (for self-callbacks)"
         )
 
-        gchostpay1_response_queue = self.fetch_secret(
-            "GCHOSTPAY1_RESPONSE_QUEUE",
-            "GCHostPay1 response queue name (for retry callbacks)"
+        pgp_hostpay1_response_queue = self.fetch_secret(
+            "PGP_HOSTPAY1_RESPONSE_QUEUE",
+            "PGP HostPay1 response queue name (for retry callbacks)"
         )
 
         # Get ChangeNow API key for transaction status queries
@@ -114,15 +114,15 @@ class ConfigManager:
             "ChangeNow API key"
         )
 
-        # Get GCMicroBatchProcessor configuration (for batch conversion callbacks)
-        microbatch_response_queue = self.fetch_secret(
-            "MICROBATCH_RESPONSE_QUEUE",
-            "MicroBatchProcessor response queue name"
+        # Get PGP MicroBatch configuration (for batch conversion callbacks)
+        pgp_microbatch_response_queue = self.fetch_secret(
+            "PGP_MICROBATCH_RESPONSE_QUEUE",
+            "PGP MicroBatch response queue name"
         )
 
-        microbatch_url = self.fetch_secret(
-            "MICROBATCH_URL",
-            "MicroBatchProcessor service URL"
+        pgp_microbatch_url = self.fetch_secret(
+            "PGP_MICROBATCH_URL",
+            "PGP MicroBatch service URL"
         )
 
         # Fetch database configuration from Secret Manager
@@ -163,14 +163,14 @@ class ConfigManager:
             # Cloud Tasks configuration
             'cloud_tasks_project_id': cloud_tasks_project_id,
             'cloud_tasks_location': cloud_tasks_location,
-            'gchostpay1_url': gchostpay1_url,
-            'gchostpay1_response_queue': gchostpay1_response_queue,
-            'gchostpay2_queue': gchostpay2_queue,
-            'gchostpay2_url': gchostpay2_url,
-            'gchostpay3_queue': gchostpay3_queue,
-            'gchostpay3_url': gchostpay3_url,
-            'microbatch_response_queue': microbatch_response_queue,
-            'microbatch_url': microbatch_url,
+            'pgp_hostpay1_url': pgp_hostpay1_url,
+            'pgp_hostpay1_response_queue': pgp_hostpay1_response_queue,
+            'pgp_hostpay2_queue': pgp_hostpay2_queue,
+            'pgp_hostpay2_url': pgp_hostpay2_url,
+            'pgp_hostpay3_queue': pgp_hostpay3_queue,
+            'pgp_hostpay3_url': pgp_hostpay3_url,
+            'pgp_microbatch_response_queue': pgp_microbatch_response_queue,
+            'pgp_microbatch_url': pgp_microbatch_url,
 
             # Database configuration (all from Secret Manager)
             'instance_connection_name': cloud_sql_connection_name,
@@ -186,14 +186,14 @@ class ConfigManager:
         print(f"   CHANGENOW_API_KEY: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
-        print(f"   GCHostPay1 Response Queue: {'✅' if config['gchostpay1_response_queue'] else '❌'}")
-        print(f"   GCHostPay2 Queue: {'✅' if config['gchostpay2_queue'] else '❌'}")
-        print(f"   GCHostPay2 URL: {'✅' if config['gchostpay2_url'] else '❌'}")
-        print(f"   GCHostPay3 Queue: {'✅' if config['gchostpay3_queue'] else '❌'}")
-        print(f"   GCHostPay3 URL: {'✅' if config['gchostpay3_url'] else '❌'}")
-        print(f"   MicroBatch Response Queue: {'✅' if config['microbatch_response_queue'] else '❌'}")
-        print(f"   MicroBatch URL: {'✅' if config['microbatch_url'] else '❌'}")
+        print(f"   PGP HostPay1 URL: {'✅' if config['pgp_hostpay1_url'] else '❌'}")
+        print(f"   PGP HostPay1 Response Queue: {'✅' if config['pgp_hostpay1_response_queue'] else '❌'}")
+        print(f"   PGP HostPay2 Queue: {'✅' if config['pgp_hostpay2_queue'] else '❌'}")
+        print(f"   PGP HostPay2 URL: {'✅' if config['pgp_hostpay2_url'] else '❌'}")
+        print(f"   PGP HostPay3 Queue: {'✅' if config['pgp_hostpay3_queue'] else '❌'}")
+        print(f"   PGP HostPay3 URL: {'✅' if config['pgp_hostpay3_url'] else '❌'}")
+        print(f"   PGP MicroBatch Response Queue: {'✅' if config['pgp_microbatch_response_queue'] else '❌'}")
+        print(f"   PGP MicroBatch URL: {'✅' if config['pgp_microbatch_url'] else '❌'}")
         print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
         print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
         print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")
