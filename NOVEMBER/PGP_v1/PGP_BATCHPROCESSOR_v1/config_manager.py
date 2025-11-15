@@ -1,48 +1,20 @@
 #!/usr/bin/env python
 """
 Configuration Manager for PGP_BATCHPROCESSOR_v1 (Batch Payout Processor Service).
-Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
+Handles fetching configuration values from Google Cloud Secret Manager.
 """
-import os
-from google.cloud import secretmanager
-from typing import Optional
+from PGP_COMMON.config import BaseConfigManager
 
 
-class ConfigManager:
+class ConfigManager(BaseConfigManager):
     """
     Manages configuration and secrets for the PGP_BATCHPROCESSOR_v1 service.
+    Inherits common methods from BaseConfigManager.
     """
 
     def __init__(self):
         """Initialize the ConfigManager."""
-        self.client = secretmanager.SecretManagerServiceClient()
-        print(f"⚙️ [CONFIG] ConfigManager initialized")
-
-    def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
-        """
-        Fetch a secret value from environment variable.
-        Cloud Run automatically injects secret values when using --set-secrets.
-
-        Args:
-            secret_name_env: Environment variable name containing the secret value
-            description: Description for logging purposes
-
-        Returns:
-            Secret value or None if failed
-        """
-        try:
-            # Defensive pattern: handle None, strip whitespace, return None if empty
-            secret_value = (os.getenv(secret_name_env) or '').strip() or None
-            if not secret_value:
-                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
-                return None
-
-            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
-            return secret_value
-
-        except Exception as e:
-            print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
-            return None
+        super().__init__(service_name="PGP_BATCHPROCESSOR_v1")
 
     def initialize_config(self) -> dict:
         """
@@ -53,7 +25,11 @@ class ConfigManager:
         """
         print(f"⚙️ [CONFIG] Initializing PGP_BATCHPROCESSOR_v1 configuration")
 
-        # Fetch secrets from Secret Manager
+        # Use base methods to fetch common configurations
+        ct_config = self.fetch_cloud_tasks_config()
+        db_config = self.fetch_database_config()
+
+        # Fetch signing keys
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
             "Success URL signing key (for token encryption)"
@@ -62,17 +38,6 @@ class ConfigManager:
         tps_hostpay_signing_key = self.fetch_secret(
             "TPS_HOSTPAY_SIGNING_KEY",
             "TPS-HostPay signing key (for batch payout tokens)"
-        )
-
-        # Get Cloud Tasks configuration from Secret Manager
-        cloud_tasks_project_id = self.fetch_secret(
-            "CLOUD_TASKS_PROJECT_ID",
-            "Cloud Tasks project ID"
-        )
-
-        cloud_tasks_location = self.fetch_secret(
-            "CLOUD_TASKS_LOCATION",
-            "Cloud Tasks location/region"
         )
 
         # PGP Split1 configuration (for batch payout execution)
@@ -86,49 +51,27 @@ class ConfigManager:
             "PGP Split1 service URL"
         )
 
-        # Fetch database configuration from Secret Manager
-        cloud_sql_connection_name = self.fetch_secret(
-            "CLOUD_SQL_CONNECTION_NAME",
-            "Cloud SQL instance connection name"
-        )
-
-        database_name = self.fetch_secret(
-            "DATABASE_NAME_SECRET",
-            "Database name"
-        )
-
-        database_user = self.fetch_secret(
-            "DATABASE_USER_SECRET",
-            "Database user"
-        )
-
-        database_password = self.fetch_secret(
-            "DATABASE_PASSWORD_SECRET",
-            "Database password"
-        )
-
         # Validate critical configurations
         if not success_url_signing_key or not tps_hostpay_signing_key:
             print(f"⚠️ [CONFIG] Warning: Signing keys not available")
-        if not cloud_tasks_project_id or not cloud_tasks_location:
+        if not ct_config['cloud_tasks_project_id'] or not ct_config['cloud_tasks_location']:
             print(f"⚠️ [CONFIG] Warning: Cloud Tasks configuration incomplete")
 
+        # Combine all configurations
         config = {
-            # Secrets
+            # Signing keys
             'success_url_signing_key': success_url_signing_key,
             'tps_hostpay_signing_key': tps_hostpay_signing_key,
 
-            # Cloud Tasks configuration
-            'cloud_tasks_project_id': cloud_tasks_project_id,
-            'cloud_tasks_location': cloud_tasks_location,
+            # Cloud Tasks configuration (from base method)
+            **ct_config,
+
+            # Service-specific queues and URLs
             'pgp_split1_batch_queue': pgp_split1_batch_queue,
             'pgp_split1_url': pgp_split1_url,
 
-            # Database configuration (all from Secret Manager)
-            'instance_connection_name': cloud_sql_connection_name,
-            'db_name': database_name,
-            'db_user': database_user,
-            'db_password': database_password
+            # Database configuration (from base method)
+            **db_config
         }
 
         # Log configuration status

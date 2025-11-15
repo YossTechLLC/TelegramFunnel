@@ -17,6 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements and install
 COPY requirements.txt .
+
+# Install PGP_COMMON shared library
+COPY PGP_COMMON/ /app/PGP_COMMON/
+RUN pip install -e /app/PGP_COMMON
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code

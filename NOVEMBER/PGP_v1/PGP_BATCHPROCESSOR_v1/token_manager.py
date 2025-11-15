@@ -1,18 +1,20 @@
 #!/usr/bin/env python
 """
-Token Manager for GCBatchProcessor-10-26 (Batch Payout Processor Service).
-Handles token encryption for communication with GCSplit1 batch payout endpoint.
+Token Manager for PGP_BATCHPROCESSOR_v1 (Batch Payout Processor Service).
+Handles token encryption for communication with PGP Split1 batch payout endpoint.
 """
 import base64
 import hmac
 import hashlib
 import json
 from typing import Optional
+from PGP_COMMON.tokens import BaseTokenManager
 
 
-class TokenManager:
+class TokenManager(BaseTokenManager):
     """
-    Manages token encryption for GCBatchProcessor-10-26.
+    Manages token encryption for PGP_BATCHPROCESSOR_v1.
+    Inherits common methods from BaseTokenManager.
     """
 
     def __init__(self, signing_key: str):
@@ -22,8 +24,8 @@ class TokenManager:
         Args:
             signing_key: TPS_HOSTPAY_SIGNING_KEY for token encryption
         """
-        self.signing_key = signing_key
-        print(f"🔐 [TOKEN] TokenManager initialized")
+        super().__init__(signing_key=signing_key, service_name="PGP_BATCHPROCESSOR_v1")
+
 
     def encrypt_batch_token(
         self,
