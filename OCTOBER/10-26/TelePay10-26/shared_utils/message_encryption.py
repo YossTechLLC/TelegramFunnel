@@ -77,15 +77,17 @@ def encrypt_donation_message(message: str) -> str:
 
         # Step 1: UTF-8 encode
         message_bytes = message.encode("utf-8")
-        logger.debug(f"   UTF-8 encoded: {len(message_bytes)} bytes")
+        logger.info(f"   🔤 [DEBUG] Step 1 - UTF-8 encode: {len(message_bytes)} bytes")
 
         # Step 2: Compress with zstd (level 10 for maximum compression)
         compressor = zstd.ZstdCompressor(level=10)
         compressed = compressor.compress(message_bytes)
-        logger.debug(f"   Compressed: {len(compressed)} bytes (ratio: {len(message_bytes)/len(compressed):.2f}x)")
+        logger.info(f"   🗜️ [DEBUG] Step 2 - Compressed: {len(compressed)} bytes (ratio: {len(message_bytes)/len(compressed):.2f}x)")
 
         # Step 3: Base64url encode (URL-safe, no padding)
         encoded = base64.urlsafe_b64encode(compressed).decode("ascii").rstrip("=")
+        logger.info(f"   🔐 [DEBUG] Step 3 - Base64url encoded: {len(encoded)} chars")
+        logger.info(f"   🔐 [DEBUG] Final encrypted output: '{encoded}'")
         logger.info(f"✅ [ENCRYPT] Encrypted message: {len(encoded)} chars")
 
         return encoded

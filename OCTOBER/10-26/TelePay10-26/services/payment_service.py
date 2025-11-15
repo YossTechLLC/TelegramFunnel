@@ -293,14 +293,32 @@ class PaymentService:
             # Build base success URL with properly encoded order_id
             # URL encode the pipe character (|) in order_id format: PGP-{user_id}|{channel_id}
             base_url = os.getenv('BASE_URL', 'https://www.paygateprime.com')
+
+            # DEBUG: Log order_id before and after URL encoding
+            logger.info(f"🔑 [DEBUG] Order ID encoding:")
+            logger.info(f"   Original order_id: '{order_id}'")
+            logger.info(f"   URL-encoded order_id: '{quote(order_id)}'")
+
             success_url = f"{base_url}/payment-processing?order_id={quote(order_id)}"
+            logger.info(f"🔗 [DEBUG] Base success_url (before message): {success_url}")
 
             # Encrypt and append message if provided (with URL encoding)
             if donation_message:
                 logger.info(f"💬 [PAYMENT] Including donation message in invoice")
+
+                # DEBUG: Log encryption and URL encoding process
+                logger.info(f"🔐 [DEBUG] Message encryption process:")
+                logger.info(f"   Step 1 - Original message: '{donation_message}'")
+
                 encrypted_msg = encrypt_donation_message(donation_message)
+
+                logger.info(f"   Step 2 - After encryption (base64url): '{encrypted_msg}'")
+                logger.info(f"   Step 3 - URL-encoded encrypted msg: '{quote(encrypted_msg)}'")
+
                 success_url += f"&msg={quote(encrypted_msg)}"  # URL encode encrypted message
+
                 logger.info(f"   Encrypted message length: {len(encrypted_msg)} chars")
+                logger.info(f"🔗 [DEBUG] Final success_url (with message): {success_url}")
 
             # Call parent create_invoice method with constructed success_url
             result = await self.create_invoice(

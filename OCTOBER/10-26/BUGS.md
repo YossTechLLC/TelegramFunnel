@@ -1,10 +1,73 @@
 # Bug Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 Session 157
+**Last Updated:** 2025-11-15 - **URL Encoding Fix for NowPayments Invoice Creation**
 
 ---
 
 ## Recently Resolved
+
+## 2025-11-15: ✅ RESOLVED - NowPayments Invoice Creation Failure (Invalid URI)
+
+**Severity:** 🔴 CRITICAL - Blocks ALL donation payments (both with and without messages)
+**Status:** ✅ RESOLVED - Code updated, awaiting deployment
+**Service:** TelePay10-26
+**Component:** `services/payment_service.py`
+
+**Error:**
+```json
+{
+  "status": false,
+  "statusCode": 400,
+  "code": "INVALID_REQUEST_PARAMS",
+  "message": "success_url must be a valid uri"
+}
+```
+
+**Symptoms:**
+- User creates donation (with or without message)
+- Invoice creation fails immediately
+- Error logged: `❌ [PAYMENT] Invoice creation failed - Status Code: 400`
+- User receives no payment link
+
+**Root Cause:**
+1. **Pipe character `|` not URL-encoded** in `order_id` parameter
+   - Format: `PGP-{user_id}|{channel_id}` (e.g., `PGP-6271402111|-1003377958897`)
+   - Pipe `|` violates RFC 3986 (not a valid URI character)
+   - Must be percent-encoded as `%7C`
+
+2. **Encrypted message not URL-encoded** in `msg` parameter
+   - Base64URL encoding (from `message_encryption.py`) ≠ URL encoding for query parameters
+   - Even though `urlsafe_b64encode()` used, additional encoding required for query strings
+
+**Fix Applied:**
+```python
+# Added import
+from urllib.parse import quote
+
+# Line 296: Encode order_id
+success_url = f"{base_url}/payment-processing?order_id={quote(order_id)}"
+
+# Line 302: Encode encrypted message
+success_url += f"&msg={quote(encrypted_msg)}"
+```
+
+**Example:**
+- Before: `?order_id=PGP-123|-456&msg=KLUv_QBYwQEA...` ❌
+- After: `?order_id=PGP-123%7C-456&msg=KLUv_QBYwQEA...` ✅
+
+**Verification:**
+- Decryption tested: `urllib.parse.parse_qs()` auto-decodes → no impact on message decryption
+- Historical: Same issue fixed 2025-11-02 (BUGS_ARCH.md), re-introduced by donation message feature
+
+**Files Modified:**
+- `TelePay10-26/services/payment_service.py` (Lines 17, 296, 302)
+
+**Testing Required:**
+1. Test donation WITHOUT message → invoice created ✅
+2. Test donation WITH message → invoice created ✅
+3. Complete payment → verify decryption works ✅
+
+---
 
 ## 2025-11-14 Session 157: ✅ RESOLVED - Flask JSON Parsing Errors (415 & 400)
 

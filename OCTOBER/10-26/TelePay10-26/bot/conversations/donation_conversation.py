@@ -367,6 +367,15 @@ async def finalize_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # Create invoice with encrypted message in success_url
     try:
+        # DEBUG: Log original donation message before passing to payment service
+        if donation_message:
+            logger.info(f"📝 [DEBUG] Original donation message received:")
+            logger.info(f"   Input text: '{donation_message}'")
+            logger.info(f"   Length: {len(donation_message)} chars")
+            logger.info(f"   Type: {type(donation_message).__name__}")
+        else:
+            logger.info(f"📝 [DEBUG] No donation message provided (Skip Message clicked)")
+
         result = await payment_service.create_donation_invoice(
             user_id=user.id,
             amount=amount_float,
@@ -377,6 +386,11 @@ async def finalize_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         if result['success']:
             invoice_url = result['invoice_url']
+
+            # DEBUG: Log final invoice URL
+            logger.info(f"🔗 [DEBUG] Final invoice URL returned from payment_service:")
+            logger.info(f"   URL: {invoice_url}")
+            logger.info(f"   URL length: {len(invoice_url)} chars")
 
             await context.bot.send_message(
                 chat_id=chat_id,

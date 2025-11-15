@@ -1,8 +1,77 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-15 - **FIXED: URL Encoding for NowPayments Invoice Creation** ✅
+**Last Updated:** 2025-11-15 - **ENHANCED: Debug Logging for Donation Message Encryption Flow** ✅
 
 ## Recent Updates
+
+## 2025-11-15: ENHANCED - Debug Logging for Donation Message Encryption/URL Encoding ✅
+
+**Action:** Added comprehensive debug logging to track donation message encryption and URL encoding workflow
+**Status:** ✅ **CODE UPDATED - READY FOR DEPLOYMENT**
+
+**PURPOSE:**
+- Debug logging to verify encryption → URL encoding → success_url construction flow
+- Track message transformation at each step for troubleshooting
+- Validate proper encoding before NowPayments API submission
+
+**DEBUG LOGGING ADDED:**
+
+1. **donation_conversation.py (Lines 371-377, 390-393)**
+   - Log original donation message text, length, and type
+   - Log final invoice URL returned from payment_service
+   - Track whether message was provided or skipped
+
+2. **payment_service.py (Lines 297-321)**
+   - Log order_id before and after URL encoding
+   - Log base success_url before message parameter
+   - Log 3-step message encryption process:
+     - Step 1: Original message text
+     - Step 2: After encryption (base64url)
+     - Step 3: After URL encoding
+   - Log final success_url with all parameters
+
+3. **message_encryption.py (Lines 80, 85, 89-90)**
+   - Log UTF-8 encoding step with byte count
+   - Log compression step with compression ratio
+   - Log base64url encoding step with char count
+   - Log final encrypted output string
+
+**EXPECTED DEBUG OUTPUT:**
+```
+📝 [DEBUG] Original donation message received:
+   Input text: 'Test message'
+   Length: 12 chars
+   Type: str
+🔑 [DEBUG] Order ID encoding:
+   Original order_id: 'PGP-123|-456'
+   URL-encoded order_id: 'PGP-123%7C-456'
+🔗 [DEBUG] Base success_url (before message): https://...?order_id=PGP-123%7C-456
+🔐 [DEBUG] Message encryption process:
+   Step 1 - Original message: 'Test message'
+🔐 [ENCRYPT] Encrypting message (12 chars)
+   🔤 [DEBUG] Step 1 - UTF-8 encode: 12 bytes
+   🗜️ [DEBUG] Step 2 - Compressed: 18 bytes (ratio: 0.67x)
+   🔐 [DEBUG] Step 3 - Base64url encoded: 24 chars
+   🔐 [DEBUG] Final encrypted output: 'KLUv_QBYwQEA...'
+   Step 2 - After encryption (base64url): 'KLUv_QBYwQEA...'
+   Step 3 - URL-encoded encrypted msg: 'KLUv_QBYwQEA...'
+🔗 [DEBUG] Final success_url (with message): https://...?order_id=PGP-123%7C-456&msg=KLUv_QBYwQEA...
+🔗 [DEBUG] Final invoice URL returned from payment_service:
+   URL: https://nowpayments.io/payment/?iid=...
+   URL length: 58 chars
+```
+
+**Files Modified:**
+- `TelePay10-26/bot/conversations/donation_conversation.py` (Lines 371-377, 390-393)
+- `TelePay10-26/services/payment_service.py` (Lines 297-321)
+- `TelePay10-26/shared_utils/message_encryption.py` (Lines 80, 85, 89-90)
+
+**Impact:**
+- Complete visibility into donation message encryption workflow
+- Easy verification of URL encoding correctness
+- Better troubleshooting for invoice creation issues
+
+---
 
 ## 2025-11-15: FIXED - URL Encoding for success_url Parameter ✅
 
