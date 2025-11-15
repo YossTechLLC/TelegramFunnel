@@ -41,36 +41,81 @@ gchostpay1_batch_queue      → pgp_hostpay1_batch_queue
 
 ### Phase 3.2: Function/Method Name Refactoring ✅
 
-**Scope:** 17 unique functions renamed across token management modules
-**Changes:** 51 total renames (17 definitions + 34 call sites)
+**Scope:** 47 unique functions renamed across token management modules
+**Changes:** 97 total renames (47 definitions + 50 call sites)
 **Risk Level:** HIGH (changes API contracts between services)
 
-**Key Functions Renamed:**
+**CORRECTION:** Initial implementation only renamed 17 functions, missed 30 more. Commit was amended to include all 47 functions.
+
+**Complete Function Categories:**
 ```
-# Token Manager Functions (Cross-Service API)
-encrypt_token_for_gcsplit2                  → encrypt_token_for_pgp_split2
-decrypt_accumulator_to_gchostpay1_token     → decrypt_accumulator_to_pgp_hostpay1_token
-encrypt_gchostpay1_to_gchostpay2_token      → encrypt_pgp_hostpay1_to_pgp_hostpay2_token
-decrypt_gchostpay1_to_gchostpay3_token      → decrypt_pgp_hostpay1_to_pgp_hostpay3_token
-encrypt_token_for_gcwebhook2                → encrypt_token_for_pgp_invite
-... (17 total function renames)
+# ACCUMULATOR (5 functions)
+encrypt_token_for_gcsplit2                      → encrypt_token_for_pgp_split2
+encrypt_accumulator_to_gcsplit3_token           → encrypt_accumulator_to_pgp_split3_token
+encrypt_accumulator_to_gchostpay1_token         → encrypt_accumulator_to_pgp_hostpay1_token
+decrypt_gcsplit3_to_accumulator_token           → decrypt_pgp_split3_to_accumulator_token
+decrypt_gchostpay1_to_accumulator_token         → decrypt_pgp_hostpay1_to_accumulator_token
+
+# MICROBATCH (2 functions)
+encrypt_microbatch_to_gchostpay1_token          → encrypt_microbatch_to_pgp_hostpay1_token
+decrypt_gchostpay1_to_microbatch_token          → decrypt_pgp_hostpay1_to_microbatch_token
+
+# ORCHESTRATOR (1 function)
+encrypt_token_for_gcwebhook2                    → encrypt_token_for_pgp_invite
+
+# HOSTPAY Chain (15 functions)
+decrypt_accumulator_to_gchostpay1_token         → decrypt_accumulator_to_pgp_hostpay1_token
+decrypt_microbatch_to_gchostpay1_token          → decrypt_microbatch_to_pgp_hostpay1_token
+decrypt_gcsplit1_to_gchostpay1_token            → decrypt_pgp_split1_to_pgp_hostpay1_token
+encrypt_gchostpay1_to_gchostpay2_token          → encrypt_pgp_hostpay1_to_pgp_hostpay2_token
+decrypt_gchostpay1_to_gchostpay2_token          → decrypt_pgp_hostpay1_to_pgp_hostpay2_token
+encrypt_gchostpay2_to_gchostpay1_token          → encrypt_pgp_hostpay2_to_pgp_hostpay1_token
+decrypt_gchostpay2_to_gchostpay1_token          → decrypt_pgp_hostpay2_to_pgp_hostpay1_token
+encrypt_gchostpay1_to_gchostpay3_token          → encrypt_pgp_hostpay1_to_pgp_hostpay3_token
+decrypt_gchostpay1_to_gchostpay3_token          → decrypt_pgp_hostpay1_to_pgp_hostpay3_token
+encrypt_gchostpay3_to_gchostpay1_token          → encrypt_pgp_hostpay3_to_pgp_hostpay1_token
+decrypt_gchostpay3_to_gchostpay1_token          → decrypt_pgp_hostpay3_to_pgp_hostpay1_token
+encrypt_gchostpay3_retry_token                  → encrypt_pgp_hostpay3_retry_token
+encrypt_gchostpay1_retry_token                  → encrypt_pgp_hostpay1_retry_token
+decrypt_gchostpay1_retry_token                  → decrypt_pgp_hostpay1_retry_token
+encrypt_gchostpay1_to_microbatch_response_token → encrypt_pgp_hostpay1_to_microbatch_response_token
+
+# SPLIT Services Inter-Communication (24 functions)
+encrypt_gcsplit1_to_gcsplit2_token              → encrypt_pgp_split1_to_pgp_split2_token
+decrypt_gcsplit1_to_gcsplit2_token              → decrypt_pgp_split1_to_pgp_split2_token
+encrypt_gcsplit2_to_gcsplit1_token              → encrypt_pgp_split2_to_pgp_split1_token
+decrypt_gcsplit2_to_gcsplit1_token              → decrypt_pgp_split2_to_pgp_split1_token
+encrypt_gcsplit1_to_gcsplit3_token              → encrypt_pgp_split1_to_pgp_split3_token
+decrypt_gcsplit1_to_gcsplit3_token              → decrypt_pgp_split1_to_pgp_split3_token
+encrypt_gcsplit3_to_gcsplit1_token              → encrypt_pgp_split3_to_pgp_split1_token
+decrypt_gcsplit3_to_gcsplit1_token              → decrypt_pgp_split3_to_pgp_split1_token
+encrypt_gcsplit3_to_accumulator_token           → encrypt_pgp_split3_to_accumulator_token
+decrypt_accumulator_to_gcsplit3_token           → decrypt_accumulator_to_pgp_split3_token
 ```
 
-**Files Modified:** 11 files
+**Files Modified:** 14 files
 - 6 `token_manager.py` files (function definitions)
-- 5 main service files (function call sites)
+- 8 main service files (function call sites)
 
 **Affected Services:**
-- PGP_ACCUMULATOR_v1
-- PGP_MICROBATCHPROCESSOR_v1
-- PGP_ORCHESTRATOR_v1
-- PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1
-- PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1
+- PGP_ACCUMULATOR_v1 (5 functions)
+- PGP_MICROBATCHPROCESSOR_v1 (2 functions)
+- PGP_ORCHESTRATOR_v1 (1 function)
+- PGP_HOSTPAY1_v1 (15 functions)
+- PGP_HOSTPAY2_v1 (shared functions)
+- PGP_HOSTPAY3_v1 (shared functions)
+- PGP_SPLIT1_v1 (8 functions)
+- PGP_SPLIT2_v1 (8 functions)
+- PGP_SPLIT3_v1 (10 functions)
 
 **Strategy:** Atomic rename (all definitions and call sites updated simultaneously)
-**Verification:** Python syntax check PASSED on all modified files, grep verification showed 0 remaining old function names
+**Verification:**
+- Python syntax check PASSED on all 14 modified files
+- grep verification confirmed 0 remaining GC* function definitions
+- All inter-service token encryption/decryption functions now use PGP_* naming
 
-**Git Commit:** `74de155` - "Phase 3.2 COMPLETE: Function/method name refactoring"
+**Git Commit:** `cae7de4` - "Phase 3.2 COMPLETE: Function/method name refactoring (CORRECTED)"
+**Note:** Commit was amended to include all 47 functions (original only had 17)
 
 ### Phase 3.3: Database Schema Column Renaming ✅
 
@@ -106,32 +151,39 @@ idx_gcwebhook1_processed    → idx_pgp_orchestrator_processed
 ### Summary Statistics
 
 **Total Code Impact:**
-- Files modified: 15 Python files
+- Files modified: 25 Python files (increased from 15 after Phase 3.2 correction)
 - SQL scripts created: 2 migration files
-- Total naming corrections: 1,981 changes
-- Services affected: 8 out of 17 PGP_v1 services
+- Total naming corrections: 2,027 changes (increased from 1,981 after Phase 3.2 correction)
+- Services affected: 9 out of 17 PGP_v1 services (added SPLIT services)
 
 **Git History:**
 ```bash
 6b08e5d - Phase 3.1 COMPLETE: Internal variable name refactoring
-74de155 - Phase 3.2 COMPLETE: Function/method name refactoring
+cae7de4 - Phase 3.2 COMPLETE: Function/method name refactoring (CORRECTED)
 98a206c - Phase 3.3 COMPLETE: Database schema column renaming
 ```
 
+**Phase 3.2 Correction Note:**
+- Original commit (74de155) only renamed 17 functions
+- Discovered 30 missed functions in SPLIT services
+- Commit amended to cae7de4 with all 47 functions
+- Force pushed to maintain clean history
+
 **Branch:** `claude/telepay-refactor-access-check-01VoFVjrTXfd97mAZWvaFTYm`
-**Status:** All changes committed and pushed to remote
+**Status:** All changes committed and pushed to remote (force push required for amended commit)
 
 ### Next Steps
 
 **Deployment Prerequisites:**
 1. ⏳ **Database Migration** - Execute `migrations/003_rename_gcwebhook1_columns.sql` on production database
-2. ⏳ **Service Deployment** - Deploy updated code to 8 affected Cloud Run services:
+2. ⏳ **Service Deployment** - Deploy updated code to 12 affected Cloud Run services:
    - PGP_ORCHESTRATOR_v1
    - PGP_NP_IPN_v1
-   - PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1
    - PGP_ACCUMULATOR_v1
    - PGP_MICROBATCHPROCESSOR_v1
    - PGP_BATCHPROCESSOR_v1
+   - PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1, PGP_HOSTPAY3_v1
+   - PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1 (added after Phase 3.2 correction)
 
 **Verification Tasks:**
 1. ⏳ End-to-end payment flow testing

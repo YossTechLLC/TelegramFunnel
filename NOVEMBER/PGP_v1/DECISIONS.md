@@ -8,15 +8,18 @@ This document records all significant architectural decisions made during the de
 
 ## Recent Decisions
 
-## 2025-01-15: Phase 3 - Atomic Rename Strategy for Function/Method Refactoring ✅
+## 2025-01-15: Phase 3.2 - Atomic Rename Strategy + Correction ✅
 
 **Decision:** Rename all function definitions and call sites simultaneously in a single atomic commit, rather than using wrapper functions for gradual migration.
 
+**CORRECTION MADE:** Initial implementation only renamed 17 functions, discovered 30 missed functions. Commit was amended to include all 47 functions using git commit --amend and force push.
+
 **Context:**
-- 17 unique functions needed renaming from GC* to PGP_* naming
+- 47 unique functions needed renaming from GC* to PGP_* naming (not 17 as initially scoped)
 - Functions are part of token_manager.py API contracts between services
 - Functions called across multiple services (e.g., `encrypt_gchostpay1_to_gchostpay2_token` called by both HOSTPAY1 and HOSTPAY2)
 - Need to maintain service compatibility during renaming
+- Initial script missed SPLIT1/SPLIT2/SPLIT3 services entirely (24 functions)
 
 **Options Considered:**
 
@@ -52,20 +55,42 @@ This document records all significant architectural decisions made during the de
    - **Rejected because:** Function calls cross service boundaries
 
 **Implementation:**
-- Python script `/tmp/phase_3_2_function_rename.py` performed atomic rename
+- Initial script `/tmp/phase_3_2_function_rename.py` - Only renamed 17 functions (INCOMPLETE)
+- Corrected script `/tmp/phase_3_2_complete_function_rename.py` - Renamed all 47 functions
 - Sorted renames by length (longest first) to avoid partial replacements
 - Regex patterns matched both definitions (`def name(`) and calls (`name(`)
-- Verification: grep confirmed 0 remaining old function names
+- Verification: grep confirmed 0 remaining old function names after correction
 
-**Git Commit:** `74de155` - All 51 changes (17 definitions + 34 call sites) in single commit
+**Missed Functions Breakdown:**
+- SPLIT1/SPLIT2/SPLIT3: 24 inter-split communication functions (ALL missed)
+- ACCUMULATOR: 2 additional decrypt functions (partial miss)
+- HOSTPAY1: 3 retry/response functions (partial miss)
+- MICROBATCH: 1 decrypt function (partial miss)
+
+**Git Commits:**
+- `74de155` - Original incomplete commit (17 functions)
+- `cae7de4` - Amended commit with all 47 functions (30 added)
+- Force push required to update remote history
 
 **Risk Mitigation:**
 - Python syntax validation on all files before commit
-- Rollback plan: `git revert 74de155`
+- Rollback plan: `git revert cae7de4` (or `git revert 74de155` for original)
 - All services tested together before production deployment
 
+**Lessons Learned from Incomplete Implementation:**
+1. **Inadequate Scope Analysis:** Initial script only analyzed ACCUMULATOR, ORCHESTRATOR, HOSTPAY, and MICROBATCH services. Failed to check SPLIT services.
+2. **Insufficient Verification:** grep search only checked files that were modified, not all potential files
+3. **Solution:** Created comprehensive inventory of ALL services before running corrected script
+4. **Prevention:** Always run `grep -r "def .*gc.*("` across ALL service directories, not just expected ones
+
+**Why Correction Was Necessary:**
+- SPLIT services handle critical payment splitting logic
+- Token functions enable secure communication between splits
+- Incomplete renaming would cause runtime errors when SPLIT services call each other
+- All 3 SPLIT services use same token manager functions (24 functions total)
+
 **Related Decisions:**
-- Phase 3.1: Variable rename (similar atomic strategy)
+- Phase 3.1: Variable rename (similar atomic strategy, but properly scoped)
 - Phase 3.3: Database schema (staged strategy due to schema risk)
 
 ---
@@ -275,11 +300,11 @@ content = content.replace(old_var, new_var)
 - ✅ Ready for deployment testing
 
 **Total Impact:**
-- 15 Python files modified
+- 25 Python files modified (increased from 15 after Phase 3.2 correction)
 - 2 SQL migration scripts created
-- 1,981 naming corrections
-- 8 services affected
-- 3 git commits
+- 2,027 naming corrections (increased from 1,981 after Phase 3.2 correction)
+- 9 services affected (increased from 8, added SPLIT services)
+- 3 git commits (1 amended with force push)
 
 **Related Decisions:**
 - Phase 2.6: Comment/documentation naming (prerequisite)
