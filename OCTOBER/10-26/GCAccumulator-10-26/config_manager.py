@@ -1,74 +1,47 @@
 #!/usr/bin/env python
 """
 Configuration Manager for GCAccumulator-10-26 (Payment Accumulation Service).
-Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
+Extends shared ConfigManager with GCAccumulator-specific configuration.
+
+Migration Date: 2025-11-15
+Extends: _shared/config_manager.ConfigManager
 """
-import os
-from google.cloud import secretmanager
-from typing import Optional
+import sys
+
+# Add parent directory to Python path for shared library access
+sys.path.insert(0, '/home/user/TelegramFunnel/OCTOBER/10-26')
+
+from _shared.config_manager import ConfigManager as SharedConfigManager
 
 
-class ConfigManager:
+class ConfigManager(SharedConfigManager):
     """
-    Manages configuration and secrets for the GCAccumulator-10-26 service.
+    GCAccumulator-specific configuration manager.
+    Extends shared ConfigManager with accumulation and threshold payout configuration.
     """
-
-    def __init__(self):
-        """Initialize the ConfigManager."""
-        self.client = secretmanager.SecretManagerServiceClient()
-        print(f"⚙️ [CONFIG] ConfigManager initialized")
-
-    def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
-        """
-        Fetch a secret value from environment variable.
-        Cloud Run automatically injects secret values when using --set-secrets.
-
-        Args:
-            secret_name_env: Environment variable name containing the secret value
-            description: Description for logging purposes
-
-        Returns:
-            Secret value or None if failed
-        """
-        try:
-            # Defensive pattern: handle None, strip whitespace, return None if empty
-            secret_value = (os.getenv(secret_name_env) or '').strip() or None
-            if not secret_value:
-                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
-                return None
-
-            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
-            return secret_value
-
-        except Exception as e:
-            print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
-            return None
 
     def initialize_config(self) -> dict:
         """
         Initialize and return all configuration values for GCAccumulator.
+
+        Extends parent's initialize_config() to add:
+        - Cloud Tasks configuration
+        - GCSplit2 queue and URL (for USDT conversion estimates)
+        - GCSplit3 queue and URL (for ETH→USDT swap creation)
+        - GCHostPay1 queue and URL (for swap execution)
+        - Platform USDT wallet address
+        - Database credentials
 
         Returns:
             Dictionary containing all configuration values
         """
         print(f"⚙️ [CONFIG] Initializing GCAccumulator-10-26 configuration")
 
-        # Fetch secrets from Secret Manager
-        success_url_signing_key = self.fetch_secret(
-            "SUCCESS_URL_SIGNING_KEY",
-            "Success URL signing key (for token verification and encryption)"
-        )
+        # Call parent to get base configuration (SUCCESS_URL_SIGNING_KEY)
+        config = super().initialize_config()
 
-        # Get Cloud Tasks configuration from Secret Manager
-        cloud_tasks_project_id = self.fetch_secret(
-            "CLOUD_TASKS_PROJECT_ID",
-            "Cloud Tasks project ID"
-        )
-
-        cloud_tasks_location = self.fetch_secret(
-            "CLOUD_TASKS_LOCATION",
-            "Cloud Tasks location/region"
-        )
+        # Fetch Cloud Tasks configuration using shared method
+        cloud_tasks_config = self.fetch_common_cloud_tasks_config()
 
         # GCSplit2 configuration (for USDT conversion estimates)
         gcsplit2_queue = self.fetch_secret(
@@ -103,52 +76,28 @@ class ConfigManager:
             "GCHostPay1 service URL"
         )
 
-        # Host wallet configuration
-        host_wallet_usdt_address = self.fetch_secret(
-            "HOST_WALLET_USDT_ADDRESS",
-            "Host USDT wallet address"
+        # Platform wallet address
+        platform_usdt_wallet_address = self.fetch_secret(
+            "PLATFORM_USDT_WALLET_ADDRESS",
+            "Platform USDT wallet address"
         )
 
-        # Fetch database configuration from Secret Manager
-        cloud_sql_connection_name = self.fetch_secret(
-            "CLOUD_SQL_CONNECTION_NAME",
-            "Cloud SQL instance connection name"
-        )
-
-        database_name = self.fetch_secret(
-            "DATABASE_NAME_SECRET",
-            "Database name"
-        )
-
-        database_user = self.fetch_secret(
-            "DATABASE_USER_SECRET",
-            "Database user"
-        )
-
-        database_password = self.fetch_secret(
-            "DATABASE_PASSWORD_SECRET",
-            "Database password"
-        )
-
-        # TP fee configuration (for fee calculation)
-        tp_flat_fee = self.fetch_secret(
-            "TP_FLAT_FEE",
-            "TP flat fee percentage"
-        ) or "3"  # Default 3%
+        # Fetch database credentials using shared method
+        db_config = self.fetch_common_database_config()
 
         # Validate critical configurations
-        if not success_url_signing_key:
-            print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
-        if not cloud_tasks_project_id or not cloud_tasks_location:
+        if not cloud_tasks_config['cloud_tasks_project_id'] or not cloud_tasks_config['cloud_tasks_location']:
             print(f"⚠️ [CONFIG] Warning: Cloud Tasks configuration incomplete")
+        if not platform_usdt_wallet_address:
+            print(f"⚠️ [CONFIG] Warning: PLATFORM_USDT_WALLET_ADDRESS not available")
 
-        config = {
-            # Secrets
-            'success_url_signing_key': success_url_signing_key,
-
+        # Merge all configuration
+        config.update({
             # Cloud Tasks configuration
-            'cloud_tasks_project_id': cloud_tasks_project_id,
-            'cloud_tasks_location': cloud_tasks_location,
+            'cloud_tasks_project_id': cloud_tasks_config['cloud_tasks_project_id'],
+            'cloud_tasks_location': cloud_tasks_config['cloud_tasks_location'],
+
+            # Service queues and URLs
             'gcsplit2_queue': gcsplit2_queue,
             'gcsplit2_url': gcsplit2_url,
             'gcsplit3_queue': gcsplit3_queue,
@@ -156,18 +105,15 @@ class ConfigManager:
             'gchostpay1_queue': gchostpay1_queue,
             'gchostpay1_url': gchostpay1_url,
 
-            # Wallet configuration
-            'host_wallet_usdt_address': host_wallet_usdt_address,
+            # Platform configuration
+            'platform_usdt_wallet_address': platform_usdt_wallet_address,
 
-            # Database configuration (all from Secret Manager)
-            'instance_connection_name': cloud_sql_connection_name,
-            'db_name': database_name,
-            'db_user': database_user,
-            'db_password': database_password,
-
-            # Fee configuration
-            'tp_flat_fee': tp_flat_fee
-        }
+            # Database configuration
+            'instance_connection_name': db_config['instance_connection_name'],
+            'db_name': db_config['db_name'],
+            'db_user': db_config['db_user'],
+            'db_password': db_config['db_password']
+        })
 
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
@@ -180,11 +126,7 @@ class ConfigManager:
         print(f"   GCSplit3 URL: {'✅' if config['gcsplit3_url'] else '❌'}")
         print(f"   GCHostPay1 Queue: {'✅' if config['gchostpay1_queue'] else '❌'}")
         print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
-        print(f"   Host USDT Wallet: {'✅' if config['host_wallet_usdt_address'] else '❌'}")
-        print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
-        print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
-        print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")
-        print(f"   DATABASE_PASSWORD_SECRET: {'✅' if config['db_password'] else '❌'}")
-        print(f"   TP_FLAT_FEE: {config['tp_flat_fee']}%")
+        print(f"   Platform USDT Wallet: {'✅' if config['platform_usdt_wallet_address'] else '❌'}")
+        print(f"   Database: {'✅' if all([config['instance_connection_name'], config['db_name'], config['db_user'], config['db_password']]) else '❌'}")
 
         return config

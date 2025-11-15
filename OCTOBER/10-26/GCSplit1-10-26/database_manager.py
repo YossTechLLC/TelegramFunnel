@@ -2,68 +2,40 @@
 """
 Database Manager for GCSplit1-10-26 (Orchestrator Service).
 Handles database operations for split_payout_request and split_payout_que tables.
-Uses Google Cloud SQL Connector.
+Extends shared BaseDatabaseManager with service-specific operations.
+
+Migration Date: 2025-11-15
+Extends: _shared/database_manager_base.BaseDatabaseManager
 """
+import sys
 import random
 import string
-from google.cloud.sql.connector import Connector
 from typing import Optional, Dict, Any
-from contextlib import contextmanager
+
+# Add parent directory to Python path for shared library access
+sys.path.insert(0, '/home/user/TelegramFunnel/OCTOBER/10-26')
+
+from _shared.database_manager_base import BaseDatabaseManager
 
 
-class DatabaseManager:
+class DatabaseManager(BaseDatabaseManager):
     """
-    Manages database connections and operations for GCSplit1-10-26.
-    Handles split_payout_request and split_payout_que tables.
+    GCSplit1-specific database manager.
+    Extends BaseDatabaseManager with split_payout_request and split_payout_que operations.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str):
         """
-        Initialize DatabaseManager with configuration.
+        Initialize DatabaseManager with database credentials.
 
         Args:
-            config: Configuration dictionary from ConfigManager
+            instance_connection_name: Cloud SQL instance connection name
+            db_name: Database name
+            db_user: Database username
+            db_password: Database password
         """
-        self.instance_connection_name = config.get('instance_connection_name')
-        self.db_name = config.get('db_name')
-        self.db_user = config.get('db_user')
-        self.db_password = config.get('db_password')
-        self.connector = Connector()
-
-        # Validate credentials
-        if not all([self.instance_connection_name, self.db_name, self.db_user, self.db_password]):
-            print(f"❌ [DATABASE] Missing required credentials")
-            print(f"   Instance: {'✅' if self.instance_connection_name else '❌'}")
-            print(f"   DB Name: {'✅' if self.db_name else '❌'}")
-            print(f"   DB User: {'✅' if self.db_user else '❌'}")
-            print(f"   DB Password: {'✅' if self.db_password else '❌'}")
-            raise RuntimeError("Database credentials incomplete")
-
-        print(f"🔗 [DATABASE] DatabaseManager initialized")
-        print(f"☁️ [DATABASE] Instance: {self.instance_connection_name}")
-        print(f"📊 [DATABASE] Database: {self.db_name}")
-
-    def get_database_connection(self):
-        """
-        Create and return a database connection using Cloud SQL Connector.
-
-        Returns:
-            pg8000 connection object
-        """
-        try:
-            connection = self.connector.connect(
-                self.instance_connection_name,
-                "pg8000",
-                user=self.db_user,
-                password=self.db_password,
-                db=self.db_name
-            )
-            print(f"✅ [DATABASE] Connection established")
-            return connection
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Connection error: {e}")
-            raise
+        # Call parent constructor
+        super().__init__(instance_connection_name, db_name, db_user, db_password)
 
     def generate_unique_id(self) -> str:
         """

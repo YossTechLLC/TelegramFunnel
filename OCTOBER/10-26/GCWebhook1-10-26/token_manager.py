@@ -2,7 +2,12 @@
 """
 Token Manager for GCWebhook1-10-26 (Payment Processor Service).
 Handles token decryption from NOWPayments and encryption for GCWebhook2 and GCSplit1.
+Extends shared BaseTokenManager with service-specific token formats.
+
+Migration Date: 2025-11-15
+Extends: _shared/token_manager_base.BaseTokenManager
 """
+import sys
 import base64
 import hmac
 import hashlib
@@ -10,21 +15,17 @@ import struct
 import time
 from typing import Tuple, Dict, Any, Optional
 
+# Add parent directory to Python path for shared library access
+sys.path.insert(0, '/home/user/TelegramFunnel/OCTOBER/10-26')
 
-class TokenManager:
+from _shared.token_manager_base import BaseTokenManager
+
+
+class TokenManager(BaseTokenManager):
     """
-    Manages token encryption and decryption for GCWebhook1-10-26.
+    GCWebhook1-specific token manager.
+    Extends BaseTokenManager with NOWPayments token format decryption and GCWebhook2 encryption.
     """
-
-    def __init__(self, signing_key: str):
-        """
-        Initialize the TokenManager.
-
-        Args:
-            signing_key: SUCCESS_URL_SIGNING_KEY for token verification and encryption
-        """
-        self.signing_key = signing_key
-        print(f"🔐 [TOKEN] TokenManager initialized")
 
     def decode_and_verify_token(self, token: str) -> Tuple[int, int, str, str, str, int, str]:
         """
@@ -129,10 +130,8 @@ class TokenManager:
         print(f"🏦 [TOKEN] Wallet: {wallet_address}")
         print(f"🌐 [TOKEN] Currency: {payout_currency}, Network: {payout_network}")
 
-        # Verify truncated signature
-        expected_full_sig = hmac.new(self.signing_key.encode(), data, hashlib.sha256).digest()
-        expected_sig = expected_full_sig[:16]  # Compare only first 16 bytes
-        if not hmac.compare_digest(sig, expected_sig):
+        # Verify truncated signature using parent's method
+        if not self._verify_hmac_signature(data, sig):
             raise ValueError("Signature mismatch")
 
         # If IDs are "negative" in Telegram, fix here (48-bit range):
@@ -254,9 +253,8 @@ class TokenManager:
             packed_data.append(len(network_bytes))
             packed_data.extend(network_bytes)
 
-            # Calculate truncated HMAC signature
-            full_signature = hmac.new(self.signing_key.encode(), bytes(packed_data), hashlib.sha256).digest()
-            truncated_signature = full_signature[:16]
+            # Calculate truncated HMAC signature using parent's method
+            truncated_signature = self._generate_hmac_signature(bytes(packed_data))
 
             # Combine data + signature
             final_data = bytes(packed_data) + truncated_signature

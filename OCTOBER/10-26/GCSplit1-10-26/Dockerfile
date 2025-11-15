@@ -24,6 +24,12 @@ WORKDIR /app
 # Copy Python dependencies from builder
 COPY --from=builder /root/.local /root/.local
 
+# ===== MIGRATION: Copy shared library =====
+# Copy shared library BEFORE service files
+# This allows the service files to import from _shared/
+COPY _shared/ /app/_shared/
+
+# ===== Service-specific files =====
 # Copy application code
 COPY tps1-10-26.py .
 COPY config_manager.py .

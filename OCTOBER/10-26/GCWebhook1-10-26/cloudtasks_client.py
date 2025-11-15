@@ -2,7 +2,12 @@
 """
 Cloud Tasks Client for GCWebhook1-10-26 (Payment Processor Service).
 Handles creation and dispatch of Cloud Tasks to GCWebhook2, GCSplit1, and GCAccumulator.
+Extends shared CloudTasksClient with webhook signature support.
+
+Migration Date: 2025-11-15
+Extends: _shared/cloudtasks_client.CloudTasksClient
 """
+import sys
 import json
 import time
 import hmac
@@ -12,91 +17,34 @@ from typing import Optional
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 
+# Add parent directory to Python path for shared library access
+sys.path.insert(0, '/home/user/TelegramFunnel/OCTOBER/10-26')
 
-class CloudTasksClient:
+from _shared.cloudtasks_client import CloudTasksClient as SharedCloudTasksClient
+
+
+class CloudTasksClient(SharedCloudTasksClient):
     """
-    Client for creating and dispatching Google Cloud Tasks.
+    GCWebhook1-specific Cloud Tasks client.
+    Extends shared CloudTasksClient with webhook signature support for GCSplit1.
     """
 
     def __init__(self, project_id: str, location: str, signing_key: str):
         """
-        Initialize Cloud Tasks client.
+        Initialize Cloud Tasks client with webhook signing support.
 
         Args:
             project_id: GCP project ID
             location: Cloud region (e.g., "us-central1")
             signing_key: SUCCESS_URL_SIGNING_KEY for webhook signature
         """
-        if not project_id or not location:
-            raise ValueError("Project ID and location are required")
+        # Call parent constructor
+        super().__init__(project_id, location)
 
-        self.project_id = project_id
-        self.location = location
+        # Store signing key for webhook signatures
         self.signing_key = signing_key
-        self.client = tasks_v2.CloudTasksClient()
 
-        print(f"☁️ [CLOUD_TASKS] Initialized client")
-        print(f"📍 [CLOUD_TASKS] Project: {project_id}, Location: {location}")
-
-    def create_task(
-        self,
-        queue_name: str,
-        target_url: str,
-        payload: dict,
-        schedule_delay_seconds: int = 0
-    ) -> Optional[str]:
-        """
-        Create and enqueue a Cloud Task.
-
-        Args:
-            queue_name: Name of the Cloud Tasks queue
-            target_url: Target service URL (full https:// URL)
-            payload: JSON payload to send (will be converted to bytes)
-            schedule_delay_seconds: Optional delay before task execution (default 0)
-
-        Returns:
-            Task name if successful, None if failed
-        """
-        try:
-            # Construct the fully qualified queue name
-            parent = self.client.queue_path(self.project_id, self.location, queue_name)
-
-            print(f"🚀 [CLOUD_TASKS] Creating task for queue: {queue_name}")
-            print(f"🎯 [CLOUD_TASKS] Target URL: {target_url}")
-            print(f"📦 [CLOUD_TASKS] Payload size: {len(json.dumps(payload))} bytes")
-
-            # Construct the task
-            task = {
-                "http_request": {
-                    "http_method": tasks_v2.HttpMethod.POST,
-                    "url": target_url,
-                    "headers": {
-                        "Content-Type": "application/json"
-                    },
-                    "body": json.dumps(payload).encode()
-                }
-            }
-
-            # Add schedule time if delay is specified
-            if schedule_delay_seconds > 0:
-                d = datetime.datetime.utcnow() + datetime.timedelta(seconds=schedule_delay_seconds)
-                timestamp = timestamp_pb2.Timestamp()
-                timestamp.FromDatetime(d)
-                task["schedule_time"] = timestamp
-                print(f"⏰ [CLOUD_TASKS] Scheduled delay: {schedule_delay_seconds}s")
-
-            # Create the task
-            response = self.client.create_task(request={"parent": parent, "task": task})
-
-            task_name = response.name
-            print(f"✅ [CLOUD_TASKS] Task created successfully")
-            print(f"🆔 [CLOUD_TASKS] Task name: {task_name}")
-
-            return task_name
-
-        except Exception as e:
-            print(f"❌ [CLOUD_TASKS] Error creating task: {e}")
-            return None
+    # Inherits create_task() from parent SharedCloudTasksClient
 
     def enqueue_gcwebhook2_telegram_invite(
         self,

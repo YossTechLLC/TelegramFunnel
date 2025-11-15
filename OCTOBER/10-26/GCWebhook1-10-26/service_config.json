@@ -1,0 +1,177 @@
+{
+  "service_name": "GCWebhook1-10-26",
+  "description": "Payment processor service that receives IPN callbacks from NowPayments, validates payments, and routes to either instant payout (GCSplit1) or threshold accumulation (GCAccumulator) based on client payout strategy",
+  "migration_date": "2025-11-15",
+  "migration_phase": "Phase 3",
+  "main_file": "tph1-10-26.py",
+  "cloud_run_port": 8080,
+
+  "shared_modules_used": [
+    "config_manager.ConfigManager (extended)",
+    "database_manager_base.BaseDatabaseManager (extended)",
+    "token_manager_base.BaseTokenManager (extended)",
+    "cloudtasks_client.CloudTasksClient (extended with webhook signature support)"
+  ],
+
+  "service_specific_features": {
+    "token_decryption": "Decrypts NOWPayments success_url tokens (48-bit IDs, variable-length strings)",
+    "payout_routing": "Routes payments to instant (GCSplit1) or threshold (GCAccumulator) based on client strategy",
+    "subscription_recording": "Records user subscriptions in private_channel_users_database with expiration dates",
+    "telegram_invite_dispatch": "Dispatches encrypted tokens to GCWebhook2 for Telegram invite sending",
+    "webhook_signatures": "Adds HMAC-SHA256 signatures to GCSplit1 webhook tasks"
+  },
+
+  "required_secrets": [
+    {
+      "name": "SUCCESS_URL_SIGNING_KEY",
+      "description": "Shared signing key for token encryption/decryption and webhook signatures",
+      "shared": true
+    },
+    {
+      "name": "CLOUD_TASKS_PROJECT_ID",
+      "description": "GCP project ID for Cloud Tasks",
+      "shared": true
+    },
+    {
+      "name": "CLOUD_TASKS_LOCATION",
+      "description": "Cloud region for Cloud Tasks (e.g., us-central1)",
+      "shared": true
+    },
+    {
+      "name": "GCWEBHOOK2_QUEUE",
+      "description": "Cloud Tasks queue name for GCWebhook2 (Telegram invite sender)",
+      "shared": false
+    },
+    {
+      "name": "GCWEBHOOK2_URL",
+      "description": "GCWebhook2 service URL (Cloud Run endpoint)",
+      "shared": false
+    },
+    {
+      "name": "GCSPLIT1_QUEUE",
+      "description": "Cloud Tasks queue name for GCSplit1 (instant payout)",
+      "shared": false
+    },
+    {
+      "name": "GCSPLIT1_URL",
+      "description": "GCSplit1 service URL (Cloud Run endpoint)",
+      "shared": false
+    },
+    {
+      "name": "GCACCUMULATOR_QUEUE",
+      "description": "Cloud Tasks queue name for GCAccumulator (threshold payout)",
+      "shared": false
+    },
+    {
+      "name": "GCACCUMULATOR_URL",
+      "description": "GCAccumulator service URL (Cloud Run endpoint)",
+      "shared": false
+    },
+    {
+      "name": "CLOUD_SQL_CONNECTION_NAME",
+      "description": "Cloud SQL instance connection name",
+      "shared": true
+    },
+    {
+      "name": "DATABASE_NAME_SECRET",
+      "description": "Database name (telepaydb)",
+      "shared": true
+    },
+    {
+      "name": "DATABASE_USER_SECRET",
+      "description": "Database username",
+      "shared": true
+    },
+    {
+      "name": "DATABASE_PASSWORD_SECRET",
+      "description": "Database password",
+      "shared": true
+    }
+  ],
+
+  "database_tables_accessed": [
+    {
+      "table": "private_channel_users_database",
+      "operations": ["INSERT", "UPDATE"],
+      "description": "Records user subscriptions with expiration dates and NowPayments payment_id"
+    },
+    {
+      "table": "main_clients_database",
+      "operations": ["SELECT"],
+      "description": "Queries payout_strategy and payout_threshold_usd for client routing"
+    }
+  ],
+
+  "incoming_dependencies": [
+    {
+      "source": "NowPayments",
+      "type": "IPN Callback",
+      "description": "Receives success_url callback with encrypted token after payment confirmation"
+    }
+  ],
+
+  "outgoing_dependencies": [
+    {
+      "target": "GCWebhook2-10-26",
+      "type": "Cloud Tasks",
+      "queue": "GCWEBHOOK2_QUEUE",
+      "description": "Dispatches encrypted token for Telegram invite sending"
+    },
+    {
+      "target": "GCSplit1-10-26",
+      "type": "Cloud Tasks (with webhook signature)",
+      "queue": "GCSPLIT1_QUEUE",
+      "description": "Routes instant payout payments (payout_strategy='instant')"
+    },
+    {
+      "target": "GCAccumulator-10-26",
+      "type": "Cloud Tasks",
+      "queue": "GCACCUMULATOR_QUEUE",
+      "description": "Routes threshold accumulation payments (payout_strategy='threshold')"
+    }
+  ],
+
+  "deployment": {
+    "cloud_run_region": "us-central1",
+    "min_instances": 0,
+    "max_instances": 100,
+    "cpu": "1",
+    "memory": "512Mi",
+    "timeout": "300s",
+    "concurrency": 80,
+    "ingress": "all",
+    "allow_unauthenticated": true
+  },
+
+  "testing_checklist": [
+    "✅ Token decryption from NowPayments (48-bit IDs, variable-length strings)",
+    "✅ Signature verification using BaseTokenManager._verify_hmac_signature()",
+    "✅ Subscription recording in private_channel_users_database",
+    "✅ Payout strategy routing (instant vs threshold)",
+    "✅ GCWebhook2 task creation with encrypted token",
+    "✅ GCSplit1 task creation with webhook signature",
+    "✅ GCAccumulator task creation with NowPayments IPN data",
+    "✅ Database connection via BaseDatabaseManager.get_database_connection()",
+    "✅ Config loading via ConfigManager.initialize_config()",
+    "✅ Cloud Tasks dispatch via CloudTasksClient (extended)"
+  ],
+
+  "migration_notes": {
+    "code_reduction": {
+      "config_manager": "169 → 121 lines (48 lines removed, 28% reduction)",
+      "database_manager": "359 → 266 lines (93 lines removed, 26% reduction)",
+      "token_manager": "273 → 269 lines (4 lines removed, service-specific logic retained)",
+      "cloudtasks_client": "299 → 255 lines (44 lines removed, 15% reduction)",
+      "total_reduction": "~189 lines of duplicate code eliminated"
+    },
+    "service_specific_preserved": [
+      "NOWPayments token format (48-bit user_id/channel_id, variable-length strings)",
+      "Payout strategy routing logic (instant vs threshold)",
+      "Webhook signature generation for GCSplit1",
+      "Subscription recording with expiration calculation",
+      "NowPayments IPN data forwarding to GCAccumulator"
+    ],
+    "docker_changes": "Added COPY _shared/ /app/_shared/ directive before service files",
+    "deployment_status": "Code migrated - NOT DEPLOYED (per user instruction)"
+  }
+}

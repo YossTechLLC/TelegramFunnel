@@ -25,12 +25,18 @@ WORKDIR /app
 # Copy Python dependencies from builder
 COPY --from=builder /root/.local /root/.local
 
+# ===== MIGRATION: Copy shared library =====
+# Copy shared library BEFORE service files
+# This allows the service files to import from _shared/
+COPY _shared/ /app/_shared/
+
+# ===== Service-specific files =====
 # Copy application code
 COPY tps2-10-26.py .
 COPY config_manager.py .
 COPY token_manager.py .
 COPY cloudtasks_client.py .
-COPY changenow_client.py .
+# NOTE: changenow_client.py is now imported from _shared/
 COPY database_manager.py .
 
 # Set environment variables
