@@ -140,10 +140,13 @@ def execute_broadcasts():
 
     try:
         # Get optional source from request body
-        data = request.get_json() or {}
+        # Use force=True to handle Content-Type issues (proxies/gateways)
+        # Use silent=True to return None instead of raising exceptions on parse errors
+        data = request.get_json(force=True, silent=True) or {}
         source = data.get('source', 'unknown')
 
         logger.info(f"🎯 Broadcast execution triggered by: {source}")
+        logger.debug(f"📦 Request data: {data}")
 
         # 1. Get all broadcasts due for sending
         logger.info("📋 Fetching due broadcasts...")

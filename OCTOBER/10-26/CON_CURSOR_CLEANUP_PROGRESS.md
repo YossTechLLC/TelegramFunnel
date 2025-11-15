@@ -93,10 +93,37 @@ with engine.connect() as conn:
 
 **Deployment**:
 - ✅ Service deployed to Cloud Run
-- ✅ Revision: `gcbroadcastscheduler-10-26-00013-snr`
+- ✅ Revision: `gcbroadcastscheduler-10-26-00019-nzk` (FINAL - ALL VARIABLES CORRECT)
 - ✅ Traffic: 100% to new revision
 - ✅ Health checks: PASSED
-- ✅ No errors in logs
+- ✅ No errors or warnings in logs
+
+**Environment Variables** (COMPLETE & CORRECTED - 10 Total):
+```bash
+# Bot Configuration (2)
+BOT_TOKEN_SECRET=projects/telepay-459221/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest
+BOT_USERNAME_SECRET=projects/telepay-459221/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+
+# Authentication (1)
+JWT_SECRET_KEY_SECRET=projects/telepay-459221/secrets/JWT_SECRET_KEY/versions/latest
+
+# Database Configuration (5)
+DATABASE_HOST_SECRET=projects/telepay-459221/secrets/DATABASE_HOST_SECRET/versions/latest
+DATABASE_NAME_SECRET=projects/telepay-459221/secrets/DATABASE_NAME_SECRET/versions/latest
+DATABASE_USER_SECRET=projects/telepay-459221/secrets/DATABASE_USER_SECRET/versions/latest
+DATABASE_PASSWORD_SECRET=projects/telepay-459221/secrets/DATABASE_PASSWORD_SECRET/versions/latest
+CLOUD_SQL_CONNECTION_NAME_SECRET=projects/telepay-459221/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest
+
+# Broadcast Intervals (2)
+BROADCAST_AUTO_INTERVAL_SECRET=projects/telepay-459221/secrets/BROADCAST_AUTO_INTERVAL/versions/latest
+BROADCAST_MANUAL_INTERVAL_SECRET=projects/telepay-459221/secrets/BROADCAST_MANUAL_INTERVAL/versions/latest
+```
+
+**Critical Fixes Applied**:
+1. **BOT_USERNAME_SECRET**: Initially pointed to wrong secret → **CORRECTED** to `TELEGRAM_BOT_USERNAME`
+2. **BROADCAST_AUTO_INTERVAL_SECRET**: Missing from initial deployment → **ADDED**
+3. **BROADCAST_MANUAL_INTERVAL_SECRET**: Missing from initial deployment → **ADDED**
+4. All environment variables verified from `config_manager.py` and cross-referenced with `SECRET_CONFIG.md`
 
 **Verification**:
 - ✅ Service responding correctly
@@ -104,13 +131,18 @@ with engine.connect() as conn:
 - ✅ Broadcast execution working
 - ✅ Database operations successful
 - ✅ Message tracking functional
+- ✅ Bot username loaded: @PayGatePrime_bot
+- ✅ Bot token loaded: 46 chars
+- ✅ JWT authentication initialized
 
 **Log Evidence**:
 ```
-2025-11-14 23:25:01 - database_manager - INFO - 📋 Found 0 broadcasts due for sending
-2025-11-14 23:25:01 - database_manager - INFO - 🔍 [DEBUG] Column names: ['id', 'client_id', ...]
-2025-11-14 23:25:01 - main - INFO - ✅ No broadcasts due at this time
-2025-11-14 23:25:01 - main - INFO - 📮 POST /api/broadcast/execute -> 200
+2025-11-14 23:42:18 - config_manager - INFO - 🤖 Bot token loaded (length: 46)
+2025-11-14 23:42:18 - config_manager - INFO - 🤖 Bot username: @PayGatePrime_bot
+2025-11-14 23:42:18 - config_manager - INFO - 🔑 JWT secret key loaded (length: 64)
+2025-11-14 23:42:18 - main - INFO - ✅ JWT authentication initialized
+2025-11-14 23:42:19 - telegram_client - INFO - 🤖 TelegramClient initialized for @PayGatePrime_bot
+2025-11-14 23:42:19 - main - INFO - ✅ All components initialized successfully
 ```
 
 ---
