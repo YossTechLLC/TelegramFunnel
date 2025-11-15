@@ -1,20 +1,21 @@
 #!/usr/bin/env python
 """
-Database Manager for GCSplit1-10-26 (Orchestrator Service).
+Database Manager for PGP_SPLIT1_v1 (Orchestrator Service).
 Handles database operations for split_payout_request and split_payout_que tables.
 Uses Google Cloud SQL Connector.
 """
 import random
 import string
-from google.cloud.sql.connector import Connector
 from typing import Optional, Dict, Any
 from contextlib import contextmanager
+from PGP_COMMON.database import BaseDatabaseManager
 
 
-class DatabaseManager:
+class DatabaseManager(BaseDatabaseManager):
     """
-    Manages database connections and operations for GCSplit1-10-26.
+    Manages database connections and operations for PGP_SPLIT1_v1.
     Handles split_payout_request and split_payout_que tables.
+    Inherits common methods from BaseDatabaseManager.
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -24,46 +25,36 @@ class DatabaseManager:
         Args:
             config: Configuration dictionary from ConfigManager
         """
-        self.instance_connection_name = config.get('instance_connection_name')
-        self.db_name = config.get('db_name')
-        self.db_user = config.get('db_user')
-        self.db_password = config.get('db_password')
-        self.connector = Connector()
+        instance_connection_name = config.get('instance_connection_name')
+        db_name = config.get('db_name')
+        db_user = config.get('db_user')
+        db_password = config.get('db_password')
 
-        # Validate credentials
-        if not all([self.instance_connection_name, self.db_name, self.db_user, self.db_password]):
+        # Validate credentials before calling super
+        if not all([instance_connection_name, db_name, db_user, db_password]):
             print(f"❌ [DATABASE] Missing required credentials")
-            print(f"   Instance: {'✅' if self.instance_connection_name else '❌'}")
-            print(f"   DB Name: {'✅' if self.db_name else '❌'}")
-            print(f"   DB User: {'✅' if self.db_user else '❌'}")
-            print(f"   DB Password: {'✅' if self.db_password else '❌'}")
+            print(f"   Instance: {'✅' if instance_connection_name else '❌'}")
+            print(f"   DB Name: {'✅' if db_name else '❌'}")
+            print(f"   DB User: {'✅' if db_user else '❌'}")
+            print(f"   DB Password: {'✅' if db_password else '❌'}")
             raise RuntimeError("Database credentials incomplete")
 
-        print(f"🔗 [DATABASE] DatabaseManager initialized")
-        print(f"☁️ [DATABASE] Instance: {self.instance_connection_name}")
-        print(f"📊 [DATABASE] Database: {self.db_name}")
+        super().__init__(
+            instance_connection_name=instance_connection_name,
+            db_name=db_name,
+            db_user=db_user,
+            db_password=db_password,
+            service_name="PGP_SPLIT1_v1"
+        )
 
     def get_database_connection(self):
         """
-        Create and return a database connection using Cloud SQL Connector.
+        Alias for get_connection() to maintain backward compatibility.
 
         Returns:
             pg8000 connection object
         """
-        try:
-            connection = self.connector.connect(
-                self.instance_connection_name,
-                "pg8000",
-                user=self.db_user,
-                password=self.db_password,
-                db=self.db_name
-            )
-            print(f"✅ [DATABASE] Connection established")
-            return connection
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Connection error: {e}")
-            raise
+        return self.get_connection()
 
     def generate_unique_id(self) -> str:
         """

@@ -3,69 +3,18 @@
 Configuration Manager for PGP_SPLIT1_v1 (Orchestrator Service).
 Handles fetching configuration values from Google Cloud Secret Manager and environment variables.
 """
-import os
-from google.cloud import secretmanager
-from typing import Optional
+from PGP_COMMON.config import BaseConfigManager
 
 
-class ConfigManager:
+class ConfigManager(BaseConfigManager):
     """
     Manages configuration and secrets for the PGP_SPLIT1_v1 service.
+    Inherits common methods from BaseConfigManager.
     """
 
     def __init__(self):
         """Initialize the ConfigManager."""
-        self.client = secretmanager.SecretManagerServiceClient()
-        print(f"⚙️ [CONFIG] ConfigManager initialized")
-
-    def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
-        """
-        Fetch a secret value from environment variable.
-        Cloud Run automatically injects secret values when using --set-secrets.
-
-        Args:
-            secret_name_env: Environment variable name containing the secret value
-            description: Description for logging purposes
-
-        Returns:
-            Secret value or None if failed
-        """
-        try:
-            # Defensive pattern: handle None, strip whitespace, return None if empty
-            secret_value = (os.getenv(secret_name_env) or '').strip() or None
-            if not secret_value:
-                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
-                return None
-
-            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
-            return secret_value
-
-        except Exception as e:
-            print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
-            return None
-
-    def get_env_var(self, var_name: str, description: str = "", required: bool = True) -> Optional[str]:
-        """
-        Get environment variable value.
-
-        Args:
-            var_name: Environment variable name
-            description: Description for logging
-            required: Whether the variable is required
-
-        Returns:
-            Environment variable value or None if not found
-        """
-        value = os.getenv(var_name)
-        if not value:
-            if required:
-                print(f"❌ [CONFIG] Required environment variable {var_name} is not set or empty")
-            else:
-                print(f"⚠️ [CONFIG] Optional environment variable {var_name} is not set or empty")
-            return None
-
-        print(f"✅ [CONFIG] {description or var_name}: {value[:50]}..." if len(value) > 50 else f"✅ [CONFIG] {description or var_name}: {value}")
-        return value
+        super().__init__(service_name="PGP_SPLIT1_v1")
 
     def initialize_config(self) -> dict:
         """
@@ -76,7 +25,11 @@ class ConfigManager:
         """
         print(f"⚙️ [CONFIG] Initializing PGP_SPLIT1_v1 configuration")
 
-        # Fetch secrets from Secret Manager
+        # Use base methods to fetch common configurations
+        ct_config = self.fetch_cloud_tasks_config()
+        db_config = self.fetch_database_config()
+
+        # Fetch service-specific secrets
         success_url_signing_key = self.fetch_secret(
             "SUCCESS_URL_SIGNING_KEY",
             "Success URL signing key (for webhook verification and token encryption)"
@@ -95,17 +48,6 @@ class ConfigManager:
         pgp_hostpay1_url = self.fetch_secret(
             "PGP_HOSTPAY1_URL",
             "PGP HostPay1 webhook URL"
-        )
-
-        # Get Cloud Tasks configuration from Secret Manager
-        cloud_tasks_project_id = self.fetch_secret(
-            "CLOUD_TASKS_PROJECT_ID",
-            "Cloud Tasks project ID"
-        )
-
-        cloud_tasks_location = self.fetch_secret(
-            "CLOUD_TASKS_LOCATION",
-            "Cloud Tasks location/region"
         )
 
         pgp_split2_queue = self.fetch_secret(
@@ -133,35 +75,15 @@ class ConfigManager:
             "PGP HostPay trigger queue name"
         )
 
-        # Fetch database configuration from Secret Manager
-        cloud_sql_connection_name = self.fetch_secret(
-            "CLOUD_SQL_CONNECTION_NAME",
-            "Cloud SQL instance connection name"
-        )
-
-        database_name = self.fetch_secret(
-            "DATABASE_NAME_SECRET",
-            "Database name"
-        )
-
-        database_user = self.fetch_secret(
-            "DATABASE_USER_SECRET",
-            "Database user"
-        )
-
-        database_password = self.fetch_secret(
-            "DATABASE_PASSWORD_SECRET",
-            "Database password"
-        )
-
         # Validate critical configurations
         if not success_url_signing_key:
             print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
         if not tp_flat_fee:
             print(f"⚠️ [CONFIG] Warning: TP_FLAT_FEE not available, will default to 3%")
-        if not cloud_tasks_project_id or not cloud_tasks_location:
+        if not ct_config['cloud_tasks_project_id'] or not ct_config['cloud_tasks_location']:
             print(f"⚠️ [CONFIG] Warning: Cloud Tasks configuration incomplete")
 
+        # Combine all configurations
         config = {
             # Secrets
             'success_url_signing_key': success_url_signing_key,
@@ -169,20 +91,18 @@ class ConfigManager:
             'tp_flat_fee': tp_flat_fee,
             'pgp_hostpay1_url': pgp_hostpay1_url,
 
-            # Cloud Tasks configuration
-            'cloud_tasks_project_id': cloud_tasks_project_id,
-            'cloud_tasks_location': cloud_tasks_location,
+            # Cloud Tasks configuration (from base method)
+            **ct_config,
+
+            # Service-specific queues and URLs
             'pgp_split2_queue': pgp_split2_queue,
             'pgp_split2_url': pgp_split2_url,
             'pgp_split3_queue': pgp_split3_queue,
             'pgp_split3_url': pgp_split3_url,
             'pgp_hostpay_trigger_queue': pgp_hostpay_trigger_queue,
 
-            # Database configuration (all from Secret Manager)
-            'instance_connection_name': cloud_sql_connection_name,
-            'db_name': database_name,
-            'db_user': database_user,
-            'db_password': database_password
+            # Database configuration (from base method)
+            **db_config
         }
 
         # Log configuration status
