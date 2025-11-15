@@ -1,12 +1,90 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Debug Logging Strategy for MessageHandler Investigation** 🔍
+**Last Updated:** 2025-11-14 - **Cross-Chat ConversationHandler Tracking (per_chat=False, per_user=True)** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: Cross-Chat Conversation Tracking for Channel-to-Private Chat Flow ✅
+
+**Decision:** Use `per_chat=False` and `per_user=True` to enable ConversationHandler to track users across different chats
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- Donation flow begins in a **channel** (where donate button is posted)
+- Telegram restriction: **Regular users CANNOT send text messages in channels**
+- Users can only send text messages in **private chat with the bot**
+- Need conversation to continue when user switches from channel to private chat
+
+**Problem:**
+- Default ConversationHandler tracks per `(user_id, chat_id)` tuple
+- Channel chat_id: `-1003377958897`
+- User's private chat_id: `6271402111`
+- When user clicks button in channel, conversation starts in channel context
+- When user types message in private chat, it's a DIFFERENT chat_id
+- ConversationHandler treats it as completely separate conversation
+- MessageHandler never triggers because conversation context doesn't match!
+
+**Solution:**
+```python
+ConversationHandler(
+    entry_points=[...],
+    states={...},
+    fallbacks=[...],
+    per_message=False,  # Still needed for text input (message_id changes)
+    per_chat=False,     # CRITICAL: Don't tie conversation to specific chat
+    per_user=True       # CRITICAL: Track conversation by user_id across ALL chats
+)
+```
+
+**How It Works:**
+1. **per_chat=False**: Removes chat_id from conversation tracking key
+2. **per_user=True**: Uses user_id as the ONLY tracking key
+3. **Result**: Conversation follows the USER, not the chat
+
+**Before Fix:**
+- Conversation key: `(user_id=6271402111, chat_id=-1003377958897)`
+- User switches to private chat (chat_id=6271402111)
+- New key: `(user_id=6271402111, chat_id=6271402111)`
+- Keys don't match → Conversation not found → Handler doesn't trigger
+
+**After Fix:**
+- Conversation key: `(user_id=6271402111)` (chat_id ignored)
+- User switches to private chat
+- Same key: `(user_id=6271402111)`
+- Keys match → Conversation found → Handler triggers!
+
+**Additional Change:**
+Send message prompt to user's PRIVATE CHAT instead of editing message in channel:
+```python
+# OLD (doesn't work - user can't reply in channel):
+await query.edit_message_text("Enter your message...")
+
+# NEW (works - user receives prompt in private chat):
+await context.bot.send_message(
+    chat_id=user.id,  # Send to user's private chat
+    text="Enter your message..."
+)
+```
+
+**Telegram Best Practices:**
+- From Telegram Bot API docs: "Pressing buttons on inline keyboards doesn't send messages to the chat"
+- Users cannot send regular text messages in channels (admin-only feature)
+- For user input, bot must interact in private chat with user
+- Cross-chat conversation tracking is the correct pattern for channel bots
+
+**Files Modified:**
+- `TelePay10-26/bot/conversations/donation_conversation.py`
+
+**References:**
+- python-telegram-bot docs: ConversationHandler per_user parameter
+- Telegram Bot API: Channel restrictions
+- Context7 MCP: python-telegram-bot best practices
+
+---
 
 ## 2025-11-14: Debug Logging Strategy for Unresolved MessageHandler Issue 🔍
 

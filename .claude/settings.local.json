@@ -127,7 +127,8 @@
       "Bash(gcloud compute ssl-certificates delete:*)",
       "Bash(gcloud compute ssl-certificates:*)",
       "Bash(gcloud compute ssh:*)",
-      "Bash(gcloud compute scp:*)"
+      "Bash(gcloud compute scp:*)",
+      "WebFetch(domain:core.telegram.org)"
     ],
     "deny": [],
     "ask": []

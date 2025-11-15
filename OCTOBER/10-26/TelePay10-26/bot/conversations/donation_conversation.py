@@ -248,17 +248,26 @@ async def handle_message_choice(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif query.data == "donation_add_message":
         # User wants to add a message
-        logger.info(f"💝 [DONATION] User {update.effective_user.id} adding message")
+        user = update.effective_user
+        logger.info(f"💝 [DONATION] User {user.id} adding message")
+        logger.info(f"🔍 [DEBUG] Current chat_id: {query.message.chat.id}")
+        logger.info(f"🔍 [DEBUG] User private chat_id: {user.id}")
         logger.info(f"🔍 [DEBUG] Returning MESSAGE_INPUT state (value: {MESSAGE_INPUT})")
-        logger.info(f"🔍 [DEBUG] ConversationHandler should now accept text messages")
+        logger.info(f"🔍 [DEBUG] ConversationHandler should now accept text messages IN PRIVATE CHAT")
 
-        await query.edit_message_text(
-            "💬 <b>Enter Your Message</b>\n\n"
-            "Please type your message (max 256 characters).\n"
-            "This message will be delivered to the channel owner.\n\n"
-            "💡 <b>Tip:</b> Send /cancel to skip this step",
+        # CRITICAL FIX: Send message to user's PRIVATE CHAT, not channel
+        # Users cannot send text messages in channels - they can only send in private chat with bot
+        await context.bot.send_message(
+            chat_id=user.id,  # Send to USER's private chat with bot
+            text="💬 <b>Enter Your Message</b>\n\n"
+                 "Please type your message here (max 256 characters).\n"
+                 "This message will be delivered to the channel owner with your donation.\n\n"
+                 "💡 <b>Tip:</b> Send /cancel to skip this step",
             parse_mode="HTML"
         )
+
+        # Also acknowledge the button press in the channel
+        await query.answer("✅ Message prompt sent to your private chat with the bot!", show_alert=True)
 
         return MESSAGE_INPUT
 
@@ -518,7 +527,9 @@ def create_donation_conversation_handler() -> ConversationHandler:
         conversation_timeout=300,  # 5 minutes
         name='donation_conversation',
         persistent=False,  # Set to True when adding persistence layer
-        per_message=False  # CRITICAL: Track conversation per user, not per message
+        per_message=False,  # Track conversation per user, not per message
+        per_chat=False,  # CRITICAL: Allow conversation to continue across different chats (channel → private)
+        per_user=True  # CRITICAL: Track conversation per user ID regardless of which chat they're in
     )
 
 
