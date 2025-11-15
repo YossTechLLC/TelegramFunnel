@@ -19,6 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
+# ===== MIGRATION: Copy shared library =====
+# Copy shared library BEFORE service files
+# This allows the service files to import from _shared/
+COPY _shared/ /app/_shared/
+
+# ===== Service-specific files =====
 # Copy the app code
 COPY config_manager.py .
 COPY database_manager.py .

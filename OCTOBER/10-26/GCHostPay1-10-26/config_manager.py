@@ -1,79 +1,59 @@
 #!/usr/bin/env python
 """
 Configuration Manager for GCHostPay1-10-26 (Validator & Orchestrator Service).
-Handles fetching configuration values from Google Cloud Secret Manager.
+Extends shared ConfigManager with GCHostPay1-specific configuration.
+
+Migration Date: 2025-11-15
+Extends: _shared/config_manager.ConfigManager
 """
-import os
-from google.cloud import secretmanager
-from typing import Optional
+import sys
+
+# Add parent directory to Python path for shared library access
+sys.path.insert(0, '/home/user/TelegramFunnel/OCTOBER/10-26')
+
+from _shared.config_manager import ConfigManager as SharedConfigManager
 
 
-class ConfigManager:
+class ConfigManager(SharedConfigManager):
     """
-    Manages configuration and secrets for the GCHostPay1-10-26 service.
+    GCHostPay1-specific configuration manager.
+    Extends shared ConfigManager with host payout orchestration configuration.
     """
-
-    def __init__(self):
-        """Initialize the ConfigManager."""
-        self.client = secretmanager.SecretManagerServiceClient()
-        print(f"⚙️ [CONFIG] ConfigManager initialized")
-
-    def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
-        """
-        Fetch a secret value from environment variable.
-        Cloud Run automatically injects secret values when using --set-secrets.
-
-        Args:
-            secret_name_env: Environment variable name containing the secret value
-            description: Description for logging purposes
-
-        Returns:
-            Secret value or None if failed
-        """
-        try:
-            # Defensive pattern: handle None, strip whitespace, return None if empty
-            secret_value = (os.getenv(secret_name_env) or '').strip() or None
-            if not secret_value:
-                print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
-                return None
-
-            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
-            return secret_value
-
-        except Exception as e:
-            print(f"❌ [CONFIG] Error loading {description or secret_name_env}: {e}")
-            return None
 
     def initialize_config(self) -> dict:
         """
         Initialize and return all configuration values for GCHostPay1.
+
+        Extends parent's initialize_config() to add:
+        - TPS HostPay signing key
+        - ChangeNOW API key
+        - Cloud Tasks configuration
+        - GCHostPay2 queue and URL (Status Checker)
+        - GCHostPay3 queue and URL (Payment Executor)
+        - GCHostPay1 response queue (Self retry)
+        - Database credentials
 
         Returns:
             Dictionary containing all configuration values
         """
         print(f"⚙️ [CONFIG] Initializing GCHostPay1-10-26 configuration")
 
-        # Fetch signing keys
+        # Call parent to get base configuration (SUCCESS_URL_SIGNING_KEY)
+        config = super().initialize_config()
+
+        # Fetch GCHostPay1-specific secrets
         tps_hostpay_signing_key = self.fetch_secret(
             "TPS_HOSTPAY_SIGNING_KEY",
             "TPS HostPay signing key (for GCSplit1 → GCHostPay1)"
         )
 
-        success_url_signing_key = self.fetch_secret(
-            "SUCCESS_URL_SIGNING_KEY",
-            "Success URL signing key (for internal GCHostPay communication)"
+        changenow_api_key = self.fetch_secret(
+            "CHANGENOW_API_KEY",
+            "ChangeNow API key"
         )
 
-        # Get Cloud Tasks configuration from Secret Manager
-        cloud_tasks_project_id = self.fetch_secret(
-            "CLOUD_TASKS_PROJECT_ID",
-            "Cloud Tasks project ID"
-        )
-
-        cloud_tasks_location = self.fetch_secret(
-            "CLOUD_TASKS_LOCATION",
-            "Cloud Tasks location/region"
-        )
+        # Fetch Cloud Tasks configuration using shared method
+        cloud_tasks_config = self.fetch_common_cloud_tasks_config()
 
         # Get GCHostPay2 (Status Checker) configuration
         gchostpay2_queue = self.fetch_secret(
@@ -98,105 +78,56 @@ class ConfigManager:
         )
 
         # Get GCHostPay1 (Self) configuration for retry callbacks
-        gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
-            "GCHostPay1 service URL (for self-callbacks)"
-        )
-
         gchostpay1_response_queue = self.fetch_secret(
             "GCHOSTPAY1_RESPONSE_QUEUE",
-            "GCHostPay1 response queue name (for retry callbacks)"
+            "GCHostPay1 response queue name (self retry)"
         )
 
-        # Get ChangeNow API key for transaction status queries
-        changenow_api_key = self.fetch_secret(
-            "CHANGENOW_API_KEY",
-            "ChangeNow API key"
-        )
-
-        # Get GCMicroBatchProcessor configuration (for batch conversion callbacks)
-        microbatch_response_queue = self.fetch_secret(
-            "MICROBATCH_RESPONSE_QUEUE",
-            "MicroBatchProcessor response queue name"
-        )
-
-        microbatch_url = self.fetch_secret(
-            "MICROBATCH_URL",
-            "MicroBatchProcessor service URL"
-        )
-
-        # Fetch database configuration from Secret Manager
-        cloud_sql_connection_name = self.fetch_secret(
-            "CLOUD_SQL_CONNECTION_NAME",
-            "Cloud SQL instance connection name"
-        )
-
-        database_name = self.fetch_secret(
-            "DATABASE_NAME_SECRET",
-            "Database name"
-        )
-
-        database_user = self.fetch_secret(
-            "DATABASE_USER_SECRET",
-            "Database user"
-        )
-
-        database_password = self.fetch_secret(
-            "DATABASE_PASSWORD_SECRET",
-            "Database password"
-        )
+        # Fetch database credentials using shared method
+        db_config = self.fetch_common_database_config()
 
         # Validate critical configurations
-        if not tps_hostpay_signing_key or not success_url_signing_key:
-            print(f"⚠️ [CONFIG] Warning: Signing keys not available")
-        if not cloud_tasks_project_id or not cloud_tasks_location:
+        if not tps_hostpay_signing_key:
+            print(f"⚠️ [CONFIG] Warning: TPS_HOSTPAY_SIGNING_KEY not available")
+        if not changenow_api_key:
+            print(f"⚠️ [CONFIG] Warning: CHANGENOW_API_KEY not available")
+        if not cloud_tasks_config['cloud_tasks_project_id'] or not cloud_tasks_config['cloud_tasks_location']:
             print(f"⚠️ [CONFIG] Warning: Cloud Tasks configuration incomplete")
 
-        config = {
-            # Signing keys
+        # Merge all configuration
+        config.update({
+            # GCHostPay1-specific secrets
             'tps_hostpay_signing_key': tps_hostpay_signing_key,
-            'success_url_signing_key': success_url_signing_key,
-
-            # ChangeNow API
             'changenow_api_key': changenow_api_key,
 
             # Cloud Tasks configuration
-            'cloud_tasks_project_id': cloud_tasks_project_id,
-            'cloud_tasks_location': cloud_tasks_location,
-            'gchostpay1_url': gchostpay1_url,
-            'gchostpay1_response_queue': gchostpay1_response_queue,
+            'cloud_tasks_project_id': cloud_tasks_config['cloud_tasks_project_id'],
+            'cloud_tasks_location': cloud_tasks_config['cloud_tasks_location'],
             'gchostpay2_queue': gchostpay2_queue,
             'gchostpay2_url': gchostpay2_url,
             'gchostpay3_queue': gchostpay3_queue,
             'gchostpay3_url': gchostpay3_url,
-            'microbatch_response_queue': microbatch_response_queue,
-            'microbatch_url': microbatch_url,
+            'gchostpay1_response_queue': gchostpay1_response_queue,
 
-            # Database configuration (all from Secret Manager)
-            'instance_connection_name': cloud_sql_connection_name,
-            'db_name': database_name,
-            'db_user': database_user,
-            'db_password': database_password
-        }
+            # Database configuration
+            'instance_connection_name': db_config['instance_connection_name'],
+            'db_name': db_config['db_name'],
+            'db_user': db_config['db_user'],
+            'db_password': db_config['db_password']
+        })
 
         # Log configuration status
         print(f"📊 [CONFIG] Configuration status:")
-        print(f"   TPS_HOSTPAY_SIGNING_KEY: {'✅' if config['tps_hostpay_signing_key'] else '❌'}")
         print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
+        print(f"   TPS_HOSTPAY_SIGNING_KEY: {'✅' if config['tps_hostpay_signing_key'] else '❌'}")
         print(f"   CHANGENOW_API_KEY: {'✅' if config['changenow_api_key'] else '❌'}")
         print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
         print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
-        print(f"   GCHostPay1 URL: {'✅' if config['gchostpay1_url'] else '❌'}")
-        print(f"   GCHostPay1 Response Queue: {'✅' if config['gchostpay1_response_queue'] else '❌'}")
         print(f"   GCHostPay2 Queue: {'✅' if config['gchostpay2_queue'] else '❌'}")
         print(f"   GCHostPay2 URL: {'✅' if config['gchostpay2_url'] else '❌'}")
         print(f"   GCHostPay3 Queue: {'✅' if config['gchostpay3_queue'] else '❌'}")
         print(f"   GCHostPay3 URL: {'✅' if config['gchostpay3_url'] else '❌'}")
-        print(f"   MicroBatch Response Queue: {'✅' if config['microbatch_response_queue'] else '❌'}")
-        print(f"   MicroBatch URL: {'✅' if config['microbatch_url'] else '❌'}")
-        print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
-        print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
-        print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")
-        print(f"   DATABASE_PASSWORD_SECRET: {'✅' if config['db_password'] else '❌'}")
+        print(f"   GCHostPay1 Response Queue: {'✅' if config['gchostpay1_response_queue'] else '❌'}")
+        print(f"   Database: {'✅' if all([config['instance_connection_name'], config['db_name'], config['db_user'], config['db_password']]) else '❌'}")
 
         return config

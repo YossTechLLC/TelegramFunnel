@@ -2,59 +2,31 @@
 """
 Database Manager for GCSplit2-10-26 (ETH→USDT Conversion Service).
 Handles database connections and operations for updating payout_accumulation records.
+Extends shared BaseDatabaseManager with service-specific operations.
+
+Migration Date: 2025-11-15
+Extends: _shared/database_manager_base.BaseDatabaseManager
 """
+import sys
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-from google.cloud.sql.connector import Connector
+
+# Add parent directory to Python path for shared library access
+sys.path.insert(0, '/home/user/TelegramFunnel/OCTOBER/10-26')
+
+from _shared.database_manager_base import BaseDatabaseManager
 
 
-class DatabaseManager:
+class DatabaseManager(BaseDatabaseManager):
     """
-    Manages database connections and operations for GCSplit2-10-26.
+    GCSplit2-specific database manager.
+    Extends BaseDatabaseManager with payout_accumulation update operations.
     """
-
-    def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str):
-        """
-        Initialize the DatabaseManager.
-
-        Args:
-            instance_connection_name: Cloud SQL instance connection name
-            db_name: Database name
-            db_user: Database user
-            db_password: Database password
-        """
-        self.instance_connection_name = instance_connection_name
-        self.db_name = db_name
-        self.db_user = db_user
-        self.db_password = db_password
-        self.connector = Connector()
-
-        print(f"🗄️ [DATABASE] DatabaseManager initialized")
-        print(f"📊 [DATABASE] Instance: {instance_connection_name}")
-        print(f"📊 [DATABASE] Database: {db_name}")
 
     def get_connection(self):
-        """
-        Create and return a database connection using Cloud SQL Connector.
-
-        Returns:
-            Database connection object or None if failed
-        """
-        try:
-            connection = self.connector.connect(
-                self.instance_connection_name,
-                "pg8000",
-                user=self.db_user,
-                password=self.db_password,
-                db=self.db_name
-            )
-            print(f"🔗 [DATABASE] Connection established successfully")
-            return connection
-
-        except Exception as e:
-            print(f"❌ [DATABASE] Connection failed: {e}")
-            return None
+        """Alias for parent's get_database_connection()."""
+        return self.get_database_connection()
 
     def update_accumulation_with_conversion(
         self,

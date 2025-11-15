@@ -18,13 +18,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
+# ===== MIGRATION: Copy shared library =====
+# Copy shared library BEFORE service files
+# This allows the service files to import from _shared/
+COPY _shared/ /app/_shared/
+
+# ===== Service-specific files =====
 # Copy the app code and supporting modules
 COPY tphp1-10-26.py .
 COPY config_manager.py .
 COPY token_manager.py .
 COPY database_manager.py .
 COPY cloudtasks_client.py .
-COPY changenow_client.py .
+# NOTE: changenow_client.py is now imported from _shared/
 
 # Expose the port
 EXPOSE 8080

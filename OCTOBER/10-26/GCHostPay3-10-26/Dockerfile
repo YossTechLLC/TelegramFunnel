@@ -18,6 +18,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
+# ===== MIGRATION: Copy shared library =====
+# Copy shared library BEFORE service files
+# This allows the service files to import from _shared/
+COPY _shared/ /app/_shared/
+
+# ===== Service-specific files =====
 # Copy the app code and supporting modules
 COPY tphp3-10-26.py .
 COPY config_manager.py .
