@@ -423,15 +423,15 @@ def main_webhook():
             print(f"❌ [ENDPOINT_1] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        gchostpay2_queue = config.get('gchostpay2_queue')
+        pgp_hostpay2_queue = config.get('pgp_hostpay2_queue')
         pgp_hostpay2_url = config.get('pgp_hostpay2_url')
 
-        if not gchostpay2_queue or not pgp_hostpay2_url:
+        if not pgp_hostpay2_queue or not pgp_hostpay2_url:
             print(f"❌ [ENDPOINT_1] PGP_HOSTPAY2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay2_status_check(
-            queue_name=gchostpay2_queue,
+            queue_name=pgp_hostpay2_queue,
             target_url=pgp_hostpay2_url,
             encrypted_token=encrypted_token
         )
@@ -560,15 +560,15 @@ def status_verified():
             print(f"❌ [ENDPOINT_2] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        gchostpay3_queue = config.get('gchostpay3_queue')
+        pgp_hostpay3_queue = config.get('pgp_hostpay3_queue')
         pgp_hostpay3_url = config.get('pgp_hostpay3_url')
 
-        if not gchostpay3_queue or not pgp_hostpay3_url:
+        if not pgp_hostpay3_queue or not pgp_hostpay3_url:
             print(f"❌ [ENDPOINT_2] PGP_HOSTPAY3_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay3_payment_execution(
-            queue_name=gchostpay3_queue,
+            queue_name=pgp_hostpay3_queue,
             target_url=pgp_hostpay3_url,
             encrypted_token=encrypted_token_payment
         )

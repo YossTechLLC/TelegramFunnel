@@ -264,10 +264,10 @@ def check_threshold():
         # Enqueue to PGP_HOSTPAY1_v1 for execution
         print(f"📤 [ENDPOINT] Enqueueing batch execution task to PGP_HOSTPAY1_v1")
 
-        gchostpay1_batch_queue = config.get('gchostpay1_batch_queue')
+        pgp_hostpay1_batch_queue = config.get('pgp_hostpay1_batch_queue')
         pgp_hostpay1_url = config.get('pgp_hostpay1_url')
 
-        if not gchostpay1_batch_queue or not pgp_hostpay1_url:
+        if not pgp_hostpay1_batch_queue or not pgp_hostpay1_url:
             print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 batch configuration missing")
             sys.stdout.flush()
             return jsonify({
@@ -297,7 +297,7 @@ def check_threshold():
             }), 500
 
         task_name = cloudtasks_client.enqueue_pgp_hostpay1_batch_execution(
-            queue_name=gchostpay1_batch_queue,
+            queue_name=pgp_hostpay1_batch_queue,
             target_url=f"{pgp_hostpay1_url}/",
             encrypted_token=encrypted_token
         )
