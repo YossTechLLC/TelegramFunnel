@@ -1,12 +1,55 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Donation Message Encryption Strategy** ✅
+**Last Updated:** 2025-11-14 - **Donation Handler Registration Strategy** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: Donation Handler Registration Strategy ✅
+
+**Decision:** Use factory function `create_donation_conversation_handler()` instead of inline ConversationHandler in bot_manager.py
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- Donation flow requires multi-state conversation: AMOUNT_INPUT → MESSAGE_INPUT → Payment
+- Original bot_manager.py had old single-state handler (DONATION_AMOUNT_INPUT only)
+- New donation_conversation.py implements full 3-state handler with message input
+- Handler registration order matters - more specific patterns must be registered first
+
+**Problem:**
+- Old handler in bot_manager.py was catching `donate_start_` callbacks before new conversation handler
+- Old handler only had AMOUNT_INPUT state, so MESSAGE_INPUT state was never reached
+- Users saw amount keypad but never got message prompt after confirming amount
+
+**Solution:**
+```python
+# OLD (WRONG):
+donation_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(self.input_handlers.start_donation_conversation, pattern="^CMD_DONATE$")],
+    states={DONATION_AMOUNT_INPUT: [...]},
+    fallbacks=[...]
+)
+
+# NEW (CORRECT):
+from bot.conversations.donation_conversation import create_donation_conversation_handler
+donation_conversation_handler = create_donation_conversation_handler()
+application.add_handler(donation_conversation_handler)
+```
+
+**Rationale:**
+1. **Separation of Concerns**: Conversation logic belongs in dedicated conversation modules, not bot_manager
+2. **Maintainability**: Changes to donation flow only require editing donation_conversation.py
+3. **Completeness**: Factory function returns fully-configured handler with all states (AMOUNT_INPUT, MESSAGE_INPUT)
+4. **Pattern Exclusion**: Catch-all callback handler explicitly excludes `donate_` pattern to prevent conflicts
+
+**Impact:**
+- ✅ Donation message feature now accessible to users
+- ✅ Cleaner bot_manager.py (less inline handler code)
+- ✅ Easier to add future conversation states
+- ✅ No more handler registration conflicts
 
 ## 2025-11-14: Donation Message Encryption Strategy ✅
 

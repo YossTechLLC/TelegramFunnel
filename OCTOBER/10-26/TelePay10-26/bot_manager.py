@@ -10,6 +10,7 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 from input_handlers import InputHandlers, OPEN_CHANNEL_INPUT, CLOSED_CHANNEL_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT, DATABASE_CHANNEL_ID_INPUT, DATABASE_EDITING, DATABASE_FIELD_INPUT
+from bot.conversations.donation_conversation import create_donation_conversation_handler
 
 class BotManager:
     def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None, donation_handler=None):
@@ -65,22 +66,13 @@ class BotManager:
             per_message=False,
         )
         
-        # Donation conversation handler
-        donation_handler = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(self.input_handlers.start_donation_conversation, pattern="^CMD_DONATE$"),
-            ],
-            states={
-                DONATION_AMOUNT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_donation_amount)],
-            },
-            fallbacks=[CommandHandler("cancel", self.input_handlers.cancel)],
-            per_message=False,
-        )
+        # NEW: Donation conversation handler with message input support
+        donation_conversation_handler = create_donation_conversation_handler()
         
         # Add all handlers (order matters - more specific first)
         application.add_handler(database_v2_handler)  # NEW: Inline form database flow
         application.add_handler(database_handler_old)  # OLD: Keep for /database command
-        application.add_handler(donation_handler)
+        application.add_handler(donation_conversation_handler)  # NEW: Donation with message support
         application.add_handler(CommandHandler("start", self.start_bot_handler))
         application.add_handler(CommandHandler("start_np_gateway_new", self.payment_gateway_handler))
         application.add_handler(CallbackQueryHandler(self.trigger_payment_handler, pattern="^TRIGGER_PAYMENT$"))
@@ -88,23 +80,8 @@ class BotManager:
         # Handle CMD_GATEWAY callback for payment gateway
         application.add_handler(CallbackQueryHandler(self.handle_cmd_gateway, pattern="^CMD_GATEWAY$"))
 
-        # NEW: Donation handlers for closed channels
-        if self.donation_handler:
-            # Handle "Donate" button click in closed channels
-            application.add_handler(CallbackQueryHandler(
-                self.donation_handler.start_donation_input,
-                pattern=r"^donate_start_"
-            ))
-            print("📝 Registered: donate_start handler")
-
-            # Handle numeric keypad button presses
-            application.add_handler(CallbackQueryHandler(
-                self.donation_handler.handle_keypad_input,
-                pattern=r"^donate_(digit|backspace|clear|confirm|cancel|noop)"
-            ))
-            print("📝 Registered: donate_keypad handler")
-
         # Catch-all for other callbacks (excluding database-related ones which are handled by ConversationHandler)
+        # NOTE: donate_ pattern excluded because it's handled by donation_conversation_handler
         application.add_handler(CallbackQueryHandler(
             self.menu_callback_handler,
             pattern="^(?!CMD_DATABASE|CMD_DONATE|TRIGGER_PAYMENT|CMD_GATEWAY|EDIT_|SUBMIT_|BACK_TO_MAIN|SAVE_ALL_CHANGES|CANCEL_EDIT|TOGGLE_TIER_|CREATE_NEW_CHANNEL|CANCEL_DATABASE|donate_).*$"

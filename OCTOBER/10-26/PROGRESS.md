@@ -1,8 +1,34 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Donation Message Feature Deployed** ✅
+**Last Updated:** 2025-11-14 - **Donation Message Handler Registration Fixed** ✅
 
 ## Recent Updates
+
+## 2025-11-14: Fixed Donation Message Handler Registration ✅
+
+**Action:** Fixed bot_manager.py to properly register donation conversation handler with message input support
+**Status:** ✅ **READY FOR VM DEPLOYMENT**
+
+**Problem Identified:**
+- Donation message feature code existed in donation_conversation.py but wasn't being presented to users
+- Root cause: bot_manager.py was using OLD donation handler without MESSAGE_INPUT state
+- Old handler was catching `donate_start_` callbacks before new conversation handler could run
+
+**Fix Applied to bot_manager.py:**
+- ✅ Line 13: Added import for `create_donation_conversation_handler`
+- ✅ Lines 69-70: Replaced old ConversationHandler with `donation_conversation_handler = create_donation_conversation_handler()`
+- ✅ Line 75: Updated handler registration to use new conversation handler
+- ✅ Line 87: Confirmed `donate_` pattern excluded from catch-all callbacks
+
+**Files Modified:**
+- `TelePay10-26/bot_manager.py` - Handler registration fix
+- `TelePay10-26/11-14.env` - Created environment config with Secret Manager paths
+
+**Next Steps:**
+1. ⏳ User to push changes to VM via GitHub
+2. ⏳ Restart telepay10-26.py service on VM
+3. ⏳ Test donation flow: Amount → Confirm → Message prompt (Yes/No) → Payment
+4. ⏳ Verify encrypted message delivery to channel owner
 
 ## 2025-11-14: Donation Message Feature - Complete Implementation ✅
 

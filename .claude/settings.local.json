@@ -125,7 +125,9 @@
       "Bash(for i in {1..12})",
       "Bash(do echo \"=== Check $i/12 ===\")",
       "Bash(gcloud compute ssl-certificates delete:*)",
-      "Bash(gcloud compute ssl-certificates:*)"
+      "Bash(gcloud compute ssl-certificates:*)",
+      "Bash(gcloud compute ssh:*)",
+      "Bash(gcloud compute scp:*)"
     ],
     "deny": [],
     "ask": []
