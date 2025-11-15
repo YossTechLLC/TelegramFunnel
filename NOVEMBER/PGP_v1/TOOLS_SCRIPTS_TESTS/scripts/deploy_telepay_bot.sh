@@ -1,23 +1,23 @@
 #!/bin/bash
 ################################################################################
-# Deploy TelePay10-26 (Telegram Bot with NotificationService)
-# Purpose: Deploy updated TelePay bot with notification service
-# Version: 1.0
-# Date: 2025-11-11
+# Deploy pgp-server-v1 (Telegram Bot with NotificationService)
+# Purpose: Deploy updated PGP server bot with notification service
+# Version: 2.0
+# Date: 2025-11-15
 ################################################################################
 
 set -e  # Exit on error
 
 echo ""
 echo "========================================================================"
-echo "🚀 Deploying TelePay10-26 (Telegram Bot)"
+echo "🚀 Deploying pgp-server-v1 (Telegram Bot)"
 echo "========================================================================"
 echo ""
 
 # Configuration
-SERVICE_NAME="telepay-10-26"
+SERVICE_NAME="pgp-server-v1"
 REGION="us-central1"
-SOURCE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/TelePay10-26"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../PGP_SERVER_v1"
 
 echo "📋 Configuration:"
 echo "   Service: $SERVICE_NAME"
@@ -90,7 +90,7 @@ gcloud run deploy $SERVICE_NAME \
 if [ $? -eq 0 ]; then
     echo ""
     echo "========================================================================"
-    echo "✅ TelePay10-26 deployed successfully!"
+    echo "✅ pgp-server-v1 deployed successfully!"
     echo "========================================================================"
     echo ""
 
@@ -99,10 +99,10 @@ if [ $? -eq 0 ]; then
     echo "🌐 Service URL: $SERVICE_URL"
     echo ""
 
-    # Save URL for np-webhook configuration
-    echo "📝 Saving service URL for np-webhook configuration..."
-    echo "$SERVICE_URL" > /tmp/telepay_bot_url.txt
-    echo "   Saved to: /tmp/telepay_bot_url.txt"
+    # Save URL for pgp-np-ipn-v1 configuration
+    echo "📝 Saving service URL for pgp-np-ipn-v1 configuration..."
+    echo "$SERVICE_URL" > /tmp/pgp_server_url.txt
+    echo "   Saved to: /tmp/pgp_server_url.txt"
     echo ""
 
     # Test health endpoint
@@ -115,8 +115,8 @@ if [ $? -eq 0 ]; then
     fi
     echo ""
 
-    echo "ℹ️ Important: Update TELEPAY_BOT_URL secret with this URL:"
-    echo "   gcloud secrets versions add TELEPAY_BOT_URL --data-file=- <<< \"$SERVICE_URL\""
+    echo "ℹ️ Important: Update PGP_SERVER_URL secret with this URL:"
+    echo "   gcloud secrets versions add PGP_SERVER_URL --data-file=- <<< \"$SERVICE_URL\""
     echo ""
 
     echo "✅ Deployment completed successfully!"

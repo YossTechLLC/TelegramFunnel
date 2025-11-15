@@ -19,7 +19,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code and supporting modules
-COPY tphp3-10-26.py .
+COPY pgp_hostpay3_v1.py .
 COPY config_manager.py .
 COPY token_manager.py .
 COPY database_manager.py .
@@ -32,4 +32,4 @@ COPY alerting.py .
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tphp3-10-26.py"]
+CMD ["python", "pgp_hostpay3_v1.py"]

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Cloud Tasks Queue Deployment Script for GCSplit Services
+# Cloud Tasks Queue Deployment Script for PGP_v1 Split Services
 # Creates all required queues with appropriate retry configuration
 # ==============================================================================
 
@@ -12,11 +12,11 @@ LOCATION="${CLOUD_TASKS_LOCATION:-us-central1}"
 
 # Queue names
 QUEUES=(
-    "gcsplit-usdt-eth-estimate-queue"
-    "gcsplit-usdt-eth-response-queue"
-    "gcsplit-eth-client-swap-queue"
-    "gcsplit-eth-client-response-queue"
-    "gcsplit-hostpay-trigger-queue"
+    "pgp-split1-estimate-queue-v1"
+    "pgp-split1-response-queue-v1"
+    "pgp-split2-swap-queue-v1"
+    "pgp-split2-response-queue-v1"
+    "pgp-hostpay-trigger-queue-v1"
 )
 
 # Retry configuration

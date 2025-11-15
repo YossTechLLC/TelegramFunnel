@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Deploy GCBroadcastScheduler-10-26 to Cloud Run
+# Deploy pgp-broadcast-v1 to Cloud Run
 # This script deploys the broadcast scheduler service with all required environment variables
 
 set -e  # Exit on error
 
 PROJECT_ID="telepay-459221"
 REGION="us-central1"
-SERVICE_NAME="gcbroadcastscheduler-10-26"
-SOURCE_DIR="./GCBroadcastScheduler-10-26"
+SERVICE_NAME="pgp-broadcast-v1"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../PGP_BROADCAST_v1"
 
 echo "🚀 Starting deployment of $SERVICE_NAME to Cloud Run..."
 echo "📍 Project: $PROJECT_ID"
@@ -19,7 +19,7 @@ echo ""
 # Check if source directory exists
 if [ ! -d "$SOURCE_DIR" ]; then
     echo "❌ Error: Source directory $SOURCE_DIR not found"
-    echo "Please run this script from the OCTOBER/10-26 directory"
+    echo "Please ensure PGP_BROADCAST_v1 directory exists"
     exit 1
 fi
 

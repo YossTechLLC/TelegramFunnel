@@ -26,7 +26,7 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 
 # Copy application code
-COPY tps2-10-26.py .
+COPY pgp_split2_v1.py .
 COPY config_manager.py .
 COPY token_manager.py .
 COPY cloudtasks_client.py .
@@ -41,4 +41,4 @@ ENV PATH=/root/.local/bin:$PATH
 EXPOSE 8080
 
 # Run the application
-CMD ["python", "tps2-10-26.py"]
+CMD ["python", "pgp_split2_v1.py"]

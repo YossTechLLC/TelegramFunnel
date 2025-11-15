@@ -27,4 +27,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Run Flask app
-CMD ["python", "app.py"]
+CMD ["python", "pgp_webapi_v1.py"]

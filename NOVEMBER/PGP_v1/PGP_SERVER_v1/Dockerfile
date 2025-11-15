@@ -22,4 +22,4 @@ COPY . .
 EXPOSE 8080
 
 # Run the application
-CMD ["python", "telepay10-26.py"]
+CMD ["python", "pgp_server_v1.py"]

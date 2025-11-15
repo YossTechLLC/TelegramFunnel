@@ -14,11 +14,11 @@ RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code
 COPY cloudtasks_client.py .
-COPY app.py .
+COPY pgp_np_ipn_v1.py .
 COPY payment-processing.html .
 
 # Expose the port
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "app.py"]
+CMD ["python", "pgp_np_ipn_v1.py"]

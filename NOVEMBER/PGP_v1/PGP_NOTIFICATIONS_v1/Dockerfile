@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 8080
 
 # Run application
-CMD ["python", "service.py"]
+CMD ["python", "pgp_notifications_v1.py"]

@@ -1,23 +1,23 @@
 #!/bin/bash
 ################################################################################
-# Deploy np-webhook-10-26 (NowPayments IPN Webhook)
+# Deploy pgp-np-ipn-v1 (NowPayments IPN Webhook)
 # Purpose: Deploy updated webhook with notification trigger
-# Version: 1.0
-# Date: 2025-11-11
+# Version: 2.0
+# Date: 2025-11-15
 ################################################################################
 
 set -e  # Exit on error
 
 echo ""
 echo "========================================================================"
-echo "🚀 Deploying np-webhook-10-26 (IPN Webhook)"
+echo "🚀 Deploying pgp-np-ipn-v1 (IPN Webhook)"
 echo "========================================================================"
 echo ""
 
 # Configuration
-SERVICE_NAME="np-webhook-10-26"
+SERVICE_NAME="pgp-np-ipn-v1"
 REGION="us-central1"
-SOURCE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26/np-webhook-10-26"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../PGP_NP_IPN_v1"
 
 echo "📋 Configuration:"
 echo "   Service: $SERVICE_NAME"
@@ -37,22 +37,22 @@ echo "🔍 Checking current deployment status..."
 gcloud run services describe $SERVICE_NAME --region=$REGION --format="value(status.url)" 2>/dev/null || echo "   Service not found or not deployed yet"
 echo ""
 
-# Check if TELEPAY_BOT_URL secret exists
-echo "🔍 Checking TELEPAY_BOT_URL secret..."
-if gcloud secrets describe TELEPAY_BOT_URL &>/dev/null; then
-    TELEPAY_BOT_URL=$(gcloud secrets versions access latest --secret=TELEPAY_BOT_URL)
-    echo "   ✅ TELEPAY_BOT_URL found: $TELEPAY_BOT_URL"
+# Check if PGP_SERVER_URL secret exists
+echo "🔍 Checking PGP_SERVER_URL secret..."
+if gcloud secrets describe PGP_SERVER_URL &>/dev/null; then
+    PGP_SERVER_URL=$(gcloud secrets versions access latest --secret=PGP_SERVER_URL)
+    echo "   ✅ PGP_SERVER_URL found: $PGP_SERVER_URL"
 else
-    echo "   ⚠️ TELEPAY_BOT_URL secret not found!"
+    echo "   ⚠️ PGP_SERVER_URL secret not found!"
     echo "   Creating secret..."
 
-    # Check if TelePay bot URL was saved
-    if [ -f "/tmp/telepay_bot_url.txt" ]; then
-        TELEPAY_BOT_URL=$(cat /tmp/telepay_bot_url.txt)
-        echo "$TELEPAY_BOT_URL" | gcloud secrets create TELEPAY_BOT_URL --data-file=-
-        echo "   ✅ Created TELEPAY_BOT_URL secret with: $TELEPAY_BOT_URL"
+    # Check if PGP server URL was saved
+    if [ -f "/tmp/pgp_server_url.txt" ]; then
+        PGP_SERVER_URL=$(cat /tmp/pgp_server_url.txt)
+        echo "$PGP_SERVER_URL" | gcloud secrets create PGP_SERVER_URL --data-file=-
+        echo "   ✅ Created PGP_SERVER_URL secret with: $PGP_SERVER_URL"
     else
-        echo "   ❌ Error: TelePay bot URL not found. Please deploy TelePay bot first."
+        echo "   ❌ Error: PGP server URL not found. Please deploy pgp-server-v1 first."
         exit 1
     fi
 fi
@@ -69,11 +69,11 @@ SECRET_NAMES=(
     "DATABASE_PASSWORD_SECRET"
     "CLOUD_TASKS_PROJECT_ID"
     "CLOUD_TASKS_LOCATION"
-    "GCWEBHOOK1_QUEUE"
-    "GCWEBHOOK1_URL"
-    "GCWEBHOOK2_QUEUE"
-    "GCWEBHOOK2_URL"
-    "TELEPAY_BOT_URL"
+    "PGP_ORCHESTRATOR_QUEUE"
+    "PGP_ORCHESTRATOR_URL"
+    "PGP_INVITE_QUEUE"
+    "PGP_INVITE_URL"
+    "PGP_SERVER_URL"
 )
 
 SECRET_ARGS=""
@@ -101,7 +101,7 @@ gcloud run deploy $SERVICE_NAME \
 if [ $? -eq 0 ]; then
     echo ""
     echo "========================================================================"
-    echo "✅ np-webhook-10-26 deployed successfully!"
+    echo "✅ pgp-np-ipn-v1 deployed successfully!"
     echo "========================================================================"
     echo ""
 

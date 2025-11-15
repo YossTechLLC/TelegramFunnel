@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
-# Cloud Tasks Queue Deployment Script for GCHostPay(x)-10-26 Services
-# Creates all 4 queues required for the split GCHostPay microservices architecture
+# Cloud Tasks Queue Deployment Script for PGP_v1 HostPay Services
+# Creates all 4 queues required for the split pgp-hostpay-v1 microservices architecture
 # ==============================================================================
 
 set -e  # Exit on error
@@ -23,7 +23,7 @@ MIN_BACKOFF=60s          # 60 second minimum backoff
 MAX_BACKOFF=60s          # 60 second maximum backoff (no exponential backoff)
 MAX_DOUBLINGS=0          # Disable exponential backoff
 
-echo "🚀 [DEPLOY] Starting Cloud Tasks queue deployment for GCHostPay(x)-10-26"
+echo "🚀 [DEPLOY] Starting Cloud Tasks queue deployment for PGP_v1 HostPay Services"
 echo "📍 [DEPLOY] Project: $PROJECT_ID"
 echo "📍 [DEPLOY] Location: $LOCATION"
 echo ""
@@ -32,21 +32,21 @@ echo ""
 # Define all 4 queues required for GCHostPay architecture
 # =============================================================================
 
-# Queue 1: GCSplit1 → GCHostPay1 (Initial payment request)
-QUEUE_1_NAME="gcsplit-hostpay-trigger-queue"
-QUEUE_1_PURPOSE="GCSplit1 → GCHostPay1 (Initial ETH payment orchestration request)"
+# Queue 1: pgp-split1-v1 → pgp-hostpay1-v1 (Initial payment request)
+QUEUE_1_NAME="pgp-hostpay-trigger-queue-v1"
+QUEUE_1_PURPOSE="pgp-split1-v1 → pgp-hostpay1-v1 (Initial ETH payment orchestration request)"
 
-# Queue 2: GCHostPay1 → GCHostPay2 (ChangeNow status check)
-QUEUE_2_NAME="gchostpay2-status-check-queue"
-QUEUE_2_PURPOSE="GCHostPay1 → GCHostPay2 (ChangeNow status verification with infinite retry)"
+# Queue 2: pgp-hostpay1-v1 → pgp-hostpay2-v1 (ChangeNow status check)
+QUEUE_2_NAME="pgp-hostpay2-status-queue-v1"
+QUEUE_2_PURPOSE="pgp-hostpay1-v1 → pgp-hostpay2-v1 (ChangeNow status verification with infinite retry)"
 
-# Queue 3: GCHostPay1 → GCHostPay3 (ETH payment execution)
-QUEUE_3_NAME="gchostpay3-payment-exec-queue"
-QUEUE_3_PURPOSE="GCHostPay1 → GCHostPay3 (ETH blockchain payment execution with infinite retry)"
+# Queue 3: pgp-hostpay1-v1 → pgp-hostpay3-v1 (ETH payment execution)
+QUEUE_3_NAME="pgp-hostpay3-payment-queue-v1"
+QUEUE_3_PURPOSE="pgp-hostpay1-v1 → pgp-hostpay3-v1 (ETH blockchain payment execution with infinite retry)"
 
-# Queue 4: GCHostPay2/GCHostPay3 → GCHostPay1 (Response callbacks)
-QUEUE_4_NAME="gchostpay1-response-queue"
-QUEUE_4_PURPOSE="GCHostPay2/GCHostPay3 → GCHostPay1 (Status verification and payment completion responses)"
+# Queue 4: pgp-hostpay2/3-v1 → pgp-hostpay1-v1 (Response callbacks)
+QUEUE_4_NAME="pgp-hostpay1-response-queue-v1"
+QUEUE_4_PURPOSE="pgp-hostpay2-v1/pgp-hostpay3-v1 → pgp-hostpay1-v1 (Status verification and payment completion responses)"
 
 # Array of all queues
 declare -a QUEUES=(
@@ -118,7 +118,7 @@ done
 # =============================================================================
 
 echo "═══════════════════════════════════════════════════════════════════════════"
-echo "🎉 [DEPLOY] All Cloud Tasks queues for GCHostPay(x)-10-26 deployed successfully!"
+echo "🎉 [DEPLOY] All Cloud Tasks queues for PGP_v1 HostPay Services deployed successfully!"
 echo ""
 echo "📊 [DEPLOY] Queue Summary:"
 echo ""
@@ -142,15 +142,15 @@ echo "   • Max Retry Duration: $MAX_RETRY_DURATION"
 echo "   • Backoff: $MIN_BACKOFF - $MAX_BACKOFF (fixed, no exponential)"
 echo ""
 echo "📋 [DEPLOY] Next steps:"
-echo "   1. Deploy GCHostPay1-10-26 service: gcloud run deploy gchostpay1-10-26 ..."
-echo "   2. Deploy GCHostPay2-10-26 service: gcloud run deploy gchostpay2-10-26 ..."
-echo "   3. Deploy GCHostPay3-10-26 service: gcloud run deploy gchostpay3-10-26 ..."
+echo "   1. Deploy pgp-hostpay1-v1 service: gcloud run deploy pgp-hostpay1-v1 ..."
+echo "   2. Deploy pgp-hostpay2-v1 service: gcloud run deploy pgp-hostpay2-v1 ..."
+echo "   3. Deploy pgp-hostpay3-v1 service: gcloud run deploy pgp-hostpay3-v1 ..."
 echo "   4. Update Secret Manager with queue names:"
-echo "      • GCHOSTPAY2_QUEUE=$QUEUE_2_NAME"
-echo "      • GCHOSTPAY3_QUEUE=$QUEUE_3_NAME"
-echo "      • GCHOSTPAY1_RESPONSE_QUEUE=$QUEUE_4_NAME"
-echo "   5. Update GCHOSTPAY1_URL, GCHOSTPAY2_URL, GCHOSTPAY3_URL in Secret Manager"
-echo "   6. Test end-to-end workflow: GCSplit1 → GCHostPay1 → GCHostPay2 → GCHostPay3"
+echo "      • PGP_HOSTPAY2_QUEUE=$QUEUE_2_NAME"
+echo "      • PGP_HOSTPAY3_QUEUE=$QUEUE_3_NAME"
+echo "      • PGP_HOSTPAY1_RESPONSE_QUEUE=$QUEUE_4_NAME"
+echo "   5. Update PGP_HOSTPAY1_URL, PGP_HOSTPAY2_URL, PGP_HOSTPAY3_URL in Secret Manager"
+echo "   6. Test end-to-end workflow: pgp-split1-v1 → pgp-hostpay1-v1 → pgp-hostpay2-v1 → pgp-hostpay3-v1"
 echo ""
 echo "✅ [DEPLOY] Deployment complete!"
 echo "═══════════════════════════════════════════════════════════════════════════"

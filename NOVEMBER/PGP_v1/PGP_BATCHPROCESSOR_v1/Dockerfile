@@ -24,10 +24,10 @@ COPY config_manager.py .
 COPY database_manager.py .
 COPY token_manager.py .
 COPY cloudtasks_client.py .
-COPY batch10-26.py .
+COPY pgp_batchprocessor_v1.py .
 
 # Expose the port
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "batch10-26.py"]
+CMD ["python", "pgp_batchprocessor_v1.py"]

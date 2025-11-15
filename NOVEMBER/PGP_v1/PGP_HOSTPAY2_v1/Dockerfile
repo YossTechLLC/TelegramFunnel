@@ -19,7 +19,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 # Copy the app code and supporting modules
-COPY tphp2-10-26.py .
+COPY pgp_hostpay2_v1.py .
 COPY config_manager.py .
 COPY token_manager.py .
 COPY changenow_client.py .
@@ -29,4 +29,4 @@ COPY cloudtasks_client.py .
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tphp2-10-26.py"]
+CMD ["python", "pgp_hostpay2_v1.py"]

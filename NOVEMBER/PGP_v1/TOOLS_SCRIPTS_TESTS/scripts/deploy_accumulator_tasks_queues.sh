@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
-# Cloud Tasks Queue Deployment Script for Threshold Payout System
-# Creates all required queues for GCAccumulator and GCBatchProcessor
+# Cloud Tasks Queue Deployment Script for PGP_v1 Accumulator & Batch Processor
+# Creates all required queues for pgp-accumulator-v1 and pgp-batchprocessor-v1
 # ==============================================================================
 
 set -e  # Exit on error
@@ -12,8 +12,8 @@ LOCATION="${CLOUD_TASKS_LOCATION:-us-central1}"
 
 # Queue names
 QUEUES=(
-    "accumulator-payment-queue"
-    "gcsplit1-batch-queue"
+    "pgp-accumulator-queue-v1"
+    "pgp-batchprocessor-queue-v1"
 )
 
 # Retry configuration
@@ -96,16 +96,16 @@ echo "   Max Retry Duration: $MAX_RETRY_DURATION"
 echo "   Backoff: $MIN_BACKOFF - $MAX_BACKOFF (fixed, no exponential)"
 echo ""
 echo "📝 [DEPLOY] Next steps:"
-echo "   1. Deploy GCAccumulator-10-26 service"
-echo "   2. Deploy GCBatchProcessor-10-26 service"
+echo "   1. Deploy pgp-accumulator-v1 service"
+echo "   2. Deploy pgp-batchprocessor-v1 service"
 echo "   3. Update Secret Manager with:"
-echo "      - GCACCUMULATOR_QUEUE=accumulator-payment-queue"
-echo "      - GCACCUMULATOR_URL=https://gcaccumulator-10-26-SERVICE_URL"
-echo "      - GCSPLIT1_BATCH_QUEUE=gcsplit1-batch-queue"
+echo "      - PGP_ACCUMULATOR_QUEUE=pgp-accumulator-queue-v1"
+echo "      - PGP_ACCUMULATOR_URL=https://pgp-accumulator-v1-SERVICE_URL"
+echo "      - PGP_BATCHPROCESSOR_QUEUE=pgp-batchprocessor-queue-v1"
 echo "   4. Create Cloud Scheduler job:"
-echo "      gcloud scheduler jobs create http batch-processor-job \\"
+echo "      gcloud scheduler jobs create http pgp-batchprocessor-job \\"
 echo "        --schedule=\"*/5 * * * *\" \\"
-echo "        --uri=\"https://gcbatchprocessor-10-26-SERVICE_URL/process\" \\"
+echo "        --uri=\"https://pgp-batchprocessor-v1-SERVICE_URL/process\" \\"
 echo "        --http-method=POST \\"
 echo "        --location=$LOCATION \\"
 echo "        --time-zone=\"America/Los_Angeles\""

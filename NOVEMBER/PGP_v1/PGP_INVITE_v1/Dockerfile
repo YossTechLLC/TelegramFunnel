@@ -16,10 +16,10 @@ RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 COPY config_manager.py .
 COPY token_manager.py .
 COPY database_manager.py .
-COPY tph2-10-26.py .
+COPY pgp_invite_v1.py .
 
 # Expose the port
 EXPOSE 8080
 
 # Set the entrypoint
-CMD ["python", "tph2-10-26.py"]
+CMD ["python", "pgp_invite_v1.py"]

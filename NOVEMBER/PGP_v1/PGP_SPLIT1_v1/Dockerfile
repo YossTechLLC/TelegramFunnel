@@ -25,7 +25,7 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 
 # Copy application code
-COPY tps1-10-26.py .
+COPY pgp_split1_v1.py .
 COPY config_manager.py .
 COPY database_manager.py .
 COPY token_manager.py .
@@ -39,4 +39,4 @@ ENV PATH=/root/.local/bin:$PATH
 EXPOSE 8080
 
 # Run the application
-CMD ["python", "tps1-10-26.py"]
+CMD ["python", "pgp_split1_v1.py"]
