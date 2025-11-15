@@ -1,66 +1,26 @@
 #!/usr/bin/env python
 """
-Token Manager for GCHostPay Services (GCHostPay1, GCHostPay2, GCHostPay3).
-Handles token encryption/decryption for secure inter-service communication.
-
-Token Encryption Strategy:
-- GCSplit1 → GCHostPay1: Uses TPS_HOSTPAY_SIGNING_KEY (external communication)
-- GCHostPay1 ↔ GCHostPay2: Uses SUCCESS_URL_SIGNING_KEY (internal communication)
-- GCHostPay1 ↔ GCHostPay3: Uses SUCCESS_URL_SIGNING_KEY (internal communication)
-
-All tokens use:
-- Binary packing with struct module
-- HMAC-SHA256 signatures (16-byte truncated)
-- Base64 URL-safe encoding
-- Timestamp validation (configurable windows)
+Token Manager for PGP_HOSTPAY2_v1.
+Handles encryption and decryption of tokens for secure inter-service communication via Cloud Tasks.
 """
-import time
-import struct
-import base64
-import hmac
-import hashlib
-from typing import Optional, Dict, Any
+from typing import Dict, Any, Optional, Tuple
+from PGP_COMMON.tokens import BaseTokenManager
 
 
-class TokenManager:
+class TokenManager(BaseTokenManager):
     """
-    Manages token encryption and decryption for GCHostPay services.
+    Manages token encryption and decryption for PGP_HOSTPAY2_v1.
+    Inherits common methods from BaseTokenManager.
     """
 
-    def __init__(self, tps_hostpay_signing_key: str, internal_signing_key: str):
+    def __init__(self, signing_key: str):
         """
-        Initialize TokenManager with signing keys.
+        Initialize TokenManager with signing key.
 
         Args:
-            tps_hostpay_signing_key: Key for GCSplit1 → GCHostPay1 communication
-            internal_signing_key: Key for internal GCHostPay service communication
+            signing_key: SUCCESS_URL_SIGNING_KEY for HMAC signing
         """
-        self.tps_hostpay_key = tps_hostpay_signing_key
-        self.internal_key = internal_signing_key
-        print(f"✅ [TOKEN_MGR] TokenManager initialized")
-
-    def _pack_string(self, s: str) -> bytes:
-        """Pack a string with length prefix (1 byte length + string bytes)."""
-        s_bytes = s.encode('utf-8')
-        if len(s_bytes) > 255:
-            raise ValueError(f"String too long: {len(s_bytes)} bytes (max 255)")
-        return bytes([len(s_bytes)]) + s_bytes
-
-    def _unpack_string(self, data: bytes, offset: int) -> tuple:
-        """
-        Unpack a length-prefixed string.
-
-        Returns:
-            Tuple of (string_value, new_offset)
-        """
-        if offset >= len(data):
-            raise ValueError("Offset beyond data length")
-
-        str_len = data[offset]
-        offset += 1
-
-        if offset + str_len > len(data):
-            raise ValueError(f"String extends beyond data ({offset + str_len} > {len(data)})")
+        super().__init__(signing_key, service_name="PGP_HOSTPAY2_v1")
 
         str_val = data[offset:offset+str_len].decode('utf-8')
         offset += str_len
@@ -245,12 +205,12 @@ class TokenManager:
             print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay2: Encrypting status check request")
 
             packed_data = bytearray()
-            packed_data.extend(self._pack_string(unique_id))
-            packed_data.extend(self._pack_string(cn_api_id))
-            packed_data.extend(self._pack_string(from_currency.lower()))
-            packed_data.extend(self._pack_string(from_network.lower()))
+            packed_data.extend(self.pack_string(unique_id))
+            packed_data.extend(self.pack_string(cn_api_id))
+            packed_data.extend(self.pack_string(from_currency.lower()))
+            packed_data.extend(self.pack_string(from_network.lower()))
             packed_data.extend(struct.pack(">d", from_amount))
-            packed_data.extend(self._pack_string(payin_address))
+            packed_data.extend(self.pack_string(payin_address))
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -293,16 +253,16 @@ class TokenManager:
         offset = 0
 
         # Parse unique_id
-        unique_id, offset = self._unpack_string(raw, offset)
+        unique_id, offset = self.unpack_string(raw, offset)
 
         # Parse cn_api_id
-        cn_api_id, offset = self._unpack_string(raw, offset)
+        cn_api_id, offset = self.unpack_string(raw, offset)
 
         # Parse from_currency
-        from_currency, offset = self._unpack_string(raw, offset)
+        from_currency, offset = self.unpack_string(raw, offset)
 
         # Parse from_network
-        from_network, offset = self._unpack_string(raw, offset)
+        from_network, offset = self.unpack_string(raw, offset)
 
         # Parse from_amount
         if offset + 8 > len(raw):
@@ -311,7 +271,7 @@ class TokenManager:
         offset += 8
 
         # Parse payin_address
-        payin_address, offset = self._unpack_string(raw, offset)
+        payin_address, offset = self.unpack_string(raw, offset)
 
         # Parse timestamp
         if offset + 4 > len(raw):
@@ -396,13 +356,13 @@ class TokenManager:
             print(f"🔐 [TOKEN_ENC] GCHostPay2→GCHostPay1: Encrypting status response")
 
             packed_data = bytearray()
-            packed_data.extend(self._pack_string(unique_id))
-            packed_data.extend(self._pack_string(cn_api_id))
-            packed_data.extend(self._pack_string(status))
-            packed_data.extend(self._pack_string(from_currency.lower()))
-            packed_data.extend(self._pack_string(from_network.lower()))
+            packed_data.extend(self.pack_string(unique_id))
+            packed_data.extend(self.pack_string(cn_api_id))
+            packed_data.extend(self.pack_string(status))
+            packed_data.extend(self.pack_string(from_currency.lower()))
+            packed_data.extend(self.pack_string(from_network.lower()))
             packed_data.extend(struct.pack(">d", from_amount))
-            packed_data.extend(self._pack_string(payin_address))
+            packed_data.extend(self.pack_string(payin_address))
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -445,19 +405,19 @@ class TokenManager:
         offset = 0
 
         # Parse unique_id
-        unique_id, offset = self._unpack_string(raw, offset)
+        unique_id, offset = self.unpack_string(raw, offset)
 
         # Parse cn_api_id
-        cn_api_id, offset = self._unpack_string(raw, offset)
+        cn_api_id, offset = self.unpack_string(raw, offset)
 
         # Parse status
-        status, offset = self._unpack_string(raw, offset)
+        status, offset = self.unpack_string(raw, offset)
 
         # Parse from_currency
-        from_currency, offset = self._unpack_string(raw, offset)
+        from_currency, offset = self.unpack_string(raw, offset)
 
         # Parse from_network
-        from_network, offset = self._unpack_string(raw, offset)
+        from_network, offset = self.unpack_string(raw, offset)
 
         # Parse from_amount
         if offset + 8 > len(raw):
@@ -466,7 +426,7 @@ class TokenManager:
         offset += 8
 
         # Parse payin_address
-        payin_address, offset = self._unpack_string(raw, offset)
+        payin_address, offset = self.unpack_string(raw, offset)
 
         # Parse timestamp
         if offset + 4 > len(raw):
@@ -538,12 +498,12 @@ class TokenManager:
             print(f"🔐 [TOKEN_ENC] GCHostPay1→GCHostPay3: Encrypting payment request")
 
             packed_data = bytearray()
-            packed_data.extend(self._pack_string(unique_id))
-            packed_data.extend(self._pack_string(cn_api_id))
-            packed_data.extend(self._pack_string(from_currency.lower()))
-            packed_data.extend(self._pack_string(from_network.lower()))
+            packed_data.extend(self.pack_string(unique_id))
+            packed_data.extend(self.pack_string(cn_api_id))
+            packed_data.extend(self.pack_string(from_currency.lower()))
+            packed_data.extend(self.pack_string(from_network.lower()))
             packed_data.extend(struct.pack(">d", from_amount))
-            packed_data.extend(self._pack_string(payin_address))
+            packed_data.extend(self.pack_string(payin_address))
 
             current_timestamp = int(time.time())
             packed_data.extend(struct.pack(">I", current_timestamp))
@@ -586,16 +546,16 @@ class TokenManager:
         offset = 0
 
         # Parse unique_id
-        unique_id, offset = self._unpack_string(raw, offset)
+        unique_id, offset = self.unpack_string(raw, offset)
 
         # Parse cn_api_id
-        cn_api_id, offset = self._unpack_string(raw, offset)
+        cn_api_id, offset = self.unpack_string(raw, offset)
 
         # Parse from_currency
-        from_currency, offset = self._unpack_string(raw, offset)
+        from_currency, offset = self.unpack_string(raw, offset)
 
         # Parse from_network
-        from_network, offset = self._unpack_string(raw, offset)
+        from_network, offset = self.unpack_string(raw, offset)
 
         # Parse from_amount
         if offset + 8 > len(raw):
@@ -604,7 +564,7 @@ class TokenManager:
         offset += 8
 
         # Parse payin_address
-        payin_address, offset = self._unpack_string(raw, offset)
+        payin_address, offset = self.unpack_string(raw, offset)
 
         # Parse timestamp
         if offset + 4 > len(raw):
@@ -675,10 +635,10 @@ class TokenManager:
             print(f"🔐 [TOKEN_ENC] GCHostPay3→GCHostPay1: Encrypting payment response")
 
             packed_data = bytearray()
-            packed_data.extend(self._pack_string(unique_id))
-            packed_data.extend(self._pack_string(cn_api_id))
-            packed_data.extend(self._pack_string(tx_hash))
-            packed_data.extend(self._pack_string(tx_status))
+            packed_data.extend(self.pack_string(unique_id))
+            packed_data.extend(self.pack_string(cn_api_id))
+            packed_data.extend(self.pack_string(tx_hash))
+            packed_data.extend(self.pack_string(tx_status))
             packed_data.extend(struct.pack(">Q", gas_used))
             packed_data.extend(struct.pack(">Q", block_number))
 
@@ -723,16 +683,16 @@ class TokenManager:
         offset = 0
 
         # Parse unique_id
-        unique_id, offset = self._unpack_string(raw, offset)
+        unique_id, offset = self.unpack_string(raw, offset)
 
         # Parse cn_api_id
-        cn_api_id, offset = self._unpack_string(raw, offset)
+        cn_api_id, offset = self.unpack_string(raw, offset)
 
         # Parse tx_hash
-        tx_hash, offset = self._unpack_string(raw, offset)
+        tx_hash, offset = self.unpack_string(raw, offset)
 
         # Parse tx_status
-        tx_status, offset = self._unpack_string(raw, offset)
+        tx_status, offset = self.unpack_string(raw, offset)
 
         # Parse gas_used
         if offset + 8 > len(raw):

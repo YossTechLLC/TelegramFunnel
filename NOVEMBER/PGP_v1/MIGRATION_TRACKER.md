@@ -52,11 +52,12 @@ Tracking the migration of all 17 PGP_v1 services to use the PGP_COMMON shared li
   - [x] Dockerfile → Add PGP_COMMON installation
   - **Total: Saved ~201 lines**
 
-- [ ] **PGP_HOSTPAY2_v1**
-  - [ ] config_manager.py → BaseConfigManager
-  - [ ] cloudtasks_client.py → BaseCloudTasksClient
-  - [ ] token_manager.py → BaseTokenManager
-  - [ ] Dockerfile → Add PGP_COMMON installation
+- [x] **PGP_HOSTPAY2_v1** ✅ COMPLETE
+  - [x] config_manager.py → BaseConfigManager (122 → 87 lines, saved 35)
+  - [x] cloudtasks_client.py → BaseCloudTasksClient (215 → 160 lines, saved 55)
+  - [x] token_manager.py → BaseTokenManager (783 → 743 lines, saved 40)
+  - [x] Dockerfile → Add PGP_COMMON installation
+  - **Total: Saved ~130 lines**
 
 - [ ] **PGP_HOSTPAY3_v1**
   - [ ] config_manager.py → BaseConfigManager
@@ -173,10 +174,10 @@ RUN pip install -e /app/PGP_COMMON
 
 ## Progress Summary
 
-- **Completed**: 6/17 services (PGP_ORCHESTRATOR_v1, PGP_INVITE_v1, PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1, PGP_HOSTPAY1_v1)
+- **Completed**: 7/17 services (PGP_ORCHESTRATOR_v1, PGP_INVITE_v1, PGP_SPLIT1_v1, PGP_SPLIT2_v1, PGP_SPLIT3_v1, PGP_HOSTPAY1_v1, PGP_HOSTPAY2_v1)
 - **In Progress**: 0/17 services
-- **Pending**: 11/17 services
-- **Total Code Reduction So Far**: ~1,080 lines
+- **Pending**: 10/17 services
+- **Total Code Reduction So Far**: ~1,210 lines
 
 ## Notes
 
@@ -186,5 +187,6 @@ RUN pip install -e /app/PGP_COMMON
 - ✅ PGP_SPLIT2_v1 completed successfully (USDT→ETH estimator service)
 - ✅ PGP_SPLIT3_v1 completed successfully (ETH→ClientCurrency swapper service)
 - ✅ PGP_HOSTPAY1_v1 completed successfully (Validator & Orchestrator service)
+- ✅ PGP_HOSTPAY2_v1 completed successfully (ChangeNow Status Checker service)
 - Each migration reduces duplicate code by ~67-271 lines depending on service complexity
 - Total expected code reduction: ~7,250 lines
