@@ -1,12 +1,69 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Payment Service Bot Data Registration** ✅
+**Last Updated:** 2025-11-14 - **Debug Logging Strategy for MessageHandler Investigation** 🔍
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-14: Debug Logging Strategy for Unresolved MessageHandler Issue 🔍
+
+**Decision:** Add comprehensive debug logging at multiple levels to identify why MessageHandler isn't triggering
+**Status:** 🔴 **DEBUG LOGS ADDED - AWAITING TEST RESULTS**
+
+**Context:**
+- Both previous fixes (payment_service + per_message=False) confirmed deployed and working
+- Logs show: `payment_service=True` ✅
+- Logs show: PTBUserWarning about per_message=False ✅
+- BUT: MessageHandler for text input STILL not triggering when user types message
+
+**Evidence:**
+```
+2025-11-15 03:20:50,585 - 💝 [DONATION] User 6271402111 adding message
+[USER TYPES MESSAGE]
+[NO FURTHER LOGS - handle_message_text() never called]
+```
+
+**Debug Logging Added:**
+1. **ConversationHandler Creation** (Lines 495-497)
+   - Log MESSAGE_INPUT state value (should be 1)
+   - Log registered handlers
+   - Confirms handler configuration at startup
+
+2. **MESSAGE_INPUT State Entry** (Lines 252-253)
+   - Log when MESSAGE_INPUT state is returned
+   - Confirms ConversationHandler should accept text messages
+   - Verifies state transition is happening
+
+3. **handle_message_text() Entry** (Lines 276-284)
+   - Log function entry (confirms if MessageHandler triggers at all)
+   - Log full update object structure
+   - Log whether update.message exists
+   - Log user ID and message text
+   - **CRITICAL:** This will definitively show if handler is called
+
+**Hypotheses Being Tested:**
+1. **Chat Context Mismatch** - Text message from different chat_id than button click
+2. **Update Type Filtering** - Telegram sending different update structure that doesn't match filters.TEXT
+3. **Handler Blocking** - Another handler catching text before ConversationHandler
+4. **State Tracking Bug** - ConversationHandler not properly tracking MESSAGE_INPUT state
+
+**Expected Outcomes:**
+- **If handle_message_text() logs appear:** Handler works, issue is downstream (payment creation)
+- **If handle_message_text() logs DON'T appear:** Handler isn't catching the update (chat context, filter mismatch, or blocking)
+
+**Files Modified:**
+- `TelePay10-26/bot/conversations/donation_conversation.py`
+
+**Next Steps:**
+1. Restart service with debug logging
+2. Test donation flow
+3. Analyze logs to identify exact root cause
+4. Apply targeted fix based on log findings
+
+---
 
 ## 2025-11-14: ConversationHandler per_message Parameter ✅
 

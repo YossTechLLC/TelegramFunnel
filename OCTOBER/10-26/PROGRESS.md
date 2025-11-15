@@ -1,8 +1,35 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Donation Message Text Input Fixed** ✅
+**Last Updated:** 2025-11-14 - **Donation Message Text Input - Debug Logging Added** 🔍
 
 ## Recent Updates
+
+## 2025-11-14: Added Debug Logging to Investigate MessageHandler Issue 🔍
+
+**Action:** Added comprehensive debug logging to trace why MessageHandler isn't triggering
+**Status:** 🔴 **DEBUG LOGGING DEPLOYED TO VM - AWAITING USER TEST & RESTART**
+
+**Problem:** Despite both fixes (payment_service + per_message=False) confirmed deployed and working, MessageHandler for text input still NOT triggering when user types message.
+
+**Debug Logs Added:**
+- ConversationHandler creation with state values
+- MESSAGE_INPUT state entry confirmation
+- handle_message_text() function entry with full update object details
+- User ID, chat ID, and message text content
+
+**Files Modified:**
+- `TelePay10-26/bot/conversations/donation_conversation.py` (Lines 252-253, 276-284, 495-497)
+- Copied to VM: `/home/kingslavxxx/TelegramFunnel/OCTOBER/10-26/TelePay10-26/bot/conversations/donation_conversation.py`
+
+**Next Steps:**
+1. User must restart telepay10-26.py service as kingslavxxx user
+2. Test donation flow and type message
+3. Analyze debug logs to identify exact root cause
+
+**Documentation Created:**
+- `DONATION_MESSAGE_DEBUG_ANALYSIS.md` - Complete debug analysis and restart instructions
+
+---
 
 ## 2025-11-14: Fixed Donation Message Text Input (TWO Root Causes) ✅
 
