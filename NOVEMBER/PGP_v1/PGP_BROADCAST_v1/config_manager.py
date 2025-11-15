@@ -2,36 +2,39 @@
 """
 ConfigManager - Manages configuration from Secret Manager
 Fetches and caches broadcast intervals and bot credentials
+Inherits from BaseConfigManager for common functionality
 """
 
 import os
 import logging
 from typing import Optional
-from google.cloud import secretmanager
+from PGP_COMMON.config import BaseConfigManager
 
 logger = logging.getLogger(__name__)
 
 
-class ConfigManager:
+class ConfigManager(BaseConfigManager):
     """
     Manages configuration from Google Cloud Secret Manager.
+    Inherits common secret fetching from BaseConfigManager.
 
     Responsibilities:
     - Fetch configuration from Secret Manager
-    - Cache values for performance
+    - Cache values for performance (service-specific caching layer)
     - Provide type-safe access to config values
     - Handle fallback to default values on errors
     """
 
     def __init__(self):
-        """Initialize the ConfigManager."""
-        self.client = secretmanager.SecretManagerServiceClient()
+        """Initialize the ConfigManager with caching support."""
+        super().__init__(service_name="PGP_BROADCAST_v1")
         self.logger = logging.getLogger(__name__)
+        # Service-specific caching layer to reduce Secret Manager API calls
         self._cache = {}
 
     def _fetch_secret(self, secret_env_var: str, default: Optional[str] = None) -> Optional[str]:
         """
-        Fetch a secret from Secret Manager.
+        Fetch a secret from Secret Manager with caching layer.
 
         Args:
             secret_env_var: Environment variable containing secret path
@@ -48,17 +51,17 @@ class ConfigManager:
                     return default
                 raise ValueError(f"Environment variable {secret_env_var} not set and no default provided")
 
-            # Check cache
+            # Check service-specific cache first
             if secret_path in self._cache:
                 self.logger.debug(f"📦 Using cached value for {secret_env_var}")
                 return self._cache[secret_path]
 
-            # Fetch from Secret Manager
+            # Fetch from Secret Manager using base class client
             self.logger.info(f"🔐 Fetching secret: {secret_env_var}")
             response = self.client.access_secret_version(request={"name": secret_path})
             value = response.payload.data.decode("UTF-8").strip()  # Strip whitespace/newlines
 
-            # Cache value
+            # Cache value (service-specific caching)
             self._cache[secret_path] = value
             self.logger.debug(f"✅ Secret fetched and cached: {secret_env_var}")
 
@@ -177,7 +180,7 @@ class ConfigManager:
         self.logger.info("🗑️  Configuration cache cleared")
 
 
-# Global instance for convenience
+# Global instance for convenience (singleton pattern)
 _config_manager_instance = None
 
 
