@@ -256,7 +256,7 @@ def calculate_pure_market_conversion(
 
 
 # ============================================================================
-# ENDPOINT 1: POST / - Initial webhook from GCWebhook
+# ENDPOINT 1: POST / - Initial webhook from PGP_ORCHESTRATOR_v1
 # ============================================================================
 
 @app.route("/", methods=["POST"])
@@ -774,7 +774,7 @@ def receive_eth_client_swap():
         print(f"✅ [ENDPOINT_3] Database insertion successful")
         print(f"🔗 [ENDPOINT_3] Linked to split_payout_request via unique_id: {unique_id}")
 
-        # Build GCHostPay token
+        # Build PGP_HOSTPAY1_v1 token
         tps_hostpay_signing_key = config.get('tps_hostpay_signing_key')
         if not tps_hostpay_signing_key:
             print(f"❌ [ENDPOINT_3] HostPay signing key not available")
@@ -795,7 +795,7 @@ def receive_eth_client_swap():
             print(f"❌ [ENDPOINT_3] Failed to build HostPay token")
             abort(500, "HostPay token generation failed")
 
-        # Enqueue Cloud Task to GCHostPay
+        # Enqueue Cloud Task to PGP_HOSTPAY1_v1
         if not cloudtasks_client:
             print(f"❌ [ENDPOINT_3] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
