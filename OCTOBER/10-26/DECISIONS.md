@@ -1,12 +1,60 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **Cross-Chat ConversationHandler Tracking (per_chat=False, per_user=True)** ✅
+**Last Updated:** 2025-11-15 - **URL Encoding for NowPayments success_url Query Parameters** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-15: URL Encoding for NowPayments API Query Parameters ✅
+
+**Decision:** Use `urllib.parse.quote()` to URL-encode ALL query parameters in `success_url` when creating NowPayments invoices
+**Status:** ✅ **IMPLEMENTED**
+
+**Context:**
+- NowPayments API requires `success_url` parameter to be a valid RFC 3986 compliant URI
+- Our `order_id` format: `PGP-{user_id}|{channel_id}` (e.g., `PGP-6271402111|-1003377958897`)
+- Pipe character `|` is **NOT a valid URI character** and must be percent-encoded as `%7C`
+- Donation message feature encrypts messages using base64url encoding
+- Base64URL encoding ≠ URL encoding for query parameters
+
+**Problem:**
+- Invoice creation failing with: `{"status":false,"statusCode":400,"code":"INVALID_REQUEST_PARAMS","message":"success_url must be a valid uri"}`
+- Both donation flows (with and without message) were failing
+- This exact issue was fixed on 2025-11-02, but donation message feature re-introduced the pattern
+
+**Solution:**
+```python
+from urllib.parse import quote
+
+# Encode order_id (contains pipe character)
+success_url = f"{base_url}/payment-processing?order_id={quote(order_id)}"
+
+# Encode encrypted message (base64url-encoded string)
+if donation_message:
+    encrypted_msg = encrypt_donation_message(donation_message)
+    success_url += f"&msg={quote(encrypted_msg)}"
+```
+
+**Result:**
+- `PGP-123|456` → `PGP-123%7C456` ✅
+- NowPayments accepts the URI as valid
+- Decryption unaffected: `urllib.parse.parse_qs()` automatically decodes query parameters
+
+**Why This Works:**
+1. **RFC 3986 Compliance:** Pipe `|` must be percent-encoded in query strings
+2. **Transparent Decoding:** `parse_qs()` in webhook automatically decodes `%7C` back to `|`
+3. **No Impact on Encryption:** The encryption/decryption flow remains unchanged
+4. **Standard Pattern:** Matches previous fix from 2025-11-02
+
+**Files Modified:**
+- `TelePay10-26/services/payment_service.py` (Lines 17, 296, 302)
+
+**Alternative Considered:** Using `urllib.parse.urlencode()` for entire query dict - rejected for simplicity, quote() is sufficient
+
+---
 
 ## 2025-11-14: Cross-Chat Conversation Tracking for Channel-to-Private Chat Flow ✅
 

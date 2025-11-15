@@ -1,8 +1,38 @@
 # Progress Tracker - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-14 - **FIXED: Chat Context Mismatch - Donation Messages Now Work!** ✅
+**Last Updated:** 2025-11-15 - **FIXED: URL Encoding for NowPayments Invoice Creation** ✅
 
 ## Recent Updates
+
+## 2025-11-15: FIXED - URL Encoding for success_url Parameter ✅
+
+**Action:** Added URL encoding to fix NowPayments invoice creation failure
+**Status:** ✅ **CODE UPDATED - READY FOR DEPLOYMENT**
+
+**ROOT CAUSE:**
+- NowPayments API rejecting invoices with error: `"success_url must be a valid uri"`
+- Pipe character `|` in order_id (format: `PGP-{user_id}|{channel_id}`) not URL-encoded
+- Encrypted donation message in `msg` parameter not URL-encoded
+- Both violations of RFC 3986 URI specification
+
+**THE FIX:**
+- Added `from urllib.parse import quote` to imports
+- Changed `success_url = f"{base_url}/payment-processing?order_id={order_id}"`
+  to `success_url = f"{base_url}/payment-processing?order_id={quote(order_id)}"`
+- Changed `success_url += f"&msg={encrypted_msg}"`
+  to `success_url += f"&msg={quote(encrypted_msg)}"`
+
+**Files Modified:**
+- `TelePay10-26/services/payment_service.py` (Lines 17, 296, 302)
+
+**Impact:**
+- Invoice creation will now succeed for both donation flows (with and without message)
+- Pipe character encoded as `%7C` (e.g., `PGP-123%7C456`)
+- Decryption unaffected (urllib.parse.parse_qs() auto-decodes query parameters)
+
+**Historical Note:** This exact issue was fixed on 2025-11-02 (see BUGS_ARCH.md), but donation message feature re-introduced the pattern without URL encoding.
+
+---
 
 ## 2025-11-14: SOLVED - Chat Context Mismatch (Channel → Private Chat) ✅
 

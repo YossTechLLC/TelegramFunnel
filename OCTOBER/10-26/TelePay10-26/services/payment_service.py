@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional
 from google.cloud import secretmanager
 import os
 import sys
+from urllib.parse import quote  # For URL encoding query parameters
 
 # Add shared_utils to path for message encryption
 sys.path.append('/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26')
@@ -289,15 +290,16 @@ class PaymentService:
             }
 
         try:
-            # Build base success URL
+            # Build base success URL with properly encoded order_id
+            # URL encode the pipe character (|) in order_id format: PGP-{user_id}|{channel_id}
             base_url = os.getenv('BASE_URL', 'https://www.paygateprime.com')
-            success_url = f"{base_url}/payment-processing?order_id={order_id}"
+            success_url = f"{base_url}/payment-processing?order_id={quote(order_id)}"
 
-            # Encrypt and append message if provided
+            # Encrypt and append message if provided (with URL encoding)
             if donation_message:
                 logger.info(f"💬 [PAYMENT] Including donation message in invoice")
                 encrypted_msg = encrypt_donation_message(donation_message)
-                success_url += f"&msg={encrypted_msg}"
+                success_url += f"&msg={quote(encrypted_msg)}"  # URL encode encrypted message
                 logger.info(f"   Encrypted message length: {len(encrypted_msg)} chars")
 
             # Call parent create_invoice method with constructed success_url

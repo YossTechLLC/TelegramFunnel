@@ -128,7 +128,8 @@
       "Bash(gcloud compute ssl-certificates:*)",
       "Bash(gcloud compute ssh:*)",
       "Bash(gcloud compute scp:*)",
-      "WebFetch(domain:core.telegram.org)"
+      "WebFetch(domain:core.telegram.org)",
+      "WebFetch(domain:documenter.getpostman.com)"
     ],
     "deny": [],
     "ask": []
