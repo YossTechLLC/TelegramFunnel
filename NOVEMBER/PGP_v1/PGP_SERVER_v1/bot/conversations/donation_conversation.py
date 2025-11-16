@@ -215,21 +215,85 @@ async def confirm_donation(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         parse_mode="HTML"
     )
 
-    # TODO: Trigger payment gateway
-    # Get payment service from bot_data
-    # payment_service = context.application.bot_data.get('payment_service')
-    # if payment_service:
-    #     result = await payment_service.create_invoice(
-    #         user_id=user.id,
-    #         amount=amount_float,
-    #         order_id=f"DONATE-{user.id}-{open_channel_id}",
-    #         description=f"Donation for {open_channel_id}"
-    #     )
-    #     if result['success']:
-    #         await context.bot.send_message(
-    #             chat_id=query.message.chat.id,
-    #             text=f"💳 Payment link ready!\n\n{result['invoice_url']}"
-    #         )
+    # ✅ PHASE 4A: Integrated payment gateway
+    # Get payment service from bot_data (set in app_initializer.py)
+    try:
+        from services import init_payment_service
+        import os
+
+        # Initialize payment service
+        payment_service = init_payment_service()
+
+        # Create order_id in same format as subscriptions
+        order_id = f"PGP-{user.id}|{open_channel_id}"
+
+        logger.info(f"💰 [DONATION] Creating payment invoice for ${amount_float:.2f} - order_id: {order_id}")
+
+        # Get success URL
+        base_url = os.getenv("BASE_URL", "https://www.paygateprime.com")
+        success_url = f"{base_url}/payment-success"
+
+        # Create invoice using payment service
+        invoice_result = await payment_service.create_payment_invoice(
+            user_id=user.id,
+            amount=amount_float,
+            success_url=success_url,
+            order_id=order_id
+        )
+
+        if invoice_result.get("success"):
+            invoice_url = invoice_result["data"].get("invoice_url", "")
+
+            if invoice_url:
+                logger.info(f"✅ [DONATION] Payment invoice created successfully for ${amount_float:.2f}")
+
+                # Get database manager from bot_data
+                db_manager = context.application.bot_data.get('database_manager')
+
+                # Fetch channel details for message formatting
+                if db_manager:
+                    channel_details = db_manager.get_channel_details_by_open_id(open_channel_id)
+                    channel_title = channel_details.get('closed_channel_title', 'Premium Channel') if channel_details else 'Premium Channel'
+                else:
+                    channel_title = 'Premium Channel'
+
+                # Send payment button to user's PRIVATE chat (not channel)
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+                keyboard = [[InlineKeyboardButton("💳 Complete Payment", url=invoice_url)]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await context.bot.send_message(
+                    chat_id=user.id,  # Send to user's DM
+                    text=f"💝 <b>Thank You for Your Donation!</b>\n\n"
+                         f"💰 Amount: <b>${amount_float:.2f}</b>\n"
+                         f"📺 Channel: <b>{channel_title}</b>\n\n"
+                         f"Click the button below to complete your payment via NowPayments.\n"
+                         f"Your support helps creators continue producing great content!",
+                    parse_mode="HTML",
+                    reply_markup=reply_markup
+                )
+                logger.info(f"✅ [DONATION] Payment button sent to user {user.id}")
+            else:
+                logger.error(f"❌ [DONATION] No invoice URL in response")
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text="❌ Error creating payment link. Please try again later."
+                )
+        else:
+            error_msg = invoice_result.get("message", "Unknown error")
+            logger.error(f"❌ [DONATION] Invoice creation failed: {error_msg}")
+            await context.bot.send_message(
+                chat_id=user.id,
+                text=f"❌ Payment gateway error: {error_msg}\nPlease try again later."
+            )
+
+    except Exception as e:
+        logger.error(f"❌ [DONATION] Payment gateway integration error: {e}", exc_info=True)
+        await context.bot.send_message(
+            chat_id=user.id,
+            text="❌ Error processing payment. Please try again later."
+        )
 
     logger.info(f"✅ [DONATION] Donation flow complete for user {user.id}")
 

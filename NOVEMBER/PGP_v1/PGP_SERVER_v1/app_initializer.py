@@ -23,10 +23,10 @@ from input_handlers import InputHandlers
 from menu_handlers import MenuHandlers
 from bot_manager import BotManager
 
-# Legacy imports (will be removed after full migration)
-from donation_input_handler import DonationKeypadHandler  # TODO: Migrate to bot.conversations (kept for backward compatibility)
-# from start_np_gateway import PaymentGatewayManager  # REPLACED by services.PaymentService
-# ✅ REMOVED: notification_service.py (Phase 1 consolidation complete - using services.NotificationService)
+# ✅ Phase 4A: Legacy imports removed - migrated to NEW_ARCHITECTURE
+# from donation_input_handler import DonationKeypadHandler  # REPLACED by bot.conversations.donation_conversation
+# from start_np_gateway import PaymentGatewayManager  # REPLACED by services.PaymentService (Phase 2)
+# from notification_service import NotificationService  # REPLACED by services.NotificationService (Phase 1)
 
 from telegram import Bot  # For bot initialization
 
@@ -109,11 +109,11 @@ class AppInitializer:
         )
         self.logger.info("✅ Closed Channel Manager initialized")
 
-        # Initialize donation input handler
-        self.donation_handler = DonationKeypadHandler(
-            self.db_manager
-        )
-        self.logger.info("✅ Donation Input Handler initialized")
+        # ✅ Phase 4A: Donation handler migrated to modular pattern
+        # OLD: DonationKeypadHandler (donation_input_handler.py) - REMOVED
+        # NEW: bot/conversations/donation_conversation.py - ConversationHandler pattern
+        # No instance needed here - handler created in bot_manager.py via create_donation_conversation_handler()
+        self.logger.info("✅ Donation handler: Using NEW modular conversation pattern (Phase 4A)")
 
         # Create payment gateway wrapper function
         async def payment_gateway_wrapper(update, context):
@@ -136,6 +136,7 @@ class AppInitializer:
         
         # Initialize menu handlers and bot manager
         self.menu_handlers = MenuHandlers(self.input_handlers, payment_gateway_wrapper)
+        # ✅ Phase 4A: donation_handler parameter removed (using NEW modular bot/conversations pattern)
         self.bot_manager = BotManager(
             self.input_handlers,
             self.menu_handlers.main_menu_callback,
@@ -143,7 +144,7 @@ class AppInitializer:
             payment_gateway_wrapper,
             self.menu_handlers,
             self.db_manager,
-            self.donation_handler
+            None  # donation_handler removed (Phase 4A - using bot.conversations.donation_conversation)
         )
         
         # Initialize subscription manager with configurable check interval

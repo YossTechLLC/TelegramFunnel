@@ -11,6 +11,10 @@ from telegram.ext import (
 )
 from input_handlers import InputHandlers, OPEN_CHANNEL_INPUT, CLOSED_CHANNEL_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT, DATABASE_CHANNEL_ID_INPUT, DATABASE_EDITING, DATABASE_FIELD_INPUT
 
+# 🆕 NEW_ARCHITECTURE: Import modular handlers and conversations (Phase 4A)
+from bot.handlers import register_command_handlers
+from bot.conversations import create_donation_conversation_handler
+
 class BotManager:
     def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None, donation_handler=None):
         self.input_handlers = input_handlers
@@ -23,6 +27,11 @@ class BotManager:
     
     def setup_handlers(self, application: Application):
         """Set up all bot handlers"""
+        # 🆕 NEW_ARCHITECTURE: Register modular command handlers first (Phase 4A)
+        # These will override the OLD menu_handlers.start_bot() method
+        register_command_handlers(application)
+        print("✅ [PHASE_4A] Modular command handlers registered (/start, /help)")
+
         # Get handler functions from input_handlers
         handlers = self.input_handlers.get_handlers()
 
@@ -65,44 +74,28 @@ class BotManager:
             per_message=False,
         )
         
-        # Donation conversation handler
-        donation_handler = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(self.input_handlers.start_donation_conversation, pattern="^CMD_DONATE$"),
-            ],
-            states={
-                DONATION_AMOUNT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.input_handlers.receive_donation_amount)],
-            },
-            fallbacks=[CommandHandler("cancel", self.input_handlers.cancel)],
-            per_message=False,
-        )
+        # 🆕 NEW_ARCHITECTURE: Donation conversation handler (Phase 4A)
+        # Using modular bot/conversations/donation_conversation.py instead of OLD donation_input_handler.py
+        donation_conversation = create_donation_conversation_handler()
+        print("✅ [PHASE_4A] Modular donation conversation handler created")
         
         # Add all handlers (order matters - more specific first)
         application.add_handler(database_v2_handler)  # NEW: Inline form database flow
         application.add_handler(database_handler_old)  # OLD: Keep for /database command
-        application.add_handler(donation_handler)
-        application.add_handler(CommandHandler("start", self.start_bot_handler))
+        application.add_handler(donation_conversation)  # 🆕 NEW_ARCHITECTURE: Modular donation handler (Phase 4A)
+        # ✅ REMOVED: CommandHandler("start", self.start_bot_handler) - Replaced by bot.handlers.command_handler (Phase 4A)
+        # OLD start_bot_handler in menu_handlers.py still available but not registered
+        # NEW modular /start and /help are now registered via register_command_handlers()
         application.add_handler(CommandHandler("start_np_gateway_new", self.payment_gateway_handler))
         application.add_handler(CallbackQueryHandler(self.trigger_payment_handler, pattern="^TRIGGER_PAYMENT$"))
 
         # Handle CMD_GATEWAY callback for payment gateway
         application.add_handler(CallbackQueryHandler(self.handle_cmd_gateway, pattern="^CMD_GATEWAY$"))
 
-        # NEW: Donation handlers for closed channels
-        if self.donation_handler:
-            # Handle "Donate" button click in closed channels
-            application.add_handler(CallbackQueryHandler(
-                self.donation_handler.start_donation_input,
-                pattern=r"^donate_start_"
-            ))
-            print("📝 Registered: donate_start handler")
-
-            # Handle numeric keypad button presses
-            application.add_handler(CallbackQueryHandler(
-                self.donation_handler.handle_keypad_input,
-                pattern=r"^donate_(digit|backspace|clear|confirm|cancel|noop)"
-            ))
-            print("📝 Registered: donate_keypad handler")
+        # ✅ REMOVED: OLD donation_handler (donation_input_handler.py) handlers (Phase 4A)
+        # Replaced by NEW modular donation_conversation (bot/conversations/donation_conversation.py)
+        # OLD pattern: DonationKeypadHandler.start_donation_input + handle_keypad_input
+        # NEW pattern: ConversationHandler with start_donation, handle_keypad_input states
 
         # Catch-all for other callbacks (excluding database-related ones which are handled by ConversationHandler)
         application.add_handler(CallbackQueryHandler(
@@ -119,10 +112,12 @@ class BotManager:
 
         application = Application.builder().token(telegram_token).build()
         
-        # Store references in bot_data for donation flow  
+        # Store references in bot_data for donation flow
         application.bot_data['menu_handlers'] = self.menu_handlers
         application.bot_data['payment_gateway_handler'] = self.payment_gateway_handler
         application.bot_data['db_manager'] = self.db_manager
+        # 🆕 NEW_ARCHITECTURE: Also store as 'database_manager' for modular handlers (Phase 4A)
+        application.bot_data['database_manager'] = self.db_manager
         print(f"⚙️ [DEBUG] Bot data setup: menu_handlers={self.menu_handlers is not None}, payment_handler={self.payment_gateway_handler is not None}, db_manager={self.db_manager is not None}")
         
         # Setup all handlers
