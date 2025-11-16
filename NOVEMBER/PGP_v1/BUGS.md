@@ -1,4 +1,4 @@
-# Bug Tracker - TelegramFunnel OCTOBER/10-26
+# Bug Tracker - TelegramFunnel NOVEMBER/PGP_v1
 
 **Last Updated:** 2025-11-14 Session 157
 

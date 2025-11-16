@@ -1,4 +1,4 @@
-# Architectural Decisions - TelegramFunnel OCTOBER/10-26
+# Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
 **Last Updated:** 2025-11-16 - **Phase 4B: message_utils.py Cleanup Complete** ✅
 
@@ -2527,3 +2527,8 @@ Integration successful when:
 
 ---
 
+
+# DECISIONS
+
+## 2025-11-16
+- Created new workspace at NOVEMBER/PGP_v1 for PayGatePrime (PGP) v1 development
