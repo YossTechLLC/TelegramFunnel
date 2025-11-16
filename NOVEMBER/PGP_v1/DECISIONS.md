@@ -1,12 +1,45 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-16 - **Phase 4A: NEW_ARCHITECTURE Migration Complete** ✅
+**Last Updated:** 2025-11-16 - **Phase 4B: message_utils.py Cleanup Complete** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-16: Phase 4B Execution - message_utils.py Removal ✅
+
+**Decision:** Removed unused message_utils.py (23 lines) after comprehensive verification showed zero actual usage.
+
+**Execution Details:**
+
+**Verification Steps:**
+1. Import analysis: Found imports in app_initializer.py
+2. Usage analysis: ZERO actual method calls found
+3. Functional replacement: All managers use telegram.Bot instances
+
+**Removal Actions:**
+1. Deleted message_utils.py (23 lines)
+2. Removed 4 references from app_initializer.py (lines 10, 58, 96, 290)
+
+**Risk Assessment:**
+- Pre-execution: 🟢 **VERY LOW** - File completely unused
+- Post-execution: ✅ **ZERO ISSUES**
+
+**Results:**
+- Code: ↓ 23 lines (Phase 4B)
+- Cumulative: ↓ 1,471 lines (Phases 1-4B)
+- Functionality: ✅ **ZERO LOSS**
+
+**Architecture Evolution:**
+- OLD: Synchronous requests-based messaging (message_utils.py)
+- NEW: Async telegram.Bot instances in all managers
+
+**Timeline:**
+- Total time: ~10 minutes for Phase 4B cleanup
+
+---
 
 ## 2025-11-16: Phase 4A Execution - NEW_ARCHITECTURE Migration ✅
 

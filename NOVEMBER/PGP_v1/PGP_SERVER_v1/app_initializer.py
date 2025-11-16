@@ -7,7 +7,7 @@ import os
 from config_manager import ConfigManager
 # ✅ REMOVED: secure_webhook.py (Phase 3 consolidation complete - deprecated, replaced by static landing page)
 from broadcast_manager import BroadcastManager
-from message_utils import MessageUtils
+# ✅ Phase 4B: Removed message_utils import (unused - all managers use telegram.Bot)
 from subscription_manager import SubscriptionManager
 from closed_channel_manager import ClosedChannelManager
 
@@ -55,7 +55,7 @@ class AppInitializer:
         self.input_handlers = None
         self.menu_handlers = None
         self.bot_manager = None
-        self.message_utils = None
+        # ✅ Phase 4B: Removed self.message_utils (unused - all managers use telegram.Bot)
         self.subscription_manager = None
         self.closed_channel_manager = None
         self.donation_handler = None
@@ -93,7 +93,7 @@ class AppInitializer:
         # ✅ REMOVED: PaymentGatewayManager (Phase 2 consolidation complete - using services.PaymentService)
         # OLD start_np_gateway.py functionality now fully migrated to services/payment_service.py
         self.input_handlers = InputHandlers(self.db_manager)
-        self.message_utils = MessageUtils(self.config['bot_token'])
+        # ✅ Phase 4B: Removed MessageUtils (unused - all managers use telegram.Bot for async messaging)
         
         # Initialize broadcast manager
         self.broadcast_manager = BroadcastManager(
@@ -287,7 +287,7 @@ class AppInitializer:
             'input_handlers': self.input_handlers,
             'menu_handlers': self.menu_handlers,
             'bot_manager': self.bot_manager,
-            'message_utils': self.message_utils,
+            # ✅ Phase 4B: Removed message_utils (unused - all managers use telegram.Bot)
 
             # 🆕 NEW_ARCHITECTURE: Modular services (Phase 1 & 2 complete)
             'payment_service': self.payment_service,  # Phase 2: COMPLETE - replaced payment_manager
