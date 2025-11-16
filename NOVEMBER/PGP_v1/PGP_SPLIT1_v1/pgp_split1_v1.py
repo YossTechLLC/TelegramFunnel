@@ -365,7 +365,7 @@ def initial_webhook():
             print(f"❌ [ENDPOINT_1] Token manager not available")
             abort(500, "Service configuration error")
 
-        encrypted_token = token_manager.encrypt_gcsplit1_to_gcsplit2_token(
+        encrypted_token = token_manager.encrypt_pgp_split1_to_pgp_split2_token(
             user_id=user_id,
             closed_channel_id=str(closed_channel_id),
             wallet_address=wallet_address,
@@ -461,7 +461,7 @@ def receive_usdt_eth_estimate():
             print(f"❌ [ENDPOINT_2] Token manager not available")
             abort(500, "Service configuration error")
 
-        decrypted_data = token_manager.decrypt_gcsplit2_to_gcsplit1_token(encrypted_token)
+        decrypted_data = token_manager.decrypt_pgp_split2_to_pgp_split1_token(encrypted_token)
         if not decrypted_data:
             print(f"❌ [ENDPOINT_2] Failed to decrypt token")
             abort(401, "Invalid token")
@@ -525,7 +525,7 @@ def receive_usdt_eth_estimate():
         print(f"🆔 [ENDPOINT_2] Unique ID: {unique_id}")
 
         # Encrypt token for PGP_SPLIT3_v1
-        encrypted_token_for_split3 = token_manager.encrypt_gcsplit1_to_gcsplit3_token(
+        encrypted_token_for_split3 = token_manager.encrypt_pgp_split1_to_pgp_split3_token(
             unique_id=unique_id,
             user_id=user_id,
             closed_channel_id=closed_channel_id,
@@ -622,7 +622,7 @@ def receive_eth_client_swap():
             print(f"❌ [ENDPOINT_3] Token manager not available")
             abort(500, "Service configuration error")
 
-        decrypted_data = token_manager.decrypt_gcsplit3_to_gcsplit1_token(encrypted_token)
+        decrypted_data = token_manager.decrypt_pgp_split3_to_pgp_split1_token(encrypted_token)
         if not decrypted_data:
             print(f"❌ [ENDPOINT_3] Failed to decrypt token")
             abort(401, "Invalid token")
@@ -924,7 +924,7 @@ def batch_payout():
         print(f"📝 [ENDPOINT_4] Using user_id={batch_user_id} for batch payout")
 
         # Encrypt token for PGP_SPLIT2_v1 (USDT estimate request)
-        encrypted_token_for_split2 = token_manager.encrypt_gcsplit1_to_gcsplit2_token(
+        encrypted_token_for_split2 = token_manager.encrypt_pgp_split1_to_pgp_split2_token(
             user_id=batch_user_id,
             closed_channel_id=str(client_id),
             wallet_address=wallet_address,

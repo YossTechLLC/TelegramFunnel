@@ -195,7 +195,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gcsplit3_to_accumulator_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_split3_to_accumulator_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from PGP_SPLIT3_v1 with ETH→USDT swap details.
 
@@ -379,7 +379,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gchostpay1_to_accumulator_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_hostpay1_to_accumulator_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from PGP_HOSTPAY1_v1 with swap execution completion details.
 

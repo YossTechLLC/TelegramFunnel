@@ -97,7 +97,7 @@ def process_eth_client_swap():
             print(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
 
-        decrypted_data = token_manager.decrypt_gcsplit1_to_gcsplit3_token(encrypted_token)
+        decrypted_data = token_manager.decrypt_pgp_split1_to_pgp_split3_token(encrypted_token)
         if not decrypted_data:
             print(f"❌ [ENDPOINT] Failed to decrypt token")
             abort(401, "Invalid token")
@@ -167,7 +167,7 @@ def process_eth_client_swap():
         print(f"💰 [ENDPOINT] To: {api_to_amount} {api_to_currency.upper()}")
 
         # Encrypt response token for PGP_SPLIT1_v1
-        encrypted_response_token = token_manager.encrypt_gcsplit3_to_gcsplit1_token(
+        encrypted_response_token = token_manager.encrypt_pgp_split3_to_pgp_split1_token(
             unique_id=unique_id,
             user_id=user_id,
             closed_channel_id=closed_channel_id,
@@ -273,7 +273,7 @@ def process_eth_to_usdt_swap():
             print(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
 
-        decrypted_data = token_manager.decrypt_accumulator_to_gcsplit3_token(encrypted_token)
+        decrypted_data = token_manager.decrypt_accumulator_to_pgp_split3_token(encrypted_token)
         if not decrypted_data:
             print(f"❌ [ENDPOINT] Failed to decrypt token")
             abort(401, "Invalid token")
@@ -325,7 +325,7 @@ def process_eth_to_usdt_swap():
         print(f"💰 [ENDPOINT] To: ${api_to_amount} USDT")
 
         # Encrypt response token for PGP_ACCUMULATOR
-        encrypted_response_token = token_manager.encrypt_gcsplit3_to_accumulator_token(
+        encrypted_response_token = token_manager.encrypt_pgp_split3_to_accumulator_token(
             accumulation_id=accumulation_id,
             client_id=client_id,
             cn_api_id=cn_api_id,

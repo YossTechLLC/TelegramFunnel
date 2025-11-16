@@ -392,7 +392,7 @@ def swap_executed():
             }), 400
 
         print(f"🔐 [ENDPOINT] Decrypting token from PGP_HOSTPAY1_v1")
-        decrypted_data = token_manager.decrypt_gchostpay1_to_microbatch_token(encrypted_token)
+        decrypted_data = token_manager.decrypt_pgp_hostpay1_to_microbatch_token(encrypted_token)
 
         if not decrypted_data:
             print(f"❌ [ENDPOINT] Token decryption failed")

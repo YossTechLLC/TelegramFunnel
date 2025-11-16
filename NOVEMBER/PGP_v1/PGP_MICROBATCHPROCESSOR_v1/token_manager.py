@@ -105,7 +105,7 @@ class TokenManager(BaseTokenManager):
             print(f"❌ [TOKEN_ENC] Encryption error: {e}")
             return None
 
-    def decrypt_gchostpay1_to_microbatch_token(self, token: str) -> Optional[Dict[str, Any]]:
+    def decrypt_pgp_hostpay1_to_microbatch_token(self, token: str) -> Optional[Dict[str, Any]]:
         """
         Decrypt token from PGP_HOSTPAY1_v1 with batch execution completion details.
 

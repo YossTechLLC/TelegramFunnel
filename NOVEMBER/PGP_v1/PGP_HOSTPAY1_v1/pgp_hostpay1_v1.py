@@ -122,7 +122,7 @@ def _route_batch_callback(
             return False
 
         # Encrypt response token for MicroBatchProcessor
-        response_token = token_manager.encrypt_gchostpay1_to_microbatch_response_token(
+        response_token = token_manager.encrypt_pgp_hostpay1_to_microbatch_response_token(
             batch_conversion_id=batch_conversion_id,
             cn_api_id=cn_api_id,
             tx_hash=tx_hash,
@@ -230,7 +230,7 @@ def _enqueue_delayed_callback_check(
             print(f"❌ [RETRY_ENQUEUE] Token manager not available")
             return False
 
-        retry_token = token_manager.encrypt_gchostpay1_retry_token(
+        retry_token = token_manager.encrypt_pgp_hostpay1_retry_token(
             unique_id=unique_id,
             cn_api_id=cn_api_id,
             tx_hash=tx_hash,
@@ -823,7 +823,7 @@ def retry_callback_check():
             abort(500, "Service configuration error")
 
         try:
-            decrypted_data = token_manager.decrypt_gchostpay1_retry_token(token)
+            decrypted_data = token_manager.decrypt_pgp_hostpay1_retry_token(token)
             if not decrypted_data:
                 print(f"❌ [ENDPOINT_4] Failed to decrypt retry token")
                 abort(401, "Invalid token")
