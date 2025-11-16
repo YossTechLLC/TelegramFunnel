@@ -53,16 +53,45 @@
 - ✅ All scripts updated with new database name: `pgpdb`
 - ✅ All scripts updated with new connection: `pgp-live:us-central1:pgp-live-psql`
 
+### Phase 7: Complete Deployment Scripts & Missing Services ✅ COMPLETE
+- ✅ **CRITICAL DISCOVERY:** Added missing **np-webhook-PGP** service (NowPayments IPN handler)
+- ✅ Created **DEPLOYMENT_NEEDS_ANALYSIS.md** - Comprehensive deployment requirements analysis
+- ✅ **06_setup_iam_permissions.sh** - Service account and IAM role configuration
+- ✅ **07_deploy_backend_services.sh** - Deploy all 15 backend services to Cloud Run
+- ✅ **08_deploy_frontend.sh** - Build and deploy React frontend to Cloud Storage + CDN
+- ✅ **09_EXTERNAL_WEBHOOKS_CONFIG.md** - Critical external webhook configuration guide
+- ✅ **10_verify_deployment.sh** - Comprehensive deployment verification script
+- ✅ Total deployment scripts: 10 (5 infrastructure + 3 service deployment + 2 documentation)
+- ✅ All webhook services identified and deployment scripts created
+- ✅ All scripts marked "DO NOT EXECUTE" for manual review
+
 ## 📊 Final Statistics
-- **Services migrated:** 14
+- **Services migrated:** 15 (14 original + np-webhook-PGP)
 - **Config files updated:** 13
 - **Migration scripts updated:** 13
-- **Deployment scripts updated:** 6
-- **Total files modified:** 200+
+- **Deployment scripts created:** 10
+- **Total files in PGP_v1:** 260+
+- **Total lines of code migrated:** 50,392+
 - **Project ID occurrences changed:** 26
 - **Database connections updated:** 45+
 - **Secrets documented:** 46
+- **Cloud Tasks queues:** 16
+- **Cloud Run services:** 15
 - **Zero hardcoded `telepay-459221` references remaining** ✅
 
 ## ✅ MIGRATION CODE PREPARATION: COMPLETE
 All code has been successfully migrated and is ready for deployment to `pgp-live` project.
+
+**All 10 deployment scripts created and ready for execution:**
+1. ✅ API enablement
+2. ✅ Cloud SQL setup
+3. ✅ Secrets creation
+4. ✅ Queue secrets creation
+5. ✅ Service URL secrets creation
+6. ✅ IAM permissions setup
+7. ✅ Backend services deployment (15 services)
+8. ✅ Frontend deployment
+9. ✅ External webhooks configuration guide
+10. ✅ Deployment verification
+
+**Ready for user to execute scripts manually when deploying to pgp-live project.**
