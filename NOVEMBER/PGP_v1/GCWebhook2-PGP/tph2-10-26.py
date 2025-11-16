@@ -23,10 +23,16 @@ Key Implementation:
 - Event loop and connections properly cleaned up after each request
 """
 import time
+import sys
 import asyncio
 from flask import Flask, request, abort, jsonify
 from telegram import Bot
 from telegram.error import TelegramError
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
 
 # Import service modules
 from config_manager import ConfigManager
@@ -34,6 +40,9 @@ from token_manager import TokenManager
 from database_manager import DatabaseManager
 
 app = Flask(__name__)
+
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCWebhook2-10-26 Telegram Invite Sender Service")
@@ -83,6 +92,7 @@ except Exception as e:
 # ============================================================================
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def send_telegram_invite():
     """
     Main endpoint for sending Telegram invites.
@@ -101,6 +111,11 @@ def send_telegram_invite():
     """
     try:
         print(f"🎯 [ENDPOINT] Telegram invite request received (from GCWebhook1)")
+
+        # Log authenticated caller
+        caller = get_caller_identity()
+        caller_email = caller.get('email', 'unknown') if caller else 'unknown'
+        print(f"🔐 [OIDC_AUTH] Authenticated caller: {caller_email}")
 
         # Parse JSON payload
         try:

@@ -10,8 +10,15 @@ Endpoints:
 - POST /status-verified - Status check response (from GCHostPay2)
 - POST /payment-completed - Payment execution response (from GCHostPay3)
 """
+import sys
 import time
 from flask import Flask, request, abort, jsonify
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
 
 # Import service modules
 from config_manager import ConfigManager
@@ -21,6 +28,9 @@ from cloudtasks_client import CloudTasksClient
 from changenow_client import ChangeNowClient
 
 app = Flask(__name__)
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
+
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCHostPay1-10-26 Validator & Orchestrator Service")
@@ -273,6 +283,7 @@ def _enqueue_delayed_callback_check(
 # ============================================================================
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def main_webhook():
     """
     Main webhook endpoint for receiving payment split requests.
@@ -465,6 +476,7 @@ def main_webhook():
 # ============================================================================
 
 @app.route("/status-verified", methods=["POST"])
+@require_oidc_token
 def status_verified():
     """
     Status check response endpoint (receives from GCHostPay2).
@@ -603,6 +615,7 @@ def status_verified():
 # ============================================================================
 
 @app.route("/payment-completed", methods=["POST"])
+@require_oidc_token
 def payment_completed():
     """
     Payment execution response endpoint (receives from GCHostPay3).
@@ -783,6 +796,7 @@ def payment_completed():
 # ============================================================================
 
 @app.route("/retry-callback-check", methods=["POST"])
+@require_oidc_token
 def retry_callback_check():
     """
     Retry endpoint to re-query ChangeNow for actual USDT received.

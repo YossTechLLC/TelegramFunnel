@@ -1,10 +1,19 @@
 #!/usr/bin/env python
+import sys
 import socket
 from flask import Flask
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.security_headers import apply_internal_security
 
 class ServerManager:
     def __init__(self):
         self.flask_app = Flask(__name__)
+
+        # Apply security headers (Flask-Talisman for internal service)
+        apply_internal_security(self.flask_app)
+
         self.port = None
     
     def find_free_port(self, start_port=5000, max_tries=20):

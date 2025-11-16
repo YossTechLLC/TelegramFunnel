@@ -16,9 +16,14 @@ Deployment:
 - Region: us-central1
 """
 import os
+import sys
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.security_headers import apply_api_security
 
 from config_manager import config_manager
 from api.routes.auth import auth_bp
@@ -29,6 +34,10 @@ from api.middleware.rate_limiter import setup_rate_limiting, get_rate_limit_erro
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Apply security headers (Flask-Talisman for API)
+# Note: Must be applied BEFORE CORS to avoid conflicts
+apply_api_security(app)
 
 # Load configuration
 config = config_manager.get_config()

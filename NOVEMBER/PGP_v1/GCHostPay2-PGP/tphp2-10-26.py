@@ -6,8 +6,15 @@ with INFINITE RETRY logic, and returns response back to GCHostPay1.
 
 Implements infinite retry via Cloud Tasks (60s fixed backoff, 24h max duration).
 """
+import sys
 import time
 from flask import Flask, request, abort, jsonify
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
 
 # Import service modules
 from config_manager import ConfigManager
@@ -16,6 +23,9 @@ from cloudtasks_client import CloudTasksClient
 from changenow_client import ChangeNowClient
 
 app = Flask(__name__)
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
+
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCHostPay2-10-26 ChangeNow Status Checker Service")
@@ -69,6 +79,7 @@ except Exception as e:
 # ============================================================================
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def check_changenow_status():
     """
     Main endpoint for checking ChangeNow status with infinite retry.

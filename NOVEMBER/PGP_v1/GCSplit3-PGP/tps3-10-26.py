@@ -5,9 +5,16 @@ Receives encrypted tokens from GCSplit1, creates ChangeNow fixed-rate transactio
 and returns encrypted responses back to GCSplit1 via Cloud Tasks.
 Implements infinite retry logic for resilience against API failures.
 """
+import sys
 import time
 from typing import Dict, Any
 from flask import Flask, request, abort, jsonify
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
 
 # Import service modules
 from config_manager import ConfigManager
@@ -16,6 +23,9 @@ from cloudtasks_client import CloudTasksClient
 from changenow_client import ChangeNowClient
 
 app = Flask(__name__)
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
+
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCSplit3-10-26 ETH→Client Swapper Service")
@@ -62,6 +72,7 @@ except Exception as e:
 # ============================================================================
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def process_eth_client_swap():
     """
     Main endpoint for processing ETH→ClientCurrency swap requests from GCSplit1.
@@ -236,6 +247,7 @@ def process_eth_client_swap():
 # ============================================================================
 
 @app.route("/eth-to-usdt", methods=["POST"])
+@require_oidc_token
 def process_eth_to_usdt_swap():
     """
     New endpoint for creating ETH→USDT swaps (threshold payout accumulation).

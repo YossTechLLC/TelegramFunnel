@@ -11,8 +11,10 @@ sqlalchemy==2.0.23
 
 # Web Framework (for webhook server)
 Flask==3.0.3
+flask-talisman==1.1.0
 
 # Google Cloud
+google-auth==2.23.4
 google-cloud-secret-manager==2.16.3
 
 # HTTP Clients

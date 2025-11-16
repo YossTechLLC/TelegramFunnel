@@ -5,11 +5,18 @@ Receives encrypted tokens from GCSplit1, calls ChangeNow API for USDT→ETH esti
 and returns encrypted responses back to GCSplit1 via Cloud Tasks.
 Implements infinite retry logic for resilience against API failures.
 """
+import sys
 import time
 from decimal import Decimal
 from datetime import datetime
 from typing import Dict, Any
 from flask import Flask, request, abort, jsonify
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
 
 # Import service modules
 from config_manager import ConfigManager
@@ -18,6 +25,9 @@ from cloudtasks_client import CloudTasksClient
 from changenow_client import ChangeNowClient
 
 app = Flask(__name__)
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
+
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCSplit2-10-26 USDT→ETH Estimator Service")
@@ -64,6 +74,7 @@ except Exception as e:
 # ============================================================================
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def process_usdt_eth_estimate():
     """
     Main endpoint for processing USDT→ETH estimate requests from GCSplit1.

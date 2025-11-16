@@ -5,6 +5,7 @@ Receives Instant Payment Notification (IPN) callbacks from NowPayments.
 Verifies signature and updates database with payment_id and payment metadata.
 """
 import os
+import sys
 import hmac
 import hashlib
 import json
@@ -14,7 +15,15 @@ from flask_cors import CORS
 from google.cloud.sql.connector import Connector
 from typing import Optional
 
+# Add common modules to path
+sys.path.append('/workspace')
+from common.security_headers import apply_api_security
+from common.validators import IPNValidator, sanitize_log_amount, sanitize_log_wallet
+
 app = Flask(__name__)
+
+# Apply security headers (Flask-Talisman for API)
+apply_api_security(app)
 
 # ============================================================================
 # CORS CONFIGURATION
@@ -620,15 +629,30 @@ def handle_ipn():
         print(f"   Payment ID: {ipn_data.get('payment_id', 'N/A')}")
         print(f"   Order ID: {ipn_data.get('order_id', 'N/A')}")
         print(f"   Payment Status: {ipn_data.get('payment_status', 'N/A')}")
-        print(f"   Pay Amount: {ipn_data.get('pay_amount', 'N/A')} {ipn_data.get('pay_currency', 'N/A')}")
-        print(f"   Outcome Amount: {ipn_data.get('outcome_amount', 'N/A')} {ipn_data.get('outcome_currency', ipn_data.get('pay_currency', 'N/A'))}")
-        print(f"   Price Amount: {ipn_data.get('price_amount', 'N/A')} {ipn_data.get('price_currency', 'N/A')}")
-        print(f"   Pay Address: {ipn_data.get('pay_address', 'N/A')}")
+        print(f"   Pay Amount: {sanitize_log_amount(ipn_data.get('pay_amount', 0))} {ipn_data.get('pay_currency', 'N/A')}")
+        print(f"   Outcome Amount: {sanitize_log_amount(ipn_data.get('outcome_amount', 0))} {ipn_data.get('outcome_currency', ipn_data.get('pay_currency', 'N/A'))}")
+        print(f"   Price Amount: {sanitize_log_amount(ipn_data.get('price_amount', 0))} {ipn_data.get('price_currency', 'N/A')}")
+        print(f"   Pay Address: {sanitize_log_wallet(ipn_data.get('pay_address', 'N/A'))}")
 
     except Exception as e:
         print(f"❌ [IPN] Failed to parse JSON payload: {e}")
         print(f"=" * 80)
         abort(400, "Invalid JSON payload")
+
+    # ============================================================================
+    # INPUT VALIDATION: Validate IPN data structure and values
+    # ============================================================================
+    print(f"")
+    print(f"🔍 [VALIDATION] Validating IPN data structure and values...")
+
+    is_valid, validation_error = IPNValidator.validate_ipn_data(ipn_data)
+    if not is_valid:
+        print(f"❌ [VALIDATION] IPN data validation failed: {validation_error}")
+        print(f"🚫 [VALIDATION] Rejecting request - invalid data")
+        print(f"=" * 80)
+        abort(400, f"Invalid IPN data: {validation_error}")
+
+    print(f"✅ [VALIDATION] IPN data validation passed")
 
     # ============================================================================
     # CRITICAL: Validate payment_status before processing

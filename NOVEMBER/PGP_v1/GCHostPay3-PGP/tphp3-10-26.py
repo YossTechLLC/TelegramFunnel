@@ -8,8 +8,15 @@ NEW: Implements 3-attempt retry limit with error classification and failed trans
 - Attempt 1-2: Retry with 60s delay via Cloud Tasks
 - Attempt 3: Store in failed_transactions table and send alert
 """
+import sys
 import time
 from flask import Flask, request, abort, jsonify
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
 
 # Import service modules
 from config_manager import ConfigManager
@@ -21,6 +28,9 @@ from error_classifier import ErrorClassifier
 from alerting import AlertingService
 
 app = Flask(__name__)
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
+
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCHostPay3-10-26 ETH Payment Executor Service")
@@ -109,6 +119,7 @@ except Exception as e:
 # ============================================================================
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def execute_eth_payment():
     """
     Main endpoint for executing ETH payments with 3-ATTEMPT RETRY LIMIT.

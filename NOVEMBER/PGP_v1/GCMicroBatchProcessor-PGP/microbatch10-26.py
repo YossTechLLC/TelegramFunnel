@@ -10,6 +10,12 @@ import uuid
 from decimal import Decimal
 from flask import Flask, request, abort, jsonify
 
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
+
 from config_manager import ConfigManager
 from database_manager import DatabaseManager
 from token_manager import TokenManager
@@ -17,6 +23,9 @@ from cloudtasks_client import CloudTasksClient
 from changenow_client import ChangeNowClient
 
 app = Flask(__name__)
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
+
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCMicroBatchProcessor-10-26 Micro-Batch Conversion Service")
@@ -72,6 +81,7 @@ except Exception as e:
 
 
 @app.route("/check-threshold", methods=["POST"])
+@require_oidc_token
 def check_threshold():
     """
     Main endpoint for threshold checking (triggered by Cloud Scheduler every 15 minutes).
@@ -338,6 +348,7 @@ def check_threshold():
 
 
 @app.route("/swap-executed", methods=["POST"])
+@require_oidc_token
 def swap_executed():
     """
     Callback endpoint from GCHostPay1 after ETH payment executed.

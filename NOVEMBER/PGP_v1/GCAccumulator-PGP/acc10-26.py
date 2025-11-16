@@ -4,10 +4,17 @@ GCAccumulator-10-26: Payment Accumulation Service
 Receives payment data from GCWebhook1, converts to USDT immediately,
 and stores in accumulation table to eliminate volatility risk.
 """
+import sys
 import time
 from decimal import Decimal
 from datetime import datetime
 from flask import Flask, request, abort, jsonify
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
 
 from config_manager import ConfigManager
 from database_manager import DatabaseManager
@@ -15,6 +22,9 @@ from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 
 app = Flask(__name__)
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
+
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCAccumulator-10-26 Payment Accumulation Service")
@@ -61,6 +71,7 @@ except Exception as e:
 
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def accumulate_payment():
     """
     Main endpoint for accumulating payments.

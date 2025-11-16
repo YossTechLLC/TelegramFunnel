@@ -6,8 +6,15 @@ writes to database, and enqueues tasks to GCWebhook2 (Telegram invite)
 and GCSplit1 (payment split).
 """
 import time
+import sys
 from datetime import datetime, timedelta
 from flask import Flask, request, abort, jsonify
+
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+from common.validators import sanitize_log_wallet, sanitize_log_amount
 
 # Import service modules
 from config_manager import ConfigManager
@@ -16,6 +23,9 @@ from database_manager import DatabaseManager
 from cloudtasks_client import CloudTasksClient
 
 app = Flask(__name__)
+
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCWebhook1-10-26 Payment Processor Service")
@@ -196,6 +206,7 @@ def process_payment():
 # ============================================================================
 
 @app.route("/process-validated-payment", methods=["POST"])
+@require_oidc_token
 def process_validated_payment():
     """
     Process a payment that has been validated by np-webhook.
@@ -220,6 +231,11 @@ def process_validated_payment():
         print(f"")
         print(f"=" * 80)
         print(f"🎯 [VALIDATED] Received validated payment from NP-Webhook")
+
+        # Log authenticated caller
+        caller = get_caller_identity()
+        caller_email = caller.get('email', 'unknown') if caller else 'unknown'
+        print(f"🔐 [OIDC_AUTH] Authenticated caller: {caller_email}")
 
         # Get validated payment data from NP-Webhook
         payment_data = request.get_json()

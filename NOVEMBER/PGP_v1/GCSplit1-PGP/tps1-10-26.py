@@ -5,6 +5,7 @@ Coordinates payment splitting workflow across GCSplit2 and GCSplit3 using Cloud 
 Handles database operations and integrates with GCHostPay for final ETH transfers.
 """
 import os
+import sys
 import json
 import time
 import hmac
@@ -15,6 +16,11 @@ from decimal import Decimal
 from typing import Dict, Any, Optional, Tuple
 from flask import Flask, request, abort, jsonify
 
+# Add common modules to path
+sys.path.append('/workspace')
+from common.oidc_auth import require_oidc_token, get_caller_identity
+from common.security_headers import apply_internal_security
+
 # Import service modules
 from config_manager import ConfigManager
 from database_manager import DatabaseManager
@@ -22,6 +28,9 @@ from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 
 app = Flask(__name__)
+
+# Apply security headers (Flask-Talisman)
+apply_internal_security(app)
 
 # Initialize managers
 print(f"🚀 [APP] Initializing GCSplit1-10-26 Orchestrator Service")
@@ -260,6 +269,7 @@ def calculate_pure_market_conversion(
 # ============================================================================
 
 @app.route("/", methods=["POST"])
+@require_oidc_token
 def initial_webhook():
     """
     Main webhook endpoint for receiving payment split requests from GCWebhook10-26.
@@ -275,6 +285,11 @@ def initial_webhook():
         JSON response with status
     """
     try:
+        # Log authenticated caller
+        caller = get_caller_identity()
+        caller_email = caller.get('email', 'unknown') if caller else 'unknown'
+        print(f"🔐 [OIDC_AUTH] Authenticated caller: {caller_email}")
+
         # Get raw payload for signature verification
         payload = request.get_data()
         signature = request.headers.get('X-Webhook-Signature', '')
