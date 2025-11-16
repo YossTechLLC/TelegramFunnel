@@ -31,7 +31,7 @@ class ChangeNowClient:
             'Content-Type': 'application/json'
         })
 
-        print(f"🔗 [CHANGENOW_CLIENT] Initialized with API key: {api_key[:8]}...")
+        print("🔗 [CHANGENOW_CLIENT] Initialized successfully")
 
     def create_fixed_rate_transaction_with_retry(
         self,

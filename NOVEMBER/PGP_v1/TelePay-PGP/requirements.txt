@@ -1,0 +1,27 @@
+# PayGatePrime v1 - Telegram Bot (pgp-bot-v1) Requirements
+# Core dependencies for Telegram bot and database operations
+
+# Telegram Bot Framework
+python-telegram-bot==20.7
+
+# Database
+psycopg2-binary==2.9.9
+cloud-sql-python-connector==1.4.3
+sqlalchemy==2.0.23
+
+# Web Framework (for webhook server)
+Flask==3.0.3
+
+# Google Cloud
+google-cloud-secret-manager==2.16.3
+
+# HTTP Clients
+requests==2.31.0
+httpx==0.24.1
+
+# Async Support
+nest-asyncio==1.5.8
+
+# Utility
+python-dateutil==2.8.2
+python-dotenv==1.0.0

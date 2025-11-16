@@ -32,7 +32,7 @@ class ChangeNowClient:
             'Content-Type': 'application/json'
         })
 
-        print(f"🔗 [CHANGENOW_CLIENT] Initialized with API key: {api_key[:8]}...")
+        print("🔗 [CHANGENOW_CLIENT] Initialized successfully")
 
     def get_estimated_amount_v2_with_retry(
         self,
