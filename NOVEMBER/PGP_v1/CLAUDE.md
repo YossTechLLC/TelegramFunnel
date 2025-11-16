@@ -1,7 +1,9 @@
 The current working directory is TelegramFunnel/NOVEMBER/PGP_v1 --> That's where the code we are editing exists, you are free to search outside that directory if necessary, however the working code you are to interface & edit only exists in TelegramFunnel/NOVEMBER/PGP_v1
 You are allowed to read and view any file inside of /TelegramFunnel --> however you are to only edit folders & files found inside of TelegramFunnel/NOVEMBER/PGP_v1
+Your working .venv environmentinside of ~/TelegramFunnel/NOVEMBER/PGP_v1/.venv --> Please make sure to only operate inside that .venv environment
+Your .claude folder is explicitly found inside of /PGP_v1 --> ingore any others
 REMEMBER TO Always warn about the remaining context! Before starting a new task make sure the remaining context is enough for the new task or not. If not, ask the user to compact first.
-REMEMBER REFER TO SECRET_SCHEME.md --> contains updated PGP_X_v1 naming scheme of secrets and their respective contents --> always use Google Cloud Secret path inside of code
+REMEMBER REFER TO SECRET_SCHEME.md --> contains updated PGP_X_v1 naming scheme of secrets and their respective contents --> always use Google Cloud Secret path inside of code when trying to give raw value to any given function
 REMEMBER REFER TO NAMING_SCHEME.md --> containts updated PGP_x_v1 naming scheme map & mapping to old scheme for reference and utility
 Create PROGRESS.md, BUGS.md & DECISION.md if not already existing. Update the PROGRESS.md file after every turn with a concice checklist of what you've been able to accomplish (ONLY update PROGRESS.md DECISIONS.md & BUGS.md if you have changed any actual code and NOT if you only produced a new .md file for me to read such as a checklist, report, analysis), 
 While adding bug reports to BUGS.md file. Use the DECISIONS.md file to log every architectural decision you make. Keep these notes short & concentrated.
