@@ -1,0 +1,36 @@
+# Use the official lightweight Python image.
+FROM python:3.11-slim
+
+# Set environment variables to prevent Python from writing pyc files and buffering stdout/stderr.
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Set workdir
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+
+# Install PGP_COMMON shared library
+COPY PGP_COMMON/ /app/PGP_COMMON/
+RUN pip install -e /app/PGP_COMMON
+
+# Copy the app code and supporting modules
+COPY pgp_hostpay2_v1.py .
+COPY config_manager.py .
+COPY token_manager.py .
+COPY changenow_client.py .
+COPY cloudtasks_client.py .
+
+# Expose the port
+EXPOSE 8080
+
+# Set the entrypoint
+CMD ["python", "pgp_hostpay2_v1.py"]

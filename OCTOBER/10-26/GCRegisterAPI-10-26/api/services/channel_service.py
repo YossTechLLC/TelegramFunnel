@@ -62,7 +62,7 @@ class ChannelService:
             if cursor.fetchone():
                 raise ValueError('Channel ID already registered')
 
-            # Insert channel
+            # Insert channel (🆕 includes notification fields)
             cursor.execute("""
                 INSERT INTO main_clients_database (
                     open_channel_id,
@@ -71,6 +71,7 @@ class ChannelService:
                     closed_channel_id,
                     closed_channel_title,
                     closed_channel_description,
+                    closed_channel_donation_message,
                     sub_1_price,
                     sub_1_time,
                     sub_2_price,
@@ -82,10 +83,12 @@ class ChannelService:
                     client_payout_network,
                     payout_strategy,
                     payout_threshold_usd,
+                    notification_status,
+                    notification_id,
                     client_id,
                     created_by
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """, (
                 channel_data.open_channel_id,
@@ -94,6 +97,7 @@ class ChannelService:
                 channel_data.closed_channel_id,
                 channel_data.closed_channel_title,
                 channel_data.closed_channel_description,
+                channel_data.closed_channel_donation_message,
                 channel_data.sub_1_price,
                 channel_data.sub_1_time,
                 channel_data.sub_2_price,
@@ -105,12 +109,14 @@ class ChannelService:
                 channel_data.client_payout_network,
                 channel_data.payout_strategy,
                 channel_data.payout_threshold_usd,
+                channel_data.notification_status,
+                channel_data.notification_id,
                 user_id,
                 username
             ))
 
             cursor.close()
-            print(f"✅ Channel {channel_data.open_channel_id} registered successfully")
+            print(f"✅ Channel {channel_data.open_channel_id} registered with notification settings")
             return True
 
         except Exception as e:
@@ -132,26 +138,33 @@ class ChannelService:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT
-                open_channel_id,
-                open_channel_title,
-                open_channel_description,
-                closed_channel_id,
-                closed_channel_title,
-                closed_channel_description,
-                sub_1_price,
-                sub_1_time,
-                sub_2_price,
-                sub_2_time,
-                sub_3_price,
-                sub_3_time,
-                client_wallet_address,
-                client_payout_currency,
-                client_payout_network,
-                payout_strategy,
-                payout_threshold_usd
-            FROM main_clients_database
-            WHERE client_id = %s
-            ORDER BY open_channel_id DESC
+                m.open_channel_id,
+                m.open_channel_title,
+                m.open_channel_description,
+                m.closed_channel_id,
+                m.closed_channel_title,
+                m.closed_channel_description,
+                m.closed_channel_donation_message,
+                m.sub_1_price,
+                m.sub_1_time,
+                m.sub_2_price,
+                m.sub_2_time,
+                m.sub_3_price,
+                m.sub_3_time,
+                m.client_wallet_address,
+                m.client_payout_currency,
+                m.client_payout_network,
+                m.payout_strategy,
+                m.payout_threshold_usd,
+                m.notification_status,
+                m.notification_id,
+                b.id AS broadcast_id
+            FROM main_clients_database m
+            LEFT JOIN broadcast_manager b
+                ON m.open_channel_id = b.open_channel_id
+                AND m.closed_channel_id = b.closed_channel_id
+            WHERE m.client_id = %s
+            ORDER BY m.open_channel_id DESC
         """, (user_id,))
 
         rows = cursor.fetchall()
@@ -161,11 +174,11 @@ class ChannelService:
         for row in rows:
             # Calculate tier_count dynamically
             tier_count = 0
-            if row[6] is not None:  # sub_1_price
+            if row[7] is not None:  # sub_1_price (index shifted by 1)
                 tier_count += 1
-            if row[8] is not None:  # sub_2_price
+            if row[9] is not None:  # sub_2_price (index shifted by 1)
                 tier_count += 1
-            if row[10] is not None:  # sub_3_price
+            if row[11] is not None:  # sub_3_price (index shifted by 1)
                 tier_count += 1
 
             channels.append({
@@ -175,18 +188,22 @@ class ChannelService:
                 'closed_channel_id': row[3],
                 'closed_channel_title': row[4],
                 'closed_channel_description': row[5],
+                'closed_channel_donation_message': row[6],
                 'tier_count': tier_count,
-                'sub_1_price': float(row[6]) if row[6] else None,
-                'sub_1_time': row[7],
-                'sub_2_price': float(row[8]) if row[8] else None,
-                'sub_2_time': row[9],
-                'sub_3_price': float(row[10]) if row[10] else None,
-                'sub_3_time': row[11],
-                'client_wallet_address': row[12],
-                'client_payout_currency': row[13],
-                'client_payout_network': row[14],
-                'payout_strategy': row[15],
-                'payout_threshold_usd': float(row[16]) if row[16] else None,
+                'sub_1_price': float(row[7]) if row[7] else None,
+                'sub_1_time': row[8],
+                'sub_2_price': float(row[9]) if row[9] else None,
+                'sub_2_time': row[10],
+                'sub_3_price': float(row[11]) if row[11] else None,
+                'sub_3_time': row[12],
+                'client_wallet_address': row[13],
+                'client_payout_currency': row[14],
+                'client_payout_network': row[15],
+                'payout_strategy': row[16],
+                'payout_threshold_usd': float(row[17]) if row[17] else None,
+                'notification_status': row[18],
+                'notification_id': row[19],
+                'broadcast_id': str(row[20]) if row[20] else None,  # 🆕 Broadcast Manager ID
                 'accumulated_amount': None  # TODO: Calculate from payout_accumulation table
             })
 
@@ -213,6 +230,7 @@ class ChannelService:
                 closed_channel_id,
                 closed_channel_title,
                 closed_channel_description,
+                closed_channel_donation_message,
                 sub_1_price,
                 sub_1_time,
                 sub_2_price,
@@ -224,6 +242,8 @@ class ChannelService:
                 client_payout_network,
                 payout_strategy,
                 payout_threshold_usd,
+                notification_status,
+                notification_id,
                 client_id
             FROM main_clients_database
             WHERE open_channel_id = %s
@@ -237,11 +257,11 @@ class ChannelService:
 
         # Calculate tier_count dynamically
         tier_count = 0
-        if row[6] is not None:  # sub_1_price
+        if row[7] is not None:  # sub_1_price (index shifted by 1)
             tier_count += 1
-        if row[8] is not None:  # sub_2_price
+        if row[9] is not None:  # sub_2_price (index shifted by 1)
             tier_count += 1
-        if row[10] is not None:  # sub_3_price
+        if row[11] is not None:  # sub_3_price (index shifted by 1)
             tier_count += 1
 
         return {
@@ -251,19 +271,22 @@ class ChannelService:
             'closed_channel_id': row[3],
             'closed_channel_title': row[4],
             'closed_channel_description': row[5],
+            'closed_channel_donation_message': row[6],
             'tier_count': tier_count,
-            'sub_1_price': float(row[6]) if row[6] else None,
-            'sub_1_time': row[7],
-            'sub_2_price': float(row[8]) if row[8] else None,
-            'sub_2_time': row[9],
-            'sub_3_price': float(row[10]) if row[10] else None,
-            'sub_3_time': row[11],
-            'client_wallet_address': row[12],
-            'client_payout_currency': row[13],
-            'client_payout_network': row[14],
-            'payout_strategy': row[15],
-            'payout_threshold_usd': float(row[16]) if row[16] else None,
-            'client_id': str(row[17])
+            'sub_1_price': float(row[7]) if row[7] else None,
+            'sub_1_time': row[8],
+            'sub_2_price': float(row[9]) if row[9] else None,
+            'sub_2_time': row[10],
+            'sub_3_price': float(row[11]) if row[11] else None,
+            'sub_3_time': row[12],
+            'client_wallet_address': row[13],
+            'client_payout_currency': row[14],
+            'client_payout_network': row[15],
+            'payout_strategy': row[16],
+            'payout_threshold_usd': float(row[17]) if row[17] else None,
+            'notification_status': row[18],
+            'notification_id': row[19],
+            'client_id': str(row[20])
         }
 
     @staticmethod
@@ -283,7 +306,7 @@ class ChannelService:
         update_fields = []
         values = []
 
-        for field, value in update_data.model_dump(exclude_none=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             update_fields.append(f"{field} = %s")
             values.append(value)
 

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing Payment - PayGate Prime</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .status-message {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .spinner-container {
+            margin: 30px 0;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .success-icon {
+            display: none;
+            font-size: 80px;
+            color: #4CAF50;
+            margin: 20px 0;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+            }
+            to {
+                transform: scale(1);
+            }
+        }
+
+        .error-icon {
+            display: none;
+            font-size: 80px;
+            color: #f44336;
+            margin: 20px 0;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            animation: progress 30s linear infinite;
+        }
+
+        @keyframes progress {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            border-radius: 4px;
+        }
+
+        .info-box p {
+            color: #555;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+
+        .info-box strong {
+            color: #333;
+        }
+
+        .redirect-message {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 8px;
+            color: #2e7d32;
+            font-weight: 500;
+        }
+
+        .error-message {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #ffebee;
+            border-radius: 8px;
+            color: #c62828;
+            font-weight: 500;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            color: #999;
+            font-size: 12px;
+        }
+
+        .retry-button {
+            display: none;
+            margin-top: 20px;
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .retry-button:hover {
+            background: #5568d3;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .status-message {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">💳</div>
+        <h1 id="title">Processing Payment</h1>
+        <p class="status-message" id="status-message">Please wait while we confirm your payment...</p>
+
+        <div class="spinner-container" id="spinner-container">
+            <div class="spinner"></div>
+        </div>
+
+        <div class="success-icon" id="success-icon">✓</div>
+        <div class="error-icon" id="error-icon">✗</div>
+
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+        </div>
+
+        <div class="info-box">
+            <p><strong>Order ID:</strong> <span id="order-id">Loading...</span></p>
+            <p><strong>Status:</strong> <span id="payment-status">Pending</span></p>
+            <p><strong>Time Elapsed:</strong> <span id="time-elapsed">0s</span></p>
+        </div>
+
+        <div class="redirect-message" id="redirect-message">
+            ✅ Payment confirmed! Redirecting to Telegram...
+        </div>
+
+        <div class="error-message" id="error-message">
+            ❌ Payment verification failed. Please contact support.
+        </div>
+
+        <button class="retry-button" id="retry-button" onclick="window.location.reload()">
+            Retry Payment Check
+        </button>
+
+        <div class="footer">
+            <p>Secured by PayGate Prime</p>
+            <p>If you experience any issues, please contact support</p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = window.location.origin; // Use same origin (no hardcoded URL needed!)
+        const POLL_INTERVAL = 5000; // 5 seconds
+        const MAX_POLL_ATTEMPTS = 120; // 10 minutes total (120 * 5s)
+        const REDIRECT_DELAY = 3000; // 3 seconds after confirmation
+
+        // State
+        let pollCount = 0;
+        let pollTimer = null;
+        let startTime = Date.now();
+        let timeElapsedInterval = null;
+
+        // Get order_id from URL parameters
+        function getOrderIdFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('order_id');
+        }
+
+        // Update time elapsed display
+        function updateTimeElapsed() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById('time-elapsed').textContent = `${elapsed}s`;
+        }
+
+        // Poll payment status
+        async function checkPaymentStatus() {
+            const orderId = getOrderIdFromUrl();
+
+            if (!orderId) {
+                showError('No order ID provided in URL');
+                return;
+            }
+
+            document.getElementById('order-id').textContent = orderId;
+
+            try {
+                pollCount++;
+                console.log(`[POLL] 🔄 Attempt ${pollCount}/${MAX_POLL_ATTEMPTS}`);
+                console.log(`[POLL] 📡 Calling: ${API_BASE_URL}/api/payment-status?order_id=${orderId}`);
+
+                const response = await fetch(
+                    `${API_BASE_URL}/api/payment-status?order_id=${encodeURIComponent(orderId)}`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        mode: 'cors',
+                        credentials: 'omit'
+                    }
+                );
+
+                console.log(`[POLL] 📊 Response status: ${response.status} ${response.statusText}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('[POLL] ✅ Response data:', data);
+
+                // Update status display
+                if (data.status) {
+                    document.getElementById('payment-status').textContent = data.status.toUpperCase();
+                }
+
+                if (data.status === 'confirmed') {
+                    console.log('[POLL] 🎉 Payment confirmed!');
+                    handlePaymentConfirmed(data);
+                } else if (data.status === 'failed') {
+                    console.log('[POLL] ❌ Payment failed');
+                    handlePaymentFailed(data);
+                } else if (data.status === 'pending') {
+                    console.log('[POLL] ⏳ Payment still pending');
+                    if (pollCount >= MAX_POLL_ATTEMPTS) {
+                        console.log('[POLL] ⏰ Maximum attempts reached');
+                        handleTimeout();
+                    } else {
+                        schedulePoll();
+                    }
+                } else if (data.status === 'error') {
+                    console.error('[POLL] ⚠️ API returned error:', data.message);
+                    // Show error to user after 3 consecutive failures
+                    if (pollCount >= 3) {
+                        showError(`Error: ${data.message || 'Unknown error occurred'}`);
+                    } else {
+                        schedulePoll();
+                    }
+                } else {
+                    console.warn('[POLL] ⚠️ Unknown status:', data.status);
+                    if (pollCount >= MAX_POLL_ATTEMPTS) {
+                        handleTimeout();
+                    } else {
+                        schedulePoll();
+                    }
+                }
+            } catch (error) {
+                console.error('[POLL] ❌ Error:', error);
+
+                // Categorize error type
+                let errorType = 'Unknown';
+                let errorMessage = 'Connection error';
+
+                if (error.message.includes('CORS') || error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                    errorType = 'CORS/Network';
+                    errorMessage = 'Cannot connect to payment server (CORS or network error)';
+                } else if (error.message.includes('404')) {
+                    errorType = '404';
+                    errorMessage = 'Payment API endpoint not found';
+                } else if (error.message.includes('500')) {
+                    errorType = '500';
+                    errorMessage = 'Payment server error';
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorType = 'Network';
+                    errorMessage = 'Network error - please check your connection';
+                }
+
+                console.error(`[POLL] 🔍 Error type: ${errorType}`);
+                console.error(`[POLL] 📝 Error message: ${errorMessage}`);
+
+                if (pollCount >= MAX_POLL_ATTEMPTS) {
+                    console.log('[POLL] ⏰ Maximum attempts reached after errors');
+                    handleTimeout();
+                } else if (pollCount >= 5) {
+                    // After 5 failed attempts (25 seconds), show warning to user
+                    const statusMsg = document.getElementById('status-message');
+                    if (statusMsg) {
+                        statusMsg.textContent = `⚠️ Having trouble connecting to payment server... (Attempt ${pollCount}/${MAX_POLL_ATTEMPTS})`;
+                        statusMsg.style.color = '#ff9800';  // Orange warning color
+                    }
+                    console.warn('[POLL] ⚠️ Showing connection warning to user');
+                    schedulePoll();
+                } else {
+                    // Retry silently for first few attempts
+                    console.log('[POLL] 🔄 Retrying...');
+                    schedulePoll();
+                }
+            }
+        }
+
+        // Schedule next poll
+        function schedulePoll() {
+            pollTimer = setTimeout(checkPaymentStatus, POLL_INTERVAL);
+        }
+
+        // Handle payment confirmed
+        function handlePaymentConfirmed(data) {
+            console.log('[SUCCESS] Payment confirmed!', data);
+
+            // Stop polling
+            clearTimeout(pollTimer);
+            clearInterval(timeElapsedInterval);
+
+            // Update UI
+            document.getElementById('spinner-container').style.display = 'none';
+            document.getElementById('success-icon').style.display = 'block';
+            document.getElementById('title').textContent = 'Payment Confirmed!';
+            document.getElementById('status-message').textContent = 'Your payment has been successfully confirmed.';
+            document.getElementById('payment-status').textContent = 'Confirmed ✓';
+            document.getElementById('redirect-message').style.display = 'block';
+
+            // Redirect to Telegram after delay
+            setTimeout(() => {
+                console.log('[REDIRECT] Redirecting to Telegram...');
+                // The Telegram URL will be passed by the bot or we'll use a default
+                const telegramUrl = new URLSearchParams(window.location.search).get('telegram_url');
+                if (telegramUrl) {
+                    window.location.href = decodeURIComponent(telegramUrl);
+                } else {
+                    // Fallback: just show success message
+                    document.getElementById('redirect-message').textContent = '✅ Payment confirmed! Please return to Telegram.';
+                }
+            }, REDIRECT_DELAY);
+        }
+
+        // Handle payment failed
+        function handlePaymentFailed(data) {
+            console.log('[FAILED] Payment failed:', data);
+
+            // Stop polling
+            clearTimeout(pollTimer);
+            clearInterval(timeElapsedInterval);
+
+            // Update UI
+            document.getElementById('spinner-container').style.display = 'none';
+            document.getElementById('error-icon').style.display = 'block';
+            document.getElementById('title').textContent = 'Payment Failed';
+            document.getElementById('status-message').textContent = 'Your payment could not be confirmed.';
+            document.getElementById('payment-status').textContent = 'Failed ✗';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-message').textContent = data.message || 'Payment verification failed. Please contact support.';
+            document.getElementById('retry-button').style.display = 'inline-block';
+        }
+
+        // Handle timeout
+        function handleTimeout() {
+            console.log('[TIMEOUT] Maximum poll attempts reached');
+
+            // Stop polling
+            clearTimeout(pollTimer);
+            clearInterval(timeElapsedInterval);
+
+            // Update UI
+            document.getElementById('spinner-container').style.display = 'none';
+            document.getElementById('error-icon').style.display = 'block';
+            document.getElementById('title').textContent = 'Verification Timeout';
+            document.getElementById('status-message').textContent = 'Payment verification is taking longer than expected.';
+            document.getElementById('payment-status').textContent = 'Timeout ⏱';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-message').textContent = 'Payment verification timeout. Your payment may still be processing. Please check back later or contact support.';
+            document.getElementById('retry-button').style.display = 'inline-block';
+        }
+
+        // Show error
+        function showError(message) {
+            console.error('[ERROR]', message);
+
+            clearTimeout(pollTimer);
+            clearInterval(timeElapsedInterval);
+
+            document.getElementById('spinner-container').style.display = 'none';
+            document.getElementById('error-icon').style.display = 'block';
+            document.getElementById('title').textContent = 'Error';
+            document.getElementById('status-message').textContent = message;
+            document.getElementById('payment-status').textContent = 'Error ✗';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-message').textContent = message;
+        }
+
+        // Initialize
+        function init() {
+            console.log('[INIT] Payment status page loaded');
+
+            // Start time elapsed counter
+            timeElapsedInterval = setInterval(updateTimeElapsed, 1000);
+
+            // Start polling immediately
+            checkPaymentStatus();
+        }
+
+        // Start when page loads
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

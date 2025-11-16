@@ -1,0 +1,168 @@
+#!/usr/bin/env python
+"""
+Configuration Manager for PGP_HOSTPAY3_v1 (ETH Payment Executor Service).
+Handles fetching configuration values from Google Cloud Secret Manager.
+"""
+from PGP_COMMON.config import BaseConfigManager
+
+
+class ConfigManager(BaseConfigManager):
+    """
+    Manages configuration and secrets for the PGP_HOSTPAY3_v1 service.
+    Inherits common methods from BaseConfigManager.
+    """
+
+    def __init__(self):
+        """Initialize the ConfigManager."""
+        super().__init__(service_name="PGP_HOSTPAY3_v1")
+
+    def initialize_config(self) -> dict:
+        """
+        Initialize and return all configuration values for PGP_HOSTPAY3_v1.
+
+        Returns:
+            Dictionary containing all configuration values
+        """
+        print(f"⚙️ [CONFIG] Initializing PGP_HOSTPAY3_v1 configuration")
+
+        # Use base methods to fetch common configurations
+        ct_config = self.fetch_cloud_tasks_config()
+        db_config = self.fetch_database_config()
+
+        # Fetch signing key for internal communication
+        success_url_signing_key = self.fetch_secret(
+            "SUCCESS_URL_SIGNING_KEY",
+            "Success URL signing key (for internal PGP HostPay communication)"
+        )
+
+        # Fetch wallet credentials
+        host_wallet_address = self.fetch_secret(
+            "HOST_WALLET_ETH_ADDRESS",
+            "Host wallet ETH address"
+        )
+
+        host_wallet_private_key = self.fetch_secret(
+            "HOST_WALLET_PRIVATE_KEY",
+            "Host wallet private key"
+        )
+
+        # Fetch Ethereum RPC configuration
+        ethereum_rpc_url = self.fetch_secret(
+            "ETHEREUM_RPC_URL",
+            "Ethereum RPC URL"
+        )
+
+        ethereum_rpc_url_api = self.fetch_secret(
+            "ETHEREUM_RPC_URL_API",
+            "Ethereum RPC URL API key"
+        )
+
+        # Get PGP HostPay1 response queue configuration
+        pgp_hostpay1_response_queue = self.fetch_secret(
+            "PGP_HOSTPAY1_RESPONSE_QUEUE",
+            "PGP HostPay1 response queue name"
+        )
+
+        pgp_hostpay1_url = self.fetch_secret(
+            "PGP_HOSTPAY1_URL",
+            "PGP HostPay1 service URL"
+        )
+
+        # Get PGP Accumulator response queue configuration (for threshold payouts)
+        pgp_accumulator_response_queue = self.fetch_secret(
+            "PGP_ACCUMULATOR_RESPONSE_QUEUE",
+            "PGP Accumulator response queue name"
+        )
+
+        pgp_accumulator_url = self.fetch_secret(
+            "PGP_ACCUMULATOR_URL",
+            "PGP Accumulator service URL"
+        )
+
+        # Get PGP HostPay3 self-retry configuration (for error handling)
+        pgp_hostpay3_retry_queue = self.fetch_secret(
+            "PGP_HOSTPAY3_RETRY_QUEUE",
+            "PGP HostPay3 self-retry queue name"
+        )
+
+        pgp_hostpay3_url = self.fetch_secret(
+            "PGP_HOSTPAY3_URL",
+            "PGP HostPay3 service URL"
+        )
+
+        # Get alerting configuration (optional)
+        alerting_enabled = self.fetch_secret(
+            "ALERTING_ENABLED",
+            "Alerting enabled flag"
+        )
+
+        slack_alert_webhook = self.fetch_secret(
+            "SLACK_ALERT_WEBHOOK",
+            "Slack webhook URL for alerts (optional)"
+        )
+
+        # Validate critical configurations
+        if not success_url_signing_key:
+            print(f"⚠️ [CONFIG] Warning: SUCCESS_URL_SIGNING_KEY not available")
+        if not host_wallet_address or not host_wallet_private_key:
+            print(f"⚠️ [CONFIG] Warning: Wallet credentials not available")
+        if not ethereum_rpc_url:
+            print(f"⚠️ [CONFIG] Warning: Ethereum RPC URL not available")
+        if not ct_config['cloud_tasks_project_id'] or not ct_config['cloud_tasks_location']:
+            print(f"⚠️ [CONFIG] Warning: Cloud Tasks configuration incomplete")
+
+        # Combine all configurations
+        config = {
+            # Signing key
+            'success_url_signing_key': success_url_signing_key,
+
+            # Wallet credentials
+            'host_wallet_address': host_wallet_address,
+            'host_wallet_private_key': host_wallet_private_key,
+
+            # Ethereum RPC
+            'ethereum_rpc_url': ethereum_rpc_url,
+            'ethereum_rpc_url_api': ethereum_rpc_url_api,
+
+            # Cloud Tasks configuration (from base method)
+            **ct_config,
+
+            # Service-specific queues and URLs
+            'pgp_hostpay1_response_queue': pgp_hostpay1_response_queue,
+            'pgp_hostpay1_url': pgp_hostpay1_url,
+            'pgp_accumulator_response_queue': pgp_accumulator_response_queue,
+            'pgp_accumulator_url': pgp_accumulator_url,
+            'pgp_hostpay3_retry_queue': pgp_hostpay3_retry_queue,
+            'pgp_hostpay3_url': pgp_hostpay3_url,
+
+            # Alerting configuration (optional)
+            'alerting_enabled': alerting_enabled,
+            'slack_alert_webhook': slack_alert_webhook,
+
+            # Database configuration (from base method)
+            **db_config
+        }
+
+        # Log configuration status
+        print(f"📊 [CONFIG] Configuration status:")
+        print(f"   SUCCESS_URL_SIGNING_KEY: {'✅' if config['success_url_signing_key'] else '❌'}")
+        print(f"   HOST_WALLET_ETH_ADDRESS: {'✅' if config['host_wallet_address'] else '❌'}")
+        print(f"   HOST_WALLET_PRIVATE_KEY: {'✅' if config['host_wallet_private_key'] else '❌'}")
+        print(f"   ETHEREUM_RPC_URL: {'✅' if config['ethereum_rpc_url'] else '❌'}")
+        print(f"   ETHEREUM_RPC_URL_API: {'✅' if config['ethereum_rpc_url_api'] else '❌'}")
+        print(f"   Cloud Tasks Project: {'✅' if config['cloud_tasks_project_id'] else '❌'}")
+        print(f"   Cloud Tasks Location: {'✅' if config['cloud_tasks_location'] else '❌'}")
+        print(f"   PGP HostPay1 Response Queue: {'✅' if config['pgp_hostpay1_response_queue'] else '❌'}")
+        print(f"   PGP HostPay1 URL: {'✅' if config['pgp_hostpay1_url'] else '❌'}")
+        print(f"   PGP Accumulator Response Queue: {'✅' if config['pgp_accumulator_response_queue'] else '❌'}")
+        print(f"   PGP Accumulator URL: {'✅' if config['pgp_accumulator_url'] else '❌'}")
+        print(f"   PGP HostPay3 Retry Queue: {'✅' if config['pgp_hostpay3_retry_queue'] else '❌'}")
+        print(f"   PGP HostPay3 URL: {'✅' if config['pgp_hostpay3_url'] else '❌'}")
+        print(f"   Alerting Enabled: {'✅' if config['alerting_enabled'] else '⚠️ (optional)'}")
+        print(f"   Slack Alert Webhook: {'✅' if config['slack_alert_webhook'] else '⚠️ (optional)'}")
+        print(f"   CLOUD_SQL_CONNECTION_NAME: {'✅' if config['instance_connection_name'] else '❌'}")
+        print(f"   DATABASE_NAME_SECRET: {'✅' if config['db_name'] else '❌'}")
+        print(f"   DATABASE_USER_SECRET: {'✅' if config['db_user'] else '❌'}")
+        print(f"   DATABASE_PASSWORD_SECRET: {'✅' if config['db_password'] else '❌'}")
+
+        return config

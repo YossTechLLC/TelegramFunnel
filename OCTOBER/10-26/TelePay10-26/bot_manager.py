@@ -12,13 +12,14 @@ from telegram.ext import (
 from input_handlers import InputHandlers, OPEN_CHANNEL_INPUT, CLOSED_CHANNEL_INPUT, SUB1_INPUT, SUB2_INPUT, SUB3_INPUT, SUB1_TIME_INPUT, SUB2_TIME_INPUT, SUB3_TIME_INPUT, DONATION_AMOUNT_INPUT, DATABASE_CHANNEL_ID_INPUT, DATABASE_EDITING, DATABASE_FIELD_INPUT
 
 class BotManager:
-    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None):
+    def __init__(self, input_handlers: InputHandlers, menu_callback_handler, start_bot_handler, payment_gateway_handler, menu_handlers=None, db_manager=None, donation_handler=None):
         self.input_handlers = input_handlers
         self.menu_callback_handler = menu_callback_handler
         self.start_bot_handler = start_bot_handler
         self.payment_gateway_handler = payment_gateway_handler
         self.menu_handlers = menu_handlers
         self.db_manager = db_manager
+        self.donation_handler = donation_handler
     
     def setup_handlers(self, application: Application):
         """Set up all bot handlers"""
@@ -87,10 +88,26 @@ class BotManager:
         # Handle CMD_GATEWAY callback for payment gateway
         application.add_handler(CallbackQueryHandler(self.handle_cmd_gateway, pattern="^CMD_GATEWAY$"))
 
+        # NEW: Donation handlers for closed channels
+        if self.donation_handler:
+            # Handle "Donate" button click in closed channels
+            application.add_handler(CallbackQueryHandler(
+                self.donation_handler.start_donation_input,
+                pattern=r"^donate_start_"
+            ))
+            print("📝 Registered: donate_start handler")
+
+            # Handle numeric keypad button presses
+            application.add_handler(CallbackQueryHandler(
+                self.donation_handler.handle_keypad_input,
+                pattern=r"^donate_(digit|backspace|clear|confirm|cancel|noop)"
+            ))
+            print("📝 Registered: donate_keypad handler")
+
         # Catch-all for other callbacks (excluding database-related ones which are handled by ConversationHandler)
         application.add_handler(CallbackQueryHandler(
             self.menu_callback_handler,
-            pattern="^(?!CMD_DATABASE|CMD_DONATE|TRIGGER_PAYMENT|CMD_GATEWAY|EDIT_|SUBMIT_|BACK_TO_MAIN|SAVE_ALL_CHANGES|CANCEL_EDIT|TOGGLE_TIER_|CREATE_NEW_CHANNEL|CANCEL_DATABASE).*$"
+            pattern="^(?!CMD_DATABASE|CMD_DONATE|TRIGGER_PAYMENT|CMD_GATEWAY|EDIT_|SUBMIT_|BACK_TO_MAIN|SAVE_ALL_CHANGES|CANCEL_EDIT|TOGGLE_TIER_|CREATE_NEW_CHANNEL|CANCEL_DATABASE|donate_).*$"
         ))
     
     async def run_telegram_bot(self, telegram_token: str, payment_token: str):

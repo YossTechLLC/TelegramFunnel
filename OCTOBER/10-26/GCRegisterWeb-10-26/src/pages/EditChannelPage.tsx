@@ -38,6 +38,8 @@ export default function EditChannelPage() {
   const [closedChannelId, setClosedChannelId] = useState('');
   const [closedChannelTitle, setClosedChannelTitle] = useState('');
   const [closedChannelDescription, setClosedChannelDescription] = useState('');
+  const [closedChannelDonationMessage, setClosedChannelDonationMessage] = useState('');
+  const [donationMessageCharCount, setDonationMessageCharCount] = useState(0);
 
   const [tierCount, setTierCount] = useState(1);
   const [sub1Price, setSub1Price] = useState('');
@@ -53,6 +55,10 @@ export default function EditChannelPage() {
 
   const [payoutStrategy, setPayoutStrategy] = useState('instant');
   const [payoutThresholdUsd, setPayoutThresholdUsd] = useState('');
+
+  // 🆕 Notification settings state (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
+  const [notificationId, setNotificationId] = useState('');
 
   // Wallet validation state
   const [validationWarning, setValidationWarning] = useState('');
@@ -83,6 +89,8 @@ export default function EditChannelPage() {
         setClosedChannelId(channel.closed_channel_id);
         setClosedChannelTitle(channel.closed_channel_title);
         setClosedChannelDescription(channel.closed_channel_description || '');
+        setClosedChannelDonationMessage(channel.closed_channel_donation_message || '');
+        setDonationMessageCharCount(channel.closed_channel_donation_message?.length || 0);
 
         // Determine tier count based on which tiers have values
         let calculatedTierCount = 1;
@@ -106,6 +114,10 @@ export default function EditChannelPage() {
 
         setPayoutStrategy(channel.payout_strategy);
         setPayoutThresholdUsd(channel.payout_threshold_usd?.toString() || '');
+
+        // 🆕 Load notification settings (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+        setNotificationEnabled(channel.notification_status || false);
+        setNotificationId(channel.notification_id?.toString() || '');
 
         setIsLoading(false);
         setInitialLoadComplete(true); // Mark initial load complete
@@ -240,6 +252,15 @@ export default function EditChannelPage() {
     // Repopulate networks with all options
   };
 
+  // 🆕 Notification ID validation (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+  const validateNotificationId = (id: string): boolean => {
+    if (!id.trim()) return false;
+    const numId = parseInt(id, 10);
+    if (isNaN(numId) || numId <= 0) return false;
+    if (id.length < 5 || id.length > 15) return false;
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -255,6 +276,15 @@ export default function EditChannelPage() {
       // Validate required fields
       if (!openChannelTitle || !closedChannelTitle) {
         throw new Error('Please fill in all required channel fields');
+      }
+
+      // Validate donation message
+      if (!closedChannelDonationMessage || closedChannelDonationMessage.trim().length < 10) {
+        throw new Error('Donation message must be at least 10 characters');
+      }
+
+      if (closedChannelDonationMessage.length > 256) {
+        throw new Error('Donation message cannot exceed 256 characters');
       }
 
       if (!sub1Price || !sub1Time) {
@@ -289,6 +319,11 @@ export default function EditChannelPage() {
         throw new Error('Threshold amount must be at least $20.00');
       }
 
+      // 🆕 Validate notification settings (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+      if (notificationEnabled && !validateNotificationId(notificationId)) {
+        throw new Error('Valid Telegram User ID required when notifications enabled (5-15 digits)');
+      }
+
       // Build request payload (channel IDs and tier_count cannot be changed)
       // NOTE: tier_count is calculated dynamically from sub_X_price fields
       const payload = {
@@ -296,6 +331,7 @@ export default function EditChannelPage() {
         open_channel_description: openChannelDescription || '',
         closed_channel_title: closedChannelTitle,
         closed_channel_description: closedChannelDescription || '',
+        closed_channel_donation_message: closedChannelDonationMessage.trim(),
         sub_1_price: parseFloat(sub1Price),
         sub_1_time: parseInt(sub1Time),
         sub_2_price: tierCount >= 2 ? parseFloat(sub2Price) : null,
@@ -307,6 +343,9 @@ export default function EditChannelPage() {
         client_payout_network: clientPayoutNetwork,
         payout_strategy: payoutStrategy as 'instant' | 'threshold',
         payout_threshold_usd: payoutStrategy === 'threshold' ? parseFloat(payoutThresholdUsd) : null,
+        // 🆕 Notification settings (NOTIFICATION_MANAGEMENT_ARCHITECTURE)
+        notification_status: notificationEnabled,
+        notification_id: notificationEnabled ? parseInt(notificationId, 10) : null,
       };
 
       if (!channelId) {
@@ -626,6 +665,179 @@ export default function EditChannelPage() {
                   </div>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Donation Message Configuration Section */}
+          <div className="card" style={{ marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>
+              Donation Message Configuration
+            </h2>
+            <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+              Customize the message your subscribers will see when they click the donation
+              button in your closed channel. This is your chance to connect with your community
+              and explain how their support helps!
+            </p>
+
+            <div className="form-group">
+              <label>Donation Message *</label>
+              <textarea
+                placeholder="e.g., 'Enjoying our premium content? Your support helps us continue creating quality material. Consider donating any amount to keep us going! 💝'"
+                value={closedChannelDonationMessage}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= 256) {
+                    setClosedChannelDonationMessage(value);
+                    setDonationMessageCharCount(value.length);
+                  }
+                }}
+                rows={4}
+                required
+                maxLength={256}
+                style={{
+                  resize: 'vertical',
+                  minHeight: '100px'
+                }}
+              />
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '8px'
+              }}>
+                <small style={{ color: '#666', fontSize: '12px' }}>
+                  ⚠️ This field cannot be empty (minimum 10 characters)
+                </small>
+                <small style={{
+                  color: donationMessageCharCount > 256 ? '#ef4444' : '#666',
+                  fontSize: '12px',
+                  fontWeight: donationMessageCharCount > 240 ? '600' : '400'
+                }}>
+                  {donationMessageCharCount}/256 characters
+                </small>
+              </div>
+
+              {/* Character count warning */}
+              {donationMessageCharCount > 240 && donationMessageCharCount <= 256 && (
+                <div style={{
+                  color: '#f59e0b',
+                  fontSize: '12px',
+                  marginTop: '4px',
+                  padding: '6px',
+                  background: '#fef3c7',
+                  borderRadius: '4px',
+                  borderLeft: '3px solid #f59e0b'
+                }}>
+                  ⚠️ Approaching character limit ({256 - donationMessageCharCount} characters remaining)
+                </div>
+              )}
+            </div>
+
+            {/* Preview Box */}
+            {closedChannelDonationMessage.trim() && (
+              <div style={{
+                padding: '16px',
+                background: '#f9fafb',
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb',
+                marginTop: '16px'
+              }}>
+                <h3 style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                  color: '#374151'
+                }}>
+                  📱 Preview (how it will appear in your closed channel):
+                </h3>
+                <div style={{
+                  padding: '12px',
+                  background: 'white',
+                  borderRadius: '6px',
+                  border: '1px solid #d1d5db',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  color: '#111827'
+                }}>
+                  {closedChannelDonationMessage}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 🆕 Notification Settings Section (NOTIFICATION_MANAGEMENT_ARCHITECTURE) */}
+          <div className="card" style={{ marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>
+              📬 Payment Notification Settings
+            </h2>
+            <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+              Receive instant Telegram notifications when customers complete subscription or donation payments.
+            </p>
+
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={notificationEnabled}
+                  onChange={(e) => {
+                    setNotificationEnabled(e.target.checked);
+                    if (!e.target.checked) {
+                      setNotificationId('');
+                    }
+                  }}
+                  style={{ marginRight: '8px', width: '18px', height: '18px' }}
+                />
+                <span style={{ fontWeight: '500' }}>Enable payment notifications</span>
+              </label>
+            </div>
+
+            {notificationEnabled && (
+              <>
+                <div style={{
+                  padding: '12px',
+                  background: '#e7f3ff',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  color: '#0066cc',
+                  marginBottom: '16px',
+                  border: '1px solid #b3d9ff'
+                }}>
+                  ℹ️ You will receive a Telegram message when a customer completes a subscription or donation payment. Notifications are sent only after payment confirmation.
+                </div>
+
+                <div className="form-group">
+                  <label>Telegram User ID *</label>
+                  <input
+                    type="text"
+                    placeholder="Enter your Telegram user ID"
+                    value={notificationId}
+                    onChange={(e) => setNotificationId(e.target.value)}
+                    style={{
+                      borderColor: notificationId && !validateNotificationId(notificationId) ? '#ef4444' : undefined
+                    }}
+                  />
+                  <small style={{ color: '#666', fontSize: '12px' }}>
+                    Find your Telegram ID by messaging{' '}
+                    <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" style={{ color: '#4F46E5', textDecoration: 'none' }}>
+                      @userinfobot
+                    </a>
+                    {' '}on Telegram
+                  </small>
+                  {notificationId && !validateNotificationId(notificationId) && (
+                    <div style={{
+                      color: '#ef4444',
+                      fontSize: '12px',
+                      marginTop: '4px',
+                      padding: '6px',
+                      background: '#fee2e2',
+                      borderRadius: '4px',
+                      borderLeft: '3px solid #ef4444'
+                    }}>
+                      ❌ Invalid Telegram ID format (must be 5-15 digits)
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 

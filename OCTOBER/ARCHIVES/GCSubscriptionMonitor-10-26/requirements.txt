@@ -1,0 +1,7 @@
+Flask==3.0.0
+google-cloud-secret-manager==2.18.0
+cloud-sql-python-connector==1.7.0
+sqlalchemy==2.0.25
+pg8000==1.30.4
+python-telegram-bot==20.7
+gunicorn==21.2.0

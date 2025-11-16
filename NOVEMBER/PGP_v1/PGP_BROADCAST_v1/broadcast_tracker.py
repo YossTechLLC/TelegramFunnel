@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""
+BroadcastTracker - Tracks broadcast state and updates database
+Handles state transitions, statistics, and error tracking
+"""
+
+import logging
+from datetime import datetime, timedelta
+from typing import Optional
+from sqlalchemy import text
+from database_manager import DatabaseManager
+from config_manager import ConfigManager
+
+logger = logging.getLogger(__name__)
+
+
+class BroadcastTracker:
+    """
+    Tracks broadcast state and updates the broadcast_manager table.
+
+    Responsibilities:
+    - Update broadcast status (pending → in_progress → completed/failed)
+    - Track success/failure statistics
+    - Calculate and set next send times
+    - Handle error logging
+    """
+
+    def __init__(self, db_manager: DatabaseManager, config_manager: ConfigManager):
+        """
+        Initialize the BroadcastTracker.
+
+        Args:
+            db_manager: DatabaseManager instance
+            config_manager: ConfigManager instance (for intervals)
+        """
+        self.db = db_manager
+        self.config = config_manager
+        self.logger = logging.getLogger(__name__)
+
+    def update_status(self, broadcast_id: str, status: str) -> bool:
+        """
+        Update broadcast status.
+
+        Args:
+            broadcast_id: UUID of the broadcast entry
+            status: New status ('pending', 'in_progress', 'completed', 'failed', 'skipped')
+
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.db.update_broadcast_status(broadcast_id, status)
+
+    def mark_success(self, broadcast_id: str) -> bool:
+        """
+        Mark broadcast as successfully completed.
+
+        Updates:
+        - broadcast_status = 'completed'
+        - last_sent_time = NOW()
+        - next_send_time = NOW() + BROADCAST_AUTO_INTERVAL
+        - total_broadcasts += 1
+        - successful_broadcasts += 1
+        - consecutive_failures = 0
+        - last_error_message = NULL
+
+        Args:
+            broadcast_id: UUID of the broadcast entry
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Get auto interval from config
+        auto_interval_hours = self.config.get_broadcast_auto_interval()
+        next_send = datetime.now() + timedelta(hours=auto_interval_hours)
+
+        success = self.db.update_broadcast_success(broadcast_id, next_send)
+
+        if success:
+            self.logger.info(
+                f"✅ Broadcast {str(broadcast_id)[:8]}... marked as success. "
+                f"Next send: {next_send.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+
+        return success
+
+    def mark_failure(self, broadcast_id: str, error_message: str) -> bool:
+        """
+        Mark broadcast as failed.
+
+        Updates:
+        - broadcast_status = 'failed'
+        - failed_broadcasts += 1
+        - consecutive_failures += 1
+        - last_error_message = error_message
+        - last_error_time = NOW()
+        - is_active = false (if consecutive_failures >= 5)
+
+        Args:
+            broadcast_id: UUID of the broadcast entry
+            error_message: Error description
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Truncate error message if too long (database TEXT field can handle it, but keep it reasonable)
+        if len(error_message) > 500:
+            error_message = error_message[:497] + "..."
+
+        success = self.db.update_broadcast_failure(broadcast_id, error_message)
+
+        if success:
+            self.logger.error(
+                f"❌ Broadcast {str(broadcast_id)[:8]}... marked as failure: {error_message[:100]}"
+            )
+
+        return success
+
+    def reset_consecutive_failures(self, broadcast_id: str) -> bool:
+        """
+        Reset consecutive failure count (useful for manual re-enable).
+
+        This is typically called when manually reactivating a disabled broadcast.
+
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
+        Args:
+            broadcast_id: UUID of the broadcast entry
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            engine = self.db._get_engine()
+            with engine.connect() as conn:
+                query = text("""
+                    UPDATE broadcast_manager
+                    SET consecutive_failures = 0,
+                        is_active = true
+                    WHERE id = :broadcast_id
+                """)
+
+                conn.execute(query, {"broadcast_id": broadcast_id})
+                conn.commit()
+
+                self.logger.info(f"🔄 Reset consecutive failures: {broadcast_id[:8]}...")
+                return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error resetting failures: {e}")
+            return False
+
+    def update_message_ids(
+        self,
+        broadcast_id: str,
+        open_message_id: Optional[int] = None,
+        closed_message_id: Optional[int] = None
+    ) -> bool:
+        """
+        Update the last sent message IDs for a broadcast.
+
+        This enables deletion of old messages when resending broadcasts.
+
+        🆕 NEW_ARCHITECTURE: Uses SQLAlchemy text() with named parameters.
+
+        Args:
+            broadcast_id: UUID of the broadcast entry
+            open_message_id: Telegram message ID sent to open channel
+            closed_message_id: Telegram message ID sent to closed channel
+
+        Returns:
+            True if successful, False otherwise
+
+        Note:
+            Only updates provided message IDs (supports partial updates)
+        """
+        try:
+            # Build dynamic update query
+            update_fields = []
+            params = {"broadcast_id": broadcast_id}
+
+            if open_message_id is not None:
+                update_fields.append("last_open_message_id = :open_message_id")
+                update_fields.append("last_open_message_sent_at = NOW()")
+                params["open_message_id"] = open_message_id
+
+            if closed_message_id is not None:
+                update_fields.append("last_closed_message_id = :closed_message_id")
+                update_fields.append("last_closed_message_sent_at = NOW()")
+                params["closed_message_id"] = closed_message_id
+
+            if not update_fields:
+                self.logger.warning("⚠️ No message IDs provided to update")
+                return False
+
+            # Construct query
+            query_str = f"""
+                UPDATE broadcast_manager
+                SET {', '.join(update_fields)}
+                WHERE id = :broadcast_id
+            """
+
+            engine = self.db._get_engine()
+            with engine.connect() as conn:
+                query = text(query_str)
+                conn.execute(query, params)
+                conn.commit()
+
+                self.logger.info(
+                    f"📝 Updated message IDs for broadcast {str(broadcast_id)[:8]}... "
+                    f"(open={open_message_id}, closed={closed_message_id})"
+                )
+
+                return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to update message IDs: {e}")
+            # Don't raise - this is supplementary functionality
+            return False

@@ -1,813 +1,1845 @@
 # Architectural Decisions - TelegramFunnel OCTOBER/10-26
 
-**Last Updated:** 2025-11-10 Session 104 - **Email Service BASE_URL Configuration**
+**Last Updated:** 2025-11-15 - **Domain Routing: Redirect Apex to WWW** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
-## Table of Contents
-1. [Service Architecture](#service-architecture)
-2. [Cloud Infrastructure](#cloud-infrastructure)
-3. [Data Flow & Orchestration](#data-flow--orchestration)
-4. [Security & Authentication](#security--authentication)
-5. [Database Design](#database-design)
-6. [Error Handling & Resilience](#error-handling--resilience)
-7. [User Interface](#user-interface)
-8. [Documentation Strategy](#documentation-strategy)
-9. [Email Verification & Account Management](#email-verification--account-management)
-10. [Deployment Strategy](#deployment-strategy)
-11. [Rate Limiting Strategy](#rate-limiting-strategy)
-12. [Password Reset Strategy](#password-reset-strategy)
-13. [Email Service Configuration](#email-service-configuration)
-
----
-
 ## Recent Decisions
 
-### 2025-11-10 Session 104: Email Service BASE_URL Configuration - Critical Fix 📧
+## 2025-11-15: Domain Routing Strategy - Redirect Apex to WWW ✅
 
-**Decision:** Configure `BASE_URL` environment variable for email service to use correct frontend URL in email links.
-
-**Context:**
-- Email service (`email_service.py`) generates links for password resets, email verification, and email change confirmations
-- `BASE_URL` defaults to `https://app.telepay.com` (non-existent domain) when not explicitly set
-- Emails were being sent successfully but contained broken links that users couldn't access
-
-**Problem:**
-- **Broken Email Links**: All email links pointed to `https://app.telepay.com` which doesn't exist
-- **Password Reset Failure**: Users couldn't reset passwords despite receiving emails
-- **Email Verification Failure**: New users couldn't verify email addresses
-- **Silent Failure**: Backend logs showed "email sent successfully" but emails were useless
-
-**Root Cause Analysis:**
-```python
-# email_service.py:42
-self.base_url = os.getenv('BASE_URL', 'https://app.telepay.com')  # ❌ Default was wrong
-
-# Line 138 (password reset):
-reset_url = f"{self.base_url}/reset-password?token={token}"
-# Generated: https://app.telepay.com/reset-password?token=XXX  ❌
-
-# Line 72 (email verification):
-verification_url = f"{self.base_url}/verify-email?token={token}"
-# Generated: https://app.telepay.com/verify-email?token=XXX  ❌
-```
-
-**Solution Implemented:**
-
-1. **Created GCP Secret**: `BASE_URL = "https://www.paygateprime.com"`
-   ```bash
-   echo -n "https://www.paygateprime.com" | gcloud secrets create BASE_URL --data-file=-
-   ```
-
-2. **Updated Backend Service**:
-   ```bash
-   gcloud run services update gcregisterapi-10-26 \
-     --region=us-central1 \
-     --update-secrets=BASE_URL=BASE_URL:latest
-   ```
-
-3. **New Revision Deployed**: `gcregisterapi-10-26-00023-dmg`
-
-**Affected Email Types:**
-- Password reset emails (`send_password_reset_email`)
-- Email verification emails (`send_verification_email`)
-- Email change confirmation (`send_email_change_confirmation`)
-- Email change notification (`send_email_change_notification`)
-
-**Trade-offs:**
-- ✅ **Pro**: Emails now contain correct, functional links
-- ✅ **Pro**: No code changes required - configuration only
-- ✅ **Pro**: Uses GCP Secret Manager for secure configuration
-- ⚠️ **Con**: Requires secret update if frontend domain changes
-- ⚠️ **Con**: Environment-specific configuration (prod/dev/staging need different values)
-
-**Alternatives Considered:**
-
-1. **Hardcode URL in Code** ❌
-   - Would require code changes for each environment
-   - Less flexible for testing and deployment
-
-2. **Use Request Headers** ❌
-   - Email service runs in background, no active request context
-   - Would require significant architectural changes
-
-3. **Configuration File** ❌
-   - Harder to manage across multiple environments
-   - Less secure than Secret Manager
-   - Requires container rebuild for changes
-
-**Why BASE_URL is Critical:**
-- Email service operates **independently** of HTTP requests
-- No access to request headers or referrer URLs
-- Must know frontend URL at runtime to generate valid links
-- Same backend may serve multiple frontends (web, mobile, etc.)
-
-**Future Considerations:**
-- Consider multi-environment support (dev, staging, prod)
-- May need separate BASE_URL for each environment
-- Could implement template-based email URLs for more flexibility
-
-**Follow-up: Code Cleanup - Removing CORS_ORIGIN Substitution**
-
-After deploying the BASE_URL secret, discovered that code was using `CORS_ORIGIN` as a substitute for `BASE_URL` (both had identical values).
-
-**Changes Made:**
-
-1. **config_manager.py:67** - Changed to use `BASE_URL` secret instead of `CORS_ORIGIN`
-   ```python
-   # Before:
-   'base_url': self.access_secret('CORS_ORIGIN') if self._secret_exists('CORS_ORIGIN') else ...
-
-   # After:
-   'base_url': self.access_secret('BASE_URL') if self._secret_exists('BASE_URL') else ...
-   ```
-
-2. **app.py:49** - Changed to use `base_url` config instead of hardcoded default
-   ```python
-   # Before:
-   app.config['FRONTEND_URL'] = config.get('frontend_url', 'https://www.paygateprime.com')
-
-   # After:
-   app.config['FRONTEND_URL'] = config['base_url']
-   ```
-
-**Rationale:**
-- **Semantic Correctness**: CORS_ORIGIN is for CORS security policy, BASE_URL is for application URLs
-- **Single Source of Truth**: All frontend URL references now derive from BASE_URL secret
-- **Separation of Concerns**: CORS policy and frontend URL are distinct architectural concerns
-- **Future Flexibility**: If CORS needs differ from base URL (e.g., allowing multiple origins), changes are isolated
-
----
-
-### 2025-11-09 Session 103: Password Reset Frontend Implementation - OWASP-Compliant Flow 🔐
-
-**Decision:** Implement frontend password reset flow leveraging existing OWASP-compliant backend implementation.
+**Decision:** Implement 301 permanent redirect from `paygateprime.com` to `www.paygateprime.com`
+**Status:** ✅ **INFRASTRUCTURE CONFIGURED** (Waiting for SSL provisioning + DNS changes)
 
 **Context:**
-- Users with verified email addresses had no way to recover forgotten passwords
-- Backend already implemented complete OWASP-compliant password reset functionality
-- Missing only frontend entry point (ForgotPasswordPage) to initiate the flow
-
-**Problem:**
-- **No Password Recovery**: Users locked out of accounts with no recovery method
-- **Backend Ready**: `/api/auth/forgot-password` & `/api/auth/reset-password` endpoints fully implemented
-- **Partial Frontend**: ResetPasswordPage exists but no way to trigger the flow
-
-**Solution Implemented:**
-
-**Architecture Decisions:**
-
-1. **Anti-User Enumeration Pattern** 🔒
-   - ForgotPasswordPage shows identical success message for existing/non-existing accounts
-   - Backend returns 200 OK in both cases
-   - Prevents attackers from discovering registered email addresses
-   - Follows OWASP Forgot Password Cheat Sheet recommendations
-
-2. **Token Security** 🛡️
-   - Uses existing `itsdangerous.URLSafeTimedSerializer` from backend
-   - Cryptographic signing with secret key + salt (`password-reset-v1`)
-   - 1-hour expiration enforced both by itsdangerous and database timestamp
-   - Single-use tokens (cleared from DB after successful reset)
-
-3. **User Flow Design** 🔄
-   ```
-   LoginPage → [Forgot password?] → ForgotPasswordPage
-   ↓
-   Enter Email → Backend generates token → Email sent
-   ↓
-   User clicks email link → ResetPasswordPage?token=XXX
-   ↓
-   Enter new password → Token validated → Password updated → Redirect to Login
-   ```
-
-4. **Consistent UI/UX** 🎨
-   - ForgotPasswordPage matches styling of LoginPage/SignupPage
-   - Uses same `.auth-container` and `.auth-card` classes
-   - "Forgot password?" link right-aligned below password field (standard pattern)
-   - Success screen with clear instructions
-
-**Files Created:**
-- `src/pages/ForgotPasswordPage.tsx` - Email input form + success screen
-
-**Files Modified:**
-- `src/App.tsx` - Added route for `/forgot-password`
-- `src/pages/LoginPage.tsx` - Added "Forgot password?" link
-
-**Rate Limiting (Inherited from Backend):**
-- `/auth/forgot-password`: 3 requests per hour per IP
-- `/auth/reset-password`: 5 requests per 15 minutes per IP
-- Prevents brute force token guessing
-
-**Trade-offs:**
-
-✅ **Benefits:**
-- Complete password recovery functionality for users
-- OWASP-compliant security (anti-enumeration, secure tokens)
-- Minimal frontend code (leveraged existing backend)
-- Consistent with existing verification flow patterns
-- Single-use tokens prevent replay attacks
-
-⚠️ **Considerations:**
-- Requires SendGrid API key for production email delivery (already configured)
-- Dev mode prints reset links to console (acceptable for development)
-- Token expiration (1 hour) balances security vs usability
-
-**Alternatives Considered:**
-
-1. **Security Questions** ❌
-   - Rejected: Weaker security than email-based reset
-   - OWASP discourages security questions (guessable answers)
-
-2. **SMS-Based Reset** ❌
-   - Rejected: Adds cost, requires phone number collection
-   - Email already verified during registration
-
-3. **Admin-Assisted Reset** ❌
-   - Rejected: Poor UX, doesn't scale, privacy concerns
-
-**Future Considerations:**
-- Add optional 2FA for password reset (extra verification step)
-- Consider rate limiting per email address (not just IP)
-- Add audit logging for password reset attempts
-
-**Status**: ✅ IMPLEMENTED
-
----
-
-### 2025-11-09 Session 99: Rate Limiting Adjustment - Global Limits Increased 3x ⏱️
-
-**Decision:** Increase global default rate limits by 3x to prevent legitimate usage from being blocked.
-
-**Context:**
-- Session 87 introduced global rate limiting: 200 req/day, 50 req/hour
-- Production usage revealed limits were too restrictive for normal operation
-- Dashboard page makes frequent API calls to `/api/auth/me` and `/api/channels`
-- Users hitting 50 req/hour limit during normal browsing/testing
-- Website appeared broken with "Failed to load channels" error (429 responses)
-
-**Problem:**
-- **Overly Restrictive Global Limits**: 50 requests/hour is insufficient for:
-  - React app making API calls on every page load/navigation
-  - Header component checking auth status frequently
-  - Dashboard polling for channel updates
-  - Development/testing workflows
-- **Poor User Experience**: Legitimate users seeing rate limit errors
-- **Endpoint Misalignment**: Read-only endpoints treated same as write endpoints
-
-**Solution Implemented:**
-
-Changed global default limits in `api/middleware/rate_limiter.py`:
-```python
-# Before (Session 87):
-default_limits=["200 per day", "50 per hour"]
-
-# After (Session 99):
-default_limits=["600 per day", "150 per hour"]
-```
-
-**Rationale:**
-1. **3x Multiplier**: Provides headroom for normal usage patterns while still preventing abuse
-2. **Hourly Limit**: 150 req/hour = ~2.5 req/minute (reasonable for SPA with multiple components)
-3. **Daily Limit**: 600 req/day = ~25 req/hour average (allows burst usage during active sessions)
-4. **Security Maintained**: Critical endpoints retain stricter specific limits:
-   - `/auth/signup`: 5 per 15 minutes
-   - `/auth/login`: 10 per 15 minutes
-   - `/auth/resend-verification`: 3 per hour
-   - `/auth/verify-email`: 10 per hour
-
-**Trade-offs:**
-
-✅ **Benefits:**
-- Normal users won't hit rate limits during legitimate usage
-- Better developer experience during testing
-- Read-only endpoints can be accessed frequently
-- Website functionality restored
-
-⚠️ **Risks (Mitigated):**
-- Slightly more exposure to brute force (still have endpoint-specific limits)
-- Higher server load potential (Cloud Run auto-scales to handle)
-- More lenient than industry standard (acceptable for private beta/controlled launch)
-
-**Alternative Considered:**
-- **Endpoint-specific limits only** (no global limit)
-  - Rejected: Still want global protection against runaway clients/bots
-  - Would require careful analysis of each endpoint's expected usage
-
-**Future Considerations:**
-- Monitor actual usage patterns in production
-- Consider Redis-based distributed rate limiting for horizontal scaling
-- May need to exempt certain endpoints (health checks, metrics) from global limits
-- Consider user-tier based limits (free vs paid users)
-
-**Deployment:**
-- Revision: `gcregisterapi-10-26-00021-rc5`
-- Zero downtime deployment via Cloud Run progressive rollout
-- No database changes required
-
-**Status**: ✅ IMPLEMENTED & DEPLOYED
-
----
-
-### 2025-11-09 Session 96: Production Deployment Strategy - Zero Downtime Release
-
-**Decision:** Deploy verification architecture to production using zero-downtime Cloud Run deployment with progressive rollout strategy.
-
-**Context:**
-- Full email verification architecture ready for production
-- 87 tasks completed across 15 phases
-- Need to deploy without disrupting existing users
-- Migration 002 already applied to production database
-
-**Implementation Approach:**
-
-1. **Pre-Deployment Verification:**
-   - ✅ Confirmed migration 002 already applied (7 new columns in production)
-   - ✅ Verified all required secrets exist in Secret Manager
-   - ✅ Backend code review complete
-   - ✅ Frontend build tested successfully
-
-2. **Backend Deployment (Cloud Run):**
-   - **Service**: `gcregisterapi-10-26`
-   - **Strategy**: Progressive rollout with traffic migration
-   - **Build**: Docker image via Cloud Build (`gcloud builds submit`)
-   - **Configuration**:
-     - Service account: `291176869049-compute@developer.gserviceaccount.com`
-     - Secrets: 10 total (JWT, database, email, CORS)
-     - Cloud SQL: `telepay-459221:us-central1:telepaypsql`
-     - Memory: 512Mi, CPU: 1, Max instances: 10
-   - **Result**: New revision `gcregisterapi-10-26-00017-xwp` serving 100% traffic
-   - **Downtime**: 0 seconds
-
-3. **Frontend Deployment (Cloud Storage):**
-   - **Target**: `gs://www-paygateprime-com/`
-   - **Build**: Vite production build (380 modules, 5.05s)
-   - **Strategy**: Atomic replacement with cache headers
-   - **Cache Policy**:
-     - `index.html`: `Cache-Control: no-cache` (always fetch latest)
-     - `assets/*`: `Cache-Control: public, max-age=31536000` (1 year)
-   - **Deployment**: `gsutil -m rsync -r -d` (atomic update)
-   - **Result**: New build live instantly, old assets deleted
-
-4. **Production Verification Tests:**
-   - ✅ Health check: API returns healthy status
-   - ✅ Signup auto-login: Returns access_token + refresh_token
-   - ✅ Email verified field: Included in all auth responses
-   - ✅ Verification endpoints: `/verification/status` and `/verification/resend` working
-   - ✅ Account endpoints: All 4 account management endpoints deployed
-   - ✅ Frontend routes: All new pages accessible
-
-**Deployment Decisions:**
-
-✅ **Decision 1: Secrets via Secret Manager**
-- **Rationale**: All sensitive config in Secret Manager (not env vars)
-- **Implementation**: `--update-secrets` flag with Secret Manager references
-- **Benefit**: Automatic secret rotation, audit logging, secure storage
-
-✅ **Decision 2: Cache Strategy**
-- **Rationale**: Balance performance vs. instant updates
-- **Implementation**:
-  - HTML: No cache (immediate updates)
-  - Assets: 1-year cache (hash-based filenames)
-- **Benefit**: Fast loading + instant deployments
-
-✅ **Decision 3: Zero-Downtime Deployment**
-- **Rationale**: Existing users should not experience any interruption
-- **Implementation**:
-  - Cloud Run progressive rollout (automatic)
-  - Frontend atomic replacement (gsutil rsync)
-- **Benefit**: Seamless user experience
-
-✅ **Decision 4: Migration Already Applied**
-- **Rationale**: Migration 002 was already run in previous session
-- **Verification**: Used `check_migration.py` to confirm 7 columns exist
-- **Decision**: Skip migration step, proceed directly to deployment
-- **Benefit**: Faster deployment, no database downtime
-
-✅ **Decision 5: Production Testing Post-Deployment**
-- **Rationale**: Verify all features work in production environment
-- **Implementation**: Created `test_production_flow.sh` script
-- **Tests Performed**:
-  - Website accessibility (200 OK)
-  - API health check
-  - Signup with auto-login
-  - Verification status endpoint
-  - All new endpoints accessible
-- **Result**: All tests passed ✅
-
-**Rollback Plan (Not Needed):**
-- Backend: Roll back to previous Cloud Run revision
-- Frontend: Restore previous Cloud Storage files from backup
-- Database: No rollback needed (migration already applied)
-
-**Monitoring Strategy:**
-- Cloud Logging: Monitor error rates via `gcloud run services logs`
-- Health checks: API `/health` endpoint monitoring
-- User feedback: Monitor support channels for issues
-- Email delivery: Monitor SendGrid dashboard
-
-**Results:**
-- ✅ Zero downtime achieved
-- ✅ All features working in production
-- ✅ No user-reported issues
-- ✅ Clean deployment logs
-- ✅ All tests passing
-
-**Impact:**
-- Users can now sign up and get immediate access (auto-login)
-- Unverified users can use the full application
-- Visual verification indicator in header
-- Complete account management for verified users
-- Rate-limited email sending prevents abuse
-- Dual-factor email change for security
-
----
-
-### 2025-11-09 Session 95: Email Verification Architecture - Complete Implementation Strategy
-
-**Decision:** Implement "soft verification" model with auto-login, allowing unverified users full app access while requiring verification only for sensitive account management operations.
-
-**Context:**
-- Traditional email verification blocks users from using the app until they verify their email
-- Modern UX best practice is to reduce friction and allow immediate access
-- Need balance between security and user experience
-- Email changes and password changes are high-risk operations requiring verification
-- Rate limiting needed to prevent abuse of verification emails
-
-**Implementation Strategy:**
-
-1. **Auto-Login on Signup - Remove Verification Barrier:**
-   - **Decision**: Return JWT tokens immediately on signup (no verification required)
-   - **Modified Endpoints**: `/auth/signup` now returns `access_token` and `refresh_token`
-   - **User Flow**: Signup → Auto-login → Dashboard (unverified state)
-   - **Rationale**: Reduces friction, improves conversion, matches modern SaaS patterns
-   - **Security**: Email still sent for verification, required for account management
-
-2. **Unverified User Access - "Soft Verification" Model:**
-   - **Decision**: Allow unverified users to login and access dashboard
-   - **Modified Service**: `AuthService.authenticate_user()` removed email verification check
-   - **Modified Endpoint**: `/auth/login` now accepts unverified users
-   - **User Access**: Unverified users can view all content, use app features
-   - **Restrictions**: Cannot change email or password until verified
-   - **Rationale**: Balance between security and UX, reduces support burden
-
-3. **Verification Rate Limiting - Prevent Email Bombing:**
-   - **Decision**: 1 verification resend per 5 minutes per user
-   - **Implementation**: Database tracking (last_verification_resent_at, verification_resend_count)
-   - **Response**: 429 Too Many Requests with retry_after timestamp
-   - **Rationale**: Prevents abuse while allowing legitimate resends
-
-4. **Email Change Security - Dual-Factor Email Verification:**
-   - **Decision**: Send notification to OLD email + confirmation to NEW email
-   - **Workflow**:
-     - User requests change → password required → notification to old → confirmation to new
-     - User clicks link in new email → race condition check → atomic update
-   - **Token Expiration**: 1 hour (shorter than verification due to sensitivity)
-   - **Password Confirmation**: Required for all email changes
-   - **Pending Email**: Stored in database, protected by UNIQUE constraint
-   - **Rationale**: Prevents account takeover, user informed of unauthorized attempts
-
-5. **Password Change Security - Verification Requirement:**
-   - **Decision**: Require email verification before allowing password changes
-   - **Checks**: Email verified + current password correct + new password different + strength validation
-   - **No Re-login**: User stays logged in after password change
-   - **Confirmation Email**: Sent to user's email address
-   - **Rationale**: Verified email ensures user has access to account recovery
-
-6. **Database Schema - Pending Email Tracking:**
-   - **New Columns**: pending_email, pending_email_token, pending_email_token_expires, pending_email_old_notification_sent
-   - **New Columns**: last_verification_resent_at, verification_resend_count, last_email_change_requested_at
-   - **Indexes**: idx_pending_email (UNIQUE), idx_verification_token_expires, idx_pending_email_token_expires
-   - **Constraints**: CHECK(pending_email != email), UNIQUE(pending_email)
-   - **Rationale**: Supports email change flow, prevents conflicts, enables cleanup queries
-
-7. **Token Security - Separate Token Types:**
-   - **Email Verification**: 24-hour expiration (long window for user convenience)
-   - **Email Change**: 1-hour expiration (shorter for security)
-   - **Password Reset**: 1-hour expiration (high security requirement)
-   - **TokenService**: Separate methods for each token type with unique salts
-   - **Rationale**: Prevents token re-use across different operations
-
-8. **Modular Service Architecture - Separation of Concerns:**
-   - **Decision**: Create separate `account.py` routes file for account management
-   - **AuthService**: Focused on authentication (signup, login, password hashing)
-   - **Account Endpoints**: Separate blueprint (`/api/auth/account/`)
-   - **Email Service**: Extended with email change templates
-   - **Token Service**: Extended with email change token methods
-   - **Rationale**: Keeps files under 800 lines, clear separation of concerns, maintainability
-
-9. **Frontend Services Layer - TypeScript Integration:**
-   - **Decision**: Extend authService.ts with 6 new methods
-   - **New Methods**: getCurrentUser(), getVerificationStatus(), resendVerification(), requestEmailChange(), cancelEmailChange(), changePassword()
-   - **TypeScript Interfaces**: Created dedicated types file (auth.ts)
-   - **Error Handling**: Axios interceptors handle token auto-attachment
-   - **Rationale**: Type safety, consistent API client patterns, reusable service methods
-
-10. **Frontend Component Strategy - Page-Level Components:**
-    - **Decision**: Create separate pages for each user flow
-    - **VerificationStatusPage**: Shows status, resend button, rate limit info, restrictions
-    - **AccountManagePage**: Two sections (email change, password change), verification check on load
-    - **EmailChangeConfirmPage**: Handles token confirmation with loading/success/error states
-    - **Header Component**: Reusable across all pages, shows verification status
-    - **Rationale**: Clear user journeys, easy to test, matches REST endpoint structure
-
-11. **Rate Limiting Strategy - Endpoint-Specific Limits:**
-    - **Verification Resend**: 1 per 5 minutes (prevents email bombing)
-    - **Email Change**: 3 per hour (prevents rapid account changes)
-    - **Password Change**: 5 per 15 minutes (prevents brute force)
-    - **Signup**: 5 per 15 minutes (prevents bot accounts)
-    - **Login**: 10 per 15 minutes (prevents brute force)
-    - **Implementation**: Database-level tracking + Redis in production
-    - **Rationale**: Tailored to each operation's risk profile
-
-12. **Audit Logging - Comprehensive Security Tracking:**
-    - **New Methods**: log_email_change_requested, log_email_changed, log_email_change_cancelled, log_password_changed
-    - **Logged Data**: user_id, email, timestamp, IP address, reason (for failures)
-    - **User Enumeration Protection**: Generic error messages externally, detailed logs internally
-    - **Rationale**: Security monitoring, compliance, debugging, user support
-
-**Impact:**
-- ✅ Better user experience (no verification barrier)
-- ✅ Improved security for account management operations
-- ✅ Comprehensive audit trail
-- ✅ Modular, maintainable codebase
-- ✅ Type-safe frontend integration
-- ✅ Clear separation of concerns
-
-**Trade-offs:**
-- ⚠️ Unverified users can use app (acceptable for non-sensitive features)
-- ⚠️ More complex dual-email flow for email changes (better security)
-- ⚠️ Additional database columns and indexes (necessary for features)
-
----
-
-### 2025-11-09 Session 94 (Continued): Frontend Components - Visual Verification UX & Component Structure
-
-**Decision:** Implement verification status with clear visual indicators (yellow/green) and separate page components for each user flow
-
-**Context:**
-- Users need clear visual feedback about their verification status
-- Unverified users can use the app but need to know what features are restricted
-- Email change and password change are sensitive operations requiring separate UX
-- Email confirmation from link requires smooth landing page experience
-- Need consistent header across all authenticated pages
+- Users visiting `paygateprime.com` (without www) saw OLD registration page (gcregister10-26)
+- Users visiting `www.paygateprime.com` saw NEW website (GCRegisterWeb + Cloud Storage)
+- Two completely separate infrastructure setups were serving different content
+- This created user confusion and split traffic between old/new versions
+
+**Root Cause:**
+- Apex domain had Cloud Run domain mapping (created Oct 28) pointing to gcregister10-26 service
+- WWW subdomain had Load Balancer setup (created Oct 28/29) pointing to Cloud Storage bucket
+- DNS records pointed to different IPs:
+  - `paygateprime.com` → 216.239.x.x (Google Cloud Run)
+  - `www.paygateprime.com` → 35.244.222.18 (Load Balancer)
+
+**Options Considered:**
+
+1. **Option 1: Redirect Apex to WWW** ✅ SELECTED
+   - **Pros:**
+     - Industry standard (www as canonical domain)
+     - Clean 301 redirect preserves SEO
+     - Maintains current SSL infrastructure
+     - Simplest implementation
+   - **Cons:**
+     - Users must type www (minor UX consideration)
+
+2. **Option 2: Serve Both from Load Balancer**
+   - **Pros:**
+     - Works with or without www
+     - Better UX flexibility
+   - **Cons:**
+     - Duplicate content (SEO concern)
+     - More complex certificate management
+
+3. **Option 3: Redirect WWW to Apex**
+   - **Pros:**
+     - Shorter URL
+   - **Cons:**
+     - Against industry best practices
+     - More complex DNS setup (ALIAS/ANAME records)
+     - Current infrastructure already optimized for www
+
+**Decision Rationale:**
+- Option 1 chosen as it follows web standards
+- www subdomain already has established infrastructure
+- 301 redirect properly signals to search engines the canonical domain
+- Minimal changes required to existing working setup
+- Easy to test and rollback if needed
 
 **Implementation:**
 
-1. **Header Component Decision - Reusable & Always Visible:**
-   - Created standalone `Header.tsx` component (not integrated into pages)
-   - Props-based design: accepts `user` object with `username` and `email_verified`
-   - **Visual States:**
-     - **Unverified**: Yellow button (#fbbf24) - "Please Verify E-Mail" (calls attention)
-     - **Verified**: Green button (#22c55e) - "✓ Verified" (positive confirmation)
-   - Click handler navigates to `/verification` page
-   - Logo click returns to `/dashboard`
-   - Logout button uses authService.logout()
-   - **Rationale**: Persistent visual reminder without blocking user, matches "soft verification" architecture
+1. **URL Map Configuration:**
+   ```yaml
+   hostRules:
+   - hosts:
+     - paygateprime.com
+     pathMatcher: redirect-to-www
 
-2. **VerificationStatusPage Component - Dual State Design:**
-   - **Verified State**: Green checkmark, congratulatory message, "Back to Dashboard" button
-   - **Unverified State**: Yellow warning, resend button, restrictions notice box
-   - Resend button disabled when rate limited (5-minute cooldown)
-   - Rate limiting countdown shown in UI
-   - Alert messages for success/error feedback
-   - **Rationale**: Clear distinction between states, actionable UI for unverified users
+   pathMatchers:
+   - name: redirect-to-www
+     defaultUrlRedirect:
+       hostRedirect: www.paygateprime.com
+       redirectResponseCode: MOVED_PERMANENTLY_DEFAULT
+       httpsRedirect: true
+       stripQuery: false
+   ```
 
-3. **AccountManagePage Component - Verified Users Only:**
-   - Auto-redirects to `/verification` if user is unverified
-   - Two separate form sections (email change, password change)
-   - Independent state management for each form
-   - Client-side validation (passwords must match)
-   - Clear success/error messages per section
-   - Forms clear on success
-   - **Rationale**: Enforce verification requirement, prevent confusion with separate forms
+2. **SSL Certificate:**
+   - Created: `paygateprime-ssl-combined`
+   - Covers: `www.paygateprime.com` AND `paygateprime.com`
+   - Type: Google-managed
+   - Status: PROVISIONING (15-60 minutes)
 
-4. **EmailChangeConfirmPage Component - Token-Based Landing Page:**
-   - Reads token from URL query parameter (`?token=...`)
-   - Auto-executes confirmation on mount (no user interaction needed)
-   - Three visual states: Loading (spinner), Success (green checkmark + countdown), Error (red X)
-   - Auto-redirect countdown (3 seconds) with manual override button
-   - **Rationale**: Smooth email link experience, clear feedback, automatic flow completion
+3. **HTTPS Proxy Update:**
+   - Updated `www-paygateprime-https-proxy` to use new certificate
+   - Will serve both domains once certificate is active
 
-5. **Routing Architecture:**
-   - Public routes: `/confirm-email-change` (token-based)
-   - Protected routes: `/verification`, `/account/manage`
-   - ProtectedRoute wrapper enforces authentication
-   - **Rationale**: Security enforcement at route level, clear separation of public/private flows
+4. **DNS Changes Required (Cloudflare):**
+   - Remove: 4 A records pointing to 216.239.x.x (Cloud Run)
+   - Add: 1 A record pointing to 35.244.222.18 (Load Balancer)
+   - Proxy: DISABLED (DNS only - gray cloud)
 
-**Alternatives Considered:**
-- **Alternative 1**: Integrate header directly into each page component
-  - **Rejected**: Would require duplicate code, harder to maintain consistency
-- **Alternative 2**: Modal dialogs for email/password change instead of separate page
-  - **Rejected**: Forms are complex, separate page provides better UX and focus
-- **Alternative 3**: Redirect/green verification indicator
-  - **Rejected**: Yellow (warning) is more attention-grabbing for unverified state
+5. **Cleanup (After Verification):**
+   - Remove Cloud Run domain mapping for `paygateprime.com`
+   - Optional: Delete old SSL certificate `www-paygateprime-ssl` after 24 hours
 
 **Benefits:**
-- Clear visual feedback across entire app (yellow = action needed, green = verified)
-- Reusable Header component reduces code duplication
-- Separate pages provide focused UX for each flow
-- Auto-redirect with countdown improves conversion (email confirmation)
-- Protected routes enforce business logic (account management requires verification)
-- Loading states prevent user confusion during async operations
+- ✅ All users see NEW website regardless of URL used
+- ✅ Automatic redirect preserves bookmarks and links
+- ✅ SEO-friendly 301 permanent redirect
+- ✅ Single source of truth for content
+- ✅ Simplified infrastructure (one load balancer for both domains)
 
-**Trade-offs:**
-- More page components = larger bundle size (minimal impact with code splitting)
-- Auto-redirect countdown may feel rushed (3 seconds is standard, can be adjusted)
+**Risks & Mitigation:**
+- **Risk:** SSL provisioning may take up to 60 minutes
+  - **Mitigation:** Wait for ACTIVE status before DNS changes
+- **Risk:** DNS propagation time
+  - **Mitigation:** Keep Cloud Run mapping active during transition
+- **Risk:** User confusion during transition
+  - **Mitigation:** Short transition window (< 2 hours total)
 
-**File:** `GCRegisterWeb-10-26/src/components/Header.tsx`, `src/pages/VerificationStatusPage.tsx`, `src/pages/AccountManagePage.tsx`, `src/pages/EmailChangeConfirmPage.tsx`, `src/App.tsx`
+**Files Created:**
+- `PAYGATEPRIME_DOMAIN_INVESTIGATION_REPORT.md` - Full technical analysis
+- `CLOUDFLARE_DNS_CHANGES_REQUIRED.md` - Step-by-step DNS update guide
+- `NEXT_STEPS_DOMAIN_FIX.md` - Post-implementation checklist
+
+**Next Steps:**
+1. ⏳ Wait for SSL certificate to show ACTIVE status (~30 min)
+2. 📝 Update Cloudflare DNS records (manual action required)
+3. ⏳ Wait for DNS propagation (~15 min)
+4. ✅ Test redirect functionality
+5. 🗑️ Remove Cloud Run domain mapping
+
+## 2025-11-14: Flask request.get_json() Best Practice Pattern ✅
+
+**Decision:** Use `request.get_json(force=True, silent=True)` for robust JSON parsing in API endpoints
+**Status:** ✅ **IMPLEMENTED & DEPLOYED** (gcbroadcastscheduler-10-26-00020-j6n)
+
+**Context:**
+- Cloud Scheduler and manual API calls to `/api/broadcast/execute` were failing
+- Errors: `415 Unsupported Media Type` and `400 Bad Request`
+- Root cause: Flask's default `request.get_json()` raises exceptions instead of returning `None`
+
+**Problem with Default Behavior:**
+```python
+# ❌ DEFAULT PATTERN (Raises Exceptions):
+data = request.get_json() or {}
+
+# Issues:
+# 1. Raises werkzeug.exceptions.UnsupportedMediaType (415) if Content-Type ≠ 'application/json'
+# 2. Raises werkzeug.exceptions.BadRequest (400) if JSON parsing fails
+# 3. Crashes endpoint instead of gracefully handling edge cases
+```
+
+**Adopted Best Practice:**
+```python
+# ✅ ROBUST PATTERN (Flask Best Practice):
+data = request.get_json(force=True, silent=True) or {}
+
+# Benefits:
+# 1. force=True:  Parse JSON regardless of Content-Type header
+#    - Handles proxies/gateways that strip or modify headers
+#    - Works with manual curl/wget tests missing headers
+#    - Cloud Scheduler compatibility (sometimes sends non-standard Content-Type)
+#
+# 2. silent=True: Return None instead of raising exceptions
+#    - Empty body → None → fallback to {}
+#    - Malformed JSON → None → fallback to {}
+#    - Prevents 400 errors from crashing the endpoint
+#
+# 3. or {}:       Provide safe default for dictionary operations
+#    - Ensures data.get('key', 'default') always works
+#    - No need for None checks throughout the code
+```
+
+**When to Use This Pattern:**
+1. ✅ **Public APIs**: External services calling your endpoints
+2. ✅ **Cloud Scheduler/Cron Jobs**: Google Cloud services with varied request formats
+3. ✅ **Webhook Endpoints**: Third-party services (NOWPayments, ChangeNOW, etc.)
+4. ✅ **Internal Services**: Microservices that may evolve independently
+5. ✅ **Manual Testing**: curl/Postman/wget requests during development
+
+**When NOT to Use:**
+- ❌ Endpoints requiring strict JSON validation (use schema validators instead)
+- ❌ Security-critical endpoints needing Content-Type enforcement (validate separately)
+
+**Flask Documentation Reference:**
+- From Context7 MCP research: Flask docs recommend `force=True, silent=True` for production APIs
+- Source: Flask Request API documentation (verified via mcp__context7__get-library-docs)
+
+**Applied To:**
+- `GCBroadcastScheduler-10-26/main.py` → `/api/broadcast/execute` endpoint
+
+**Testing Validated:**
+1. ✅ Missing Content-Type header → Works
+2. ✅ Empty request body → Works
+3. ✅ Malformed JSON → Works
+4. ✅ Proper JSON payload → Works
+5. ✅ Cloud Scheduler execution → Works
+
+**Future Application:**
+- Apply this pattern to ALL webhook and API endpoints across services:
+  - GCNotificationService webhook endpoints
+  - GCHostPay webhook endpoints
+  - TelePay webhook endpoints
+  - Any new microservices with HTTP endpoints
 
 ---
 
-### 2025-11-09 Session 94: Frontend Services - Type Safety & Auto-Login Decision
+## 2025-11-14: Cursor Context Manager Fix - NEW_ARCHITECTURE Pattern ✅
 
-**Decision:** Implement comprehensive TypeScript interfaces for all verification and account management flows
+**Decision:** Migrate from pg8000 raw cursors to SQLAlchemy `text()` pattern for all database operations
+**Status:** ✅ **IMPLEMENTED & DEPLOYED**
 
 **Context:**
-- Frontend needs to call new backend verification and account management endpoints
-- TypeScript provides compile-time type safety for API calls
-- Backend responses include complex nested structures (VerificationStatus, EmailChangeResponse, etc.)
-- Auto-login behavior requires signup to return tokens (breaking change from previous behavior)
+- pg8000 cursors do NOT support Python's context manager protocol (`with` statement)
+- Production error: `'Cursor' object does not support the context manager protocol`
+- Error occurred in `broadcast_tracker.py:199` during message ID updates
+
+**Pattern Decision:**
+
+```python
+# ❌ OLD PATTERN (Problematic):
+with self.get_connection() as conn:
+    cur = conn.cursor()
+    cur.execute("SELECT ... WHERE id = %s", (id,))
+    result = cur.fetchone()
+    # cursor not explicitly closed - relies on __exit__ which doesn't exist
+
+# ✅ NEW PATTERN (SQLAlchemy text()):
+engine = self._get_engine()
+with engine.connect() as conn:
+    query = text("SELECT ... WHERE id = :id")
+    result = conn.execute(query, {"id": id})
+    row = result.fetchone()
+    # SQLAlchemy handles cursor lifecycle automatically
+```
+
+**Benefits:**
+1. ✅ Automatic resource management - no manual cursor cleanup needed
+2. ✅ SQL injection protection - named parameters (`:param`) instead of `%s`
+3. ✅ Better error context - SQLAlchemy provides detailed stack traces
+4. ✅ Consistent pattern - aligns with modern SQLAlchemy best practices
+5. ✅ Type safety - better IDE support and type checking
+6. ✅ Row mapping - easy dictionary conversion via `row._mapping`
+
+**Scope:**
+- 11 methods migrated in GCBroadcastScheduler-10-26
+- Services to review later: GCNotificationService, TelePay10-26 (only if errors occur)
+
+---
+
+## 2025-11-14: Complete Environment Variable Configuration ✅
+
+**Decision:** Configure ALL 10 required environment variables for GCBroadcastScheduler-10-26
+**Status:** ✅ **COMPLETE & DEPLOYED** (Revision: `gcbroadcastscheduler-10-26-00019-nzk`)
+
+**Context:**
+- Initial deployment missing 3 environment variables
+- Deployment errors: "Environment variable BOT_USERNAME_SECRET not set", "BROADCAST_MANUAL_INTERVAL_SECRET not set"
+- Root cause: Incomplete review of `config_manager.py` requirements
+
+**Complete Secret Mappings (10 Total):**
+```bash
+# config_manager.py calls:                      # Must point to Secret Manager secret:
+
+# Bot Configuration (2)
+BOT_TOKEN_SECRET          →  TELEGRAM_BOT_SECRET_NAME        (bot token: 46 chars)
+BOT_USERNAME_SECRET       →  TELEGRAM_BOT_USERNAME           (username: PayGatePrime_bot)
+
+# Authentication (1)
+JWT_SECRET_KEY_SECRET     →  JWT_SECRET_KEY                  (JWT signing: 64 chars)
+
+# Database Configuration (5)
+DATABASE_HOST_SECRET      →  DATABASE_HOST_SECRET            (34.58.246.248)
+DATABASE_NAME_SECRET      →  DATABASE_NAME_SECRET            (client_table)
+DATABASE_USER_SECRET      →  DATABASE_USER_SECRET            (postgres)
+DATABASE_PASSWORD_SECRET  →  DATABASE_PASSWORD_SECRET        (15 chars)
+CLOUD_SQL_CONNECTION_NAME_SECRET → CLOUD_SQL_CONNECTION_NAME (telepay-459221:us-central1:telepaypsql)
+
+# Broadcast Intervals (2)
+BROADCAST_AUTO_INTERVAL_SECRET   →  BROADCAST_AUTO_INTERVAL    (24 hours)
+BROADCAST_MANUAL_INTERVAL_SECRET →  BROADCAST_MANUAL_INTERVAL  (0.0833 hours = 5 min)
+```
+
+**Key Learning:**
+1. **Always** review entire `config_manager.py` file for ALL environment variable calls
+2. **Always** reference `SECRET_CONFIG.md` for correct secret name mappings
+3. Environment variable names (what config reads) ≠ Secret Manager names (what secrets are stored as)
+4. Example: `BOT_TOKEN_SECRET` env var → points to → `TELEGRAM_BOT_SECRET_NAME` secret
+5. Methods with default values still log warnings if env vars are missing
+
+---
+
+## 2025-11-14: GCBroadcastService Removal - Cleanup Complete ✅
+
+**Decision:** DELETE GCBroadcastService-10-26 entirely
+**Status:** ✅ **EXECUTED AND COMPLETE**
+
+**Implementation Completed:**
+1. ✅ Paused `gcbroadcastservice-daily` Cloud Scheduler job
+2. ✅ Verified GCBroadcastScheduler-10-26 operational (HEALTHY)
+3. ✅ Deleted `gcbroadcastservice-10-26` Cloud Run service
+4. ✅ Deleted `gcbroadcastservice-daily` scheduler job permanently
+5. ✅ Archived code: `OCTOBER/ARCHIVES/GCBroadcastService-10-26-archived-2025-11-14`
+
+**Infrastructure State After Cleanup:**
+- ✅ ONE broadcast service: `gcbroadcastscheduler-10-26`
+- ✅ ONE scheduler job: `broadcast-scheduler-daily` (every 5 minutes)
+- ✅ Clean code directory: Only Scheduler in `10-26/`
+- ✅ Redundant service archived for historical reference
+
+**Benefits Achieved:**
+- ✅ Eliminated 100% functional duplication
+- ✅ Reduced cloud infrastructure costs (~50% for broadcast services)
+- ✅ Removed developer confusion (single source of truth)
+- ✅ Eliminated potential race conditions at 12:00 UTC daily
+- ✅ Simplified monitoring and debugging
+- ✅ Clear service ownership and responsibility
+
+**Validation:**
+- User insight: "I have a feeling that BroadcastService may not be necessary"
+- Analysis confirmed: 100% redundancy across all endpoints and modules
+- Decision executed: Service and infrastructure completely removed
+- Verification: GCBroadcastScheduler continues operating normally
+
+**Documentation:**
+- Full analysis: `BROADCAST_SERVICE_REDUNDANCY_ANALYSIS.md`
+- Cleanup logged: `PROGRESS.md` (2025-11-14 entry)
+
+---
+
+## 2025-11-14: Database Cursor Management Pattern - Migrate to NEW_ARCHITECTURE ✅
+
+**Decision:** Migrate all database cursor operations to SQLAlchemy `text()` pattern (NEW_ARCHITECTURE)
+
+**Context:**
+- Production error: `'Cursor' object does not support the context manager protocol`
+- Service affected: GCBroadcastScheduler-10-26
+- Error location: `broadcast_tracker.py` line 199 (`update_message_ids` method)
+- Root cause: pg8000 cursors do NOT support `with` statement
+
+**Problem:**
+```python
+# WRONG - pg8000 cursors don't support context managers:
+with self.db.get_connection() as conn:
+    with conn.cursor() as cur:  # ❌ ERROR
+        cur.execute(query, params)
+```
+
+**Options Considered:**
+
+**Option A: Quick Fix (Just add cur.close())**
+```python
+with self.db.get_connection() as conn:
+    cur = conn.cursor()
+    try:
+        cur.execute(query, params)
+    finally:
+        cur.close()  # Manual cleanup
+```
+- ✅ Quick to implement
+- ❌ Still uses %s string formatting (SQL injection risk)
+- ❌ Not aligned with NEW_ARCHITECTURE
+- ❌ Manual resource management
+- **Rejected**
+
+**Option B: NEW_ARCHITECTURE Pattern (SQLAlchemy text())**
+```python
+engine = self._get_engine()
+with engine.connect() as conn:
+    query = text("SELECT ... WHERE id = :id")
+    result = conn.execute(query, {"id": value})
+    conn.commit()  # For DML
+```
+- ✅ Automatic cursor lifecycle management
+- ✅ Named parameters (better SQL injection protection)
+- ✅ Consistent with NEW_ARCHITECTURE design
+- ✅ Future ORM migration path
+- ✅ Better error messages
+- **Selected**
+
+**Decision Rationale:**
+1. Aligns with existing NEW_ARCHITECTURE pattern used in other services
+2. Better security through named parameters (`:param` vs `%s`)
+3. SQLAlchemy handles all resource cleanup automatically
+4. Enables future migration to ORM if needed
+5. Cleaner, more maintainable code
+6. Better debugging with SQLAlchemy's detailed error messages
 
 **Implementation:**
+- ✅ Updated 11 methods across 2 files
+- ✅ All methods migrated to `text()` pattern
+- ✅ Replaced `%s` with `:named_params`
+- ✅ Used `row._mapping` for dictionary conversion
+- ✅ Added `conn.commit()` for DML operations
 
-1. **TypeScript Interfaces Added:**
-   - Updated `User` interface to include `email_verified`, `created_at`, `last_login`
-   - Updated `AuthResponse` to include `email_verified` field
-   - Added `VerificationStatus` (6 fields: email_verified, email, token_expires, can_resend, last_resent_at, resend_count)
-   - Added `EmailChangeRequest` (new_email, password)
-   - Added `EmailChangeResponse` (success, message, pending_email, notifications status)
-   - Added `PasswordChangeRequest` (current_password, new_password, confirm_password)
-   - Added `PasswordChangeResponse` (success, message)
+**Benefits Realized:**
+1. Error eliminated: No more cursor context manager errors
+2. Code quality: Consistent SQLAlchemy pattern across service
+3. Security: Named parameters prevent SQL injection
+4. Maintainability: Easier to understand and modify
+5. Future-proof: ORM migration path available
 
-2. **AuthService Methods Added:**
-   - `getCurrentUser()` - Fetches user with email_verified status
-   - `getVerificationStatus()` - Fetches detailed verification info
-   - `resendVerification()` - Authenticated resend (no email parameter needed)
-   - `requestEmailChange(newEmail, password)` - Initiates email change
-   - `cancelEmailChange()` - Cancels pending change
-   - `changePassword(current, new)` - Changes password
+**Lessons Learned:**
+- pg8000 driver has limitations (no context manager support)
+- SQLAlchemy `text()` is the preferred pattern for raw SQL
+- Always use named parameters for security
+- Resource management should be handled by frameworks, not manually
+- NEW_ARCHITECTURE pattern should be applied universally
 
-3. **Auto-Login Behavior:**
-   - **Modified:** `signup()` now stores access_token and refresh_token
-   - **Rationale:** Matches backend's new auto-login flow (signup returns tokens)
-   - **Impact:** Users auto-logged in after signup, can use app immediately
+**Reference:**
+- CON_CURSOR_MAYBE_CHECKLIST.md - Original guidance
+- CON_CURSOR_CLEANUP_PROGRESS.md - Implementation tracking
+- CLAUDE.md - "REMEMBER Wrong fix (just adding cur.close()) --> correct pattern (SQLAlchemy text())"
+
+---
+
+## 2025-11-14: GCBroadcastService Redundancy - User Insight Validated ✅
+
+**Issue:** Two separate broadcast services with 100% functional duplication
+**User Insight:** "I have a feeling that BroadcastService may not be necessary"
+**Verdict:** User is CORRECT - complete architectural redundancy confirmed
+
+**Services Identified:**
+1. **GCBroadcastScheduler-10-26** (ACTIVE)
+   - Cloud Scheduler: `broadcast-scheduler-daily` (every 5 minutes)
+   - Status: ✅ Working correctly with recent message deletion fix
+   - Code structure: Flat (all modules in root)
+
+2. **GCBroadcastService-10-26** (REDUNDANT)
+   - Cloud Scheduler: `gcbroadcastservice-daily` (once daily at 12:00 UTC)
+   - Status: ⚠️ Unnecessary duplicate
+   - Code structure: Organized (services/, routes/, clients/, utils/)
+
+**100% Duplication Confirmed:**
+- All 4 API endpoints identical (execute, trigger, status, health)
+- All 6 core modules identical (executor, scheduler, tracker, telegram, database, config)
+- Both hit same `broadcast_manager` database table
+- Both use same Cloud SQL connection pool
+- Only difference: code organization (GCBroadcastService has better structure)
+
+**Historical Context:**
+- Likely created during refactoring effort (better code organization)
+- Old service (Scheduler) never decommissioned after new service (Service) deployed
+- Both services running in parallel with separate scheduler jobs
+- User correctly identified the overlap during debugging
+
+**Decision:** REMOVE GCBroadcastService-10-26 entirely
+**Rationale:**
+- Zero unique functionality
+- Wastes cloud resources (duplicate deployment)
+- Causes confusion (which service to update?)
+- Potential for race conditions (both executing at same time)
+- GCBroadcastScheduler already working with recent bug fixes
+
+**Action Plan:**
+1. Pause `gcbroadcastservice-daily` scheduler job
+2. Verify GCBroadcastScheduler continues working (next 5-min cron)
+3. Delete `gcbroadcastservice-10-26` Cloud Run service
+4. Delete `gcbroadcastservice-daily` scheduler job
+5. Archive `GCBroadcastService-10-26` code directory
+
+**Lessons Learned:**
+- Always complete migration plans (don't leave old services running)
+- Use distinct service names that indicate purpose
+- Regular audits to identify redundant infrastructure
+- User observations often reveal critical architectural issues
+
+**Documentation:** Full analysis in `BROADCAST_SERVICE_REDUNDANCY_ANALYSIS.md`
+
+---
+
+## 2025-11-14: Root Cause Analysis - Deployment Gap Identified
+
+**Issue:** Message deletion not working despite code implementation
+**Root Cause:** Code was updated locally but never deployed to Cloud Run
+**Decision:** Immediate deployment of GCBroadcastService-10-26 with message tracking
+
+**Analysis:**
+- Database schema was migrated successfully (columns exist)
+- Code changes were implemented correctly (delete-then-send workflow)
+- Service was running old version from 2025-11-13 (before code changes)
+- All message IDs in database were NULL (never stored by old code)
+
+**Resolution Strategy:**
+1. Deploy updated code immediately (low risk - isolated changes)
+2. Accept first broadcast won't delete (no IDs stored yet)
+3. Second broadcast onwards will work correctly
+4. Manual cleanup of existing duplicates optional (one-time)
+
+**Rationale:**
+- Code review showed implementation was correct
+- Problem was operational (deployment), not technical (code)
+- Graceful degradation ensures no breaking changes
+- First broadcast establishes baseline for future deletions
+
+---
+
+## 2025-11-14: Bot Architecture Redundancy Analysis
+
+**Decision:** Documented extensive redundancy between `/bot` folder (new modular architecture) and root-level handlers (legacy monolithic)
+
+**Finding:**
+- 60-90% functional overlap in core features
+- Both `bot/conversations/donation_conversation.py` (350 lines) and `donation_input_handler.py` (654 lines) implement donation keypad
+- Both `bot/handlers/command_handler.py` and `menu_handlers.py` implement /start command
+- `bot/conversations/donation_conversation.py` is DEAD CODE (imported but never registered)
+
+**Critical Issue Identified:**
+- `menu_handlers.py` uses global state (`self.global_sub_value`, `self.global_open_channel_id`) shared across all users
+- Concurrency bug: Multiple users can overwrite each other's subscription values
+- **Risk Level:** HIGH - Can cause incorrect payment amounts
+
+**Validation Inconsistency:**
+- `donation_input_handler.py`: MIN_AMOUNT = $4.99
+- `bot/conversations/donation_conversation.py`: MIN = $4.99
+- `input_handlers.py`: MIN = $1.00 ← DIFFERENT!
+
+**Migration Status:** 25% complete
+- ✅ Command handlers migrated to bot/handlers/
+- ✅ Keyboard utilities migrated to bot/utils/
+- 🔄 Donation flow in progress (new handler created but not deployed)
+- ❌ Database configuration not started
+- ❌ Global state replacement not started
+
+**Recommendations:**
+1. **IMMEDIATE:** Fix global state bug by moving to `context.user_data`
+2. **SHORT-TERM:** Remove dead code (`bot/conversations/donation_conversation.py`)
+3. **SHORT-TERM:** Standardize validation constants across all handlers
+4. **LONG-TERM:** Complete migration to bot/ architecture or abandon it
+
+**Documentation:** Full analysis in `BOT_TELEPAY_REDUNDANCIES.md`
+
+---
+
+## 2025-01-14: Live-Time Broadcast Message Deletion Architecture
+
+**Decision:** Implement delete-then-send workflow for broadcast messages
+
+**Rationale:**
+- Prevents message clutter in channels
+- Ensures only latest broadcast message is visible
+- Maintains professional channel presentation
+- Users see current pricing/donation options only
+
+**Implementation Choices:**
+
+1. **Database Schema Design:**
+   - Store message IDs as BIGINT (matches Telegram's message_id type)
+   - Separate columns for open vs closed channel messages
+   - Track timestamps for debugging and analytics
+   - Indexed for efficient querying
+
+2. **Deletion Strategy:**
+   - Delete BEFORE sending (prevents race conditions)
+   - Idempotent deletion (treat "not found" as success)
+   - Graceful degradation (deletion failures don't block sends)
+   - No retry on deletion failures (message already gone or permission issue)
+
+3. **Workflow Order:**
+   - Query old message ID from database
+   - Attempt to delete old message
+   - Send new message
+   - Store new message ID
+   - **Rationale:** Ensures database always has most recent message ID
+
+4. **Error Handling Philosophy:**
+   - Deletion errors logged but non-blocking
+   - "Message not found" treated as success (idempotent)
+   - Permission errors logged for admin attention
+   - Send operations always attempted regardless of deletion outcome
+
+5. **Code Organization:**
+   - DatabaseManager methods for message ID operations (TelePay10-26)
+   - BroadcastTracker methods for message ID operations (GCBroadcastService)
+   - Consistent delete_message implementations across both services
+   - Delete logic embedded in broadcast executors (not separate module)
+
+6. **Async/Sync Conversion:**
+   - Converted BroadcastManager.broadcast_hash_links() to async
+   - Replaced requests.post() with Bot.send_message()
+   - **Rationale:** Enables message deletion API and consistent async pattern
+
+**Trade-offs Considered:**
+- ❌ Delete AFTER send: Could leave orphaned messages if send fails
+- ✅ Delete BEFORE send: Clean state even on send failure
+- ❌ Retry deletion failures: Could cause rate limiting
+- ✅ Log and continue: Better availability, admin can investigate
+- ❌ Separate deletion utility module: Over-engineering for current needs
+- ✅ Inline deletion logic: Simpler, fewer abstractions
+
+## 2025-11-14 Session 160 (Part 2): GCWebhook1 - Early Idempotency Check Pattern
+
+**Decision:** Add idempotency check at the BEGINNING of `/process-validated-payment` endpoint to prevent duplicate processing when called multiple times.
+
+**Problem:**
+- User received 3 different invitation links for 1 payment
+- GCWebhook1 only marked payments as processed at the END
+- No check at the BEGINNING to detect already-processed payments
+- Allowed duplicate Cloud Task creation if upstream services retried
+
+**Root Cause:**
+```python
+# BEFORE (BROKEN):
+@app.route("/process-validated-payment", methods=["POST"])
+def process_validated_payment():
+    # Extract payment data
+    # Validate payment
+    # Create Cloud Tasks ❌ DUPLICATE PROCESSING
+    # Queue to GCSplit1
+    # Queue to GCWebhook2
+    # Mark as processed ← TOO LATE!
+```
+
+**Design Choices:**
+
+1. **Early Idempotency Check (CHOSEN)** ✅
+   - Check `processed_payments.gcwebhook1_processed` flag at START
+   - Return 200 success immediately if already processed
+   - Prevent duplicate Cloud Task creation
+   - Pros: Clean, effective, compatible with retries
+   - Cons: None
+
+2. **Request Deduplication Cache (REJECTED)**
+   - Use in-memory cache with request ID
+   - Cons: State not shared across instances, lost on restart
+
+3. **Cloud Tasks Task Name Deduplication (REJECTED)**
+   - Use payment_id as task name
+   - Cons: Doesn't prevent double-processing, only duplicate tasks
+
+**Implementation Pattern:**
+
+```python
+# AFTER (FIXED):
+@app.route("/process-validated-payment", methods=["POST"])
+def process_validated_payment():
+    # Extract payment_id
+    nowpayments_payment_id = payment_data.get('nowpayments_payment_id')
+
+    # ✅ CHECK IDEMPOTENCY FIRST
+    SELECT gcwebhook1_processed FROM processed_payments WHERE payment_id = %s
+
+    if already_processed:
+        # Return success without re-processing
+        return jsonify({"status": "success", "message": "Payment already processed"}), 200
+
+    # Otherwise, proceed with normal processing
+    # Create Cloud Tasks
+    # Queue to GCSplit1
+    # Queue to GCWebhook2
+    # Mark as processed
+```
+
+**Why Early Check is Critical:**
+- Prevents duplicate Cloud Tasks (expensive operations)
+- Prevents duplicate GCSplit1 processing (money movement)
+- Prevents duplicate GCWebhook2 invites (security issue)
+- Compatible with np-webhook retry behavior
+- Idempotent by definition (safe to call multiple times)
+
+**Fail-Open Strategy:**
+- If database unavailable → log warning and proceed
+- Rationale: Better to risk duplicate than block legitimate payments
+- np-webhook will retry failed requests anyway
+- GCWebhook2 has its own idempotency protection
+
+**Security Consideration:**
+- Without this fix: Users could get multiple invite links per payment
+- Each link grants channel access (1 payment → 3 people get access)
+- Violates subscription model
+- Potential revenue loss for channel owners
+
+**Alternative Considered:**
+- Database transaction locks: Rejected (complex, performance impact)
+- Optimistic locking: Rejected (race conditions still possible)
+- Early check is simplest and most effective
+
+---
+
+## 2025-11-14 Session 160: GCWebhook2 - Enhanced Confirmation Message Design
+
+**Decision:** Implement database lookup for channel title and tier number to enhance invitation confirmation message, with graceful fallback to prevent blocking.
+
+**Problem:**
+- Current message only shows invite link without context
+- Users don't see which channel they're joining or subscription details
+- No tier information displayed (important for multi-tier channels)
+
+**Design Choices:**
+
+1. **Database Lookup Strategy (CHOSEN)** ✅
+   - Query `main_clients_database` for channel title and tier configuration
+   - Match token price/duration against database tiers to determine tier number
+   - Pros: Accurate data, professional user experience
+   - Cons: Adds database query (~50-100ms latency)
+
+2. **Token Embedding (REJECTED)**
+   - Include channel title and tier in token payload
+   - Cons: Increases token size, requires coordinated changes across GCWebhook1/GCWebhook2
+
+3. **Static Message (REJECTED)**
+   - Keep simple message without channel details
+   - Cons: Poor user experience, no context provided
+
+**Implementation Pattern:**
+
+```python
+# Non-blocking design with fallback
+channel_details = {'channel_title': 'Premium Channel', 'tier_number': 'Unknown'}
+if db_manager:
+    try:
+        channel_details = db_manager.get_channel_subscription_details(...)
+    except Exception:
+        # Use fallback values, never block invite send
+        pass
+```
+
+**Tier Matching Logic:**
+- Exact match on BOTH price AND duration required
+- Floating point tolerance: 0.01 (handles precision issues)
+- Returns "Unknown" if no match (e.g., custom pricing, expired tiers)
+
+**Fallback Strategy:**
+- Database unavailable → Use `'Premium Channel'` / `'Unknown'`
+- Channel not found → Use `'Premium Channel'` / `'Unknown'`
+- Empty channel title → Use `'Premium Channel'`
+- No tier match → Use tier_number `'Unknown'`
+
+**Why Cosmetic Enhancement is Safe:**
+- Database lookup happens BEFORE async telegram operations
+- Wrapped in try-except with fallback values
+- Never blocks invite link creation or message send
+- Payment validation remains unchanged and independent
+
+**Message Format Decision:**
+- Tree structure (`├`, `└`) for visual hierarchy
+- Emojis for each element (📺, 🔗, 🎯, 💰, ⏳)
+- Clear sections: Header → Channel/Link → Subscription Details
+
+**Performance Impact:** Acceptable
+- Database query adds ~50-100ms per invite
+- Query is simple single-row lookup with indexed column
+- Only runs once per successful payment (not high frequency)
+
+**Alternative Considered:**
+- Async database lookup: Rejected (adds complexity, minimal benefit)
+- Cache channel data: Rejected (channel titles rarely used, caching overhead not worth it)
+
+---
+
+## 2025-11-14 Session 159: GCNotificationService - Persistent Event Loop for python-telegram-bot 20.x
+
+**Decision:** Implement persistent event loop pattern in TelegramClient instead of creating/closing loop per request.
+
+**Problem:**
+- "RuntimeError('Event loop is closed')" on second consecutive notification
+- Root cause: Creating new event loop → using it → closing it for EACH request
+- First request succeeded, second request failed with closed event loop error
+
+**Analysis:**
+```
+Request 1: Create loop → Use → Close ✅
+Request 2: Try to create loop → CRASH ❌ (asyncio stale references)
+```
+
+**Solution Options Evaluated:**
+
+1. **Persistent Event Loop (CHOSEN)** ✅
+   - Create loop once in `__init__`, reuse for all requests
+   - Pros: Clean, efficient, follows asyncio best practices
+   - Cons: Need to manage loop lifecycle (handled by Cloud Run)
+
+2. **nest_asyncio Library**
+   - Allow nested event loops with `nest_asyncio.apply()`
+   - Pros: Quick fix, minimal code changes
+   - Cons: Adds dependency, doesn't address root issue
+
+3. **Synchronous Library**
+   - Use python-telegram-bot < 20.x
+   - Cons: Outdated, loses async benefits
+
+**Implementation:**
+```python
+# BEFORE (BROKEN):
+def send_message(self, ...):
+    loop = asyncio.new_event_loop()  # ❌ New loop every time
+    loop.run_until_complete(...)
+    loop.close()                     # ❌ Closes loop
+
+# AFTER (FIXED):
+def __init__(self, bot_token):
+    self.bot = Bot(token=bot_token)
+    self.loop = asyncio.new_event_loop()  # ✅ Persistent loop
+    asyncio.set_event_loop(self.loop)
+
+def send_message(self, ...):
+    self.loop.run_until_complete(...)  # ✅ Reuse existing loop
+    # NO loop.close() - stays open
+```
+
+**Benefits:**
+- Event loop created ONCE during service initialization
+- All `send_message()` calls reuse the same loop
+- Cloud Run container lifecycle handles cleanup
+- Better performance (no loop recreation overhead)
+
+**Tradeoffs:**
+- Loop persists for container lifetime (acceptable - Cloud Run manages lifecycle)
+- Added `close()` method for explicit cleanup (optional, rarely needed)
+
+**Testing:**
+- ✅ First notification: SUCCESS
+- ✅ Second notification: SUCCESS (was failing before)
+- ✅ No "Event loop is closed" errors in logs
+
+**Pattern:** This is the recommended approach for Flask/FastAPI apps using python-telegram-bot >= 20.x in Cloud Run.
+
+---
+
+## 2025-11-14 Session 158: Subscription Expiration - TelePay Consolidation with Database Delegation
+
+**Decision:** Consolidate subscription expiration management entirely within TelePay using DatabaseManager delegation pattern, removing GCSubscriptionMonitor service.
+
+**Context:**
+- THREE redundant implementations of subscription expiration handling discovered:
+  1. TelePay10-26/subscription_manager.py with duplicate SQL methods
+  2. TelePay10-26/database.py with the same SQL methods (96 lines duplicate)
+  3. GCSubscriptionMonitor-10-26 Cloud Run service (separate implementation)
+- No coordination between TelePay and GCSubscriptionMonitor (risk of duplicate processing)
+- 96 lines of duplicate SQL code between subscription_manager.py and database.py
 
 **Rationale:**
 
-1. **Type Safety:**
-   - Catches API contract mismatches at compile time
-   - IntelliSense provides autocomplete for API responses
-   - Prevents runtime errors from incorrect field access
+1. **Simpler Architecture**
+   - One less service to deploy and maintain (GCSubscriptionMonitor removed)
+   - No additional infrastructure needed (Cloud Scheduler/Cloud Run)
+   - Tight integration: Subscription logic stays with bot application
+   - Reduced complexity: No inter-service coordination needed
 
-2. **Developer Experience:**
-   - Clear contract between frontend and backend
-   - Self-documenting code (interfaces show what data looks like)
-   - Easier refactoring (TypeScript shows all usages)
+2. **Single Source of Truth (DatabaseManager)**
+   - ALL SQL queries handled by DatabaseManager only
+   - subscription_manager.py orchestrates workflow but delegates data access
+   - Follows DRY principle: No duplicate SQL queries
+   - Follows Single Responsibility: DatabaseManager owns SQL, SubscriptionManager owns workflow
 
-3. **Maintainability:**
-   - Centralized type definitions in `src/types/auth.ts`
-   - Easy to update when backend changes
-   - Consistent typing across all components
+3. **Cost Reduction**
+   - GCSubscriptionMonitor scaled to 0 instances: ~$5-10/month → ~$0.50/month
+   - One less Cloud Run service to monitor and maintain
+   - Simplified logging: All subscription logs in TelePay
 
-4. **Auto-Login Decision:**
-   - **Problem:** Old flow required email verification before login (high friction)
-   - **Solution:** Signup returns tokens immediately, verification optional for account changes
-   - **Security:** Unverified users can use app, but can't change email/password
-   - **UX:** Zero-friction onboarding, clear verification prompts in UI
+4. **Best Practices from Context7 MCP**
+   - **Delegation Pattern**: Service layer delegates to data access layer
+   - **Async Context Management**: Using async with patterns for bot operations
+   - **Connection Pooling**: Utilizing SQLAlchemy QueuePool properly
+   - **Rate Limiting**: Small delays (asyncio.sleep) when processing multiple users
+   - **Error Handling**: Proper exception handling for TelegramError and database errors
+
+**Trade-offs:**
+
+✅ **Pros:**
+- Simpler deployment (one service instead of two)
+- Lower infrastructure costs (no separate Cloud Run)
+- Easier debugging (all logs in one place)
+- No coordination issues between services
+- Single source of truth for SQL queries
+
+⚠️ **Cons:**
+- Coupled to main application (can't scale subscription processing independently)
+- Background task in main process (slight overhead, negligible in practice)
+- No separate observability for subscription management (mitigated by good logging)
+
+**Alternatives Considered:**
+- **Option A:** GCSubscriptionMonitor as sole handler (rejected - unnecessary service separation)
+- **Option C:** Keep both with distributed locking (rejected - overcomplicated, coordination overhead)
+- **Selected Option B:** TelePay subscription_manager with DatabaseManager delegation
+
+**Implementation Pattern:**
+```python
+# BEFORE (subscription_manager.py - DUPLICATES SQL):
+def fetch_expired_subscriptions(self):
+    with self.db_manager.pool.engine.connect() as conn:
+        query = "SELECT ... FROM private_channel_users_database WHERE ..."
+        # ... 58 lines of SQL logic ...
+
+# AFTER (subscription_manager.py - DELEGATES):
+expired = self.db_manager.fetch_expired_subscriptions()
+```
+
+**Delegation Architecture:**
+- `subscription_manager.py` orchestrates workflow:
+  - Fetches expired → via `db_manager.fetch_expired_subscriptions()`
+  - Deactivates subscription → via `db_manager.deactivate_subscription()`
+  - Removes user from channel → via Telegram Bot API (unique responsibility)
+- `database.py` provides SQL queries (single source of truth)
+- `remove_user_from_channel()` handles Telegram API (no database equivalent)
+
+**Enhancements Added:**
+- Configurable monitoring interval (env var: `SUBSCRIPTION_CHECK_INTERVAL`, default: 60s)
+- Processing statistics returned: `expired_count`, `processed_count`, `failed_count`
+- Failure rate monitoring (warns if >10% failures)
+- Summary logging: "📊 Expiration check complete: X found, Y processed, Z failed"
+
+**Rollback Plan:**
+If TelePay fails, GCSubscriptionMonitor can be quickly re-enabled:
+1. Scale up Cloud Run: `min-instances=1`
+2. Service remains deployed at: `https://gcsubscriptionmonitor-10-26-291176869049.us-central1.run.app`
+3. Immediate fallback available if needed
+
+## 2025-11-14 Session 157: Display Payout Configuration in Notifications (Not Payment Amounts)
+
+**Decision:** Refactored payment notification messages to show client payout configuration (instant/threshold) instead of crypto payment amounts, with PayGatePrime branding.
+
+**Context:**
+- Notifications were showing crypto amounts and NowPayments branding
+- Channel owners need to see their payout method configuration, not raw payment details
+- Threshold mode requires live progress tracking to show accumulation towards payout threshold
+- User requested: "Show payout method, not payment amounts"
+
+**Rationale:**
+
+1. **Client-Centric Information**
+   - Channel owners care about HOW they get paid, not raw crypto amounts
+   - Payout method (instant vs threshold) is more actionable information
+   - Wallet address confirmation ensures payouts go to correct destination
+
+2. **PayGatePrime Branding**
+   - Remove 3rd-party payment processor (NowPayments) visibility
+   - Consistent branded experience for channel owners
+   - Reinforces PayGatePrime as the payment platform
+
+3. **Live Threshold Progress**
+   - Threshold mode needs real-time accumulation tracking
+   - Shows "$47.50 / $100.00 (47.5%)" progress towards payout
+   - Helps channel owners anticipate when next payout occurs
+   - Query: `SUM(payment_amount_usd) WHERE is_paid_out = FALSE`
+
+4. **Modular Architecture**
+   - Created separate `_format_payout_section()` method
+   - Keeps notification formatting clean and testable
+   - Easy to add new payout strategies in future
+   - Follows separation of concerns principle
+
+**Implementation Details:**
+
+**New Database Methods:**
+- `get_payout_configuration()` - Returns payout_strategy, wallet_address, currency, network, threshold
+- `get_threshold_progress()` - Calculates live accumulated unpaid amount
+
+**Message Changes:**
+- REMOVED: Payment Amount section (crypto + USD)
+- ADDED: Payout Method section (strategy-specific)
+- CHANGED: "NowPayments IPN" → "PayGatePrime"
+- FIXED: Duplicate User ID line
+
+**Edge Cases:**
+- Long wallet addresses: Truncate to "0x1234...5678" if > 48 chars
+- Division by zero: Check threshold_usd > 0 before calculating percentage
+- Missing config: Display "Payout Method: Not configured"
+- NULL accumulation: Default to Decimal('0.00')
+
+**Performance Impact:**
+- +2 database queries per notification (minimal overhead)
+- Threshold query: Simple SUM with is_paid_out filter (indexed)
+- Connection pooling mitigates query overhead
 
 **Alternatives Considered:**
 
-**Option 1: Use `any` types (rejected)**
-- Pros: Faster initial implementation
-- Cons: No type safety, runtime errors, poor developer experience
+1. **Keep showing payment amounts**
+   - Rejected: Not useful for channel owners
+   - Raw crypto amounts don't help with business decisions
 
-**Option 2: Inline types in service methods (rejected)**
-- Pros: Types close to usage
-- Cons: Duplication, inconsistency, harder to maintain
+2. **Cache payout configuration**
+   - Rejected: Configuration changes infrequent, caching overhead not justified
+   - Connection pooling provides adequate performance
 
-**Option 3: Centralized interfaces in types file (CHOSEN)**
-- Pros: Single source of truth, reusable, maintainable
-- Cons: Extra file to manage (minimal overhead)
+3. **Batch threshold progress updates**
+   - Rejected: Real-time progress more valuable
+   - Query is lightweight (single SUM aggregation)
+
+**Follow-up Actions:**
+- Deploy updated GCNotificationService (blocked by build issues)
+- Test threshold mode with mock accumulated payments
+- Monitor notification delivery performance
+- Gather channel owner feedback on new format
+
+**Related Files:**
+- `/GCNotificationService-10-26/database_manager.py`
+- `/GCNotificationService-10-26/notification_handler.py`
+- `/NOTIFICATION_MESSAGE_REFACTOR_CHECKLIST.md`
+
+## 2025-11-14 Session 156: Migrate GCNotificationService to NEW_ARCHITECTURE Pattern
+
+**Decision:** Refactored GCNotificationService database layer to use SQLAlchemy with Cloud SQL Connector, matching TelePay10-26 NEW_ARCHITECTURE pattern established in Session 154.
+
+**Context:**
+- GCNotificationService was using raw psycopg2 connections with manual connection management
+- TelePay10-26 established NEW_ARCHITECTURE pattern using SQLAlchemy `text()` with connection pooling
+- Inconsistent patterns across services increase maintenance burden
+- Notification workflow analysis (NOTIFICATION_WORKFLOW_REPORT.md) identified this as Priority 2 improvement
+
+**Rationale:**
+
+1. **Consistency Across Services**
+   - All services should follow same database connection pattern
+   - Reduces cognitive load when switching between codebases
+   - Easier onboarding for new developers
+
+2. **Connection Pooling Benefits**
+   - Reduces connection overhead (important for high-volume notifications)
+   - Automatic connection health checks prevent stale connections
+   - Pool recycling (30 min) prevents long-lived connection issues
+   - QueuePool manages concurrent requests efficiently
+
+3. **Cloud SQL Connector Integration**
+   - Handles authentication automatically via IAM
+   - Unix socket connection when running on Cloud Run
+   - No need to manage DATABASE_HOST_SECRET
+   - Simplifies deployment configuration
+
+4. **Named Parameters**
+   - `:param_name` syntax more readable than `%s` positional
+   - Better protection against SQL injection
+   - Self-documenting queries
+
+5. **Context Manager Pattern**
+   - `with self.engine.connect()` ensures automatic cleanup
+   - No risk of connection leaks from forgotten `close()` calls
+   - Exception-safe resource management
+
+**Implementation Pattern:**
+
+**✅ CORRECT PATTERN (NEW_ARCHITECTURE):**
+```python
+from sqlalchemy import text
+
+def get_notification_settings(self, open_channel_id: str):
+    with self.engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT notification_status, notification_id
+                FROM main_clients_database
+                WHERE open_channel_id = :open_channel_id
+            """),
+            {"open_channel_id": str(open_channel_id)}
+        )
+        row = result.fetchone()
+        return row if row else None
+```
+
+**❌ OLD PATTERN (psycopg2 raw):**
+```python
+def get_notification_settings(self, open_channel_id: str):
+    conn = self.get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT notification_status, notification_id
+        FROM main_clients_database
+        WHERE open_channel_id = %s
+    """, (str(open_channel_id),))
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+    return result if result else None
+```
+
+**Configuration Changes:**
+- Uses `CLOUD_SQL_CONNECTION_NAME` environment variable (e.g., `telepay-459221:us-central1:telepaypsql`)
+- Removes dependency on `DATABASE_HOST_SECRET` from Secret Manager
+- Connection string handled internally by Cloud SQL Connector
+
+**Pool Configuration:**
+```python
+pool_size=3,           # Smaller than TelePay (notification service has lower volume)
+max_overflow=2,        # Limited overflow
+pool_timeout=30,       # 30 seconds
+pool_recycle=1800,     # 30 minutes (prevents stale connections)
+pool_pre_ping=True     # Health check before using connection
+```
 
 **Impact:**
-- ✅ All frontend API calls are now type-safe
-- ✅ Signup flow auto-logs user in (matches backend)
-- ✅ Ready for Phase 9 UI components
-- ✅ No breaking changes for existing login flow
-- ✅ Clear separation between authenticated and public endpoints
+- ✅ Consistent with Session 154 architectural decision
+- ✅ All database operations now use NEW_ARCHITECTURE pattern
+- ✅ Improved performance for concurrent notification requests
+- ✅ Simplified deployment (one less secret to manage)
+- ⚠️ Breaking change: Requires redeployment with new environment variable
 
-**Pattern:** Type-safe API client with centralized interface definitions
+**Trade-offs:**
+- **Added dependencies**: SQLAlchemy + cloud-sql-python-connector (~5MB more)
+  - Acceptable: Performance and consistency benefits outweigh size increase
+- **Connection pool overhead**: Small memory footprint (3-5 connections)
+  - Acceptable: Notification service has low baseline memory usage
+- **Migration effort**: Required updating 5 files
+  - Acceptable: One-time refactor with clear long-term benefits
+
+**Alternatives Considered:**
+
+1. ❌ **Keep psycopg2 pattern, just add connection pooling**
+   - Rejected: Still inconsistent with NEW_ARCHITECTURE
+   - Would require custom pool implementation
+   - Doesn't leverage SQLAlchemy benefits
+
+2. ❌ **Migrate to full ORM (SQLAlchemy models)**
+   - Rejected: Overkill for simple query service
+   - Would require defining all database models
+   - Raw SQL with `text()` sufficient for read-only operations
+
+3. ✅ **SQLAlchemy Core with text() (selected)**
+   - Best balance of consistency, simplicity, and performance
+   - Matches TelePay10-26 pattern exactly
+   - Minimal learning curve for developers
+
+**Deployment Checklist:**
+- [ ] Set `CLOUD_SQL_CONNECTION_NAME` environment variable on Cloud Run
+- [ ] Remove `DATABASE_HOST_SECRET` environment variable (optional, will be ignored)
+- [ ] Deploy with updated `requirements.txt` dependencies
+- [ ] Verify connection pool initialization in logs: "✅ [DATABASE] Connection pool initialized (NEW_ARCHITECTURE)"
+- [ ] Test notification sending works correctly
+- [ ] Monitor Cloud Logging for any connection errors
+
+**Consistency Mandate:**
+ALL future services MUST use NEW_ARCHITECTURE pattern:
+- Use SQLAlchemy `create_engine()` with Cloud SQL Connector
+- Use `text()` wrapper for all SQL queries
+- Use named parameters (`:param_name`) not positional (`%s`)
+- Use `with engine.connect() as conn:` context manager
+- No raw psycopg2 connections except for migrations/scripts
 
 ---
 
-### 2025-11-09 Session 93: Verification Endpoints - Modular Design Decision
+## 2025-11-14 Session 155: Broadcast Manager Auto-Creation Architecture
 
-**Decision:** Add verification endpoints to existing `auth.py` instead of creating separate `verification.py` file
-
-**Context:**
-- VERIFICATION_ARCHITECTURE_1_CHECKLIST.md recommends creating separate file if auth.py exceeds 800 lines
-- Current auth.py is 568 lines (well under threshold)
-- Need to add 2 new verification endpoints: `/verification/status` and `/verification/resend`
-- Must maintain clean code organization while avoiding premature optimization
-
-**Options Considered:**
-
-**Option 1: Create Separate verification.py File**
-- Pros: Maximum modularity, clear separation of concerns, easier testing
-- Cons: Overhead for small codebase, multiple files to navigate, may be premature
-- Pattern: Microservices-style separation
-
-**Option 2: Add to Existing auth.py with Clear Section Markers (CHOSEN)**
-- Pros: All auth-related routes in one place, simpler navigation, no premature splitting
-- Cons: File will grow (but still manageable at ~745 lines after additions)
-- Pattern: Monolithic but organized
+**Decision:** Created separate `BroadcastService` module in GCRegisterAPI-10-26 to handle broadcast_manager entry creation during channel registration.
 
 **Rationale:**
-1. **File Size:** 568 + ~180 lines = ~748 lines (still under 800-line threshold)
-2. **Cohesion:** Verification is closely related to authentication (same security context)
-3. **Simplicity:** Easier for developers to find all auth-related endpoints
-4. **Section Markers:** Used clear `# ===== VERIFICATION ENDPOINTS (Phase 5) =====` separator
-5. **Future-Proofing:** Can split later if auth.py approaches 1000 lines
+- **Separation of concerns**: Channel logic (`ChannelService`) vs Broadcast logic (`BroadcastService`)
+- **Transactional safety**: Using same DB connection for channel + broadcast creation ensures atomic operations with rollback on failure
+- **Follows Flask best practices**: Service layer pattern from Context7 documentation
+- **Reusability**: BroadcastService can be used for future broadcast operations beyond registration
+- **Maintainability**: Modular code structure prevents monolithic service files
 
 **Implementation Details:**
-- Added clear section marker comment for verification endpoints
-- Placed verification endpoints after existing auth endpoints
-- Maintained consistent error handling and audit logging patterns
-- Both endpoints require JWT authentication (same security model as other auth endpoints)
+- Service accepts database connection as parameter (no global state)
+- Methods return UUIDs for created entries (enables verification)
+- Error handling distinguishes duplicate keys vs FK violations
+- Emoji logging pattern (📢) for easy Cloud Logging queries
 
-**Future Considerations:**
-- If auth.py exceeds 900 lines, consider splitting:
-  - `auth.py`: signup, login, logout, refresh, /me
-  - `verification.py`: /verification/*, /verify-email
-  - `account.py`: /account/* (email change, password change)
+**Impact:**
+- New channels automatically get broadcast_manager entries
+- Fixed "Not Configured" button issue for user 7e1018e4-5644-4031-a05c-4166cc877264
+- Frontend dashboard now receives `broadcast_id` field in API responses
+- CASCADE delete works automatically (broadcast_manager entries removed when channel deleted)
+
+**Trade-offs:**
+- Added complexity: Two database operations instead of one (mitigated by transaction safety)
+- Dependency on broadcast_manager table structure (acceptable for MVP)
+- No retry logic for transient failures (acceptable, user can retry registration)
+
+**Alternatives Considered:**
+1. ❌ **Database trigger**: Could auto-create broadcast_manager entries via PostgreSQL trigger
+   - Rejected: Less visibility, harder to test, complicates rollback scenarios
+2. ❌ **Background job**: Queue broadcast creation after channel registration
+   - Rejected: Introduces eventual consistency issues, user sees "Not Configured" briefly
+3. ✅ **Synchronous service call**: Create broadcast entry in same transaction
+   - Selected: Simple, reliable, maintains data consistency
 
 ---
 
-### 2025-11-09 Session 93: Rate Limiting Implementation - Database-Level Tracking
+## 2025-11-14 Session 154: Standardize Database Connection Pattern Using SQLAlchemy
 
-**Decision:** Implement rate limiting using database timestamps and counts instead of Redis/Memcached
+**Decision:** ALL database operations MUST use `pool.engine.connect()` with SQLAlchemy `text()`, not raw connection patterns with `get_connection()`
+
+**Problem Discovered:**
+Multiple database methods used incorrect nested context manager pattern:
+```python
+# ❌ INCORRECT PATTERN (8 instances found)
+with self.get_connection() as conn, conn.cursor() as cur:
+    cur.execute("SELECT ...", (param,))
+```
+
+This failed because:
+1. `get_connection()` returns SQLAlchemy's `_ConnectionFairy` wrapper
+2. Calling `.cursor()` on `_ConnectionFairy` returns raw psycopg2 cursor
+3. Raw psycopg2 cursor doesn't support nested context manager syntax
+4. Error: "_ConnectionFairy' object does not support the context manager protocol"
+
+**Impact:**
+- 🔴 CRITICAL: 8 database methods non-functional on startup
+- 🔴 Open channel fetching failed (subscription system broken)
+- 🔴 Channel configuration updates failed (dashboard broken)
+- 🔴 Subscription expiration monitoring failed
+- 🔴 Donation flow database queries failed
+
+**Affected Files:**
+- `database.py`: 6 methods
+- `subscription_manager.py`: 2 methods
+
+**Architectural Decision:**
+
+### Mandatory Pattern: SQLAlchemy Connection with text()
+
+**✅ CORRECT PATTERN (All database operations):**
+```python
+from sqlalchemy import text
+
+# For SELECT queries
+with self.pool.engine.connect() as conn:
+    result = conn.execute(text("SELECT * FROM table WHERE id = :id"), {"id": value})
+    rows = result.fetchall()
+
+# For UPDATE/INSERT/DELETE queries
+with self.pool.engine.connect() as conn:
+    result = conn.execute(
+        text("UPDATE table SET field = :field WHERE id = :id"),
+        {"field": new_value, "id": record_id}
+    )
+    conn.commit()  # MUST commit for data modifications
+    rows_affected = result.rowcount
+```
+
+**❌ DEPRECATED PATTERN (Do NOT use):**
+```python
+# NEVER use this pattern - it's incompatible with SQLAlchemy pooling
+with self.get_connection() as conn, conn.cursor() as cur:
+    cur.execute("SELECT ...", (param,))
+```
+
+**Why This Pattern?**
+1. **Consistent with NEW_ARCHITECTURE:** Uses SQLAlchemy engine pooling
+2. **Proper connection management:** Context manager handles cleanup automatically
+3. **Compatible with connection pool:** Works seamlessly with `ConnectionPool` class
+4. **Type safety:** `text()` provides SQL injection protection
+5. **Explicit transactions:** Clear when commits are needed
+6. **Future ORM compatibility:** Can migrate to ORM models later
+
+**Query Parameter Syntax:**
+```python
+# ✅ CORRECT - Named parameters with dict
+text("SELECT * FROM table WHERE id = :id"), {"id": value}
+
+# ❌ INCORRECT - Positional parameters with tuple (old psycopg2 style)
+cur.execute("SELECT * FROM table WHERE id = %s", (value,))
+```
+
+**Commit Rules:**
+- **SELECT queries:** NO commit needed
+- **UPDATE queries:** MUST call `conn.commit()`
+- **INSERT queries:** MUST call `conn.commit()`
+- **DELETE queries:** MUST call `conn.commit()`
+
+**get_connection() Method Status:**
+The `get_connection()` method (database.py:133) is now **DEPRECATED** and kept only for backward compatibility:
+```python
+def get_connection(self):
+    """
+    ⚠️ DEPRECATED: Prefer using execute_query() or get_session() for better connection management.
+    This method is kept for backward compatibility with legacy code.
+    """
+    return self.pool.engine.raw_connection()
+```
+
+**Migration Strategy:**
+1. All NEW code must use `pool.engine.connect()` pattern
+2. All EXISTING code should migrate to new pattern when touched
+3. Search for `with.*get_connection().*conn.cursor()` pattern periodically
+4. Eventually remove `get_connection()` method entirely
+
+**Files Refactored (Session 154):**
+1. `database.py` - 6 methods migrated:
+   - `fetch_open_channel_list()` - Line 209
+   - `get_default_donation_channel()` - Line 305
+   - `fetch_channel_by_id()` - Line 537
+   - `update_channel_config()` - Line 590
+   - `fetch_expired_subscriptions()` - Line 650
+   - `deactivate_subscription()` - Line 708
+
+2. `subscription_manager.py` - 2 methods migrated:
+   - `fetch_expired_subscriptions()` - Line 96
+   - `deactivate_subscription()` - Line 197
+
+**Verification:**
+- ✅ Searched entire codebase: NO remaining instances of broken pattern
+- ✅ All database operations now use consistent pattern
+- ✅ All methods maintain backward-compatible return values
+
+**Benefits:**
+1. Eliminates context manager compatibility issues
+2. Consistent with SQLAlchemy best practices
+3. Better connection pool utilization
+4. Easier to debug (clear transaction boundaries)
+5. Safer parameter handling (prevents SQL injection)
+
+**Related Decisions:**
+- Session 153: Secret Manager fetch pattern enforcement
+- NEW_ARCHITECTURE: Connection pooling with SQLAlchemy
+
+---
+
+## 2025-11-14 Session 153: Enforce Secret Manager Fetch Pattern for All Secrets
+
+**Decision:** ALL Secret Manager secrets MUST use fetch functions, not direct `os.getenv()` calls
+
+**Problem Discovered:**
+- CLOUD_SQL_CONNECTION_NAME used direct `os.getenv()` instead of Secret Manager fetch
+- Environment variable contained secret PATH (`projects/291176869049/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest`)
+- Application expected secret VALUE (`telepay-459221:us-central1:telepaypsql`)
+- Resulted in complete database connection failure (CRITICAL severity)
+
+**Inconsistency Identified:**
+```python
+# ✅ CORRECT PATTERN - Other database secrets
+DB_HOST = fetch_database_host()          # Fetches from Secret Manager
+DB_NAME = fetch_database_name()          # Fetches from Secret Manager
+DB_USER = fetch_database_user()          # Fetches from Secret Manager
+DB_PASSWORD = fetch_database_password()  # Fetches from Secret Manager
+
+# ❌ INCORRECT PATTERN - Cloud SQL connection (BEFORE FIX)
+self.pool = init_connection_pool({
+    'instance_connection_name': os.getenv('CLOUD_SQL_CONNECTION_NAME', 'default'),  # Direct getenv!
+})
+```
+
+**Root Cause:**
+- Environment variables contain Secret Manager PATHS (e.g., `projects/.../secrets/NAME/versions/latest`)
+- Secret Manager fetch functions retrieve the actual SECRET VALUES from those paths
+- Direct `os.getenv()` returns the PATH, not the VALUE
+- Cloud SQL Connector requires actual connection string format (`PROJECT:REGION:INSTANCE`)
+
+**Decision: Mandatory Fetch Pattern**
+```python
+def fetch_[secret_name]() -> str:
+    """Fetch [secret] from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("[ENV_VAR_NAME]")
+        if not secret_path:
+            # Return fallback or raise error
+            return "default_value"  # OR raise ValueError()
+
+        # Check if already in correct format (optimization)
+        if is_correct_format(secret_path):
+            return secret_path
+
+        # Fetch from Secret Manager
+        response = client.access_secret_version(request={"name": secret_path})
+        value = response.payload.data.decode("UTF-8").strip()
+        print(f"✅ Fetched [secret_name]: {value}")
+        return value
+    except Exception as e:
+        print(f"❌ Error fetching [secret_name]: {e}")
+        # Handle error: raise or return fallback
+        return "default_value"  # OR raise
+```
+
+**Implementation for CLOUD_SQL_CONNECTION_NAME:**
+```python
+# database.py:64-87
+def fetch_cloud_sql_connection_name() -> str:
+    """Fetch Cloud SQL connection name from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        secret_path = os.getenv("CLOUD_SQL_CONNECTION_NAME")
+        if not secret_path:
+            return "telepay-459221:us-central1:telepaypsql"
+
+        # Optimization: Check if already in correct format
+        if ':' in secret_path and not secret_path.startswith('projects/'):
+            return secret_path
+
+        # Fetch from Secret Manager
+        response = client.access_secret_version(request={"name": secret_path})
+        return response.payload.data.decode("UTF-8").strip()
+    except Exception as e:
+        print(f"❌ Error fetching CLOUD_SQL_CONNECTION_NAME: {e}")
+        return "telepay-459221:us-central1:telepaypsql"
+
+# Module-level initialization
+DB_CLOUD_SQL_CONNECTION_NAME = fetch_cloud_sql_connection_name()
+```
+
+**Environment Variable Naming Convention:**
+- Secrets ending in `_SECRET`: Fetch from Secret Manager (e.g., `DATABASE_HOST_SECRET`)
+- Secrets without `_SECRET` suffix: Should STILL fetch if env var contains `projects/...` path
+- Naming convention should be enforced: ALL Secret Manager refs should end in `_SECRET`
+
+**Action Items from This Decision:**
+1. ✅ Fixed CLOUD_SQL_CONNECTION_NAME fetch pattern
+2. 🔍 Search entire codebase for similar direct `os.getenv()` issues
+3. 📋 Verify all secret fetching patterns are consistent
+4. 📝 Document fetch pattern as mandatory in coding standards
+
+**Benefits:**
+- ✅ Consistent secret handling across codebase
+- ✅ Prevents similar bugs in future development
+- ✅ Clear pattern for adding new secrets
+- ✅ Easier to audit security practices
+- ✅ Reduces deployment configuration errors
+
+**Related Bug:** BUGS.md Session 153 - CLOUD_SQL_CONNECTION_NAME Secret Manager Path Not Fetched
+
+---
+
+## 2025-11-14 Session 152: Maintain Legacy DonationKeypadHandler During Migration
+
+**Decision:** Keep legacy `DonationKeypadHandler` import active during NEW_ARCHITECTURE migration
 
 **Context:**
-- Need to enforce 5-minute rate limit on verification email resends
-- Could use external cache (Redis) or database tracking
-- System already has PostgreSQL with all user data
+- NEW_ARCHITECTURE migration in progress with gradual component replacement
+- `DonationKeypadHandler` import was prematurely commented out
+- New `bot.conversations.donation_conversation` module exists but integration incomplete
+- Application startup failed with NameError
 
 **Options Considered:**
+1. **Quick Fix:** Uncomment import, defer migration
+2. **Complete Migration:** Remove legacy, fully integrate new bot.conversations module
+3. **Hybrid Approach:** Restore import, plan future migration (CHOSEN)
 
-**Option 1: Redis/Memcached for Rate Limiting**
-- Pros: Fast, designed for this use case, atomic operations
-- Cons: Additional infrastructure, data inconsistency risk, overengineering for current scale
-- Pattern: High-scale distributed systems
-
-**Option 2: Database-Level Tracking (CHOSEN)**
-- Pros: Single source of truth, persistent tracking, simpler architecture, no new dependencies
-- Cons: Slightly slower (negligible for current scale), DB load increase
-- Pattern: Monolithic applications, startups
-
-**Rationale:**
-1. **Simplicity:** No additional infrastructure needed
-2. **Data Consistency:** All rate limiting data lives with user data
-3. **Auditability:** Can query resend history directly from database
-4. **Scale:** Current user base doesn't justify Redis complexity
-5. **Performance:** PostgreSQL is more than fast enough for this use case
+**Decision Rationale:**
+- Matches existing pattern: `PaymentGatewayManager` also kept for backward compatibility
+- Reduces deployment risk by avoiding breaking changes during migration
+- Allows gradual testing and validation of new modular components
+- Provides stable baseline while completing NEW_ARCHITECTURE transition
 
 **Implementation:**
-- Added `last_verification_resent_at` TIMESTAMP column
-- Added `verification_resend_count` INTEGER column
-- Rate limiting check: `time_since_resend.total_seconds() > 300` (5 minutes)
-- Increment count on each resend: `verification_resend_count = COALESCE(verification_resend_count, 0) + 1`
+```python
+# app_initializer.py:27
+from donation_input_handler import DonationKeypadHandler  # TODO: Migrate to bot.conversations (kept for backward compatibility)
+```
 
-**Monitoring:**
-- Track resend_count to identify users who repeatedly request verification
-- Can analyze last_verification_resent_at patterns to detect abuse
+**Future Work:**
+- Complete integration of `bot.conversations.create_donation_conversation_handler()`
+- Remove legacy donation_input_handler.py after validation
+- Update bot_manager.py to use new modular conversation handler
 
 ---
 
-### 2025-11-09 Session 92: Email Verification Architecture - Auto-Login Pattern
+## 2025-11-14 Session 152: VM-Based Polling for Telegram Bot (Confirmed Optimal)
 
-**Decision:** Implement "soft verification" with auto-login after signup instead of mandatory pre-login email verification
+**Decision:** Maintain VM-based polling for Telegram bot interactions (NOT webhooks)
+
+**Architecture Investigation:**
+- User questioned if NEW_ARCHITECTURE uses webhooks for button presses (which would cause delays)
+- Verified bot uses `Application.run_polling()` for instant user responses
+- Confirmed webhooks only used for external services (NOWPayments IPN)
+
+**Polling Architecture Benefits:**
+- ✅ Instant button response times (~100-500ms network latency only)
+- ✅ No webhook cold-start delays
+- ✅ Persistent connection to Telegram servers
+- ✅ No webhook infrastructure complexity
+- ✅ Reliable update delivery
+
+**Webhook Architecture (External Services Only):**
+- Payment notifications from NOWPayments/GCNotificationService
+- Secured with HMAC + IP whitelist + rate limiting
+- Isolated from user interaction path (no impact on UX)
+
+**User Interaction Flow:**
+```
+User clicks button → Telegram API (50ms)
+→ Polling bot receives update (<1ms)
+→ CallbackQueryHandler matches pattern (<1ms)
+→ Handler executes (5-50ms)
+→ Response sent to user (50ms)
+Total: ~106-160ms (INSTANT UX)
+```
+
+**Payment Notification Flow:**
+```
+NOWPayments IPN → GCNotificationService (100-500ms)
+→ Webhook /notification (5ms HMAC verify)
+→ NotificationService sends message (50ms)
+Total: 2-6 seconds (acceptable for async payment events)
+```
+
+**Verification Evidence:**
+- `bot_manager.py:132` - `await application.run_polling()`
+- `NEW_ARCHITECTURE.md:625` - Documents "Telegram bot polling"
+- All CallbackQueryHandler registrations process instantly via polling
+- No Telegram webhook configuration found in codebase
+
+**Decision:** MAINTAIN current architecture - VM polling is optimal for use case
+
+## 2025-11-14 Session 151: Security Decorator Application - Programmatic vs Decorator Syntax
+
+**Decision:** Validated programmatic security decorator application as correct implementation
 
 **Context:**
-- Current system blocks login until email is verified (403 Forbidden)
-- Users report frustration at not being able to access the dashboard immediately
-- High signup abandonment rate due to verification friction
-- Modern UX best practice favors immediate access with optional verification
-- Based on OWASP guidelines and industry standards (GitHub, Twitter, LinkedIn pattern)
+- Initial audit reported security decorators NOT applied (critical issue blocking deployment)
+- Report gave score of 95/100, blocking deployment
+- User asked to "proceed" with fixing the critical issue
+- Upon deeper investigation, discovered decorators ARE properly applied
+
+**Investigation:**
+1. Re-read `server_manager.py` create_app() function thoroughly
+2. Found programmatic decorator application at lines 161-172
+3. Verified security component initialization includes all required components
+4. Traced config construction from `app_initializer.py` (lines 226-231)
+5. Confirmed condition `if config and hmac_auth and ip_whitelist and rate_limiter:` will be TRUE
+
+**Implementation Pattern (VALID):**
+```python
+# server_manager.py lines 161-172
+if config and hmac_auth and ip_whitelist and rate_limiter:
+    for endpoint in ['webhooks.handle_notification', 'webhooks.handle_broadcast_trigger']:
+        if endpoint in app.view_functions:
+            view_func = app.view_functions[endpoint]
+            # Apply security stack: Rate Limit → IP Whitelist → HMAC
+            view_func = rate_limiter.limit(view_func)
+            view_func = ip_whitelist.require_whitelisted_ip(view_func)
+            view_func = hmac_auth.require_signature(view_func)
+            app.view_functions[endpoint] = view_func
+```
+
+**Why This Pattern Works:**
+- Blueprints registered first (line 156-157)
+- View functions become available in `app.view_functions` dictionary
+- Programmatically wrap each view function with security decorators
+- Replace original function with wrapped version
+- Valid Flask pattern for post-registration decorator application
+
+**Execution Order (Request Flow):**
+1. Request arrives at webhook endpoint
+2. HMAC signature verified (outermost wrapper - executes first)
+3. IP whitelist checked (middle wrapper - executes second)
+4. Rate limit checked (innermost wrapper - executes third)
+5. Original handler executes if all checks pass
+
+**Alternative Considered (NOT CHOSEN):**
+```python
+# In api/webhooks.py - using @decorator syntax
+@webhooks_bp.route('/notification', methods=['POST'])
+@require_hmac
+@require_ip_whitelist
+@rate_limit
+def handle_notification():
+    # ...
+```
+
+**Why Programmatic Pattern Was Chosen:**
+- Centralized security management in factory function
+- Security applied conditionally based on config presence
+- No need to pass decorators through app context to blueprints
+- Security logging centralized
+- Easier to add/remove security layers without modifying blueprint files
+
+**Outcome:**
+- ✅ Corrected NEW_ARCHITECTURE_REPORT_LX.md
+- ✅ Changed "Critical Issue #1" to "✅ RESOLVED: Security Decorators ARE Properly Applied"
+- ✅ Updated overall score: 95/100 → 100/100
+- ✅ Updated deployment recommendation: Ready for deployment
+
+**Lesson Learned:**
+- Always verify code execution flow thoroughly before reporting critical issues
+- Programmatic decorator application is valid and sometimes preferable
+- Flask `app.view_functions` dictionary allows post-registration modification
+
+**Status:** ✅ Security properly implemented - No changes required
+
+---
+
+## 2025-11-13 Session 150: Environment Variable Correction - TELEGRAM_BOT_USERNAME
+
+**Decision:** Clarified TELEGRAM_BOT_USERNAME as Secret Manager Path
+
+**Context:**
+- Documentation initially showed `TELEGRAM_BOT_USERNAME=your_bot_username`
+- Code was already correct (fetches from Secret Manager)
+- User identified the documentation discrepancy
+
+**Correction Applied:**
+```bash
+# INCORRECT (documentation only - code was never wrong):
+TELEGRAM_BOT_USERNAME=your_bot_username
+
+# CORRECT (what code expects):
+TELEGRAM_BOT_USERNAME=projects/291176869049/secrets/TELEGRAM_BOT_USERNAME/versions/latest
+```
+
+**Implementation:**
+- `config_manager.py` already correctly fetches from Secret Manager (line 61)
+- Updated `DEPLOYMENT_SUMMARY.md` with correct Secret Manager path format
+- No code changes required (was already implemented correctly)
+
+**Rationale:**
+- Consistent with other secrets (TELEGRAM_BOT_SECRET_NAME, DATABASE_*_SECRET)
+- Secure: Username not exposed in environment variables
+- Secret Manager provides centralized secret management
+
+**Files Updated:**
+- `DEPLOYMENT_SUMMARY.md` - Corrected environment variable documentation
+- `DECISIONS.md` - Documented the correction
+
+## 2025-11-13 Session 150: Phase 3.5 Integration - Backward Compatibility Strategy
+
+**Decision:** Dual-Mode Architecture During Migration
+
+**Context:**
+- NEW_ARCHITECTURE modules (Phases 1-3) complete but 0% integrated
+- Running application uses 100% legacy code
+- Need to integrate new modules without breaking production
+- Cannot afford downtime during migration
 
 **Options Considered:**
 
-**Option 1: Keep Mandatory Pre-Login Verification (Current)**
-- Pros: Maximum email validity assurance, prevents fake accounts
-- Cons: High friction, poor UX, signup abandonment, frustrated users
-- Pattern: Traditional (outdated for most SaaS)
+1. **Big Bang Migration (REJECTED)**
+   - Replace all legacy code at once
+   - ❌ High risk of breaking production
+   - ❌ Difficult to rollback if issues found
+   - ❌ Testing all features simultaneously unrealistic
 
-**Option 2: Auto-Login with Soft Verification (CHOSEN)**
-- Pros: Zero friction onboarding, immediate value delivery, higher conversion, modern UX
-- Cons: Some unverified accounts may exist, requires feature gating
-- Pattern: Modern SaaS (GitHub, LinkedIn, most web apps)
+2. **Parallel Systems (REJECTED)**
+   - Run old and new systems side-by-side
+   - ❌ Requires duplicate infrastructure
+   - ❌ Data synchronization complexity
+   - ❌ Unclear cutover timeline
 
-**Option 3: Optional Verification (No Requirements)**
-- Pros: Lowest friction possible
-- Cons: No way to enforce email validity, security concerns for account recovery
+3. **Gradual Integration with Backward Compatibility (CHOSEN)**
+   - Keep both old and new code active
+   - New services coexist with legacy managers
+   - Migrate individual features one at a time
+   - ✅ Low risk - fallback always available
+   - ✅ Gradual testing and validation
+   - ✅ Clear migration path
+
+**Implementation:**
+
+**1. Connection Pool with Backward Compatible get_connection():**
+```python
+# database.py
+class DatabaseManager:
+    def __init__(self):
+        self.pool = init_connection_pool(...)  # NEW
+
+    def get_connection(self):
+        # DEPRECATED but still works - returns connection from pool
+        return self.pool.engine.raw_connection()
+
+    def execute_query(self, query, params):
+        # NEW method - preferred
+        return self.pool.execute_query(query, params)
+```
+
+**Decision Rationale:**
+- Existing code using `db_manager.get_connection()` continues to work
+- Connection pool active underneath (performance improvement)
+- New code can use `execute_query()` for better management
+- No breaking changes to existing database queries
+
+**2. Dual Payment Manager (Legacy + New):**
+```python
+# app_initializer.py
+self.payment_service = init_payment_service()  # NEW
+self.payment_manager = PaymentGatewayManager()  # LEGACY
+
+# services/payment_service.py
+async def start_np_gateway_new(self, update, context, ...):
+    # Compatibility wrapper - maps old API to new
+    logger.warning("Using compatibility wrapper - migrate to create_invoice()")
+    result = await self.create_invoice(...)
+```
+
+**Decision Rationale:**
+- Both services active simultaneously
+- Legacy code continues to use `payment_manager.start_np_gateway_new()`
+- Compatibility wrapper in PaymentService handles legacy calls
+- Logs deprecation warnings for tracking migration progress
+- Can migrate payment flows one at a time
+
+**3. Security Config with Development Fallback:**
+```python
+# app_initializer.py
+def _initialize_security_config(self):
+    try:
+        # Production: Fetch from Secret Manager
+        webhook_signing_secret = fetch_from_secret_manager()
+    except Exception as e:
+        # Development: Generate temporary secret
+        webhook_signing_secret = secrets.token_hex(32)
+        logger.warning("Using temporary secret (DEV ONLY)")
+```
+
+**Decision Rationale:**
+- Never fails initialization (important for local testing)
+- Production uses real secrets from Secret Manager
+- Development auto-generates temporary secrets
+- Enables testing without full infrastructure setup
+
+**4. Services Wired to Flask Config (Not Global Singleton):**
+```python
+# app_initializer.py
+self.flask_app.config['notification_service'] = self.notification_service
+self.flask_app.config['payment_service'] = self.payment_service
+
+# api/webhooks.py
+@webhooks_bp.route('/notification', methods=['POST'])
+def handle_notification():
+    notification_service = current_app.config.get('notification_service')
+```
+
+**Decision Rationale:**
+- Clean dependency injection pattern
+- Services scoped to Flask app instance
+- Easier testing (can create test app with mock services)
+- Avoids global state and import cycles
+
+**5. Bot Handlers NOT Registered (Yet):**
+```python
+# app_initializer.py
+# TODO: Enable after testing
+# register_command_handlers(application)
+# application.add_handler(create_donation_conversation_handler())
+```
+
+**Decision Rationale:**
+- Core integration first (database, services, security)
+- Test that imports work before registering handlers
+- Avoid potential conflicts with existing handlers
+- Next phase: Register new handlers after validation
+
+**Migration Path:**
+
+**Phase 3.5A (Current Session - COMPLETE):**
+- ✅ Connection pool integration with backward compat
+- ✅ Services initialization alongside legacy
+- ✅ Security config with fallback
+- ✅ Flask app wiring
+
+**Phase 3.5B (Next Session):**
+- ⏳ Test integration locally
+- ⏳ Fix any import errors
+- ⏳ Verify connection pool works
+- ⏳ Validate services initialization
+
+**Phase 3.5C (Future):**
+- ⏳ Register new bot handlers (commented out for now)
+- ⏳ Test payment flow with PaymentService
+- ⏳ Monitor deprecation warnings
+- ⏳ Gradually migrate queries to execute_query()
+
+**Phase 3.5D (Future):**
+- ⏳ Remove legacy PaymentGatewayManager
+- ⏳ Remove legacy NotificationService
+- ⏳ Archive old donation_input_handler
+- ⏳ Clean up compatibility wrappers
+
+**Rollback Plan:**
+
+If integration causes issues:
+```bash
+# Immediate rollback
+git checkout app_initializer.py
+git checkout database.py
+git checkout services/payment_service.py
+
+# Partial rollback (keep connection pool, revert services)
+# Comment out new service initialization in app_initializer.py
+# Fall back to pure legacy managers
+```
+
+**Success Criteria:**
+
+Integration successful when:
+- ✅ Bot starts without errors
+- ✅ Database pool initializes
+- ✅ Security config loads
+- ✅ Services initialize
+- ✅ Flask app starts with security
+- ✅ Legacy code still works (payment flow, database queries)
+- ✅ No performance degradation
+
+**Risks Accepted:**
+
+- **Medium:** Connection pool may have subtle bugs
+  - Mitigation: Extensive testing before production
+- **Low:** Dual managers consume more memory
+  - Acceptable: Temporary during migration (weeks)
+- **Low:** Deprecation warnings in logs
+  - Acceptable: Helps track migration progress
+
+**Lessons for Future:**
+
+1. **Always provide backward compatibility during major refactors**
+2. **Never do big bang migrations in production systems**
+3. **Use compatibility wrappers to bridge old and new APIs**
+4. **Test integration in phases (database → services → handlers)**
+5. **Log deprecation warnings to track migration progress**
+
+**References:**
+- Phase_3.5_Integration_Plan.md (comprehensive implementation guide)
+- NEW_ARCHITECTURE_REPORT.md (review that identified 0% integration)
+- NEW_ARCHITECTURE_CHECKLIST.md (original architecture plan)
+
+## 2025-11-13 Session 149: Architecture Review Findings
+
+## 2025-11-13 Session 149: Architecture Review Findings
+
+**Decision #149.1: Create Phase 3.5 - Integration**
+- **Context:** Comprehensive review revealed 0% integration of new modules
+- **Finding:** All new code (Phases 1-3) exists but NOT used by running application
+- **Decision:** Create new Phase 3.5 dedicated to integration before proceeding to Phase 4
+- **Rationale:**
+  - Cannot test (Phase 4) until new code is integrated
+  - Cannot deploy (Phase 5) with duplicate code paths
+  - Security layers must be active before production use
+  - Integration is prerequisite for all subsequent phases
+- **Impact:** Adds 1 week to timeline but ensures clean migration
+- **Status:** Proposed - Awaiting user approval
+
+**Decision #149.2: Safe Migration Strategy**
+- **Context:** Legacy code still running, new code exists alongside
+- **Decision:** Keep legacy code until new code is proven in production
+- **Rationale:**
+  - Allows safe rollback if issues discovered
+  - Enables A/B testing of new vs old code paths
+  - Reduces risk of breaking production
+  - Maintains business continuity during migration
+- **Implementation:**
+  1. Integrate new modules into app_initializer.py
+  2. Add feature flag to switch between old/new
+  3. Test thoroughly with new code
+  4. Monitor in production
+  5. Archive legacy code only after validation
+- **Impact:** Slower but safer migration
+- **Status:** Recommended approach
+
+**Decision #149.3: Deployment Configuration Priority**
+- **Context:** Security modules implemented but no deployment config
+- **Finding:** Missing WEBHOOK_SIGNING_SECRET, allowed IPs, rate limits
+- **Decision:** Create deployment configuration as PRIORITY 2 (after integration)
+- **Required Configuration:**
+  1. WEBHOOK_SIGNING_SECRET in Google Secret Manager
+  2. Cloud Run egress IP ranges documented
+  3. Rate limit values configured
+  4. .env.example updated with all variables
+- **Impact:** Blocks Phase 5 deployment until complete
+- **Status:** Required before deployment
+
+**Review Summary:**
+- ✅ Code Quality: Excellent (50/50 score)
+- ⚠️ Integration: Critical blocker (0% complete)
+- ❌ Testing: Not started (blocked by integration)
+- ❌ Deployment: Not ready (blocked by integration + config)
+
+**Recommended Timeline:**
+- Week 4: Phase 3.5 - Integration
+- Week 5: Phase 4 - Testing
+- Week 6: Phase 5 - Deployment
+
+---
+
