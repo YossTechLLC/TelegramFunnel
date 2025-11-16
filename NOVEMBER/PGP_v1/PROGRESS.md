@@ -65,12 +65,36 @@
 - ✅ All webhook services identified and deployment scripts created
 - ✅ All scripts marked "DO NOT EXECUTE" for manual review
 
+### Phase 8: Individual Service Deployment Scripts ✅ COMPLETE
+- ✅ Created **individual_services/** directory for granular deployment control
+- ✅ **deploy_gcregisterapi.sh** - Main backend API deployment
+- ✅ **deploy_np_webhook.sh** - NowPayments IPN webhook handler deployment
+- ✅ **deploy_gcwebhook1.sh** - Primary payment processor deployment
+- ✅ **deploy_gcwebhook2.sh** - Telegram invite handler deployment
+- ✅ **deploy_gcsplit1.sh** - Payment splitter deployment
+- ✅ **deploy_gcsplit2.sh** - Payment router deployment
+- ✅ **deploy_gcsplit3.sh** - Accumulator enqueuer deployment
+- ✅ **deploy_gchostpay1.sh** - Crypto conversion executor deployment
+- ✅ **deploy_gchostpay2.sh** - Conversion monitor deployment
+- ✅ **deploy_gchostpay3.sh** - Blockchain validator deployment
+- ✅ **deploy_gcaccumulator.sh** - Payment accumulator deployment
+- ✅ **deploy_gcbatchprocessor.sh** - Batch processor deployment
+- ✅ **deploy_gcmicrobatchprocessor.sh** - Micro batch processor deployment
+- ✅ **deploy_telepay.sh** - Telegram bot deployment
+- ✅ **deploy_all_services.sh** - Master orchestration script (deploys all 15 services in correct order)
+- ✅ **README.md** - Comprehensive guide for individual service deployments
+- ✅ Total individual scripts: 16 (15 service scripts + 1 master orchestration)
+- ✅ All scripts made executable (chmod +x)
+- ✅ Each script includes service-specific configuration, secrets, and next steps
+
 ## 📊 Final Statistics
 - **Services migrated:** 15 (14 original + np-webhook-PGP)
 - **Config files updated:** 13
 - **Migration scripts updated:** 13
-- **Deployment scripts created:** 10
-- **Total files in PGP_v1:** 260+
+- **Main deployment scripts:** 10 (infrastructure + verification)
+- **Individual service scripts:** 16 (15 services + 1 master orchestration)
+- **Total deployment scripts:** 26
+- **Total files in PGP_v1:** 275+
 - **Total lines of code migrated:** 50,392+
 - **Project ID occurrences changed:** 26
 - **Database connections updated:** 45+
