@@ -6,6 +6,7 @@ Refactored to use Flask application factory pattern with modular blueprints.
 """
 import socket
 import logging
+import os
 from flask import Flask, request, jsonify
 import asyncio
 
@@ -13,6 +14,10 @@ import asyncio
 from security.hmac_auth import init_hmac_auth
 from security.ip_whitelist import init_ip_whitelist
 from security.rate_limiter import init_rate_limiter
+
+# Import Flask security extensions
+from flask_wtf.csrf import CSRFProtect
+from flask_talisman import Talisman
 
 # Import blueprints
 from api.webhooks import webhooks_bp
@@ -99,13 +104,25 @@ def create_app(config: dict = None):
                 'webhook_signing_secret': 'secret',
                 'allowed_ips': ['127.0.0.1', '10.0.0.0/8'],
                 'rate_limit_per_minute': 10,
-                'rate_limit_burst': 20
+                'rate_limit_burst': 20,
+                'flask_secret_key': 'secret'  # For CSRF protection
             }
 
     Returns:
         Configured Flask application instance
     """
     app = Flask(__name__)
+
+    # 🔒 STEP 1: Configure Flask secret key (required for CSRF)
+    # Flask secret key is required for session management and CSRF protection
+    flask_secret = os.getenv('FLASK_SECRET_KEY')
+    if not flask_secret:
+        logger.warning("⚠️ [APP_FACTORY] FLASK_SECRET_KEY not set - using fallback")
+        # Fallback: generate a random secret (NOT recommended for production)
+        import secrets
+        flask_secret = secrets.token_hex(32)
+
+    app.config['SECRET_KEY'] = flask_secret
 
     # Store config in app context
     if config:
@@ -141,16 +158,44 @@ def create_app(config: dict = None):
             logger.error(f"❌ [APP_FACTORY] Error initializing security: {e}", exc_info=True)
             raise
 
-    # Register security headers middleware
-    @app.after_request
-    def add_security_headers(response):
-        """Add security headers to all responses."""
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options'] = 'DENY'
-        response.headers['Content-Security-Policy'] = "default-src 'self'"
-        response.headers['X-XSS-Protection'] = '1; mode=block'
-        return response
+    # 🔒 STEP 2: Initialize CSRF Protection
+    # CSRFProtect provides protection against Cross-Site Request Forgery attacks
+    csrf = CSRFProtect(app)
+    logger.info("🔒 [APP_FACTORY] CSRF protection enabled")
+
+    # Exempt webhook endpoints from CSRF (they use HMAC authentication instead)
+    csrf.exempt(webhooks_bp)
+    logger.info("🔒 [APP_FACTORY] Webhook endpoints exempted from CSRF (using HMAC)")
+
+    # 🔒 STEP 3: Initialize Security Headers with Talisman
+    # Talisman provides comprehensive security headers including CSP, HSTS, etc.
+    csp = {
+        'default-src': "'self'",
+        'script-src': "'self'",
+        'style-src': "'self'",
+        'img-src': "'self' data:",
+        'font-src': "'self'",
+        'connect-src': "'self'",
+        'frame-ancestors': "'none'",
+        'base-uri': "'self'",
+        'form-action': "'self'"
+    }
+
+    Talisman(
+        app,
+        force_https=True,
+        strict_transport_security=True,
+        strict_transport_security_max_age=31536000,
+        strict_transport_security_include_subdomains=True,
+        content_security_policy=csp,
+        content_security_policy_nonce_in=['script-src'],
+        referrer_policy='strict-origin-when-cross-origin',
+        session_cookie_secure=True,
+        session_cookie_samesite='Lax',
+        x_content_type_options=True,
+        x_xss_protection=True
+    )
+    logger.info("🔒 [APP_FACTORY] Security headers configured with Talisman")
 
     # Register blueprints
     app.register_blueprint(health_bp)
@@ -160,7 +205,13 @@ def create_app(config: dict = None):
 
     # Apply security decorators to webhook blueprint endpoints
     if config and hmac_auth and ip_whitelist and rate_limiter:
-        for endpoint in ['webhooks.handle_notification', 'webhooks.handle_broadcast_trigger']:
+        # Endpoints that require HMAC + IP whitelist + Rate limiting
+        secured_endpoints = [
+            'webhooks.handle_notification',
+            'webhooks.handle_broadcast_trigger'
+        ]
+
+        for endpoint in secured_endpoints:
             if endpoint in app.view_functions:
                 view_func = app.view_functions[endpoint]
                 # Apply security stack: Rate Limit → IP Whitelist → HMAC
@@ -169,8 +220,30 @@ def create_app(config: dict = None):
                 view_func = hmac_auth.require_signature(view_func)
                 app.view_functions[endpoint] = view_func
 
-        logger.info("🔒 [APP_FACTORY] Security applied to webhook endpoints")
+        logger.info("🔒 [APP_FACTORY] HMAC+IP+Rate security applied to internal webhooks")
 
-    logger.info("✅ [APP_FACTORY] Flask app created successfully")
+    # Apply rate limiting to external webhooks (NowPayments, Telegram)
+    # These endpoints have their own signature verification (IPN sig, Telegram secret token)
+    if rate_limiter:
+        external_webhooks = [
+            'webhooks.handle_nowpayments_ipn',
+            'webhooks.handle_telegram_webhook'
+        ]
+
+        for endpoint in external_webhooks:
+            if endpoint in app.view_functions:
+                view_func = app.view_functions[endpoint]
+                # Apply only rate limiting (they have built-in signature verification)
+                view_func = rate_limiter.limit(view_func)
+                app.view_functions[endpoint] = view_func
+
+        logger.info("🔒 [APP_FACTORY] Rate limiting applied to external webhooks (NowPayments, Telegram)")
+
+    logger.info("✅ [APP_FACTORY] Flask app created successfully with security stack:")
+    logger.info("   ✅ CSRF Protection (flask-wtf)")
+    logger.info("   ✅ Security Headers (flask-talisman)")
+    logger.info("   ✅ HMAC Authentication (custom)")
+    logger.info("   ✅ IP Whitelist (custom)")
+    logger.info("   ✅ Rate Limiting (custom)")
 
     return app
