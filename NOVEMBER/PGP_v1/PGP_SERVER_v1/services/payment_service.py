@@ -38,16 +38,18 @@ class PaymentService:
         )
     """
 
-    def __init__(self, api_key: Optional[str] = None, ipn_callback_url: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, ipn_callback_url: Optional[str] = None, database_manager=None):
         """
         Initialize payment service.
 
         Args:
             api_key: NowPayments API key (if None, fetches from Secret Manager)
             ipn_callback_url: IPN callback URL (if None, fetches from Secret Manager)
+            database_manager: DatabaseManager instance for fetching channel details (optional)
         """
         self.api_key = api_key or self._fetch_api_key()
         self.ipn_callback_url = ipn_callback_url or self._fetch_ipn_callback_url()
+        self.database_manager = database_manager
         self.api_url = "https://api.nowpayments.io/v1/invoice"
 
         # Log initialization status
@@ -60,6 +62,11 @@ class PaymentService:
             logger.info(f"✅ [PAYMENT] IPN callback URL configured")
         else:
             logger.warning("⚠️ [PAYMENT] IPN callback URL not configured - payment_id won't be captured")
+
+        if self.database_manager:
+            logger.info("✅ [PAYMENT] Database manager configured for channel details")
+        else:
+            logger.warning("⚠️ [PAYMENT] No database manager - channel details won't be available")
 
     def _fetch_api_key(self) -> Optional[str]:
         """
@@ -254,6 +261,140 @@ class PaymentService:
                 'error': f'Unexpected error: {str(e)}'
             }
 
+    @staticmethod
+    def get_telegram_user_id(update) -> Optional[int]:
+        """
+        Extract the user ID from a Telegram update.
+
+        Args:
+            update: The Telegram update object
+
+        Returns:
+            The user ID if found, None otherwise
+
+        Example:
+            user_id = PaymentService.get_telegram_user_id(update)
+        """
+        if hasattr(update, "effective_user") and update.effective_user:
+            return update.effective_user.id
+        if hasattr(update, "callback_query") and update.callback_query and update.callback_query.from_user:
+            return update.callback_query.from_user.id
+        return None
+
+    async def start_payment_flow(self, update, context, sub_value: float,
+                                 open_channel_id: str, secure_success_url: str,
+                                 closed_channel_title: str = "Premium Channel",
+                                 closed_channel_description: str = "exclusive content",
+                                 sub_time: int = 30, order_id: str = None) -> None:
+        """
+        Start the complete payment flow for a user with Telegram WebApp integration.
+
+        This method implements the FULL OLD functionality including:
+        - ReplyKeyboardMarkup with WebAppInfo button (Telegram Mini App)
+        - HTML formatted message with channel details
+        - Order ID generation with validation
+        - Comprehensive error handling
+
+        Args:
+            update: Telegram Update object
+            context: Telegram Context object
+            sub_value: Subscription amount in USD
+            open_channel_id: Open channel ID
+            secure_success_url: Success URL for post-payment redirect
+            closed_channel_title: Title of the closed channel (default: "Premium Channel")
+            closed_channel_description: Description of the closed channel (default: "exclusive content")
+            sub_time: Subscription duration in days (default: 30)
+            order_id: Optional pre-created order_id (to avoid duplication)
+
+        Returns:
+            None (sends message to user via Telegram)
+
+        Example:
+            await payment_service.start_payment_flow(
+                update=update,
+                context=context,
+                sub_value=29.99,
+                open_channel_id="-1001234567890",
+                secure_success_url="https://storage.googleapis.com/...",
+                closed_channel_title="VIP Channel",
+                closed_channel_description="exclusive trading signals",
+                sub_time=30
+            )
+        """
+        from telegram import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+
+        logger.info(f"💳 [PAYMENT] Starting payment flow: amount=${sub_value:.2f}, channel_id={open_channel_id}")
+
+        user_id = self.get_telegram_user_id(update)
+        if not user_id:
+            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
+            if chat_id:
+                await context.bot.send_message(chat_id, "❌ Could not determine user ID.")
+            logger.error("❌ [PAYMENT] Could not extract user ID from update")
+            return
+
+        # Create unique order ID if not provided
+        if not order_id:
+            # Validate that open_channel_id is negative (Telegram requirement)
+            if not str(open_channel_id).startswith('-') and open_channel_id != "donation_default":
+                logger.warning(f"⚠️ [PAYMENT] open_channel_id should be negative: {open_channel_id}")
+                logger.warning(f"⚠️ [PAYMENT] Telegram channel IDs are always negative for supergroups/channels")
+                # Add negative sign to fix misconfiguration
+                open_channel_id = f"-{open_channel_id}"
+                logger.info(f"✅ [PAYMENT] Corrected to: {open_channel_id}")
+
+            order_id = self.generate_order_id(user_id, open_channel_id)
+            logger.info(f"📋 [PAYMENT] Created order_id: {order_id}")
+        else:
+            logger.info(f"📋 [PAYMENT] Using provided order_id: {order_id}")
+
+        # Create payment invoice
+        invoice_result = await self.create_invoice(
+            user_id=user_id,
+            amount=sub_value,
+            success_url=secure_success_url,
+            order_id=order_id,
+            description=f"Subscription - {sub_time} days"
+        )
+
+        # Determine chat ID for response
+        chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
+        bot = context.bot
+
+        if invoice_result.get("success"):
+            invoice_url = invoice_result.get("invoice_url", "<no url>")
+            logger.info(f"✅ [PAYMENT] Payment gateway created successfully for ${sub_value:.2f}")
+            logger.info(f"🔗 [PAYMENT] Invoice URL: {invoice_url}")
+
+            # CRITICAL: Use ReplyKeyboardMarkup with WebAppInfo (Telegram Mini App)
+            # This is the key difference from the compatibility wrapper
+            reply_markup = ReplyKeyboardMarkup.from_button(
+                KeyboardButton(
+                    text="💰 Start Payment Gateway",
+                    web_app=WebAppInfo(url=invoice_url),
+                )
+            )
+
+            # Enhanced HTML message with channel details
+            text = (
+                f"💳 <b>Click the button below to start the Payment Gateway</b> 🚀\n\n"
+                f"🔒 <b>Private Channel:</b> {closed_channel_title}\n"
+                f"📝 <b>Channel Description:</b> {closed_channel_description}\n"
+                f"💰 <b>Price:</b> ${sub_value:.2f}\n"
+                f"⏰ <b>Duration:</b> {sub_time} days"
+            )
+
+            await bot.send_message(chat_id, text, reply_markup=reply_markup, parse_mode="HTML")
+            logger.info(f"✅ [PAYMENT] Payment message sent to user {user_id}")
+        else:
+            error_msg = invoice_result.get("error", "Unknown error")
+            status_code = invoice_result.get("status_code", "N/A")
+            await bot.send_message(
+                chat_id,
+                f"❌ NowPayments error — status {status_code}\n{error_msg}",
+            )
+            logger.error(f"❌ [PAYMENT] Invoice creation failed for user {user_id}: {error_msg}")
+
     def generate_order_id(self, user_id: int, channel_id: str) -> str:
         """
         Generate unique order ID for payment tracking.
@@ -365,107 +506,117 @@ class PaymentService:
 
     async def start_np_gateway_new(self, update, context, amount, channel_id, duration, webhook_manager, db_manager):
         """
-        🆕 COMPATIBILITY WRAPPER for old PaymentGatewayManager.start_np_gateway_new()
+        🆕 FULL-FEATURED COMPATIBILITY WRAPPER with database integration.
 
-        This allows gradual migration from old to new payment service.
-        Provides backward compatibility while the codebase transitions.
+        This provides COMPLETE backward compatibility with OLD PaymentGatewayManager.start_np_gateway_new()
+        including database integration, WebApp button, static landing page, and channel details.
 
-        ⚠️ DEPRECATED: This method exists only for backward compatibility.
-        New code should use create_invoice() directly.
+        ✅ Phase 2 Migration: Now includes ALL features from OLD implementation
 
         Args:
             update: Telegram Update object
             context: Telegram Context object
-            amount: Payment amount in USD
-            channel_id: Channel/group ID (can be string or int)
-            duration: Subscription duration in days (for description)
-            webhook_manager: Legacy parameter (not used)
-            db_manager: Legacy parameter (not used)
+            amount: Payment amount in USD (global_sub_value)
+            channel_id: Channel/group ID (global_open_channel_id)
+            duration: Subscription duration in days (global_sub_time)
+            webhook_manager: Legacy parameter (not used - replaced by static landing page)
+            db_manager: DatabaseManager instance for fetching channel details
 
         Returns:
             None (sends message to user directly via Telegram)
 
-        Migration Path:
-            Old code:
-                await payment_manager.start_np_gateway_new(update, context, amount, channel_id, duration, webhook_manager, db_manager)
-
-            New code:
-                result = await payment_service.create_invoice(user_id, amount, success_url, order_id, description)
-                if result['success']:
-                    # Send invoice_url to user
+        Features:
+            - Database integration for closed_channel_id, wallet_info, channel_details
+            - ReplyKeyboardMarkup with WebAppInfo (Telegram Mini App)
+            - Static landing page URL construction
+            - Enhanced message formatting with channel details
+            - Donation default handling
         """
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        from urllib.parse import quote
 
-        logger.warning("⚠️ [PAYMENT] Using compatibility wrapper - migrate to create_invoice()")
-        logger.warning("⚠️ [PAYMENT] This wrapper will be removed in future versions")
+        logger.info(f"💳 [PAYMENT] start_np_gateway_new called: amount=${amount:.2f}, channel={channel_id}, duration={duration}d")
 
-        user_id = update.effective_user.id
+        user_id = self.get_telegram_user_id(update)
+        if not user_id:
+            chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
+            if chat_id:
+                await context.bot.send_message(chat_id, "❌ Could not determine user ID.")
+            return
 
         # Ensure channel_id is string (can be int from legacy code)
         channel_id = str(channel_id)
 
-        # Generate order ID (format: PGP-{user_id}|{channel_id})
+        # Use database_manager from instance if available, fallback to parameter
+        db_mgr = self.database_manager or db_manager
+
+        # Handle special donation default case
+        if channel_id == "donation_default":
+            logger.info("🎯 [PAYMENT] Handling donation_default case - using placeholder values")
+            closed_channel_id = "donation_default_closed"
+            closed_channel_title = "Donation Channel"
+            closed_channel_description = "supporting our community"
+        else:
+            if not db_mgr:
+                logger.error("❌ [PAYMENT] No database manager available for channel details")
+                chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else None
+                if chat_id:
+                    await context.bot.send_message(chat_id, "❌ Database not available. Please contact support.")
+                return
+
+            # Get closed channel ID from database
+            closed_channel_id = db_mgr.fetch_closed_channel_id(channel_id)
+            if not closed_channel_id:
+                chat_id = update.effective_chat.id if hasattr(update, "effective_chat") else update.callback_query.message.chat.id
+                await context.bot.send_message(chat_id, "❌ Could not find a closed_channel_id for this open_channel_id. Please check your database!")
+                logger.error(f"❌ [PAYMENT] No closed_channel_id found for {channel_id}")
+                return
+
+            # Get wallet info from database (now includes network)
+            wallet_address, payout_currency, payout_network = db_mgr.fetch_client_wallet_info(channel_id)
+            logger.info(f"💰 [PAYMENT] Retrieved wallet info for {channel_id}: wallet='{wallet_address}', currency='{payout_currency}', network='{payout_network}'")
+
+            # Get channel title and description info for personalized message
+            _, channel_info_map = db_mgr.fetch_open_channel_list()
+            channel_data = channel_info_map.get(channel_id, {})
+            closed_channel_title = channel_data.get("closed_channel_title", "Premium Channel")
+            closed_channel_description = channel_data.get("closed_channel_description", "exclusive content")
+            logger.info(f"🏷️ [PAYMENT] Retrieved channel info: title='{closed_channel_title}', description='{closed_channel_description}'")
+
+        # Validate that channel_id is negative (Telegram requirement)
+        if not str(channel_id).startswith('-') and channel_id != "donation_default":
+            logger.warning(f"⚠️ [PAYMENT] channel_id should be negative: {channel_id}")
+            # Add negative sign to fix misconfiguration
+            channel_id = f"-{channel_id}"
+            logger.info(f"✅ [PAYMENT] Corrected to: {channel_id}")
+
+        # Create order_id for NowPayments tracking
         order_id = self.generate_order_id(user_id, channel_id)
 
-        # Build success URL (use Telegram deep link)
-        bot_username = context.bot.username
-        success_url = f"https://t.me/{bot_username}?start=payment_success"
+        # Build success URL pointing to static landing page
+        # The landing page will poll payment status via API
+        landing_page_base_url = "https://storage.googleapis.com/paygateprime-static/payment-processing.html"
+        secure_success_url = f"{landing_page_base_url}?order_id={quote(order_id, safe='')}"
 
-        # Create invoice
-        result = await self.create_invoice(
-            user_id=user_id,
-            amount=amount,
-            success_url=success_url,
-            order_id=order_id,
-            description=f"Subscription - {duration} days"
+        logger.info(f"🔗 [PAYMENT] Using static landing page URL: {secure_success_url}")
+
+        # Use the new start_payment_flow method with ALL channel info
+        await self.start_payment_flow(
+            update=update,
+            context=context,
+            sub_value=amount,
+            open_channel_id=channel_id,
+            secure_success_url=secure_success_url,
+            closed_channel_title=closed_channel_title,
+            closed_channel_description=closed_channel_description,
+            sub_time=duration,
+            order_id=order_id  # Pass order_id to avoid duplicate creation
         )
-
-        if result['success']:
-            # Send payment link to user
-            invoice_url = result['invoice_url']
-            invoice_id = result['invoice_id']
-
-            # Format payment message (same as legacy)
-            message_text = (
-                f"💳 <b>Payment Gateway</b>\n\n"
-                f"Amount: <b>${amount:.2f} USD</b>\n"
-                f"Duration: <b>{duration} days</b>\n\n"
-                f"Click the button below to complete your payment:"
-            )
-
-            # Create payment button keyboard
-            keyboard = [[
-                InlineKeyboardButton("💰 Pay Now", url=invoice_url)
-            ]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            # Send message to user
-            await update.effective_message.reply_text(
-                text=message_text,
-                parse_mode='HTML',
-                reply_markup=reply_markup
-            )
-
-            logger.info(f"✅ [PAYMENT] Payment link sent to user {user_id}")
-            logger.info(f"   Invoice ID: {invoice_id}")
-            logger.info(f"   Amount: ${amount:.2f}")
-            logger.info(f"   Duration: {duration} days")
-
-        else:
-            # Error creating invoice - inform user
-            error_message = "❌ <b>Payment Error</b>\n\nCould not create payment invoice. Please try again later or contact support."
-            await update.effective_message.reply_text(
-                text=error_message,
-                parse_mode='HTML'
-            )
-
-            logger.error(f"❌ [PAYMENT] Invoice creation failed for user {user_id}")
-            logger.error(f"   Error: {result.get('error', 'Unknown error')}")
 
 
 def init_payment_service(
     api_key: Optional[str] = None,
-    ipn_callback_url: Optional[str] = None
+    ipn_callback_url: Optional[str] = None,
+    database_manager=None
 ) -> PaymentService:
     """
     Factory function to initialize payment service.
@@ -473,21 +624,26 @@ def init_payment_service(
     Args:
         api_key: NowPayments API key (if None, fetches from Secret Manager)
         ipn_callback_url: IPN callback URL (if None, fetches from Secret Manager)
+        database_manager: DatabaseManager instance for fetching channel details (optional)
 
     Returns:
         PaymentService instance
 
     Usage:
-        # Auto-fetch from Secret Manager
+        # Auto-fetch from Secret Manager without database
         payment_service = init_payment_service()
 
-        # Or provide directly
+        # With database manager for full features
+        payment_service = init_payment_service(database_manager=db_manager)
+
+        # Or provide all parameters directly
         payment_service = init_payment_service(
             api_key="your_api_key",
-            ipn_callback_url="https://your-domain.com/ipn"
+            ipn_callback_url="https://your-domain.com/ipn",
+            database_manager=db_manager
         )
     """
-    return PaymentService(api_key=api_key, ipn_callback_url=ipn_callback_url)
+    return PaymentService(api_key=api_key, ipn_callback_url=ipn_callback_url, database_manager=database_manager)
 
 
 logger.info("✅ [PAYMENT] Payment service module loaded")

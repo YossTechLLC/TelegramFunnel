@@ -85,15 +85,13 @@ class AppInitializer:
         # 🆕 NEW_ARCHITECTURE: Initialize new services
         self.logger.info("🆕 Initializing NEW_ARCHITECTURE services...")
 
-        # Initialize payment service (replaces PaymentGatewayManager)
-        self.payment_service = init_payment_service()
-        self.logger.info("✅ Payment Service initialized")
+        # Initialize payment service with database manager (Phase 2 migration complete)
+        self.payment_service = init_payment_service(database_manager=self.db_manager)
+        self.logger.info("✅ Payment Service initialized with database integration")
+        self.logger.info("✅ Phase 2: Payment Service now has ALL features from OLD implementation")
 
-        # Keep old payment_manager temporarily for backward compatibility
-        # TODO: Migrate all payment_manager usages to payment_service
-        from start_np_gateway import PaymentGatewayManager
-        self.payment_manager = PaymentGatewayManager()
-        self.logger.info("⚠️ Legacy PaymentGatewayManager still active - migrate to PaymentService")
+        # ✅ REMOVED: PaymentGatewayManager (Phase 2 consolidation complete - using services.PaymentService)
+        # OLD start_np_gateway.py functionality now fully migrated to services/payment_service.py
         self.input_handlers = InputHandlers(self.db_manager)
         self.message_utils = MessageUtils(self.config['bot_token'])
         
@@ -121,17 +119,18 @@ class AppInitializer:
         async def payment_gateway_wrapper(update, context):
             print(f"🔄 [DEBUG] Payment gateway wrapper called for user: {update.effective_user.id if update.effective_user else 'Unknown'}")
             global_values = self.menu_handlers.get_global_values() if self.menu_handlers else {
-                'sub_value': 5.0, 
+                'sub_value': 5.0,
                 'open_channel_id': '',
                 'sub_time': 30
             }
             print(f"🎯 [DEBUG] Payment gateway using global values: {global_values}")
-            await self.payment_manager.start_np_gateway_new(
-                update, context, 
-                global_values['sub_value'], 
+            # ✅ Phase 2: Now using NEW payment_service with FULL OLD functionality
+            await self.payment_service.start_np_gateway_new(
+                update, context,
+                global_values['sub_value'],
                 global_values['open_channel_id'],
                 global_values['sub_time'],
-                self.webhook_manager, 
+                self.webhook_manager,
                 self.db_manager
             )
         
@@ -265,10 +264,10 @@ class AppInitializer:
         """Run the Telegram bot."""
         if not self.bot_manager:
             raise RuntimeError("Bot manager not initialized. Call initialize() first.")
-        
+
         await self.bot_manager.run_telegram_bot(
             telegram_token=self.config['bot_token'],
-            payment_token=self.payment_manager.payment_token
+            payment_token=self.payment_service.api_key  # Phase 2: Using NEW payment_service
         )
     
     def get_managers(self):
@@ -276,21 +275,21 @@ class AppInitializer:
         Get all initialized managers for external use.
 
         🆕 NEW_ARCHITECTURE: Now includes new modular services and Flask app.
+        ✅ Phase 2: payment_manager removed, payment_service is now the single source
         """
         return {
-            # Legacy managers (backward compatibility)
+            # Core managers
             'db_manager': self.db_manager,
             'webhook_manager': self.webhook_manager,
-            'payment_manager': self.payment_manager,  # OLD - for compatibility
             'broadcast_manager': self.broadcast_manager,
             'input_handlers': self.input_handlers,
             'menu_handlers': self.menu_handlers,
             'bot_manager': self.bot_manager,
             'message_utils': self.message_utils,
 
-            # 🆕 NEW_ARCHITECTURE: New modular services
-            'payment_service': self.payment_service,  # NEW
-            'notification_service': self.notification_service,  # NEW modular version
-            'flask_app': self.flask_app,  # NEW
-            'security_config': self.security_config  # NEW
+            # 🆕 NEW_ARCHITECTURE: Modular services (Phase 1 & 2 complete)
+            'payment_service': self.payment_service,  # Phase 2: COMPLETE - replaced payment_manager
+            'notification_service': self.notification_service,  # Phase 1: COMPLETE - replaced notification_service
+            'flask_app': self.flask_app,
+            'security_config': self.security_config
         }

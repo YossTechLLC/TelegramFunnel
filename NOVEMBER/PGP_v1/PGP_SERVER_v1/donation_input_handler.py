@@ -544,11 +544,11 @@ class DonationKeypadHandler:
         user_id = update.effective_user.id
 
         try:
-            # Import payment gateway
-            from start_np_gateway import PaymentGatewayManager
+            # ✅ Phase 2: Use NEW payment service instead of OLD PaymentGatewayManager
+            from services import init_payment_service
 
-            # Initialize gateway manager
-            payment_gateway = PaymentGatewayManager()
+            # Initialize payment service
+            payment_gateway = init_payment_service()
 
             # Create order_id in same format as subscriptions
             order_id = f"PGP-{user_id}|{open_channel_id}"
