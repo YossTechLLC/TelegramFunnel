@@ -1,5 +1,5 @@
 #!/bin/bash
-# Create Service URL Secrets
+# Create Service URL Secrets - PGP v1 Naming Scheme
 # DO NOT EXECUTE - Run this AFTER deploying all Cloud Run services
 # This script will fetch actual service URLs and create secrets
 
@@ -8,11 +8,12 @@ set -e
 PROJECT_ID="pgp-live"
 REGION="us-central1"
 
-echo "🌐 Creating Service URL Secrets"
-echo "================================="
+echo "🌐 Creating Service URL Secrets (PGP v1 Naming)"
+echo "================================================="
 echo ""
 echo "📍 Project: $PROJECT_ID"
 echo "📍 Region: $REGION"
+echo "📍 Service Naming: pgp-{service}-v1"
 echo ""
 
 # Set project
@@ -24,10 +25,10 @@ echo "📋 Project Number: $PROJECT_NUMBER"
 echo ""
 
 # =============================================================================
-# SERVICE URLS - Fetched from Cloud Run
+# SERVICE URLS - Fetched from Cloud Run (PGP v1 Naming)
 # =============================================================================
 
-echo "Fetching service URLs from Cloud Run..."
+echo "Fetching service URLs from Cloud Run with PGP v1 naming..."
 echo ""
 
 # Function to get service URL
@@ -56,90 +57,94 @@ create_or_update_secret() {
     echo "   ✅ $secret_name = $secret_value"
 }
 
-# GCWEBHOOK1_URL
-echo "🔗 GCWEBHOOK1_URL..."
-GCWEBHOOK1_URL=$(get_service_url "gcwebhook1-pgp")
+# PGP_WEBHOOK1_URL
+echo "🔗 PGP_WEBHOOK1_URL..."
+PGP_WEBHOOK1_URL=$(get_service_url "pgp-webhook1-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCWEBHOOK1_URL" "$GCWEBHOOK1_URL"
+    create_or_update_secret "PGP_WEBHOOK1_URL" "$PGP_WEBHOOK1_URL"
 fi
 echo ""
 
-# GCWEBHOOK2_URL
-echo "🔗 GCWEBHOOK2_URL..."
-GCWEBHOOK2_URL=$(get_service_url "gcwebhook2-pgp")
+# PGP_WEBHOOK2_URL
+echo "🔗 PGP_WEBHOOK2_URL..."
+PGP_WEBHOOK2_URL=$(get_service_url "pgp-webhook2-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCWEBHOOK2_URL" "$GCWEBHOOK2_URL"
+    create_or_update_secret "PGP_WEBHOOK2_URL" "$PGP_WEBHOOK2_URL"
 fi
 echo ""
 
-# GCSPLIT1_URL
-echo "🔗 GCSPLIT1_URL..."
-GCSPLIT1_URL=$(get_service_url "gcsplit1-pgp")
+# PGP_SPLIT1_URL
+echo "🔗 PGP_SPLIT1_URL..."
+PGP_SPLIT1_URL=$(get_service_url "pgp-split1-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCSPLIT1_URL" "$GCSPLIT1_URL"
+    create_or_update_secret "PGP_SPLIT1_URL" "$PGP_SPLIT1_URL"
 fi
 echo ""
 
-# GCSPLIT2_URL
-echo "🔗 GCSPLIT2_URL..."
-GCSPLIT2_URL=$(get_service_url "gcsplit2-pgp")
+# PGP_SPLIT2_URL
+echo "🔗 PGP_SPLIT2_URL..."
+PGP_SPLIT2_URL=$(get_service_url "pgp-split2-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCSPLIT2_URL" "$GCSPLIT2_URL"
+    create_or_update_secret "PGP_SPLIT2_URL" "$PGP_SPLIT2_URL"
 fi
 echo ""
 
-# GCSPLIT3_URL
-echo "🔗 GCSPLIT3_URL..."
-GCSPLIT3_URL=$(get_service_url "gcsplit3-pgp")
+# PGP_SPLIT3_URL
+echo "🔗 PGP_SPLIT3_URL..."
+PGP_SPLIT3_URL=$(get_service_url "pgp-split3-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCSPLIT3_URL" "$GCSPLIT3_URL"
+    create_or_update_secret "PGP_SPLIT3_URL" "$PGP_SPLIT3_URL"
 fi
 echo ""
 
-# GCACCUMULATOR_URL
-echo "🔗 GCACCUMULATOR_URL..."
-GCACCUMULATOR_URL=$(get_service_url "gcaccumulator-pgp")
+# PGP_ACCUMULATOR_URL
+echo "🔗 PGP_ACCUMULATOR_URL..."
+PGP_ACCUMULATOR_URL=$(get_service_url "pgp-accumulator-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCACCUMULATOR_URL" "$GCACCUMULATOR_URL"
+    create_or_update_secret "PGP_ACCUMULATOR_URL" "$PGP_ACCUMULATOR_URL"
 fi
 echo ""
 
-# GCHOSTPAY1_URL
-echo "🔗 GCHOSTPAY1_URL..."
-GCHOSTPAY1_URL=$(get_service_url "gchostpay1-pgp")
+# PGP_HOSTPAY1_URL
+echo "🔗 PGP_HOSTPAY1_URL..."
+PGP_HOSTPAY1_URL=$(get_service_url "pgp-hostpay1-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCHOSTPAY1_URL" "$GCHOSTPAY1_URL"
+    create_or_update_secret "PGP_HOSTPAY1_URL" "$PGP_HOSTPAY1_URL"
 fi
 echo ""
 
-# GCHOSTPAY2_URL
-echo "🔗 GCHOSTPAY2_URL..."
-GCHOSTPAY2_URL=$(get_service_url "gchostpay2-pgp")
+# PGP_HOSTPAY2_URL
+echo "🔗 PGP_HOSTPAY2_URL..."
+PGP_HOSTPAY2_URL=$(get_service_url "pgp-hostpay2-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCHOSTPAY2_URL" "$GCHOSTPAY2_URL"
+    create_or_update_secret "PGP_HOSTPAY2_URL" "$PGP_HOSTPAY2_URL"
 fi
 echo ""
 
-# GCHOSTPAY3_URL
-echo "🔗 GCHOSTPAY3_URL..."
-GCHOSTPAY3_URL=$(get_service_url "gchostpay3-pgp")
+# PGP_HOSTPAY3_URL
+echo "🔗 PGP_HOSTPAY3_URL..."
+PGP_HOSTPAY3_URL=$(get_service_url "pgp-hostpay3-v1")
 if [ $? -eq 0 ]; then
-    create_or_update_secret "GCHOSTPAY3_URL" "$GCHOSTPAY3_URL"
+    create_or_update_secret "PGP_HOSTPAY3_URL" "$PGP_HOSTPAY3_URL"
 fi
 echo ""
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✅ Service URL secrets created/updated successfully!"
 echo ""
-echo "📋 Service URLs:"
-[ ! -z "$GCWEBHOOK1_URL" ] && echo "   - GCWEBHOOK1: $GCWEBHOOK1_URL"
-[ ! -z "$GCWEBHOOK2_URL" ] && echo "   - GCWEBHOOK2: $GCWEBHOOK2_URL"
-[ ! -z "$GCSPLIT1_URL" ] && echo "   - GCSPLIT1: $GCSPLIT1_URL"
-[ ! -z "$GCSPLIT2_URL" ] && echo "   - GCSPLIT2: $GCSPLIT2_URL"
-[ ! -z "$GCSPLIT3_URL" ] && echo "   - GCSPLIT3: $GCSPLIT3_URL"
-[ ! -z "$GCACCUMULATOR_URL" ] && echo "   - GCACCUMULATOR: $GCACCUMULATOR_URL"
-[ ! -z "$GCHOSTPAY1_URL" ] && echo "   - GCHOSTPAY1: $GCHOSTPAY1_URL"
-[ ! -z "$GCHOSTPAY2_URL" ] && echo "   - GCHOSTPAY2: $GCHOSTPAY2_URL"
-[ ! -z "$GCHOSTPAY3_URL" ] && echo "   - GCHOSTPAY3: $GCHOSTPAY3_URL"
+echo "📋 Service URLs (PGP v1 Naming):"
+[ ! -z "$PGP_WEBHOOK1_URL" ] && echo "   - PGP_WEBHOOK1: $PGP_WEBHOOK1_URL"
+[ ! -z "$PGP_WEBHOOK2_URL" ] && echo "   - PGP_WEBHOOK2: $PGP_WEBHOOK2_URL"
+[ ! -z "$PGP_SPLIT1_URL" ] && echo "   - PGP_SPLIT1: $PGP_SPLIT1_URL"
+[ ! -z "$PGP_SPLIT2_URL" ] && echo "   - PGP_SPLIT2: $PGP_SPLIT2_URL"
+[ ! -z "$PGP_SPLIT3_URL" ] && echo "   - PGP_SPLIT3: $PGP_SPLIT3_URL"
+[ ! -z "$PGP_ACCUMULATOR_URL" ] && echo "   - PGP_ACCUMULATOR: $PGP_ACCUMULATOR_URL"
+[ ! -z "$PGP_HOSTPAY1_URL" ] && echo "   - PGP_HOSTPAY1: $PGP_HOSTPAY1_URL"
+[ ! -z "$PGP_HOSTPAY2_URL" ] && echo "   - PGP_HOSTPAY2: $PGP_HOSTPAY2_URL"
+[ ! -z "$PGP_HOSTPAY3_URL" ] && echo "   - PGP_HOSTPAY3: $PGP_HOSTPAY3_URL"
+echo ""
+echo "📋 Naming Formats:"
+echo "   Service: pgp-{service}-v1"
+echo "   Secret: PGP_{SERVICE}_URL"
 echo ""
 echo "⏭️  Next: Configure external webhooks with these URLs"

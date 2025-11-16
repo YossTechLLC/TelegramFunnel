@@ -170,22 +170,22 @@ All queue names are auto-created with standardized naming:
 
 | Secret Name | Queue Name Value | Status |
 |------------|------------------|--------|
-| **GCWEBHOOK1_QUEUE** | `gcwebhook1-queue` | ✅ AUTO |
-| **GCWEBHOOK2_QUEUE** | `gcwebhook2-queue` | ✅ AUTO |
-| **GCSPLIT1_QUEUE** | `gcsplit1-queue` | ✅ AUTO |
-| **GCSPLIT2_QUEUE** | `gcsplit2-queue` | ✅ AUTO |
-| **GCSPLIT3_QUEUE** | `gcsplit3-queue` | ✅ AUTO |
-| **GCACCUMULATOR_QUEUE** | `gcaccumulator-queue` | ✅ AUTO |
-| **GCACCUMULATOR_RESPONSE_QUEUE** | `gcaccumulator-response-queue` | ✅ AUTO |
-| **GCBATCHPROCESSOR_QUEUE** | `gcbatchprocessor-queue` | ✅ AUTO |
-| **GCHOSTPAY1_QUEUE** | `gchostpay1-queue` | ✅ AUTO |
-| **GCHOSTPAY2_QUEUE** | `gchostpay2-queue` | ✅ AUTO |
-| **GCHOSTPAY3_QUEUE** | `gchostpay3-queue` | ✅ AUTO |
-| **GCHOSTPAY1_RESPONSE_QUEUE** | `gchostpay1-response-queue` | ✅ AUTO |
-| **GCHOSTPAY1_THRESHOLD_QUEUE** | `gchostpay1-threshold-queue` | ✅ AUTO |
-| **GCHOSTPAY3_RETRY_QUEUE** | `gchostpay3-retry-queue` | ✅ AUTO |
-| **GCSPLIT1_BATCH_QUEUE** | `gcsplit1-batch-queue` | ✅ AUTO |
-| **GCSPLIT2_RESPONSE_QUEUE** | `gcsplit2-response-queue` | ✅ AUTO |
+| **PGP_WEBHOOK1_QUEUE** | `pgp-webhook1-queue` | ✅ AUTO |
+| **PGP_WEBHOOK2_QUEUE** | `pgp-webhook2-queue` | ✅ AUTO |
+| **PGP_SPLIT1_QUEUE** | `pgp-split1-queue` | ✅ AUTO |
+| **PGP_SPLIT2_QUEUE** | `pgp-split2-queue` | ✅ AUTO |
+| **PGP_SPLIT3_QUEUE** | `pgp-split3-queue` | ✅ AUTO |
+| **PGP_ACCUMULATOR_QUEUE** | `pgp-accumulator-queue` | ✅ AUTO |
+| **PGP_ACCUMULATOR_RESPONSE_QUEUE** | `pgp-accumulator-response-queue` | ✅ AUTO |
+| **PGP_BATCHPROCESSOR_QUEUE** | `pgp-batchprocessor-queue` | ✅ AUTO |
+| **PGP_HOSTPAY1_QUEUE** | `pgp-hostpay1-queue` | ✅ AUTO |
+| **PGP_HOSTPAY2_QUEUE** | `pgp-hostpay2-queue` | ✅ AUTO |
+| **PGP_HOSTPAY3_QUEUE** | `pgp-hostpay3-queue` | ✅ AUTO |
+| **PGP_HOSTPAY1_RESPONSE_QUEUE** | `pgp-hostpay1-response-queue` | ✅ AUTO |
+| **PGP_HOSTPAY1_THRESHOLD_QUEUE** | `pgp-hostpay1-threshold-queue` | ✅ AUTO |
+| **PGP_HOSTPAY3_RETRY_QUEUE** | `pgp-hostpay3-retry-queue` | ✅ AUTO |
+| **PGP_SPLIT1_BATCH_QUEUE** | `pgp-split1-batch-queue` | ✅ AUTO |
+| **PGP_SPLIT2_RESPONSE_QUEUE** | `pgp-split2-response-queue` | ✅ AUTO |
 
 **All created automatically by script** - No manual action required for queue names.
 
@@ -199,15 +199,15 @@ These are **auto-fetched** from Cloud Run after services are deployed:
 
 | Secret Name | Example Value | Status | Notes |
 |------------|---------------|--------|-------|
-| **GCWEBHOOK1_URL** | `https://gcwebhook1-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCWEBHOOK2_URL** | `https://gcwebhook2-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCSPLIT1_URL** | `https://gcsplit1-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCSPLIT2_URL** | `https://gcsplit2-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCSPLIT3_URL** | `https://gcsplit3-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCACCUMULATOR_URL** | `https://gcaccumulator-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCHOSTPAY1_URL** | `https://gchostpay1-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCHOSTPAY2_URL** | `https://gchostpay2-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
-| **GCHOSTPAY3_URL** | `https://gchostpay3-pgp-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_WEBHOOK1_URL** | `https://pgp-webhook1-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_WEBHOOK2_URL** | `https://pgp-webhook2-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_SPLIT1_URL** | `https://pgp-split1-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_SPLIT2_URL** | `https://pgp-split2-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_SPLIT3_URL** | `https://pgp-split3-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_ACCUMULATOR_URL** | `https://pgp-accumulator-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_HOSTPAY1_URL** | `https://pgp-hostpay1-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_HOSTPAY2_URL** | `https://pgp-hostpay2-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
+| **PGP_HOSTPAY3_URL** | `https://pgp-hostpay3-v1-{PROJECT_NUMBER}.us-central1.run.app` | 🔄 AUTO | Fetched after deployment |
 
 **Run after deploying services** - Script automatically fetches and creates these secrets.
 
@@ -326,8 +326,8 @@ gcloud secrets versions access latest --secret=CLOUD_SQL_CONNECTION_NAME --proje
 | **Database Instance** | `telepaypsql` | `pgp-live-psql` |
 | **Database Name** | `telepaydb` | `pgpdb` |
 | **Connection String** | `telepay-459221:us-central1:telepaypsql` | `pgp-live:us-central1:pgp-live-psql` |
-| **Service Names** | `gcwebhook1-10-26` | `gcwebhook1-pgp` |
-| **Queue Names** | `gcwebhook1-queue` | `gcwebhook1-queue` (unchanged) |
+| **Service Names** | `gcwebhook1-10-26` | `pgp-webhook1-v1` |
+| **Queue Names** | `pgp-webhook1-queue` | `pgp-webhook1-queue` (unchanged) |
 | **Frontend URL** | `www.paygateprime.com` | `www.paygateprime.com` (unchanged) |
 
 ### Secret Name Consistency

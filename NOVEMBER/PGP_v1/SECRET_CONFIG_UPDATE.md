@@ -110,22 +110,22 @@ This document catalogs ALL secrets that must be created in the `pgp-live` projec
 
 | Secret Name | Description | Example Value | Priority |
 |------------|-------------|---------------|----------|
-| `GCWEBHOOK1_QUEUE` | Webhook 1 task queue name | `gcwebhook1-queue` | 🔴 CRITICAL |
-| `GCWEBHOOK2_QUEUE` | Webhook 2 task queue name | `gcwebhook2-queue` | 🔴 CRITICAL |
-| `GCSPLIT1_QUEUE` | Split service 1 task queue | `gcsplit1-queue` | 🔴 CRITICAL |
-| `GCSPLIT2_QUEUE` | Split service 2 task queue | `gcsplit2-queue` | 🔴 CRITICAL |
-| `GCSPLIT3_QUEUE` | Split service 3 task queue | `gcsplit3-queue` | 🔴 CRITICAL |
-| `GCACCUMULATOR_QUEUE` | Accumulator task queue | `gcaccumulator-queue` | 🔴 CRITICAL |
-| `GCACCUMULATOR_RESPONSE_QUEUE` | Accumulator response queue | `gcaccumulator-response-queue` | 🔴 CRITICAL |
-| `GCBATCHPROCESSOR_QUEUE` | Batch processor task queue | `gcbatchprocessor-queue` | 🔴 CRITICAL |
-| `GCHOSTPAY1_QUEUE` | Host pay 1 task queue | `gchostpay1-queue` | 🔴 CRITICAL |
-| `GCHOSTPAY2_QUEUE` | Host pay 2 task queue | `gchostpay2-queue` | 🔴 CRITICAL |
-| `GCHOSTPAY3_QUEUE` | Host pay 3 task queue | `gchostpay3-queue` | 🔴 CRITICAL |
-| `GCHOSTPAY1_RESPONSE_QUEUE` | Host pay 1 response queue | `gchostpay1-response-queue` | 🔴 CRITICAL |
-| `GCHOSTPAY1_THRESHOLD_QUEUE` | Host pay 1 threshold queue | `gchostpay1-threshold-queue` | 🟡 HIGH |
-| `GCHOSTPAY3_RETRY_QUEUE` | Host pay 3 retry queue | `gchostpay3-retry-queue` | 🟡 HIGH |
-| `GCSPLIT1_BATCH_QUEUE` | Split 1 batch queue | `gcsplit1-batch-queue` | 🟡 HIGH |
-| `GCSPLIT2_RESPONSE_QUEUE` | Split 2 response queue | `gcsplit2-response-queue` | 🟡 HIGH |
+| `PGP_WEBHOOK1_QUEUE` | Webhook 1 task queue name | `pgp-webhook1-queue` | 🔴 CRITICAL |
+| `PGP_WEBHOOK2_QUEUE` | Webhook 2 task queue name | `pgp-webhook2-queue` | 🔴 CRITICAL |
+| `PGP_SPLIT1_QUEUE` | Split service 1 task queue | `pgp-split1-queue` | 🔴 CRITICAL |
+| `PGP_SPLIT2_QUEUE` | Split service 2 task queue | `pgp-split2-queue` | 🔴 CRITICAL |
+| `PGP_SPLIT3_QUEUE` | Split service 3 task queue | `pgp-split3-queue` | 🔴 CRITICAL |
+| `PGP_ACCUMULATOR_QUEUE` | Accumulator task queue | `pgp-accumulator-queue` | 🔴 CRITICAL |
+| `PGP_ACCUMULATOR_RESPONSE_QUEUE` | Accumulator response queue | `pgp-accumulator-response-queue` | 🔴 CRITICAL |
+| `PGP_BATCHPROCESSOR_QUEUE` | Batch processor task queue | `pgp-batchprocessor-queue` | 🔴 CRITICAL |
+| `PGP_HOSTPAY1_QUEUE` | Host pay 1 task queue | `pgp-hostpay1-queue` | 🔴 CRITICAL |
+| `PGP_HOSTPAY2_QUEUE` | Host pay 2 task queue | `pgp-hostpay2-queue` | 🔴 CRITICAL |
+| `PGP_HOSTPAY3_QUEUE` | Host pay 3 task queue | `pgp-hostpay3-queue` | 🔴 CRITICAL |
+| `PGP_HOSTPAY1_RESPONSE_QUEUE` | Host pay 1 response queue | `pgp-hostpay1-response-queue` | 🔴 CRITICAL |
+| `PGP_HOSTPAY1_THRESHOLD_QUEUE` | Host pay 1 threshold queue | `pgp-hostpay1-threshold-queue` | 🟡 HIGH |
+| `PGP_HOSTPAY3_RETRY_QUEUE` | Host pay 3 retry queue | `pgp-hostpay3-retry-queue` | 🟡 HIGH |
+| `PGP_SPLIT1_BATCH_QUEUE` | Split 1 batch queue | `pgp-split1-batch-queue` | 🟡 HIGH |
+| `PGP_SPLIT2_RESPONSE_QUEUE` | Split 2 response queue | `pgp-split2-response-queue` | 🟡 HIGH |
 
 **📝 Note:** Queue names can remain the same or be updated for PGP branding (e.g., `pgp-webhook1-queue`)
 
@@ -135,15 +135,15 @@ This document catalogs ALL secrets that must be created in the `pgp-live` projec
 
 | Secret Name | Description | Example Value | Priority |
 |------------|-------------|---------------|----------|
-| `GCWEBHOOK1_URL` | Webhook 1 service URL | `https://gcwebhook1-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCWEBHOOK2_URL` | Webhook 2 service URL | `https://gcwebhook2-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCSPLIT1_URL` | Split service 1 URL | `https://gcsplit1-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCSPLIT2_URL` | Split service 2 URL | `https://gcsplit2-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCSPLIT3_URL` | Split service 3 URL | `https://gcsplit3-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCACCUMULATOR_URL` | Accumulator service URL | `https://gcaccumulator-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCHOSTPAY1_URL` | Host pay 1 service URL | `https://gchostpay1-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCHOSTPAY2_URL` | Host pay 2 service URL | `https://gchostpay2-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
-| `GCHOSTPAY3_URL` | Host pay 3 service URL | `https://gchostpay3-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_WEBHOOK1_URL` | Webhook 1 service URL | `https://gcwebhook1-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_WEBHOOK2_URL` | Webhook 2 service URL | `https://gcwebhook2-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_SPLIT1_URL` | Split service 1 URL | `https://gcsplit1-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_SPLIT2_URL` | Split service 2 URL | `https://gcsplit2-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_SPLIT3_URL` | Split service 3 URL | `https://gcsplit3-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_ACCUMULATOR_URL` | Accumulator service URL | `https://gcaccumulator-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_HOSTPAY1_URL` | Host pay 1 service URL | `https://gchostpay1-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_HOSTPAY2_URL` | Host pay 2 service URL | `https://gchostpay2-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
+| `PGP_HOSTPAY3_URL` | Host pay 3 service URL | `https://gchostpay3-<PROJECT_NUMBER>.us-central1.run.app` | 🔴 CRITICAL |
 
 **⚠️ Important:** `<PROJECT_NUMBER>` will be the numeric project number for `pgp-live` (obtained after project creation)
 
