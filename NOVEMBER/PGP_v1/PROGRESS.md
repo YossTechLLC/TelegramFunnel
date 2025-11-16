@@ -41,6 +41,18 @@
 - ✅ Created MIGRATION_SUMMARY.md (comprehensive migration report)
 - ✅ All tracking files updated (PROGRESS.md, DECISIONS.md)
 
+### Phase 6: Deployment Scripts ✅ COMPLETE
+- ✅ Created deployment_scripts directory with 5 executable scripts + README
+- ✅ **01_enable_apis.sh** - Enable 13 required GCP APIs
+- ✅ **02_create_cloudsql.sh** - Create Cloud SQL instance `pgp-live-psql`
+- ✅ **03_create_secrets.sh** - Create all 46 secrets in Secret Manager
+- ✅ **04_create_queue_secrets.sh** - Create Cloud Tasks queue name secrets
+- ✅ **05_create_service_url_secrets.sh** - Auto-fetch service URLs from Cloud Run
+- ✅ **README.md** - Step-by-step deployment guide
+- ✅ All scripts updated with new instance name: `pgp-live-psql`
+- ✅ All scripts updated with new database name: `pgpdb`
+- ✅ All scripts updated with new connection: `pgp-live:us-central1:pgp-live-psql`
+
 ## 📊 Final Statistics
 - **Services migrated:** 14
 - **Config files updated:** 13
