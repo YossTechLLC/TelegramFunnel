@@ -71,33 +71,33 @@ class ConfigManager:
         )
 
         gcwebhook2_queue = self.fetch_secret(
-            "GCWEBHOOK2_QUEUE",
+            "PGP_WEBHOOK2_QUEUE",
             "GCWebhook2 queue name"
         )
 
         gcwebhook2_url = self.fetch_secret(
-            "GCWEBHOOK2_URL",
+            "PGP_WEBHOOK2_URL",
             "GCWebhook2 service URL"
         )
 
         gcsplit1_queue = self.fetch_secret(
-            "GCSPLIT1_QUEUE",
+            "PGP_SPLIT1_QUEUE",
             "GCSplit1 queue name"
         )
 
         gcsplit1_url = self.fetch_secret(
-            "GCSPLIT1_URL",
+            "PGP_SPLIT1_URL",
             "GCSplit1 service URL"
         )
 
         # GCAccumulator configuration (for threshold payout)
         gcaccumulator_queue = self.fetch_secret(
-            "GCACCUMULATOR_QUEUE",
+            "PGP_ACCUMULATOR_QUEUE",
             "GCAccumulator queue name"
         )
 
         gcaccumulator_url = self.fetch_secret(
-            "GCACCUMULATOR_URL",
+            "PGP_ACCUMULATOR_URL",
             "GCAccumulator service URL"
         )
 

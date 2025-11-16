@@ -99,7 +99,7 @@ class ConfigManager:
         )
 
         gcsplit1_response_queue = self.fetch_secret(
-            "GCSPLIT2_RESPONSE_QUEUE",
+            "PGP_SPLIT2_RESPONSE_QUEUE",
             "GCSplit1 response queue name (GCSplit2 → GCSplit1)"
         )
 
@@ -131,7 +131,7 @@ class ConfigManager:
 
         # GCBatchProcessor configuration (for threshold checking)
         gcbatchprocessor_queue = self.fetch_secret(
-            "GCBATCHPROCESSOR_QUEUE",
+            "PGP_BATCHPROCESSOR_QUEUE",
             "GCBatchProcessor queue name"
         )
 

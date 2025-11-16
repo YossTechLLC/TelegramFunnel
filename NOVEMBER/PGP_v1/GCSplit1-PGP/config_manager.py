@@ -109,22 +109,22 @@ class ConfigManager:
         )
 
         gcsplit2_queue = self.fetch_secret(
-            "GCSPLIT2_QUEUE",
+            "PGP_SPLIT2_QUEUE",
             "GCSplit2 queue name"
         )
 
         gcsplit2_url = self.fetch_secret(
-            "GCSPLIT2_URL",
+            "PGP_SPLIT2_URL",
             "GCSplit2 service URL"
         )
 
         gcsplit3_queue = self.fetch_secret(
-            "GCSPLIT3_QUEUE",
+            "PGP_SPLIT3_QUEUE",
             "GCSplit3 queue name"
         )
 
         gcsplit3_url = self.fetch_secret(
-            "GCSPLIT3_URL",
+            "PGP_SPLIT3_URL",
             "GCSplit3 service URL"
         )
 

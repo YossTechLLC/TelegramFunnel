@@ -7,7 +7,7 @@ set -e
 
 PROJECT_ID="pgp-live"
 REGION="us-central1"
-SERVICE_NAME="gchostpay3-pgp"
+SERVICE_NAME="pgp-hostpay3-v1"
 SOURCE_DIR="/home/user/TelegramFunnel/NOVEMBER/PGP_v1/GCHostPay3-PGP"
 SERVICE_ACCOUNT="pgp-services@${PROJECT_ID}.iam.gserviceaccount.com"
 CLOUD_SQL_INSTANCE="pgp-live:us-central1:pgp-live-psql"

@@ -78,12 +78,12 @@ class ConfigManager:
 
         # Get GCHostPay1 response queue configuration
         gchostpay1_response_queue = self.fetch_secret(
-            "GCHOSTPAY1_RESPONSE_QUEUE",
+            "PGP_HOSTPAY1_RESPONSE_QUEUE",
             "GCHostPay1 response queue name"
         )
 
         gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
+            "PGP_HOSTPAY1_URL",
             "GCHostPay1 service URL"
         )
 

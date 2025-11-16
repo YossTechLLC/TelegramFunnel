@@ -120,13 +120,13 @@ print(f"⚙️ [CONFIG] Loading Cloud Tasks configuration...")
 # Cloud Tasks configuration for triggering GCWebhook1
 CLOUD_TASKS_PROJECT_ID = (os.getenv('CLOUD_TASKS_PROJECT_ID') or '').strip() or None
 CLOUD_TASKS_LOCATION = (os.getenv('CLOUD_TASKS_LOCATION') or '').strip() or None
-GCWEBHOOK1_QUEUE = (os.getenv('GCWEBHOOK1_QUEUE') or '').strip() or None
-GCWEBHOOK1_URL = (os.getenv('GCWEBHOOK1_URL') or '').strip() or None
+PGP_WEBHOOK1_QUEUE = (os.getenv('PGP_WEBHOOK1_QUEUE') or '').strip() or None
+PGP_WEBHOOK1_URL = (os.getenv('PGP_WEBHOOK1_URL') or '').strip() or None
 
 print(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
 print(f"   CLOUD_TASKS_LOCATION: {'✅ Loaded' if CLOUD_TASKS_LOCATION else '❌ Missing'}")
-print(f"   GCWEBHOOK1_QUEUE: {'✅ Loaded' if GCWEBHOOK1_QUEUE else '❌ Missing'}")
-print(f"   GCWEBHOOK1_URL: {'✅ Loaded' if GCWEBHOOK1_URL else '❌ Missing'}")
+print(f"   PGP_WEBHOOK1_QUEUE: {'✅ Loaded' if PGP_WEBHOOK1_QUEUE else '❌ Missing'}")
+print(f"   PGP_WEBHOOK1_URL: {'✅ Loaded' if PGP_WEBHOOK1_URL else '❌ Missing'}")
 
 # Initialize Cloud Tasks client
 cloudtasks_client = None
@@ -904,14 +904,14 @@ def handle_ipn():
                             if not cloudtasks_client:
                                 print(f"❌ [ORCHESTRATION] Cloud Tasks client not initialized")
                                 print(f"⚠️ [ORCHESTRATION] Cannot trigger GCWebhook1 - payment will not be processed!")
-                            elif not GCWEBHOOK1_QUEUE or not GCWEBHOOK1_URL:
+                            elif not PGP_WEBHOOK1_QUEUE or not PGP_WEBHOOK1_URL:
                                 print(f"❌ [ORCHESTRATION] GCWebhook1 configuration missing")
                                 print(f"⚠️ [ORCHESTRATION] Cannot trigger GCWebhook1 - payment will not be processed!")
                             else:
                                 try:
                                     task_name = cloudtasks_client.enqueue_gcwebhook1_validated_payment(
-                                        queue_name=GCWEBHOOK1_QUEUE,
-                                        target_url=f"{GCWEBHOOK1_URL}/process-validated-payment",
+                                        queue_name=PGP_WEBHOOK1_QUEUE,
+                                        target_url=f"{PGP_WEBHOOK1_URL}/process-validated-payment",
                                         user_id=user_id,
                                         closed_channel_id=closed_channel_id,
                                         wallet_address=wallet_address,

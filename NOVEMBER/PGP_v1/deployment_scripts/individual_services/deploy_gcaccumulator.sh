@@ -7,7 +7,7 @@ set -e
 
 PROJECT_ID="pgp-live"
 REGION="us-central1"
-SERVICE_NAME="gcaccumulator-pgp"
+SERVICE_NAME="pgp-accumulator-v1"
 SOURCE_DIR="/home/user/TelegramFunnel/NOVEMBER/PGP_v1/GCAccumulator-PGP"
 SERVICE_ACCOUNT="pgp-services@${PROJECT_ID}.iam.gserviceaccount.com"
 CLOUD_SQL_INSTANCE="pgp-live:us-central1:pgp-live-psql"

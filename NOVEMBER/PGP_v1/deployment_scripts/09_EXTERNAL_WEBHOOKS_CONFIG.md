@@ -13,20 +13,20 @@ PayGatePrime receives payment notifications from external services. After deploy
 ## 🔴 PRIORITY 1: NowPayments IPN Webhook
 
 ### Service Information
-- **Service:** np-webhook-pgp
+- **Service:** pgp-npwebhook-v1
 - **Purpose:** Receives Instant Payment Notifications (IPN) from NowPayments
 - **Security:** HMAC signature verification using NOWPAYMENTS_IPN_SECRET
 
 ### Get Service URL
 ```bash
-gcloud run services describe np-webhook-pgp \
+gcloud run services describe pgp-npwebhook-v1 \
   --region=us-central1 \
   --format="value(status.url)"
 ```
 
 **Example URL:**
 ```
-https://np-webhook-pgp-291176869049.us-central1.run.app
+https://pgp-npwebhook-v1-291176869049.us-central1.run.app
 ```
 
 ### Configure in NowPayments Dashboard
@@ -38,7 +38,7 @@ https://np-webhook-pgp-291176869049.us-central1.run.app
 
 3. **Update IPN Callback URL:**
    - Find your API key settings
-   - Set IPN Callback URL to: `https://np-webhook-pgp-XXXXXX.us-central1.run.app/`
+   - Set IPN Callback URL to: `https://pgp-npwebhook-v1-XXXXXX.us-central1.run.app/`
    - ⚠️ **Important:** Use the **root path** (`/`) for IPN callbacks
 
 4. **Verify IPN Secret:**
@@ -50,7 +50,7 @@ https://np-webhook-pgp-291176869049.us-central1.run.app
    - Click it to send a test notification
    - Check Cloud Run logs:
      ```bash
-     gcloud run services logs read np-webhook-pgp --region=us-central1
+     gcloud run services logs read pgp-npwebhook-v1 --region=us-central1
      ```
 
 ### Expected Flow
@@ -59,7 +59,7 @@ Customer Payment
     ↓
 NowPayments processes payment
     ↓
-NowPayments sends IPN → https://np-webhook-pgp-XXX.run.app/
+NowPayments sends IPN → https://pgp-npwebhook-v1-XXX.run.app/
     ↓
 np-webhook verifies HMAC signature
     ↓
@@ -80,7 +80,7 @@ Payment processing begins
 ### Public Endpoint
 The np-webhook service also serves a payment status tracking page:
 
-**URL:** `https://np-webhook-pgp-XXXXXX.us-central1.run.app/payment-processing`
+**URL:** `https://pgp-npwebhook-v1-XXXXXX.us-central1.run.app/payment-processing`
 
 ### Usage
 - Customers are redirected here after initiating payment
@@ -114,7 +114,7 @@ ChangeNOW may support webhook notifications for transaction status updates.
 ## 🔵 PRIORITY 4: Telegram Bot Webhooks (Optional)
 
 ### Service Information
-- **Service:** telepay-pgp
+- **Service:** pgp-bot-v1
 - **Purpose:** Telegram bot for legacy payment notifications
 
 ### Webhook Mode (Recommended)
@@ -122,7 +122,7 @@ If using webhook mode instead of polling:
 
 1. **Get Service URL:**
    ```bash
-   gcloud run services describe telepay-pgp \
+   gcloud run services describe pgp-bot-v1 \
      --region=us-central1 \
      --format="value(status.url)"
    ```
@@ -130,7 +130,7 @@ If using webhook mode instead of polling:
 2. **Set Telegram Webhook:**
    ```bash
    curl -X POST "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
-     -d "url=https://telepay-pgp-XXXXXX.us-central1.run.app/webhook"
+     -d "url=https://pgp-bot-v1-XXXXXX.us-central1.run.app/webhook"
    ```
 
 3. **Verify Webhook:**
@@ -175,7 +175,7 @@ If not using webhooks, the bot will use long polling (default behavior).
 ### Test NowPayments IPN Manually
 ```bash
 # Get your service URL
-SERVICE_URL=$(gcloud run services describe np-webhook-pgp --region=us-central1 --format="value(status.url)")
+SERVICE_URL=$(gcloud run services describe pgp-npwebhook-v1 --region=us-central1 --format="value(status.url)")
 
 # Generate test IPN payload (simplified)
 # Real IPN includes HMAC signature - use NowPayments dashboard for real test
@@ -190,7 +190,7 @@ curl -X POST "$SERVICE_URL/" \
   }'
 
 # Check logs
-gcloud run services logs read np-webhook-pgp --region=us-central1 --limit=50
+gcloud run services logs read pgp-npwebhook-v1 --region=us-central1 --limit=50
 ```
 
 ⚠️ **Note:** Real IPN includes HMAC signature. Use NowPayments dashboard "Test IPN" feature for authentic testing.
@@ -204,14 +204,14 @@ gcloud run services logs read np-webhook-pgp --region=us-central1 --limit=50
 **View all IPN callbacks:**
 ```
 resource.type="cloud_run_revision"
-resource.labels.service_name="np-webhook-pgp"
+resource.labels.service_name="pgp-npwebhook-v1"
 jsonPayload.message=~"IPN"
 ```
 
 **View signature verification failures:**
 ```
 resource.type="cloud_run_revision"
-resource.labels.service_name="np-webhook-pgp"
+resource.labels.service_name="pgp-npwebhook-v1"
 severity="ERROR"
 jsonPayload.message=~"signature"
 ```
@@ -219,7 +219,7 @@ jsonPayload.message=~"signature"
 **View successful task enqueues:**
 ```
 resource.type="cloud_run_revision"
-resource.labels.service_name="np-webhook-pgp"
+resource.labels.service_name="pgp-npwebhook-v1"
 jsonPayload.message=~"enqueued"
 ```
 
@@ -229,14 +229,14 @@ jsonPayload.message=~"enqueued"
 
 ### IPN Not Received
 1. Check service is deployed: `gcloud run services list --region=us-central1`
-2. Check service is public: `gcloud run services describe np-webhook-pgp --region=us-central1 --format="value(spec.template.spec.containers[0].env)"`
-3. Test URL directly: `curl https://np-webhook-pgp-XXX.run.app/health` (if health endpoint exists)
+2. Check service is public: `gcloud run services describe pgp-npwebhook-v1 --region=us-central1 --format="value(spec.template.spec.containers[0].env)"`
+3. Test URL directly: `curl https://pgp-npwebhook-v1-XXX.run.app/health` (if health endpoint exists)
 4. Check NowPayments dashboard for IPN delivery logs
 
 ### Signature Verification Fails
 1. Verify secret: `gcloud secrets versions access latest --secret=NOWPAYMENTS_IPN_SECRET`
 2. Check it matches NowPayments dashboard
-3. Check logs for exact error: `gcloud run services logs read np-webhook-pgp --region=us-central1`
+3. Check logs for exact error: `gcloud run services logs read pgp-npwebhook-v1 --region=us-central1`
 
 ### Tasks Not Enqueued
 1. Verify queue exists: `gcloud tasks queues list --location=us-central1`
@@ -250,9 +250,9 @@ jsonPayload.message=~"enqueued"
 
 | Service | Webhook URL | External System | Configuration Location |
 |---------|-------------|-----------------|------------------------|
-| np-webhook-pgp | `https://np-webhook-pgp-XXX.run.app/` | NowPayments | account.nowpayments.io → Settings → API Keys |
-| np-webhook-pgp | `https://np-webhook-pgp-XXX.run.app/payment-processing` | Frontend Redirect | Update in React app |
-| telepay-pgp | `https://telepay-pgp-XXX.run.app/webhook` | Telegram | Bot API setWebhook |
+| pgp-npwebhook-v1 | `https://pgp-npwebhook-v1-XXX.run.app/` | NowPayments | account.nowpayments.io → Settings → API Keys |
+| pgp-npwebhook-v1 | `https://pgp-npwebhook-v1-XXX.run.app/payment-processing` | Frontend Redirect | Update in React app |
+| pgp-bot-v1 | `https://pgp-bot-v1-XXX.run.app/webhook` | Telegram | Bot API setWebhook |
 
 ---
 

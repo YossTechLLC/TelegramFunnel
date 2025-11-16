@@ -77,34 +77,34 @@ class ConfigManager:
 
         # Get GCHostPay2 (Status Checker) configuration
         gchostpay2_queue = self.fetch_secret(
-            "GCHOSTPAY2_QUEUE",
+            "PGP_HOSTPAY2_QUEUE",
             "GCHostPay2 queue name"
         )
 
         gchostpay2_url = self.fetch_secret(
-            "GCHOSTPAY2_URL",
+            "PGP_HOSTPAY2_URL",
             "GCHostPay2 service URL"
         )
 
         # Get GCHostPay3 (Payment Executor) configuration
         gchostpay3_queue = self.fetch_secret(
-            "GCHOSTPAY3_QUEUE",
+            "PGP_HOSTPAY3_QUEUE",
             "GCHostPay3 queue name"
         )
 
         gchostpay3_url = self.fetch_secret(
-            "GCHOSTPAY3_URL",
+            "PGP_HOSTPAY3_URL",
             "GCHostPay3 service URL"
         )
 
         # Get GCHostPay1 (Self) configuration for retry callbacks
         gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
+            "PGP_HOSTPAY1_URL",
             "GCHostPay1 service URL (for self-callbacks)"
         )
 
         gchostpay1_response_queue = self.fetch_secret(
-            "GCHOSTPAY1_RESPONSE_QUEUE",
+            "PGP_HOSTPAY1_RESPONSE_QUEUE",
             "GCHostPay1 response queue name (for retry callbacks)"
         )
 

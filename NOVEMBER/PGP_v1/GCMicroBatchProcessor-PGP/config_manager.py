@@ -107,7 +107,7 @@ class ConfigManager:
         )
 
         gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
+            "PGP_HOSTPAY1_URL",
             "GCHostPay1 service URL"
         )
 

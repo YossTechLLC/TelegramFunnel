@@ -101,17 +101,17 @@ echo ""
 
 # List of internal services that other services need to invoke
 INTERNAL_SERVICES=(
-    "gcwebhook1-pgp"
-    "gcwebhook2-pgp"
-    "gcsplit1-pgp"
-    "gcsplit2-pgp"
-    "gcsplit3-pgp"
-    "gchostpay1-pgp"
-    "gchostpay2-pgp"
-    "gchostpay3-pgp"
-    "gcaccumulator-pgp"
-    "gcbatchprocessor-pgp"
-    "gcmicrobatchprocessor-pgp"
+    "pgp-webhook1-v1"
+    "pgp-webhook2-v1"
+    "pgp-split1-v1"
+    "pgp-split2-v1"
+    "pgp-split3-v1"
+    "pgp-hostpay1-v1"
+    "pgp-hostpay2-v1"
+    "pgp-hostpay3-v1"
+    "pgp-accumulator-v1"
+    "pgp-batchprocessor-v1"
+    "pgp-microbatchprocessor-v1"
 )
 
 echo "Services that need run.invoker permission:"

@@ -103,8 +103,8 @@ echo ""
 echo "These services must be deployed first as they are entry points"
 echo ""
 
-deploy_service "deploy_gcregisterapi.sh" "gcregisterapi-pgp"
-deploy_service "deploy_np_webhook.sh" "np-webhook-pgp"
+deploy_service "deploy_gcregisterapi.sh" "pgp-server-v1"
+deploy_service "deploy_np_webhook.sh" "pgp-npwebhook-v1"
 
 # After deploying these services, update service URL secrets
 echo ""
@@ -124,8 +124,8 @@ echo ""
 echo "These services handle payment processing and Telegram invites"
 echo ""
 
-deploy_service "deploy_gcwebhook1.sh" "gcwebhook1-pgp"
-deploy_service "deploy_gcwebhook2.sh" "gcwebhook2-pgp"
+deploy_service "deploy_gcwebhook1.sh" "pgp-webhook1-v1"
+deploy_service "deploy_gcwebhook2.sh" "pgp-webhook2-v1"
 
 # Update service URLs
 echo ""
@@ -144,9 +144,9 @@ echo ""
 echo "These services handle payment splitting and routing"
 echo ""
 
-deploy_service "deploy_gcsplit1.sh" "gcsplit1-pgp"
-deploy_service "deploy_gcsplit2.sh" "gcsplit2-pgp"
-deploy_service "deploy_gcsplit3.sh" "gcsplit3-pgp"
+deploy_service "deploy_gcsplit1.sh" "pgp-split1-v1"
+deploy_service "deploy_gcsplit2.sh" "pgp-split2-v1"
+deploy_service "deploy_gcsplit3.sh" "pgp-split3-v1"
 
 # Update service URLs
 echo ""
@@ -165,9 +165,9 @@ echo ""
 echo "These services handle crypto conversions and blockchain validation"
 echo ""
 
-deploy_service "deploy_gchostpay1.sh" "gchostpay1-pgp"
-deploy_service "deploy_gchostpay2.sh" "gchostpay2-pgp"
-deploy_service "deploy_gchostpay3.sh" "gchostpay3-pgp"
+deploy_service "deploy_gchostpay1.sh" "pgp-hostpay1-v1"
+deploy_service "deploy_gchostpay2.sh" "pgp-hostpay2-v1"
+deploy_service "deploy_gchostpay3.sh" "pgp-hostpay3-v1"
 
 # Update service URLs
 echo ""
@@ -186,9 +186,9 @@ echo ""
 echo "These services handle payment accumulation and batch processing"
 echo ""
 
-deploy_service "deploy_gcaccumulator.sh" "gcaccumulator-pgp"
-deploy_service "deploy_gcbatchprocessor.sh" "gcbatchprocessor-pgp"
-deploy_service "deploy_gcmicrobatchprocessor.sh" "gcmicrobatchprocessor-pgp"
+deploy_service "deploy_gcaccumulator.sh" "pgp-accumulator-v1"
+deploy_service "deploy_gcbatchprocessor.sh" "pgp-batchprocessor-v1"
+deploy_service "deploy_gcmicrobatchprocessor.sh" "pgp-microbatchprocessor-v1"
 
 # Update service URLs
 echo ""
@@ -207,7 +207,7 @@ echo ""
 echo "Legacy Telegram bot for payment notifications"
 echo ""
 
-deploy_service "deploy_telepay.sh" "telepay-pgp"
+deploy_service "deploy_telepay.sh" "pgp-bot-v1"
 
 # =============================================================================
 # FINAL: Print Summary and Next Steps

@@ -44,40 +44,40 @@ chmod +x *.sh
 
 | Script | Service | Purpose | Authentication |
 |--------|---------|---------|----------------|
-| `deploy_gcregisterapi.sh` | gcregisterapi-pgp | Main backend API | Public |
-| `deploy_np_webhook.sh` | np-webhook-pgp | NowPayments IPN handler | Public |
-| `deploy_telepay.sh` | telepay-pgp | Telegram bot | Public |
+| `deploy_gcregisterapi.sh` | pgp-server-v1 | Main backend API | Public |
+| `deploy_np_webhook.sh` | pgp-npwebhook-v1 | NowPayments IPN handler | Public |
+| `deploy_telepay.sh` | pgp-bot-v1 | Telegram bot | Public |
 
 ### 2. Payment Processing Services (Internal Only)
 
 | Script | Service | Purpose |
 |--------|---------|---------|
-| `deploy_gcwebhook1.sh` | gcwebhook1-pgp | Primary payment processor |
-| `deploy_gcwebhook2.sh` | gcwebhook2-pgp | Telegram invite handler |
+| `deploy_gcwebhook1.sh` | pgp-webhook1-v1 | Primary payment processor |
+| `deploy_gcwebhook2.sh` | pgp-webhook2-v1 | Telegram invite handler |
 
 ### 3. Split Payment Services (Internal Only)
 
 | Script | Service | Purpose |
 |--------|---------|---------|
-| `deploy_gcsplit1.sh` | gcsplit1-pgp | Payment splitter |
-| `deploy_gcsplit2.sh` | gcsplit2-pgp | Payment router |
-| `deploy_gcsplit3.sh` | gcsplit3-pgp | Accumulator enqueuer |
+| `deploy_gcsplit1.sh` | pgp-split1-v1 | Payment splitter |
+| `deploy_gcsplit2.sh` | pgp-split2-v1 | Payment router |
+| `deploy_gcsplit3.sh` | pgp-split3-v1 | Accumulator enqueuer |
 
 ### 4. Host Payment Services (Internal Only)
 
 | Script | Service | Purpose |
 |--------|---------|---------|
-| `deploy_gchostpay1.sh` | gchostpay1-pgp | Crypto conversion executor |
-| `deploy_gchostpay2.sh` | gchostpay2-pgp | Conversion monitor |
-| `deploy_gchostpay3.sh` | gchostpay3-pgp | Blockchain validator |
+| `deploy_gchostpay1.sh` | pgp-hostpay1-v1 | Crypto conversion executor |
+| `deploy_gchostpay2.sh` | pgp-hostpay2-v1 | Conversion monitor |
+| `deploy_gchostpay3.sh` | pgp-hostpay3-v1 | Blockchain validator |
 
 ### 5. Batch Processing Services (Internal Only)
 
 | Script | Service | Purpose |
 |--------|---------|---------|
-| `deploy_gcaccumulator.sh` | gcaccumulator-pgp | Payment accumulator |
-| `deploy_gcbatchprocessor.sh` | gcbatchprocessor-pgp | Batch processor |
-| `deploy_gcmicrobatchprocessor.sh` | gcmicrobatchprocessor-pgp | Micro batch processor |
+| `deploy_gcaccumulator.sh` | pgp-accumulator-v1 | Payment accumulator |
+| `deploy_gcbatchprocessor.sh` | pgp-batchprocessor-v1 | Batch processor |
+| `deploy_gcmicrobatchprocessor.sh` | pgp-microbatchprocessor-v1 | Micro batch processor |
 
 ---
 
@@ -140,9 +140,9 @@ Most services use:
 ### Authentication
 
 - **Public Services:** `--allow-unauthenticated`
-  - gcregisterapi-pgp
-  - np-webhook-pgp
-  - telepay-pgp
+  - pgp-server-v1
+  - pgp-npwebhook-v1
+  - pgp-bot-v1
 
 - **Internal Services:** `--no-allow-unauthenticated`
   - All webhook, split, hostpay, and batch services
@@ -244,7 +244,7 @@ After deployment, monitor services:
 gcloud logging read "resource.type=cloud_run_revision" --limit=100
 
 # Filter by service
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=gcregisterapi-pgp" --limit=50
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=pgp-server-v1" --limit=50
 
 # Filter by severity
 gcloud logging read "resource.type=cloud_run_revision AND severity>=ERROR" --limit=50

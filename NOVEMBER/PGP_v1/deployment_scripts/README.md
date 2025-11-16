@@ -148,7 +148,7 @@ For each service directory:
 ```bash
 # Example: Deploy GCRegisterAPI
 cd GCRegisterAPI-PGP
-gcloud run deploy gcregisterapi-pgp \
+gcloud run deploy pgp-server-v1 \
   --source=. \
   --region=us-central1 \
   --allow-unauthenticated \
@@ -159,20 +159,20 @@ gcloud run deploy gcregisterapi-pgp \
 ```
 
 **Services to Deploy:**
-1. gcregisterapi-pgp
+1. pgp-server-v1
 2. gcregisterweb-pgp (static site or Cloud Storage + CDN)
-3. gcwebhook1-pgp
-4. gcwebhook2-pgp
-5. gcsplit1-pgp
-6. gcsplit2-pgp
-7. gcsplit3-pgp
-8. gchostpay1-pgp
-9. gchostpay2-pgp
-10. gchostpay3-pgp
-11. gcaccumulator-pgp
-12. gcbatchprocessor-pgp
-13. gcmicrobatchprocessor-pgp
-14. telepay-pgp
+3. pgp-webhook1-v1
+4. pgp-webhook2-v1
+5. pgp-split1-v1
+6. pgp-split2-v1
+7. pgp-split3-v1
+8. pgp-hostpay1-v1
+9. pgp-hostpay2-v1
+10. pgp-hostpay3-v1
+11. pgp-accumulator-v1
+12. pgp-batchprocessor-v1
+13. pgp-microbatchprocessor-v1
+14. pgp-bot-v1
 
 ---
 
@@ -245,7 +245,7 @@ python3 execute_processed_payments_migration.py
 
 **NowPayments:**
 1. Log into NowPayments dashboard
-2. Update IPN callback URL to: `https://gcwebhook1-pgp-XXXXX.us-central1.run.app/webhook`
+2. Update IPN callback URL to: `https://pgp-webhook1-v1-XXXXX.us-central1.run.app/webhook`
 
 **ChangeNOW:**
 1. Log into ChangeNOW account
@@ -299,7 +299,7 @@ python3 execute_processed_payments_migration.py
 ### Service Naming
 - Removed `-10-26` suffix
 - Added `-pgp` suffix
-- Example: `gcregisterapi-pgp`
+- Example: `pgp-server-v1`
 
 ### Domain
 - Current: `www.paygateprime.com`

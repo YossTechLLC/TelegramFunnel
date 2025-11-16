@@ -201,7 +201,7 @@ echo -n "<password>" | gcloud secrets create DATABASE_PASSWORD_SECRET --data-fil
 #### 5. Deploy Services to Cloud Run
 ```bash
 # Deploy each service (example for GCRegisterAPI-PGP)
-gcloud run deploy gcregisterapi-pgp \
+gcloud run deploy pgp-server-v1 \
   --source=./GCRegisterAPI-PGP \
   --region=us-central1 \
   --allow-unauthenticated \
@@ -228,8 +228,8 @@ cd TOOLS_SCRIPTS_TESTS/scripts/
 PROJECT_NUMBER=$(gcloud projects describe pgp-live --format="value(projectNumber)")
 
 # Update URL secrets
-echo -n "https://gcwebhook1-pgp-${PROJECT_NUMBER}.us-central1.run.app" | \
-  gcloud secrets versions add GCWEBHOOK1_URL --data-file=-
+echo -n "https://pgp-webhook1-v1-${PROJECT_NUMBER}.us-central1.run.app" | \
+  gcloud secrets versions add PGP_WEBHOOK1_URL --data-file=-
 # ... (repeat for all service URLs)
 ```
 

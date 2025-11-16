@@ -101,7 +101,7 @@ echo "════════════════════════�
 
 # 1. GCRegisterAPI (Main Backend API - Public)
 deploy_service \
-    "gcregisterapi-pgp" \
+    "pgp-server-v1" \
     "GCRegisterAPI-PGP" \
     "512Mi" \
     "1" \
@@ -110,7 +110,7 @@ deploy_service \
 
 # 2. np-webhook (NowPayments IPN Handler - Public)
 deploy_service \
-    "np-webhook-pgp" \
+    "pgp-npwebhook-v1" \
     "np-webhook-PGP" \
     "512Mi" \
     "1" \
@@ -128,7 +128,7 @@ echo "════════════════════════�
 
 # 3. GCWebhook1 (Primary Payment Processor)
 deploy_service \
-    "gcwebhook1-pgp" \
+    "pgp-webhook1-v1" \
     "GCWebhook1-PGP" \
     "512Mi" \
     "1" \
@@ -137,7 +137,7 @@ deploy_service \
 
 # 4. GCHostPay1 (Crypto Payment Execution #1)
 deploy_service \
-    "gchostpay1-pgp" \
+    "pgp-hostpay1-v1" \
     "GCHostPay1-PGP" \
     "512Mi" \
     "1" \
@@ -146,7 +146,7 @@ deploy_service \
 
 # 5. GCHostPay2 (Crypto Payment Execution #2)
 deploy_service \
-    "gchostpay2-pgp" \
+    "pgp-hostpay2-v1" \
     "GCHostPay2-PGP" \
     "512Mi" \
     "1" \
@@ -155,7 +155,7 @@ deploy_service \
 
 # 6. GCHostPay3 (Crypto Payment Execution #3)
 deploy_service \
-    "gchostpay3-pgp" \
+    "pgp-hostpay3-v1" \
     "GCHostPay3-PGP" \
     "512Mi" \
     "1" \
@@ -173,7 +173,7 @@ echo "════════════════════════�
 
 # 7. GCSplit1
 deploy_service \
-    "gcsplit1-pgp" \
+    "pgp-split1-v1" \
     "GCSplit1-PGP" \
     "512Mi" \
     "1" \
@@ -182,7 +182,7 @@ deploy_service \
 
 # 8. GCSplit2
 deploy_service \
-    "gcsplit2-pgp" \
+    "pgp-split2-v1" \
     "GCSplit2-PGP" \
     "512Mi" \
     "1" \
@@ -191,7 +191,7 @@ deploy_service \
 
 # 9. GCSplit3
 deploy_service \
-    "gcsplit3-pgp" \
+    "pgp-split3-v1" \
     "GCSplit3-PGP" \
     "512Mi" \
     "1" \
@@ -209,7 +209,7 @@ echo "════════════════════════�
 
 # 10. GCWebhook2 (Telegram Invite Handler)
 deploy_service \
-    "gcwebhook2-pgp" \
+    "pgp-webhook2-v1" \
     "GCWebhook2-PGP" \
     "512Mi" \
     "1" \
@@ -218,7 +218,7 @@ deploy_service \
 
 # 11. GCAccumulator
 deploy_service \
-    "gcaccumulator-pgp" \
+    "pgp-accumulator-v1" \
     "GCAccumulator-PGP" \
     "512Mi" \
     "1" \
@@ -227,7 +227,7 @@ deploy_service \
 
 # 12. GCBatchProcessor
 deploy_service \
-    "gcbatchprocessor-pgp" \
+    "pgp-batchprocessor-v1" \
     "GCBatchProcessor-PGP" \
     "512Mi" \
     "1" \
@@ -236,7 +236,7 @@ deploy_service \
 
 # 13. GCMicroBatchProcessor
 deploy_service \
-    "gcmicrobatchprocessor-pgp" \
+    "pgp-microbatchprocessor-v1" \
     "GCMicroBatchProcessor-PGP" \
     "512Mi" \
     "1" \
@@ -245,7 +245,7 @@ deploy_service \
 
 # 14. TelePay (Telegram Bot - Optional)
 deploy_service \
-    "telepay-pgp" \
+    "pgp-bot-v1" \
     "TelePay-PGP" \
     "512Mi" \
     "1" \
@@ -264,18 +264,18 @@ echo ""
 echo "📊 Deployed Services:"
 echo ""
 echo "   Public Services (allow-unauthenticated):"
-echo "   ✅ gcregisterapi-pgp (Main API)"
-echo "   ✅ np-webhook-pgp (NowPayments IPN)"
+echo "   ✅ pgp-server-v1 (Main API)"
+echo "   ✅ pgp-npwebhook-v1 (NowPayments IPN)"
 echo ""
 echo "   Internal Services (no-allow-unauthenticated):"
-echo "   ✅ gcwebhook1-pgp (Payment Processor)"
-echo "   ✅ gcwebhook2-pgp (Telegram Invites)"
-echo "   ✅ gcsplit1-pgp, gcsplit2-pgp, gcsplit3-pgp"
-echo "   ✅ gchostpay1-pgp, gchostpay2-pgp, gchostpay3-pgp"
-echo "   ✅ gcaccumulator-pgp"
-echo "   ✅ gcbatchprocessor-pgp"
-echo "   ✅ gcmicrobatchprocessor-pgp"
-echo "   ✅ telepay-pgp"
+echo "   ✅ pgp-webhook1-v1 (Payment Processor)"
+echo "   ✅ pgp-webhook2-v1 (Telegram Invites)"
+echo "   ✅ pgp-split1-v1, pgp-split2-v1, pgp-split3-v1"
+echo "   ✅ pgp-hostpay1-v1, pgp-hostpay2-v1, pgp-hostpay3-v1"
+echo "   ✅ pgp-accumulator-v1"
+echo "   ✅ pgp-batchprocessor-v1"
+echo "   ✅ pgp-microbatchprocessor-v1"
+echo "   ✅ pgp-bot-v1"
 echo ""
 echo "⏭️  NEXT STEPS:"
 echo ""

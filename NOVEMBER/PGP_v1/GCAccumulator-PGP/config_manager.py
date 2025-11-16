@@ -72,34 +72,34 @@ class ConfigManager:
 
         # GCSplit2 configuration (for USDT conversion estimates)
         gcsplit2_queue = self.fetch_secret(
-            "GCSPLIT2_QUEUE",
+            "PGP_SPLIT2_QUEUE",
             "GCSplit2 queue name"
         )
 
         gcsplit2_url = self.fetch_secret(
-            "GCSPLIT2_URL",
+            "PGP_SPLIT2_URL",
             "GCSplit2 service URL"
         )
 
         # GCSplit3 configuration (for ETH→USDT swap creation)
         gcsplit3_queue = self.fetch_secret(
-            "GCSPLIT3_QUEUE",
+            "PGP_SPLIT3_QUEUE",
             "GCSplit3 queue name"
         )
 
         gcsplit3_url = self.fetch_secret(
-            "GCSPLIT3_URL",
+            "PGP_SPLIT3_URL",
             "GCSplit3 service URL"
         )
 
         # GCHostPay1 configuration (for swap execution)
         gchostpay1_queue = self.fetch_secret(
-            "GCHOSTPAY1_QUEUE",
+            "PGP_HOSTPAY1_QUEUE",
             "GCHostPay1 queue name"
         )
 
         gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
+            "PGP_HOSTPAY1_URL",
             "GCHostPay1 service URL"
         )
 

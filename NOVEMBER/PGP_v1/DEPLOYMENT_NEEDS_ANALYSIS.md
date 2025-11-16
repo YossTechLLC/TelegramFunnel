@@ -79,7 +79,7 @@
 
 **NowPayments Webhook URL Update:**
 - Must update IPN callback URL in NowPayments dashboard
-- New URL: `https://np-webhook-pgp-XXXXXX.us-central1.run.app/`
+- New URL: `https://pgp-npwebhook-v1-XXXXXX.us-central1.run.app/`
 - ⚠️ **CRITICAL:** Must be HTTPS (Cloud Run provides this)
 
 **ChangeNOW Webhook URL Update:**
@@ -88,8 +88,8 @@
 
 **Webhook Endpoints to Configure:**
 ```
-NowPayments IPN → https://np-webhook-pgp-{PROJECT_NUMBER}.us-central1.run.app/
-Payment Processing Page → https://np-webhook-pgp-{PROJECT_NUMBER}.us-central1.run.app/payment-processing
+NowPayments IPN → https://pgp-npwebhook-v1-{PROJECT_NUMBER}.us-central1.run.app/
+Payment Processing Page → https://pgp-npwebhook-v1-{PROJECT_NUMBER}.us-central1.run.app/payment-processing
 ```
 
 ---

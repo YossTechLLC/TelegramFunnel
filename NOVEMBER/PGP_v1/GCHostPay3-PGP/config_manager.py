@@ -94,34 +94,34 @@ class ConfigManager:
 
         # Get GCHostPay1 response queue configuration
         gchostpay1_response_queue = self.fetch_secret(
-            "GCHOSTPAY1_RESPONSE_QUEUE",
+            "PGP_HOSTPAY1_RESPONSE_QUEUE",
             "GCHostPay1 response queue name"
         )
 
         gchostpay1_url = self.fetch_secret(
-            "GCHOSTPAY1_URL",
+            "PGP_HOSTPAY1_URL",
             "GCHostPay1 service URL"
         )
 
         # Get GCAccumulator response queue configuration (for threshold payouts)
         gcaccumulator_response_queue = self.fetch_secret(
-            "GCACCUMULATOR_RESPONSE_QUEUE",
+            "PGP_ACCUMULATOR_RESPONSE_QUEUE",
             "GCAccumulator response queue name"
         )
 
         gcaccumulator_url = self.fetch_secret(
-            "GCACCUMULATOR_URL",
+            "PGP_ACCUMULATOR_URL",
             "GCAccumulator service URL"
         )
 
         # NEW: Get GCHostPay3 self-retry configuration (for error handling)
         gchostpay3_retry_queue = self.fetch_secret(
-            "GCHOSTPAY3_RETRY_QUEUE",
+            "PGP_HOSTPAY3_RETRY_QUEUE",
             "GCHostPay3 self-retry queue name"
         )
 
         gchostpay3_url = self.fetch_secret(
-            "GCHOSTPAY3_URL",
+            "PGP_HOSTPAY3_URL",
             "GCHostPay3 service URL"
         )
 

@@ -77,12 +77,12 @@ class ConfigManager:
 
         # GCSplit1 configuration (for batch payout execution)
         gcsplit1_batch_queue = self.fetch_secret(
-            "GCSPLIT1_BATCH_QUEUE",
+            "PGP_SPLIT1_BATCH_QUEUE",
             "GCSplit1 batch queue name"
         )
 
         gcsplit1_url = self.fetch_secret(
-            "GCSPLIT1_URL",
+            "PGP_SPLIT1_URL",
             "GCSplit1 service URL"
         )
 
