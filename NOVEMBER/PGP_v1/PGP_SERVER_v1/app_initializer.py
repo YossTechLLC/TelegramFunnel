@@ -26,7 +26,7 @@ from bot_manager import BotManager
 # Legacy imports (will be removed after full migration)
 from donation_input_handler import DonationKeypadHandler  # TODO: Migrate to bot.conversations (kept for backward compatibility)
 # from start_np_gateway import PaymentGatewayManager  # REPLACED by services.PaymentService
-# from notification_service import NotificationService  # REPLACED by services.NotificationService
+# ✅ REMOVED: notification_service.py (Phase 1 consolidation complete - using services.NotificationService)
 
 from telegram import Bot  # For bot initialization
 
