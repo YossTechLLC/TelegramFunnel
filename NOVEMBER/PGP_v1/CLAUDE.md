@@ -10,9 +10,10 @@ Please pay attention to the way in which the debug/error/print statements are wr
 MONITOR FOR THIS PACKAGE ERROR - google-cloud-sql-connector is not a package, instead call cloud-sql-python-connector --> it imports as google.cloud.sql.connector.
 I have given you MCP access to context7 mcp & google mcp & cloudflare mcp so your architecture designs can be checked against the best practices knowledgebase to verify that your implementation meets together to work seamlessly, securely and reliably .
 I have given you MCP access to gcloud and observability, you'll see that you're working in the pgp-live project
-You are allowed to enable any API or gcloud service you may need, however you are to EXPLICITLY ask if you must disable any API or gcloud service.
 You'll have explicit read only permissions to the telepaypsql database instance.
 YOU ARE NOT TO DEPLOY ANYTHING TO GOOGLE --> All changes must be local to the /NOVEMBER/PGP_v1 directory only.
+YOU ARE NOT TO MAKE ANY CHANGES ON CLOUDFLARE --> All changes must be local to the /NOVEMBER/PGP_v1 directory only.
+YOU ARE NOT TO DEPLOY ANYTHING TO GITHUB --> All changes must be local to the /NOVEMBER/PGP_v1 directory only
 If something isn't found in PROGRESS.md DECISION.md &or BUGS.md, and if you're looking for something specific you will easily be able to find it in PROGRESS_ARCH.md DECISIONS_ARCH.md &or BUGS_ARCH.md which hold all the archived entries if you search for your terms explicitly.
 DO NOT MAKE PSQL requests like 'Bash(PGPASSWORD='Chigdabeast123$' psql -h /cloudsql/telepay-459221:us-central1:telepaypsql -U postgres -d telepaydb -c "\d batch_conversions")' --> INSTEAD USE observability - list_log_entries (MCP)
 Remember you have access to context7 MCP and google MCP to find out best practices as to how the architecture you're building would be connected together to work seamlessly, securely and reliably
