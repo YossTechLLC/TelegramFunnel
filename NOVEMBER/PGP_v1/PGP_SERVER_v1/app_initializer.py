@@ -5,7 +5,7 @@ import os
 
 # Core managers (keep these - no new versions yet)
 from config_manager import ConfigManager
-from secure_webhook import SecureWebhookManager
+# ✅ REMOVED: secure_webhook.py (Phase 3 consolidation complete - deprecated, replaced by static landing page)
 from broadcast_manager import BroadcastManager
 from message_utils import MessageUtils
 from subscription_manager import SubscriptionManager
@@ -49,7 +49,7 @@ class AppInitializer:
 
         # Initialize managers
         self.db_manager = None
-        self.webhook_manager = None
+        # ✅ REMOVED: self.webhook_manager (Phase 3 - deprecated)
         self.payment_manager = None  # Legacy (will use payment_service)
         self.broadcast_manager = None
         self.input_handlers = None
@@ -80,7 +80,7 @@ class AppInitializer:
 
         # Initialize core managers
         self.db_manager = DatabaseManager()  # Now uses ConnectionPool internally
-        self.webhook_manager = SecureWebhookManager()
+        # ✅ REMOVED: SecureWebhookManager (Phase 3 consolidation complete - deprecated, replaced by static landing page)
 
         # 🆕 NEW_ARCHITECTURE: Initialize new services
         self.logger.info("🆕 Initializing NEW_ARCHITECTURE services...")
@@ -130,7 +130,7 @@ class AppInitializer:
                 global_values['sub_value'],
                 global_values['open_channel_id'],
                 global_values['sub_time'],
-                self.webhook_manager,
+                None,  # webhook_manager deprecated (Phase 3 - not used)
                 self.db_manager
             )
         
@@ -276,11 +276,12 @@ class AppInitializer:
 
         🆕 NEW_ARCHITECTURE: Now includes new modular services and Flask app.
         ✅ Phase 2: payment_manager removed, payment_service is now the single source
+        ✅ Phase 3: webhook_manager removed, deprecated (replaced by static landing page)
         """
         return {
             # Core managers
             'db_manager': self.db_manager,
-            'webhook_manager': self.webhook_manager,
+            # ✅ REMOVED: webhook_manager (Phase 3 - deprecated)
             'broadcast_manager': self.broadcast_manager,
             'input_handlers': self.input_handlers,
             'menu_handlers': self.menu_handlers,
