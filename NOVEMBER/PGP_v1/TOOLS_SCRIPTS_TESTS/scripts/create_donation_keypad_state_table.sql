@@ -5,7 +5,7 @@
 -- Author: Claude Code
 --
 -- This table stores the current state of donation amount input for each user.
--- Replaces in-memory state dictionary to allow GCDonationHandler to scale horizontally.
+-- Replaces in-memory state dictionary to allow PGP_DONATIONS_v1 to scale horizontally.
 -- Each row represents a user's current donation input session with:
 -- - The amount they've entered so far (as string to preserve decimal precision)
 -- - Which channel they're donating to
@@ -96,7 +96,7 @@ $$ LANGUAGE plpgsql;
 
 -- Add comments for documentation
 COMMENT ON TABLE donation_keypad_state IS
-'Stores donation keypad input state to enable stateless horizontal scaling of GCDonationHandler. Replaces in-memory user_states dictionary. States older than 1 hour are automatically cleaned up.';
+'Stores donation keypad input state to enable stateless horizontal scaling of PGP_DONATIONS_v1. Replaces in-memory user_states dictionary. States older than 1 hour are automatically cleaned up.';
 
 COMMENT ON COLUMN donation_keypad_state.user_id IS
 'Telegram user ID (primary key). Each user can have only one active donation input session at a time.';

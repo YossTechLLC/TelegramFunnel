@@ -26,7 +26,7 @@ def get_connection():
 
     def getconn():
         conn = connector.connect(
-            instance_connection_string="telepay-459221:us-central1:telepaypsql",
+            instance_connection_string="pgp-live:us-central1:pgp-telepaypsql",
             driver="pg8000",
             user="postgres",
             password=os.environ.get("DB_PASSWORD", "Chigdabeast123$"),

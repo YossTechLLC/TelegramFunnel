@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 from datetime import datetime
 
 # Database credentials
-CLOUD_SQL_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
+CLOUD_SQL_CONNECTION_NAME = "pgp-live:us-central1:pgp-telepaypsql"
 DATABASE_NAME = "client_table"
 DATABASE_USER = "postgres"
 DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD_SECRET', 'Chigdabeast123$')

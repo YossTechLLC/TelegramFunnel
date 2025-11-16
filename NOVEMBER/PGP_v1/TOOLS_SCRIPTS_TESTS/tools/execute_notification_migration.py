@@ -23,7 +23,7 @@ def get_db_connection():
         connector = Connector()
 
         conn = connector.connect(
-            os.getenv('CLOUD_SQL_CONNECTION_NAME', 'telepay-459221:us-central1:telepaypsql'),
+            os.getenv('CLOUD_SQL_CONNECTION_NAME', 'pgp-live:us-central1:pgp-telepaypsql'),
             "pg8000",
             user=os.getenv('DATABASE_USER_SECRET', 'postgres'),
             password=os.getenv('DATABASE_PASSWORD_SECRET'),

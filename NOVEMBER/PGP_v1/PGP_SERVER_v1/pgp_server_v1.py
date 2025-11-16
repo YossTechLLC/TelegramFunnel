@@ -4,6 +4,7 @@ Minimal orchestrator for the Telegram Payment Bot.
 This file coordinates all the modular components.
 """
 import asyncio
+import logging
 import os
 from pathlib import Path
 from threading import Thread
@@ -11,14 +12,25 @@ from dotenv import load_dotenv
 from app_initializer import AppInitializer
 from server_manager import ServerManager
 
+# Configure logging
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Suppress httpx INFO logs (too verbose)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
 # Load environment variables from .env file (if it exists)
 # This must happen BEFORE any modules try to access environment variables
 env_path = Path(__file__).parent / '.env'
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
-    print(f"✅ Loaded environment variables from {env_path}")
+    logger.info(f"✅ [CONFIG] Loaded environment variables from {env_path}")
 else:
-    print(f"⚠️ No .env file found at {env_path} - using system environment variables")
+    logger.info(f"⚠️ [CONFIG] No .env file found at {env_path} - using system environment variables")
 
 async def run_application(app):
     """Run both the Telegram bot and subscription monitoring concurrently."""
@@ -26,12 +38,12 @@ async def run_application(app):
         # Create both tasks
         bot_task = asyncio.create_task(app.run_bot())
         subscription_task = asyncio.create_task(app.subscription_manager.start_monitoring())
-        
+
         # Run both tasks concurrently
         await asyncio.gather(bot_task, subscription_task)
-        
+
     except Exception as e:
-        print(f"❌ Error in application tasks: {e}")
+        logger.error(f"❌ [APP] Error in application tasks: {e}", exc_info=True)
         # Stop subscription monitoring if it's running
         if hasattr(app, 'subscription_manager'):
             app.subscription_manager.stop_monitoring()

@@ -13,7 +13,7 @@ def get_db_connection():
     connector = Connector()
 
     # Database credentials
-    instance_connection_name = "telepay-459221:us-central1:telepaypsql"
+    instance_connection_name = "pgp-live:us-central1:pgp-telepaypsql"
     db_user = "postgres"
     db_pass = "Chigdabeast123$"
     db_name = "client_table"

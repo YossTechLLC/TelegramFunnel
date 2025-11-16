@@ -8,7 +8,7 @@ set -e  # Exit on error
 echo "🚀 Deploying message tracking migration to telepaypsql..."
 
 # Set database connection info
-DB_HOST="/cloudsql/telepay-459221:us-central1:telepaypsql"
+DB_HOST="/cloudsql/pgp-live:us-central1:telepaypsql"
 DB_NAME="client_table"
 DB_USER="postgres"
 

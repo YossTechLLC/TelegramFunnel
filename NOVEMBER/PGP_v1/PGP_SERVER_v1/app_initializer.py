@@ -219,9 +219,20 @@ class AppInitializer:
             webhook_signing_secret = python_secrets.token_hex(32)
             self.logger.warning("⚠️ Using temporary webhook signing secret (DEV ONLY)")
 
-        # Get allowed IPs from environment or use defaults
-        allowed_ips_str = os.getenv('ALLOWED_IPS', '127.0.0.1,10.0.0.0/8')
-        allowed_ips = [ip.strip() for ip in allowed_ips_str.split(',')]
+        # Get allowed IPs using centralized configuration
+        # Uses ENVIRONMENT variable or explicit ALLOWED_IPS override
+        from security.allowed_ips import get_allowed_ips_from_env, validate_ip_list
+
+        try:
+            allowed_ips = get_allowed_ips_from_env()
+            validate_ip_list(allowed_ips)
+            environment = os.getenv('ENVIRONMENT', 'production')
+            self.logger.info(f"🔒 [IP_WHITELIST] Loaded configuration for environment: {environment}")
+        except Exception as e:
+            self.logger.error(f"❌ Error loading IP whitelist config: {e}")
+            # Fallback to localhost only for safety
+            allowed_ips = ['127.0.0.1']
+            self.logger.warning("⚠️ Using fallback IP whitelist: localhost only")
 
         # Get rate limit config from environment
         rate_limit_per_minute = int(os.getenv('RATE_LIMIT_PER_MINUTE', '10'))
@@ -236,6 +247,10 @@ class AppInitializer:
 
         self.logger.info(f"🔒 [SECURITY] Configured:")
         self.logger.info(f"   Allowed IPs: {len(allowed_ips)} ranges")
+        if allowed_ips:
+            self.logger.info(f"   IP ranges: {', '.join(allowed_ips[:3])}" + (" ..." if len(allowed_ips) > 3 else ""))
+        else:
+            self.logger.info("   IP whitelist: DISABLED (HMAC-only authentication)")
         self.logger.info(f"   Rate limit: {rate_limit_per_minute} req/min, burst {rate_limit_burst}")
 
         return config

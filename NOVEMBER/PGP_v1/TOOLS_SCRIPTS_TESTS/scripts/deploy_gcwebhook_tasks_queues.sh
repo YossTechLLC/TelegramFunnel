@@ -4,7 +4,7 @@
 
 set -e
 
-PROJECT_ID="telepay-459221"
+PROJECT_ID="pgp-live"
 LOCATION="us-central1"
 
 echo "🚀 Deploying Cloud Tasks queues for PGP_v1 Orchestrator and Invite Services..."

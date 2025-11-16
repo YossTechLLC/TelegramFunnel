@@ -16,6 +16,7 @@ Deployment:
 - Region: us-central1
 """
 import os
+import logging
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -26,6 +27,17 @@ from api.routes.account import account_bp
 from api.routes.channels import channels_bp
 from api.routes.mappings import mappings_bp
 from api.middleware.rate_limiter import setup_rate_limiting, get_rate_limit_error_handler
+
+# Configure logging
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Suppress httpx INFO logs (too verbose)
+logging.getLogger('httpx').setLevel(logging.WARNING)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -83,27 +95,27 @@ def handle_preflight():
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
             response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
             response.headers['Access-Control-Max-Age'] = '3600'
-            print(f"✅ Preflight handled for origin: {origin}")
+            logger.debug(f"✅ [CORS] Preflight handled for origin: {origin}")
             return response
 
 # Explicit CORS headers for all responses (backup method)
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    print(f"🔍 CORS Debug - Origin: {origin}, Allowed origins: {cors_origins}")
-    print(f"🔍 CORS Debug - Origin in list: {origin in cors_origins}")
+    logger.debug(f"🔍 [CORS] Origin: {origin}, Allowed origins: {cors_origins}")
+    logger.debug(f"🔍 [CORS] Origin in list: {origin in cors_origins}")
 
     if origin in cors_origins:
-        print(f"✅ Adding CORS headers for origin: {origin}")
+        logger.debug(f"✅ [CORS] Adding CORS headers for origin: {origin}")
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
     else:
-        print(f"❌ Origin not in allowed list or missing")
+        logger.debug(f"❌ [CORS] Origin not in allowed list or missing")
 
-    print(f"🔍 Response headers: {dict(response.headers)}")
+    logger.debug(f"🔍 [CORS] Response headers: {dict(response.headers)}")
     return response
 
 # Rate limiting (OPTIONS requests are handled in before_request, so won't be rate limited)
@@ -221,16 +233,17 @@ def unauthorized_callback(error):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    print("=" * 80)
-    print("🚀 PGP_WEBAPI_v1 Starting")
-    print("=" * 80)
-    print(f"📍 Port: {port}")
-    print(f"🔐 JWT Authentication: Enabled")
-    print(f"🌐 CORS Origin: {config['cors_origin']}")
-    print(f"💾 Database: Cloud SQL PostgreSQL")
-    print(f"📊 Rate Limiting: 200/day, 50/hour")
-    print("=" * 80)
-    print("✅ Ready to accept requests")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("🚀 PGP_WEBAPI_v1 Starting")
+    logger.info("=" * 80)
+    logger.info(f"📍 Port: {port}")
+    logger.info(f"🔐 JWT Authentication: Enabled")
+    logger.info(f"🌐 CORS Origin: {config['cors_origin']}")
+    logger.info(f"💾 Database: Cloud SQL PostgreSQL")
+    logger.info(f"📊 Rate Limiting: 200/day, 50/hour")
+    logger.info(f"📝 Log Level: {LOG_LEVEL}")
+    logger.info("=" * 80)
+    logger.info("✅ Ready to accept requests")
+    logger.info("=" * 80)
 
     app.run(host='0.0.0.0', port=port, debug=False)

@@ -7,7 +7,7 @@
 set -e  # Exit on error
 
 # Configuration
-PROJECT_ID="${CLOUD_TASKS_PROJECT_ID:-telepay-459221}"
+PROJECT_ID="${CLOUD_TASKS_PROJECT_ID:-pgp-live}"
 LOCATION="${CLOUD_TASKS_LOCATION:-us-central1}"
 
 # Retry configuration (shared across all queues)

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Add nowpayments_outcome_amount_usd column to private_channel_users_database
--- Part of: NowPayments Outcome Amount - GCWebhook1 Architecture Implementation
+-- Part of: NowPayments Outcome Amount - PGP_ORCHESTRATOR_v1 Architecture Implementation
 -- Date: 2025-11-02
 -- ============================================================================
 

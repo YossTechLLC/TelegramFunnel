@@ -5,9 +5,9 @@
 set -e  # Exit on error
 
 BASE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26"
-PROJECT_ID="telepay-459221"
+PROJECT_ID="pgp-live"
 REGION="us-central1"
-SQL_INSTANCE="telepay-459221:us-central1:telepaypsql"
+SQL_INSTANCE="pgp-live:us-central1:telepaypsql"
 
 echo "🚀 Starting deployment of config_manager.py fixes..."
 echo "📦 Services to deploy: PGP_INVITE_v1, PGP_SPLIT1_v1-3, PGP_HOSTPAY1_v1-3"

@@ -48,7 +48,7 @@ class BackfillManager:
         """Get or create SQLAlchemy engine with Cloud SQL Connector"""
         if self._engine is None:
             # Cloud SQL connection details
-            connection_name = "telepay-459221:us-central1:telepaypsql"
+            connection_name = "pgp-live:us-central1:pgp-telepaypsql"
             db_name = "client_table"
             db_user = "postgres"
             db_password = "Chigdabeast123$"

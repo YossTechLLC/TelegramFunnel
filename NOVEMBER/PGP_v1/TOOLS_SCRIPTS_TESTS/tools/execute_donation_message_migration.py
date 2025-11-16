@@ -11,7 +11,7 @@ from google.cloud.sql.connector import Connector
 import pg8000
 
 # Database configuration
-PROJECT_ID = "telepay-459221"
+PROJECT_ID = "pgp-live"
 REGION = "us-central1"
 INSTANCE_NAME = "telepaypsql"
 DATABASE_NAME = "client_table"

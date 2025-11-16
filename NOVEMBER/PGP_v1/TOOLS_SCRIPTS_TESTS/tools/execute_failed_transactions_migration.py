@@ -11,7 +11,7 @@ print("🚀 [MIGRATION] Starting failed_transactions table migration")
 print(f"⏰ [MIGRATION] Timestamp: {int(time.time())}")
 
 # Database connection details
-INSTANCE_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
+INSTANCE_CONNECTION_NAME = "pgp-live:us-central1:pgp-telepaypsql"
 DB_NAME = "client_table"
 DB_USER = "postgres"
 DB_PASSWORD = "Chigdabeast123$"

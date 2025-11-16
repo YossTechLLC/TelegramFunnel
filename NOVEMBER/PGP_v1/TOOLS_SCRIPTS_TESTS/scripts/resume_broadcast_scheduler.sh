@@ -5,7 +5,7 @@
 
 set -e
 
-PROJECT_ID="telepay-459221"
+PROJECT_ID="pgp-live"
 LOCATION="us-central1"
 JOB_NAME="broadcast-scheduler-daily"
 

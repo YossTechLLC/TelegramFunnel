@@ -15,8 +15,8 @@ from sqlalchemy import create_engine, text, pool
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Configuration
-PROJECT_ID = "telepay-459221"
-INSTANCE_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
+PROJECT_ID = "pgp-live"
+INSTANCE_CONNECTION_NAME = "pgp-live:us-central1:pgp-telepaypsql"
 DB_USER = "postgres"
 DB_NAME = "client_table"
 TEST_CHANNEL_ID = "-1003202734748"

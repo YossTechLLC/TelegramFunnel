@@ -15,7 +15,7 @@ def fetch_secret(secret_name):
     try:
         client = secretmanager.SecretManagerServiceClient()
         # Build secret path: projects/PROJECT_ID/secrets/SECRET_NAME/versions/latest
-        project_id = "telepay-459221"
+        project_id = "pgp-live"
         secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
 
         response = client.access_secret_version(request={"name": secret_path})

@@ -19,7 +19,7 @@ from google.cloud import secretmanager
 def get_secret(secret_id):
     """Fetch secret from Secret Manager"""
     client = secretmanager.SecretManagerServiceClient()
-    name = f"projects/telepay-459221/secrets/{secret_id}/versions/latest"
+    name = f"projects/pgp-live/secrets/{secret_id}/versions/latest"
     response = client.access_secret_version(request={"name": name})
     return response.payload.data.decode('UTF-8')
 

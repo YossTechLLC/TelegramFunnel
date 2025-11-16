@@ -15,7 +15,7 @@ def get_secret(project_id: str, secret_name: str) -> str:
     return response.payload.data.decode("UTF-8").strip()
 
 def main():
-    project_id = "telepay-459221"
+    project_id = "pgp-live"
 
     print("🔐 Fetching database credentials from Secret Manager...")
     try:

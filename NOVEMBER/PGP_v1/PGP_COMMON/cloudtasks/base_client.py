@@ -120,10 +120,16 @@ class BaseCloudTasksClient:
         schedule_delay_seconds: int = 0
     ) -> Optional[str]:
         """
-        Create a Cloud Task with webhook signature.
+        Create a Cloud Task with webhook signature and timestamp.
 
-        This is a convenience method that automatically adds X-Webhook-Signature
-        header using the signing_key.
+        This is a convenience method that automatically adds X-Signature and
+        X-Request-Timestamp headers using the signing_key. The timestamp is
+        included in the signature calculation to prevent replay attacks.
+
+        Security:
+        - Includes Unix timestamp in signature calculation
+        - Uses HMAC-SHA256 for signature generation
+        - Timestamp format: HMAC-SHA256(timestamp:payload)
 
         Args:
             queue_name: Name of the Cloud Tasks queue
@@ -136,22 +142,30 @@ class BaseCloudTasksClient:
         """
         import hmac
         import hashlib
+        import time
 
         try:
-            # Create HMAC signature
+            # Generate Unix timestamp (seconds since epoch)
+            timestamp = str(int(time.time()))
+
+            # Create HMAC signature including timestamp
             payload_json = json.dumps(payload)
+            message = f"{timestamp}:{payload_json}"  # Timestamp prefix prevents reordering attacks
+
             signature = hmac.new(
                 self.signing_key.encode(),
-                payload_json.encode(),
+                message.encode(),
                 hashlib.sha256
             ).hexdigest()
 
-            # Add signature to custom headers
+            # Add signature AND timestamp to custom headers
             custom_headers = {
-                "X-Webhook-Signature": signature
+                "X-Signature": signature,  # Renamed from X-Webhook-Signature for consistency
+                "X-Request-Timestamp": timestamp
             }
 
-            print(f"🔐 [CLOUD_TASKS] Added webhook signature")
+            print(f"🔐 [CLOUD_TASKS] Generated signature with timestamp: {timestamp}")
+            print(f"🔐 [CLOUD_TASKS] Signature format: HMAC-SHA256(timestamp:payload)")
 
             # Use create_task with custom headers
             return self.create_task(

@@ -12,7 +12,7 @@ import time
 
 # Configuration
 GCBROADCASTSERVICE_URL = "https://pgp_broadcastservice-10-26-291176869049.us-central1.run.app"
-CLOUD_SQL_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
+CLOUD_SQL_CONNECTION_NAME = "pgp-live:us-central1:pgp-telepaypsql"
 DATABASE_NAME = "client_table"
 DATABASE_USER = "postgres"
 DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD_SECRET', 'Chigdabeast123$')

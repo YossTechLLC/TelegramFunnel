@@ -22,7 +22,7 @@ def execute_migration():
     print("=" * 80)
 
     # Database connection parameters
-    INSTANCE_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
+    INSTANCE_CONNECTION_NAME = "pgp-live:us-central1:pgp-telepaypsql"
     DB_USER = "postgres"
     DB_PASSWORD = "Chigdabeast123$"
     DB_NAME = "client_table"

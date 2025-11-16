@@ -8,7 +8,7 @@ import pg8000
 from google.cloud.sql.connector import Connector
 
 # Database configuration
-CLOUD_SQL_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
+CLOUD_SQL_CONNECTION_NAME = "pgp-live:us-central1:pgp-telepaypsql"
 DATABASE_NAME = "client_table"
 DATABASE_USER = "postgres"
 DATABASE_PASSWORD = "Chigdabeast123$"

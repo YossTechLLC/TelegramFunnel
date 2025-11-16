@@ -9,7 +9,7 @@ echo "📋 [DEPLOY] Deployment order: Downstream → Upstream (for compatibility
 echo ""
 
 # Project and region
-PROJECT_ID="telepay-459221"
+PROJECT_ID="pgp-live"
 REGION="us-central1"
 BASE_DIR="/mnt/c/Users/YossTech/Desktop/2025/TelegramFunnel/OCTOBER/10-26"
 

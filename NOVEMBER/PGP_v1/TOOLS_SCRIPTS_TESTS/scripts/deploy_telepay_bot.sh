@@ -83,7 +83,7 @@ gcloud run deploy $SERVICE_NAME \
     --min-instances=1 \
     --max-instances=3 \
     --execution-environment=gen2 \
-    --add-cloudsql-instances=telepay-459221:us-central1:telepaypsql \
+    --add-cloudsql-instances=pgp-live:us-central1:pgp-telepaypsql \
     --set-env-vars=SUBSCRIPTION_CHECK_INTERVAL=60 \
     $SECRET_ARGS
 

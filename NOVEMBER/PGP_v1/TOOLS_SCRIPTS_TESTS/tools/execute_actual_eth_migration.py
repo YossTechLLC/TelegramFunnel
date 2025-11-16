@@ -10,7 +10,7 @@ from google.cloud.sql.connector import Connector
 import sqlalchemy
 
 # Database configuration
-INSTANCE_CONNECTION_NAME = "telepay-459221:us-central1:telepaypsql"
+INSTANCE_CONNECTION_NAME = "pgp-live:us-central1:pgp-telepaypsql"
 DB_USER = "postgres"
 DB_PASS = "Chigdabeast123$"
 DB_NAME = "client_table"

@@ -5,7 +5,7 @@
 
 set -e  # Exit on error
 
-PROJECT_ID="telepay-459221"
+PROJECT_ID="pgp-live"
 REGION="us-central1"
 SERVICE_NAME="pgp-broadcast-v1"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../PGP_BROADCAST_v1"
@@ -40,13 +40,14 @@ gcloud run deploy $SERVICE_NAME \
     --concurrency=1 \
     --set-env-vars="BROADCAST_AUTO_INTERVAL_SECRET=projects/${PROJECT_ID}/secrets/BROADCAST_AUTO_INTERVAL/versions/latest" \
     --set-env-vars="BROADCAST_MANUAL_INTERVAL_SECRET=projects/${PROJECT_ID}/secrets/BROADCAST_MANUAL_INTERVAL/versions/latest" \
-    --set-env-vars="BOT_TOKEN_SECRET=projects/${PROJECT_ID}/secrets/BOT_TOKEN/versions/latest" \
-    --set-env-vars="BOT_USERNAME_SECRET=projects/${PROJECT_ID}/secrets/BOT_USERNAME/versions/latest" \
+    --set-env-vars="BOT_TOKEN_SECRET=projects/${PROJECT_ID}/secrets/TELEGRAM_BOT_SECRET_NAME/versions/latest" \
+    --set-env-vars="BOT_USERNAME_SECRET=projects/${PROJECT_ID}/secrets/TELEGRAM_BOT_USERNAME/versions/latest" \
     --set-env-vars="JWT_SECRET_KEY_SECRET=projects/${PROJECT_ID}/secrets/JWT_SECRET_KEY/versions/latest" \
     --set-env-vars="DATABASE_HOST_SECRET=projects/${PROJECT_ID}/secrets/DATABASE_HOST/versions/latest" \
     --set-env-vars="DATABASE_NAME_SECRET=projects/${PROJECT_ID}/secrets/DATABASE_NAME/versions/latest" \
     --set-env-vars="DATABASE_USER_SECRET=projects/${PROJECT_ID}/secrets/DATABASE_USER/versions/latest" \
-    --set-env-vars="DATABASE_PASSWORD_SECRET=projects/${PROJECT_ID}/secrets/DATABASE_PASSWORD/versions/latest" \
+    --set-env-vars="DATABASE_PASSWORD_SECRET=projects/${PROJECT_ID}/secrets/DATABASE_PASSWORD_SECRET/versions/latest" \
+    --set-env-vars="CLOUD_SQL_CONNECTION_NAME_SECRET=projects/${PROJECT_ID}/secrets/CLOUD_SQL_CONNECTION_NAME/versions/latest" \
     --project=$PROJECT_ID
 
 if [ $? -eq 0 ]; then

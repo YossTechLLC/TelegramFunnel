@@ -21,10 +21,10 @@ def fetch_secret(secret_path):
 
 def get_db_connection():
     """Get database connection"""
-    host = fetch_secret("projects/telepay-459221/secrets/DATABASE_HOST_SECRET/versions/latest")
-    dbname = fetch_secret("projects/telepay-459221/secrets/DATABASE_NAME_SECRET/versions/latest")
-    user = fetch_secret("projects/telepay-459221/secrets/DATABASE_USER_SECRET/versions/latest")
-    password = fetch_secret("projects/telepay-459221/secrets/DATABASE_PASSWORD_SECRET/versions/latest")
+    host = fetch_secret("projects/pgp-live/secrets/DATABASE_HOST_SECRET/versions/latest")
+    dbname = fetch_secret("projects/pgp-live/secrets/DATABASE_NAME_SECRET/versions/latest")
+    user = fetch_secret("projects/pgp-live/secrets/DATABASE_USER_SECRET/versions/latest")
+    password = fetch_secret("projects/pgp-live/secrets/DATABASE_PASSWORD_SECRET/versions/latest")
 
     if not all([host, dbname, user, password]):
         raise RuntimeError("❌ Failed to fetch required database credentials")

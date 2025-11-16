@@ -7,14 +7,14 @@ from google.cloud import secretmanager
 def get_secret(secret_name):
     """Fetch secret from Google Secret Manager"""
     client = secretmanager.SecretManagerServiceClient()
-    name = f"projects/telepay-459221/secrets/{secret_name}/versions/latest"
+    name = f"projects/pgp-live/secrets/{secret_name}/versions/latest"
     response = client.access_secret_version(request={"name": name})
     return response.payload.data.decode('UTF-8').strip()
 
 def main():
     connector = Connector()
     conn = connector.connect(
-        "telepay-459221:us-central1:telepaypsql",
+        "pgp-live:us-central1:pgp-telepaypsql",
         "pg8000",
         user=get_secret("DATABASE_USER_SECRET"),
         password=get_secret("DATABASE_PASSWORD_SECRET"),
