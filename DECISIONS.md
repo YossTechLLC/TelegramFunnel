@@ -1,5 +1,96 @@
 # Architectural Decisions Log
 
+## 2025-11-16: PGP_SERVER_v1 Security Architecture Assessment
+
+### Decision: Document Current Security Architecture and Identify Critical Gaps
+
+**Context:**
+- Post-Phase 4B redundancy elimination (1,471 lines removed)
+- Need to understand overlap between root files and modular directories
+- Security architecture needs validation against industry best practices
+- User requested thorough analysis of overlap, security benefits, and weaknesses
+
+**Analysis Performed:**
+- Comprehensive review of all 20 critical root files
+- Mapping of relationships with /api, /bot, /models, /security, /services
+- Security architecture assessment using Context7 MCP (Flask-Security, python-telegram-bot)
+- Vulnerability identification using OWASP Top 10 framework
+- Compliance scoring against best practices
+
+**Findings:**
+
+**Overlap Rationale (Intentional Architecture):**
+1. **Bot Instance Creation (9 files)**: Background services need independent Bot instances for concurrent operations - NOT REDUNDANT
+2. **Secret Management (19 files)**: Dependency injection pattern - ConfigManager is single source of truth - NOT REDUNDANT
+3. **Database Access**: Shared ConnectionPool instance across all managers - NOT REDUNDANT
+4. **Handler Registration**: Hybrid OLD/NEW pattern during phased migration (Phase 4C planned) - TEMPORARY OVERLAP
+
+**Security Strengths:**
+- ✅ Defense-in-depth: 3-layer middleware stack (IP whitelist, HMAC, rate limiter)
+- ✅ Secret Manager integration for all credentials
+- ✅ Connection pooling prevents DoS attacks
+- ✅ SQLAlchemy prevents SQL injection
+
+**Critical Security Gaps:**
+- 🔴 No IPN signature verification (NowPayments webhook)
+- 🔴 No CSRF protection on webhook endpoints
+- 🟠 Missing security headers (CSP, X-Frame-Options, HSTS)
+- 🟠 No bot token rotation policy
+- 🟡 In-memory rate limiting (doesn't scale horizontally)
+- 🟡 No replay attack prevention
+
+**Compliance Scores:**
+- Flask-Security: 62.5% (5/8 features)
+- python-telegram-bot: 42.9% (3/7 features)
+- OWASP Top 10: 60% (6/10 risks mitigated)
+
+**Decision:**
+Maintain current hybrid architecture with the following security improvements:
+
+**Immediate (Week 1):**
+1. Implement NowPayments IPN signature verification (CRITICAL)
+2. Add Telegram webhook secret token verification (HIGH)
+
+**Short-Term (Sprint 1):**
+1. Add CSRF protection with flask-wtf
+2. Implement security headers with flask-talisman
+3. Audit for SQL injection vulnerabilities
+
+**Medium-Term (Sprint 2-3):**
+1. Add replay attack prevention (timestamp + nonce validation)
+2. Deploy Redis for distributed rate limiting
+3. Add input validation framework
+
+**Long-Term (Q1 2025):**
+1. Implement bot token rotation mechanism
+2. Complete Phase 4C migration (optional)
+3. Security penetration testing
+
+**Rationale:**
+- Current architecture is sound (intentional overlap, not redundant)
+- Security gaps are implementation details, not architectural flaws
+- Phased approach reduces risk of breaking changes
+- Critical gaps must be addressed before production scaling
+
+**Alternatives Considered:**
+- Full architectural rewrite → Rejected: Current architecture is solid, only security gaps need fixing
+- Immediate Phase 4C migration → Rejected: Security fixes are higher priority
+- Merge all Bot instances → Rejected: Would couple independent services
+
+**Consequences:**
+- **Positive**: Clear security roadmap with prioritized actions
+- **Positive**: Architectural decisions validated (overlap is intentional)
+- **Positive**: Compliance gaps identified with concrete mitigation steps
+- **Negative**: Requires additional development effort (estimated 40+ hours)
+- **Negative**: Need Redis deployment for distributed rate limiting
+
+**Documentation:**
+- Created SECURITY_AND_OVERLAP_ANALYSIS.md (730+ lines)
+- Provides complete vulnerability list, recommendations, and implementation examples
+- Includes best practices compliance matrix and security checklist
+
+---
+
 ## 2025-11-15: PGP_v1 Naming Architecture
 
 ### Decision: Complete Service Renaming to PGP_v1 Pattern
