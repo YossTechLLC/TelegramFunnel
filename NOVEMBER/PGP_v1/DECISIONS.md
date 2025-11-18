@@ -1,12 +1,239 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **Security Architecture - IAM Authentication & Service Accounts** 🔒
+**Last Updated:** 2025-01-18 - **Phase 2 Security - Load Balancer & Cloud Armor** 🌐
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-01-18: Phase 2 Security - Load Balancer & Cloud Armor Architecture 🌐
+
+**Decision:** Implement global HTTPS Load Balancer with Cloud Armor WAF protection WITHOUT VPC
+
+**Context:**
+- **Requirement:** Network-level security for external-facing Cloud Run services
+- **User Constraint:** "We are choosing NOT to use VPC" (explicit requirement)
+- **Services:** 3 external-facing services (web, NowPayments webhook, Telegram webhook)
+- **Goals:** DDoS protection, WAF, rate limiting, SSL/TLS termination
+- **Alternative Rejected:** VPC Service Controls (marked as "overkill for current scale")
+
+**Architecture Decision:**
+
+### 1. Load Balancer Type Selection
+
+**Decision:** Use Google Cloud HTTP(S) Load Balancer (Global, External, Application Load Balancer)
+
+**Rationale:**
+- **Global Availability:** Single static IP accessible worldwide (anycast routing)
+- **Cloud Armor Integration:** Required for WAF/DDoS protection
+- **SSL/TLS Termination:** Free Google-managed certificates with auto-renewal
+- **Path-Based Routing:** Route different paths to different Cloud Run services
+- **Serverless Integration:** Native integration with Cloud Run via Serverless NEGs
+
+**Alternative Considered:**
+- **Regional Load Balancer:** Lower cost but no Cloud Armor support
+  - **Rejected:** Cloud Armor is critical requirement for WAF/DDoS protection
+
+### 2. No VPC Architecture
+
+**Decision:** Deploy Load Balancer WITHOUT VPC networking components
+
+**What We're NOT Using:**
+- ❌ VPC Connector (not needed - Load Balancer connects directly to Cloud Run via Serverless NEGs)
+- ❌ VPC Service Controls (explicitly rejected as "overkill")
+- ❌ Cloud NAT (not needed - Cloud Run has dynamic egress IPs, HMAC used for authentication)
+- ❌ Shared VPC (not needed - single project architecture)
+
+**What We ARE Using:**
+- ✅ **Serverless NEGs** - Connect Load Balancer to Cloud Run without VPC
+- ✅ **Cloud Armor** - Network security at Load Balancer layer (replaces VPC-SC for our use case)
+- ✅ **IAM Authentication** - Service-to-service authentication (no VPC needed)
+- ✅ **HMAC Verification** - Application-level security (already implemented)
+
+**Rationale:**
+- **Cost Savings:** VPC Connector (~$0.30-0.50/hour = ~$216-360/month) avoided
+- **Simplicity:** No VPC management overhead
+- **Sufficient Security:** Cloud Armor + IAM + HMAC provide adequate defense in depth
+- **User Requirement:** Explicit decision to avoid VPC complexity
+
+**Alternative Considered:**
+- **VPC with Cloud NAT:** Static egress IPs for IP whitelisting
+  - **Rejected:** HMAC authentication is more secure and already implemented
+
+### 3. Path-Based Routing Strategy
+
+**Decision:** Use URL Map with path-based routing to distribute traffic to 3 services
+
+**Routing Configuration:**
+- `/` → `pgp-web-v1` (Frontend - React SPA)
+- `/webhooks/nowpayments-ipn` → `pgp-np-ipn-v1` (NowPayments IPN webhook)
+- `/webhooks/telegram` → `pgp-server-v1` (Telegram Bot webhook)
+
+**Rationale:**
+- **Single Domain:** All services accessible via single domain (e.g., paygateprime.com)
+- **Single SSL Certificate:** One certificate covers all paths (cost savings)
+- **Clear Separation:** Webhook paths clearly separated from frontend
+- **Security:** Different Cloud Armor rules can be applied per path (if needed)
+
+**Alternative Considered:**
+- **Host-Based Routing:** Separate subdomains (e.g., api.paygateprime.com, webhooks.paygateprime.com)
+  - **Rejected:** More complex DNS configuration, multiple SSL certificates needed
+
+### 4. Cloud Armor Security Policy Configuration
+
+**Decision:** Single security policy with layered rules (IP whitelist + rate limiting + WAF)
+
+**Rules Implemented:**
+
+**4.1 IP Whitelisting (Priority 1000-1100):**
+- **NowPayments IPs (Priority 1000):**
+  - `193.233.22.4/32` (Server 1)
+  - `193.233.22.5/32` (Server 2)
+  - `185.136.165.122/32` (Server 3)
+  - Source: https://nowpayments.io/help/ipn-callback-ip-addresses
+- **Telegram IPs (Priority 1100):**
+  - `149.154.160.0/20` (DC1)
+  - `91.108.4.0/22` (DC2)
+  - Source: https://core.telegram.org/bots/webhooks
+
+**4.2 Rate Limiting (Priority 2000):**
+- **Threshold:** 100 requests/minute per IP
+- **Action:** Ban for 10 minutes (HTTP 429 response)
+- **Enforcement:** Per-IP tracking
+
+**4.3 OWASP Top 10 WAF Rules (Priority 3000-3900):**
+- SQL Injection (SQLi) - Priority 3000
+- Cross-Site Scripting (XSS) - Priority 3100
+- Local File Inclusion (LFI) - Priority 3200
+- Remote Code Execution (RCE) - Priority 3300
+- Remote File Inclusion (RFI) - Priority 3400
+- Method Enforcement - Priority 3500
+- Scanner Detection - Priority 3600
+- Protocol Attack - Priority 3700
+- PHP Injection - Priority 3800
+- Session Fixation - Priority 3900
+
+**4.4 Adaptive Protection:**
+- **ML-Based DDoS Detection:** Enabled (if available in project)
+- **Layer 7 DDoS Defense:** Automatic detection and mitigation
+
+**4.5 Default Rule:**
+- **Action:** ALLOW (specific denies via WAF rules above)
+- **Rationale:** WAF rules deny specific attack patterns, legitimate traffic allowed
+
+**Rationale:**
+- **Defense in Depth:** Multiple security layers (IP whitelist → rate limit → WAF → IAM → HMAC)
+- **PCI DSS Compliance:** WAF rules required for payment processing
+- **DDoS Protection:** Rate limiting + Adaptive Protection
+- **IP Whitelist as Backup:** HMAC is primary authentication, IP whitelist is secondary
+
+**Alternative Considered:**
+- **Default Deny:** Block all traffic except whitelisted IPs
+  - **Rejected:** Too restrictive for frontend (pgp-web-v1 needs public access)
+
+### 5. SSL/TLS Certificate Strategy
+
+**Decision:** Use Google-managed SSL certificates (FREE, automatic renewal)
+
+**Rationale:**
+- **Cost:** FREE (vs $50-300/year for commercial certificates)
+- **Automatic Renewal:** No manual intervention required (30 days before expiration)
+- **Simplicity:** No private key management
+- **Reliability:** Google handles certificate lifecycle
+
+**Limitations Accepted:**
+- **Provisioning Time:** 10-60 minutes (DNS verification required)
+- **Domain Validation Only:** No EV or OV certificates (acceptable for our use case)
+- **No Wildcard Support:** Must specify exact domains (acceptable - we know our domains)
+
+**Alternative Considered:**
+- **Self-Managed Certificates (Let's Encrypt):** FREE but requires manual renewal
+  - **Rejected:** Google-managed is simpler and equally secure
+
+### 6. Serverless NEG Configuration
+
+**Decision:** Create 3 Serverless NEGs (one per Cloud Run service) in us-central1 region
+
+**NEG Configuration:**
+- **Type:** SERVERLESS (for Cloud Run)
+- **Region:** us-central1 (must match Cloud Run service region)
+- **Binding:** One NEG per Cloud Run service
+
+**Rationale:**
+- **Automatic Scaling:** NEGs automatically update when Cloud Run scales
+- **Regional Deployment:** No global replication needed (all users route to us-central1)
+- **Simplicity:** Direct Cloud Run integration without VPC
+
+**Alternative Considered:**
+- **Multi-Region Deployment:** NEGs in multiple regions for lower latency
+  - **Deferred:** Single region sufficient for current scale, can add later
+
+### 7. Cloud Run Ingress Restriction
+
+**Decision:** Update Cloud Run services to `--ingress=internal-and-cloud-load-balancing`
+
+**Impact:**
+- **Before:** Cloud Run services publicly accessible (vulnerable)
+- **After:** Cloud Run services ONLY accessible via Load Balancer
+
+**Rationale:**
+- **Security:** Prevents direct access to Cloud Run URLs
+- **Enforcement:** All traffic must go through Load Balancer → Cloud Armor → Cloud Run
+- **Defense in Depth:** Even if Load Balancer is bypassed, Cloud Run denies direct traffic
+
+**Alternative Considered:**
+- **Keep Public Access:** Rely on HMAC only
+  - **Rejected:** Violates defense-in-depth principle
+
+### 8. Cost Optimization Decisions
+
+**Decision:** Use Cloud Armor "Smart" pricing tier (not "Standard")
+
+**Cost Breakdown:**
+- **Load Balancer Forwarding Rule:** $18/month (fixed)
+- **Data Processing:** $0.008-0.016/GB (traffic-dependent)
+- **Cloud Armor Rules:** $1/month per rule after first 5 FREE (we have 15 = $10/month)
+- **Cloud Armor Requests:** $0.75 per 1M after first 1M FREE
+- **SSL Certificate:** FREE (Google-managed)
+- **Total Estimated:** ~$60-200/month
+
+**Cost Savings vs VPC Approach:**
+- **VPC Connector:** ~$216-360/month SAVED
+- **Cloud NAT:** ~$0/month (not needed)
+- **Total Savings:** ~$216-360/month
+
+**Rationale:**
+- **ROI:** Cloud Armor provides better security than VPC alone
+- **Scalability:** Costs scale with traffic (pay for what you use)
+- **Predictability:** Base cost ($28/month) is fixed
+
+### 9. Logging and Monitoring Strategy
+
+**Decision:** Enable verbose logging in Cloud Armor, use Cloud Logging for monitoring
+
+**Logging Configuration:**
+- **Log Level:** VERBOSE (all security events logged)
+- **Destination:** Cloud Logging (http_load_balancer resource)
+- **Retention:** Default (30 days)
+
+**Monitoring Approach:**
+- **Blocked Requests:** Monitor Cloud Armor deny events
+- **Rate Limiting:** Track HTTP 429 responses
+- **WAF Triggers:** Track OWASP rule matches
+- **Alerting:** Manual setup post-deployment (optional)
+
+**Rationale:**
+- **Security Visibility:** All attacks logged and visible
+- **Incident Response:** Logs available for forensic analysis
+- **Compliance:** PCI DSS requires logging of security events
+
+**Alternative Considered:**
+- **Sampling (10%):** Reduce logging costs
+  - **Rejected:** Security events should always be logged (compliance requirement)
+
+---
 
 ## 2025-01-18: Security Architecture - IAM Authentication & Defense in Depth 🔒
 
@@ -2212,4 +2439,104 @@ return hmac.compare_digest(expected_signature, provided_signature)
 - Code review should flag duplicate functionality
 
 ---
+
+
+## 2025-11-18: Database Security Hardening Decisions
+
+### SSL/TLS Enforcement Mode
+**Decision**: Use `ENCRYPTED_ONLY` mode (not mutual TLS)
+**Rationale**:
+- Enforces SSL/TLS encryption without requiring client certificates
+- Best for Cloud SQL Python Connector + Cloud Run architecture
+- Simpler deployment and maintenance than mutual TLS
+- Sufficient for PCI-DSS compliance
+
+**Alternative Considered**: `TRUSTED_CLIENT_CERTIFICATE_REQUIRED` (mutual TLS)
+- ❌ Requires certificate management for all 17 services
+- ❌ More complex deployment
+- ❌ Not required for current compliance level
+
+### Encryption at Rest Strategy
+**Decision**: Use default Google-managed AES-256 encryption
+**Rationale**:
+- ✅ Already enabled by default on Cloud SQL
+- ✅ Automatic key rotation by Google
+- ✅ No additional cost
+- ✅ Sufficient for PCI-DSS, GDPR, SOC 2 compliance
+- ✅ No management overhead
+
+**Alternative Considered**: CMEK (Customer-Managed Encryption Keys)
+- ❌ Not required by current compliance needs
+- ❌ Additional complexity and cost ($0.06/key/month)
+- ❌ Requires database migration (cannot add to existing instance)
+- ❌ Risk of data loss if key destroyed
+
+### Backup Retention Policy
+**Decision**: 30 days backup retention + 7 days PITR
+**Rationale**:
+- ✅ Meets compliance requirements (PCI-DSS, GDPR)
+- ✅ Allows recovery from most incidents
+- ✅ Reasonable storage costs (~10% overhead)
+- ✅ 7-day PITR enables recovery from data corruption
+
+**RTO/RPO Targets**:
+- RTO (Recovery Time Objective): 1 hour
+- RPO (Recovery Point Objective): 5 minutes (via PITR)
+
+### Cross-Region Replica Decision
+**Decision**: NO cross-region replica initially
+**Rationale**:
+- ✅ PITR and automated backups provide sufficient DR capability
+- ✅ 30-day backup retention reduces data loss risk
+- ❌ Additional cost ($200-500/month) not justified yet
+- ✅ Can add later if business requires <1 hour RTO
+
+**Reconsider If**:
+- Business requires RTO < 1 hour
+- Need active-active or active-standby setup
+- Geographic redundancy becomes critical
+
+### Audit Logging Strategy
+**Decision**: Phased rollout (DDL first, then DML)
+**Rationale**:
+- ✅ DDL logging has minimal performance impact (~2-5%)
+- ✅ Allows testing before full DML logging
+- ✅ Reduces initial log volume and storage costs
+- ✅ Can expand to full logging after performance validation
+
+**Monitoring Period**: 1 week between phases
+**Performance Threshold**: <10% overhead acceptable
+
+### VPC/Private IP Decision
+**Decision**: **NOT IMPLEMENTING** - VPC not being used
+**Rationale**:
+- ❌ VPC-SC breaks Cloud Scheduler and external APIs (ChangeNow, NowPayments)
+- ✅ IAM + HMAC + Cloud Armor provide sufficient security
+- ✅ SSL/TLS encryption protects data in transit
+- ✅ Authorized networks can limit IP access if needed
+
+**Alternative Security Measures**:
+- SSL/TLS encryption enforced (Phase 2)
+- Audit logging enabled (Phase 3)
+- Cloud Armor for DDoS protection
+- IAM-based access control
+- HMAC authentication for webhooks
+
+### Secret Rotation Schedule
+**Decision**: 90-day rotation cycle
+**Rationale**:
+- ✅ Meets compliance requirements (PCI-DSS recommends 90 days)
+- ✅ Balances security with operational overhead
+- ✅ Leverages hot-reload capability (no service restart needed)
+- ✅ Automated via Cloud Function + Cloud Scheduler
+
+**Implementation**: Automated rotation with rollback mechanism
+
+### Storage Auto-Increase Configuration
+**Decision**: Enable with 500GB limit
+**Rationale**:
+- ✅ Prevents disk full from transaction logs and audit logs
+- ✅ 500GB limit prevents runaway costs
+- ✅ Alert at 80% usage for capacity planning
+- ✅ Required for PITR (transaction logs can grow quickly)
 

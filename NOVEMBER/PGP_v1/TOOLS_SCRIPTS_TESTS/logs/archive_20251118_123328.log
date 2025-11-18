@@ -1,0 +1,92 @@
+[2025-11-18 12:33:28] === CATEGORY 1: GC_ Naming Reference Files ===
+[2025-11-18 12:33:28] ✅ Archived: migrations/003_rename_gcwebhook1_columns.sql
+[2025-11-18 12:33:28] ✅ Archived: migrations/003_rollback.sql
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_gcsplit_tasks_queues.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_gcwebhook_tasks_queues.sh
+[2025-11-18 12:33:28] === CATEGORY 2: Old Deployment Scripts ===
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_backend_api.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_broadcast_scheduler.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_frontend.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_message_tracking_migration.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_notification_feature.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_np_webhook.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_telepay_bot.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_accumulator_tasks_queues.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_actual_eth_fix.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_config_fixes.sh
+[2025-11-18 12:33:28] ✅ Archived: scripts/deploy_hostpay_tasks_queues.sh
+[2025-11-18 12:33:28] === CATEGORY 3: Old Task Queue Scripts ===
+[2025-11-18 12:33:28] ✅ Archived: scripts/pause_broadcast_scheduler.sh
+[2025-11-18 12:33:29] ✅ Archived: scripts/resume_broadcast_scheduler.sh
+[2025-11-18 12:33:29] === CATEGORY 4: Old SQL Migration Scripts ===
+[2025-11-18 12:33:29] ✅ Archived: scripts/add_actual_eth_amount_columns.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/add_actual_eth_to_split_payout_que.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/add_donation_message_column.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/add_message_tracking_columns.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/add_notification_columns.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/add_nowpayments_outcome_usd_column.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/create_batch_conversions_table.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/create_broadcast_manager_table.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/create_donation_keypad_state_table.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/create_failed_transactions_table.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/rollback_actual_eth_amount_columns.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/rollback_broadcast_manager_table.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/rollback_donation_message_column.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/rollback_message_tracking_columns.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/rollback_notification_columns.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/fix_numeric_precision_overflow.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/fix_numeric_precision_overflow_v2.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/fix_split_payout_hostpay_unique_id_length.sql
+[2025-11-18 12:33:29] ✅ Archived: scripts/verify_broadcast_integrity.sql
+[2025-11-18 12:33:29] === CATEGORY 5: Old Migration Execution Tools ===
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_actual_eth_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_actual_eth_que_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_broadcast_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_conversation_state_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_donation_keypad_state_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_donation_message_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_failed_transactions_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_landing_page_schema_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_message_tracking_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_migrations.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_notification_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_outcome_usd_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_payment_id_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_price_amount_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_processed_payments_migration.py
+[2025-11-18 12:33:29] ✅ Archived: tools/execute_unique_id_migration.py
+[2025-11-18 12:33:29] === CATEGORY 6: Old Broadcast/Notification Tools ===
+[2025-11-18 12:33:29] ✅ Archived: tools/backfill_missing_broadcast_entries.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_broadcast_manager_table.py
+[2025-11-18 12:33:29] ✅ Archived: tools/populate_broadcast_manager.py
+[2025-11-18 12:33:29] ✅ Archived: tools/test_fetch_due_broadcasts.py
+[2025-11-18 12:33:29] ✅ Archived: tools/test_manual_broadcast_message_tracking.py
+[2025-11-18 12:33:29] ✅ Archived: tools/test_notification_flow.py
+[2025-11-18 12:33:29] ✅ Archived: scripts/run_notification_test.sh
+[2025-11-18 12:33:29] === CATEGORY 7: Old Schema Validation Tools ===
+[2025-11-18 12:33:29] ✅ Archived: tools/check_client_table_db.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_conversion_status_schema.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_migration_002.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_payment_amounts.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_payout_details.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_payout_schema.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_schema.py
+[2025-11-18 12:33:29] ✅ Archived: tools/check_schema_details.py
+[2025-11-18 12:33:29] ✅ Archived: tools/fix_payout_accumulation_schema.py
+[2025-11-18 12:33:29] ✅ Archived: tools/run_migration_002_email_change.py
+[2025-11-18 12:33:29] ✅ Archived: tools/run_migration_unique_constraints.py
+[2025-11-18 12:33:29] === CATEGORY 8: Old Test Scripts ===
+[2025-11-18 12:33:29] ✅ Archived: tools/test_batch_query.py
+[2025-11-18 12:33:29] ✅ Archived: tools/test_changenow_precision.py
+[2025-11-18 12:33:29] ✅ Archived: tools/test_idempotency_constraint.py
+[2025-11-18 12:33:29] ✅ Archived: tools/test_payout_database_methods.py
+[2025-11-18 12:33:29] ✅ Archived: tools/verify_batch_success.py
+[2025-11-18 12:33:29] ✅ Archived: tools/verify_package.py
+[2025-11-18 12:33:29] ✅ Archived: tests/test_error_classifier.py
+[2025-11-18 12:33:29] ✅ Archived: tests/test_subscription_integration.py
+[2025-11-18 12:33:29] ✅ Archived: tests/test_subscription_load.py
+[2025-11-18 12:33:30] ✅ Archived: tests/test_token_manager_retry.py
+[2025-11-18 12:33:30] === CATEGORY 9: Miscellaneous Utility Scripts ===
+[2025-11-18 12:33:30] ✅ Archived: scripts/set_max_tokens.sh
+[2025-11-18 12:33:30] ✅ Archived: scripts/fix_secret_newlines.sh
+[2025-11-18 12:33:30] Archive operation completed successfully

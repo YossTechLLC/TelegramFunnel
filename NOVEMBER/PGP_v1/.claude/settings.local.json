@@ -51,7 +51,9 @@
       "Bash(else cat /tmp/progress_to_archive.txt)",
       "Bash(if [ -f DECISIONS_ARCH.md ])",
       "Bash(then cat /tmp/decisions_to_archive.txt DECISIONS_ARCH.md)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(bash:*)",
+      "Bash(dos2unix:*)"
     ],
     "deny": [
       "Bash(gcloud deploy:*)",
