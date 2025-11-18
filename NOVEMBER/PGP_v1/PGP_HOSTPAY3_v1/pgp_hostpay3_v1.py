@@ -193,10 +193,10 @@ def execute_eth_payment():
             logger.info(f"📋 [ENDPOINT] Context: {context}")
             logger.debug(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
             logger.debug(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
-            print(f"💰 [ENDPOINT] Currency: {from_currency.upper()}")  # ✅ SHOW CURRENCY TYPE
+            logger.info(f"💰 [ENDPOINT] Currency: {from_currency.upper()}")
             logger.info(f"💎 [ENDPOINT] ACTUAL: {actual_eth_amount} {from_currency.upper()} (from NowPayments)")
             logger.debug(f"📊 [ENDPOINT] ESTIMATED: {estimated_eth_amount} {from_currency.upper()} (from ChangeNow)")
-            print(f"💰 [ENDPOINT] PAYMENT AMOUNT: {payment_amount} {from_currency.upper()}")  # ✅ DYNAMIC CURRENCY
+            logger.info(f"💰 [ENDPOINT] PAYMENT AMOUNT: {payment_amount} {from_currency.upper()}")
             logger.info(f"🏦 [ENDPOINT] Payin Address: {payin_address}")
             if last_error_code:
                 logger.warning(f"⚠️ [ENDPOINT] Previous error: {last_error_code}")

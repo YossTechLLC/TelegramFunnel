@@ -171,8 +171,8 @@ def build_hostpay_token(
         logger.info(f"✅ [HOSTPAY_TOKEN] Token generated successfully ({len(token)} chars)")
         logger.debug(f"🆔 [HOSTPAY_TOKEN] Unique ID: {unique_id}")
         logger.debug(f"🆔 [HOSTPAY_TOKEN] CN API ID: {cn_api_id}")
-        print(f"💰 [HOSTPAY_TOKEN] ACTUAL amount: {actual_eth_amount} {from_currency.upper()}")       # ✅ LOG ACTUAL
-        print(f"💰 [HOSTPAY_TOKEN] ESTIMATED amount: {estimated_eth_amount} {from_currency.upper()}") # ✅ LOG ESTIMATED
+        logger.info(f"💰 [HOSTPAY_TOKEN] ACTUAL amount: {actual_eth_amount} {from_currency.upper()}")       # ✅ LOG ACTUAL
+        logger.info(f"💰 [HOSTPAY_TOKEN] ESTIMATED amount: {estimated_eth_amount} {from_currency.upper()}") # ✅ LOG ESTIMATED
 
         return token
 
@@ -303,8 +303,8 @@ def initial_webhook():
         logger.info(f"🏢 [ENDPOINT_1] Channel ID: {closed_channel_id}")
         logger.info(f"💰 [ENDPOINT_1] Subscription Price: ${subscription_price}")
         logger.info(f"💎 [ENDPOINT_1] ACTUAL ETH Amount (NowPayments): {actual_eth_amount}")
-        print(f"🎯 [ENDPOINT_1] Payout Mode: {payout_mode}")  # ✅ NEW LOG
-        print(f"💱 [ENDPOINT_1] Swap Currency: {swap_currency}")  # ✅ NEW LOG
+        logger.info(f"🎯 [ENDPOINT_1] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+        logger.info(f"💱 [ENDPOINT_1] Swap Currency: {swap_currency}")  # ✅ NEW LOG
         logger.info(f"🏦 [ENDPOINT_1] Target: {wallet_address} ({payout_currency.upper()} on {payout_network.upper()})")
 
         # ✅ ADDED: Validation warning if actual_eth_amount is missing/zero
@@ -466,10 +466,10 @@ def receive_usdt_eth_estimate():
         payout_mode = decrypted_data.get('payout_mode', 'instant')  # ✅ NEW: Extract payout_mode
 
         logger.info(f"👤 [ENDPOINT_2] User ID: {user_id}")
-        print(f"💱 [ENDPOINT_2] Swap Currency: {swap_currency}")  # ✅ NEW LOG
-        print(f"🎯 [ENDPOINT_2] Payout Mode: {payout_mode}")  # ✅ NEW LOG
-        print(f"💰 [ENDPOINT_2] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
-        print(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_post_fee} {payout_currency.upper()}")  # ✅ FIXED
+        logger.info(f"💱 [ENDPOINT_2] Swap Currency: {swap_currency}")  # ✅ NEW LOG
+        logger.info(f"🎯 [ENDPOINT_2] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+        logger.info(f"💰 [ENDPOINT_2] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
+        logger.info(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_post_fee} {payout_currency.upper()}")  # ✅ FIXED
         logger.info(f"💎 [ENDPOINT_2] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
 
         # Calculate pure market conversion
@@ -689,15 +689,12 @@ def receive_eth_client_swap():
         existing_record = database_manager.check_split_payout_que_by_cn_api_id(cn_api_id)
 
         if existing_record:
-            print(f"=" * 80)
             logger.info(f"🛡️ [ENDPOINT_3] IDEMPOTENT REQUEST DETECTED")
-            print(f"=" * 80)
             logger.info(f"✅ [ENDPOINT_3] ChangeNow transaction already processed: {cn_api_id}")
             logger.debug(f"🆔 [ENDPOINT_3] Linked unique_id: {existing_record['unique_id']}")
             logger.info(f"🕒 [ENDPOINT_3] Original insertion: {existing_record['created_at']}")
             logger.info(f"🔄 [ENDPOINT_3] This is likely a Cloud Tasks retry")
             logger.info(f"✅ [ENDPOINT_3] Returning success to prevent retry loop")
-            print(f"=" * 80)
 
             # Return 200 OK to prevent Cloud Tasks from retrying
             return jsonify({

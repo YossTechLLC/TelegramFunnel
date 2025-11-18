@@ -53,7 +53,6 @@ logger.info(f"✅ [CORS] Configured for /api/* routes (backward compatibility)")
 logger.info(f"   NOTE: Main flow (GET /payment-processing) uses same-origin, no CORS needed")
 logger.info(f"   Allowed origins: storage.googleapis.com, www.paygateprime.com, localhost")
 logger.info(f"   IPN endpoint (POST /) remains protected (no CORS)")
-print(f"")
 
 # ============================================================================
 # CONFIGURATION AND INITIALIZATION
@@ -62,7 +61,6 @@ print(f"")
 logger.info(f"🚀 [APP] Initializing PGP_NP_IPN_v1 - NowPayments IPN Handler")
 logger.info(f"📋 [APP] This service processes IPN callbacks from NowPayments")
 logger.info(f"🔐 [APP] Verifies signatures and updates database with payment_id")
-print(f"")
 
 # Fetch required secrets from environment (mounted by Cloud Run)
 logger.info(f"⚙️ [CONFIG] Loading configuration from Secret Manager...")
@@ -81,7 +79,6 @@ DATABASE_NAME = (os.getenv('DATABASE_NAME_SECRET') or '').strip() or None
 DATABASE_USER = (os.getenv('DATABASE_USER_SECRET') or '').strip() or None
 DATABASE_PASSWORD = (os.getenv('DATABASE_PASSWORD_SECRET') or '').strip() or None
 
-print(f"")
 logger.debug(f"📊 [CONFIG] Database Configuration Status:")
 logger.error(f"   CLOUD_SQL_CONNECTION_NAME: {'✅ Loaded' if CLOUD_SQL_CONNECTION_NAME else '❌ Missing'}")
 logger.error(f"   DATABASE_NAME_SECRET: {'✅ Loaded' if DATABASE_NAME else '❌ Missing'}")
@@ -89,7 +86,6 @@ logger.error(f"   DATABASE_USER_SECRET: {'✅ Loaded' if DATABASE_USER else '❌
 logger.error(f"   DATABASE_PASSWORD_SECRET: {'✅ Loaded' if DATABASE_PASSWORD else '❌ Missing'}")
 
 if not all([CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD]):
-    print(f"")
     logger.error(f"❌ [CONFIG] CRITICAL: Missing database credentials!")
     logger.warning(f"⚠️ [CONFIG] Service will not be able to update payment_id in database")
     logger.warning(f"⚠️ [CONFIG] Required secrets:")
@@ -102,10 +98,7 @@ else:
     logger.info(f"🗄️ [CONFIG] Database: {DATABASE_NAME}")
     logger.info(f"🔗 [CONFIG] Instance: {CLOUD_SQL_CONNECTION_NAME}")
 
-print(f"")
 logger.info(f"🎯 [APP] Initialization complete - Ready to process IPN callbacks")
-print(f"=" * 80)
-print(f"")
 
 # Initialize Cloud SQL Connector
 connector = None
@@ -122,7 +115,6 @@ else:
 # CLOUD TASKS INITIALIZATION
 # ============================================================================
 
-print(f"")
 logger.info(f"⚙️ [CONFIG] Loading Cloud Tasks configuration...")
 
 # Cloud Tasks configuration for triggering PGP Orchestrator
@@ -154,7 +146,6 @@ else:
     logger.warning(f"⚠️ [CLOUDTASKS] Skipping initialization - missing configuration")
     logger.warning(f"⚠️ [CLOUDTASKS] PGP_ORCHESTRATOR_v1 will NOT be triggered after IPN validation!")
 
-print(f"")
 
 # ============================================================================
 # CRYPTO PRICING CLIENT INITIALIZATION
@@ -163,7 +154,6 @@ print(f"")
 pricing_client = CryptoPricingClient()
 logger.info(f"✅ [PRICING] CryptoPricingClient initialized")
 logger.info(f"💰 [PRICING] Supports both uppercase and lowercase crypto symbols")
-print(f"")
 
 # ============================================================================
 # DATABASE MANAGER INITIALIZATION
@@ -186,7 +176,6 @@ if all([CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWO
 else:
     logger.warning(f"⚠️ [DATABASE] Skipping DatabaseManager initialization - missing credentials")
 
-print(f"")
 
 # ============================================================================
 # DATABASE FUNCTIONS - MOVED TO database_manager.py
@@ -226,8 +215,6 @@ def handle_ipn():
     Handle IPN callback from NowPayments.
     Verifies signature and updates database with payment_id.
     """
-    print(f"")
-    print(f"=" * 80)
     logger.info(f"📬 [IPN] Received callback from NowPayments")
     logger.info(f"🌐 [IPN] Source IP: {request.remote_addr}")
     logger.info(f"⏰ [IPN] Timestamp: {request.headers.get('Date', 'N/A')}")
@@ -252,7 +239,6 @@ def handle_ipn():
 
     if not verify_sha512_signature(payload, signature, NOWPAYMENTS_IPN_SECRET):
         logger.error(f"❌ [IPN] Signature verification failed - rejecting request")
-        print(f"=" * 80)
         abort(403, "Invalid signature")
 
     logger.info(f"✅ [IPN] Signature verified successfully")
@@ -260,7 +246,6 @@ def handle_ipn():
     # Parse JSON payload
     try:
         ipn_data = request.get_json()
-        print(f"")
         logger.info(f"📋 [IPN] Payment Data Received:")
         logger.info(f"   Payment ID: {ipn_data.get('payment_id', 'N/A')}")
         logger.info(f"   Order ID: {ipn_data.get('order_id', 'N/A')}")
@@ -272,7 +257,6 @@ def handle_ipn():
 
     except Exception as e:
         logger.error(f"❌ [IPN] Failed to parse JSON payload: {e}", exc_info=True)
-        print(f"=" * 80)
         abort(400, "Invalid JSON payload")
 
     # ============================================================================
@@ -287,16 +271,13 @@ def handle_ipn():
     logger.info(f"✅ [IPN] Allowed statuses: {ALLOWED_PAYMENT_STATUSES}")
 
     if payment_status not in ALLOWED_PAYMENT_STATUSES:
-        print(f"=" * 80)
         logger.info(f"⏸️ [IPN] PAYMENT STATUS NOT READY FOR PROCESSING")
-        print(f"=" * 80)
         logger.debug(f"📊 [IPN] Current status: '{payment_status}'")
         logger.info(f"⏳ [IPN] Waiting for status: 'finished'")
         logger.info(f"💳 [IPN] Payment ID: {ipn_data.get('payment_id')}")
         logger.info(f"💰 [IPN] Amount: {ipn_data.get('price_amount')} {ipn_data.get('price_currency')}")
         logger.info(f"📝 [IPN] Action: Acknowledged but not processed")
         logger.info(f"🔄 [IPN] NowPayments will send another IPN when status becomes 'finished'")
-        print(f"=" * 80)
 
         # Return 200 OK to acknowledge receipt to NowPayments
         # But DO NOT trigger PGP_ORCHESTRATOR_v1 or any downstream processing
@@ -309,20 +290,16 @@ def handle_ipn():
         }), 200
 
     # If we reach here, payment_status is 'finished' - proceed with processing
-    print(f"=" * 80)
     logger.info(f"✅ [IPN] PAYMENT STATUS VALIDATED: '{payment_status}'")
     logger.info(f"✅ [IPN] Proceeding with payment processing")
-    print(f"=" * 80)
 
     # Extract required fields
     order_id = ipn_data.get('order_id')
     if not order_id:
         logger.error(f"❌ [IPN] Missing order_id in payload")
-        print(f"=" * 80)
         abort(400, "Missing order_id")
 
     # Update database with payment data
-    print(f"")
     logger.info(f"🗄️ [DATABASE] Updating database with payment data...")
 
     payment_data = {
@@ -349,17 +326,13 @@ def handle_ipn():
     success = db_manager.update_payment_data(order_id, payment_data) if db_manager else False
 
     if not success:
-        print(f"")
         logger.warning(f"⚠️ [IPN] Database update failed")
         logger.info(f"🔄 [IPN] Returning 500 - NowPayments will retry")
-        print(f"=" * 80)
-        print(f"")
         abort(500, "Database update failed")
 
     # ============================================================================
     # NEW: Calculate Outcome Amount in USD using CoinGecko
     # ============================================================================
-    print(f"")
     logger.info(f"💱 [CONVERSION] Calculating USD value of outcome amount...")
 
     outcome_amount = payment_data.get('outcome_amount')
@@ -452,7 +425,6 @@ def handle_ipn():
 
                         nowpayments_payment_id = payment_data['payment_id']
 
-                        print(f"")
                         logger.debug(f"🔍 [IDEMPOTENCY] Checking if payment {nowpayments_payment_id} already processed...")
 
                         try:
@@ -484,8 +456,6 @@ def handle_ipn():
 
                                     # Already processed - return success without re-enqueueing
                                     logger.info(f"✅ [IPN] IPN acknowledged (payment already handled)")
-                                    print(f"=" * 80)
-                                    print(f"")
                                     return jsonify({
                                         "status": "success",
                                         "message": "IPN processed (already handled)",
@@ -530,7 +500,6 @@ def handle_ipn():
                             traceback.print_exc()
                             logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
 
-                        print(f"")
                         logger.info(f"🚀 [ORCHESTRATION] Proceeding to enqueue payment to PGP_ORCHESTRATOR_v1...")
 
                         # ============================================================================
@@ -543,7 +512,6 @@ def handle_ipn():
                             subscription_time_days = sub_data[3]
                             subscription_price = str(sub_data[4])  # Ensure string type
 
-                            print(f"")
                             logger.info(f"🚀 [ORCHESTRATION] Triggering PGP Orchestrator for payment processing...")
 
                             if not cloudtasks_client:
@@ -577,7 +545,6 @@ def handle_ipn():
 
                                         # 🆕 Trigger notification service via PGP_NOTIFICATIONS (PGP_NOTIFICATIONS_REFACTORING_ARCHITECTURE)
                                         try:
-                                            print(f"")
                                             logger.info(f"📬 [NOTIFICATION] Triggering payment notification...")
 
                                             if GCNOTIFICATIONSERVICE_URL:
@@ -681,7 +648,6 @@ def handle_ipn():
                                             import traceback
                                             traceback.print_exc()
 
-                                        print(f"")
 
                                     else:
                                         logger.error(f"❌ [ORCHESTRATION] Failed to enqueue to PGP_ORCHESTRATOR_v1", exc_info=True)
@@ -699,11 +665,8 @@ def handle_ipn():
             import traceback
             traceback.print_exc()
 
-    print(f"")
     logger.info(f"✅ [IPN] IPN processed successfully")
     logger.info(f"🎯 [IPN] payment_id {payment_data['payment_id']} stored in database")
-    print(f"=" * 80)
-    print(f"")
     return jsonify({"status": "success", "message": "IPN processed"}), 200
 
 
@@ -730,10 +693,7 @@ def payment_status_api():
             }
         }
     """
-    print(f"")
-    print(f"=" * 80)
     logger.info(f"📡 [API] Payment Status Request Received")
-    print(f"=" * 80)
 
     # Get order_id from query parameters
     order_id = request.args.get('order_id')

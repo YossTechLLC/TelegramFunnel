@@ -1,12 +1,142 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **Security Fixes Service Integration** 🔒
+**Last Updated:** 2025-11-18 - **Security Audit Session 4: C-01, C-02, C-05 Implementation** 🔒
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-18: Security Audit Implementation - Session 4: Remaining Vulnerabilities 🔒
+
+### Decision 10.1: Wallet Validation Library Choice (C-01)
+**Context:** Need to validate Ethereum and Bitcoin wallet addresses to prevent fund theft
+**Decision:** Use web3.py + python-bitcoinlib instead of custom regex validation
+**Implementation:**
+- web3.py: Ethereum address validation with EIP-55 checksum verification
+- python-bitcoinlib: Bitcoin address validation with Base58Check/Bech32 support
+- Graceful degradation: Basic validation if libraries unavailable
+**Rationale:**
+- web3.py is industry standard for Ethereum (used by major projects)
+- Handles EIP-55 checksum automatically (prevents case-sensitivity errors)
+- python-bitcoinlib supports all Bitcoin address formats (legacy, script, SegWit)
+- Better than regex: Checksum validation catches typos, prevents fund loss
+- Container size impact: ~15MB (acceptable for security benefit)
+**Trade-offs:**
+- ✅ Security: Industry-standard validation vs custom regex
+- ✅ Maintainability: Library updates vs manual regex updates
+- ⚠️ Dependencies: Two new packages vs zero dependencies
+- ⚠️ Container size: +15MB vs +0MB
+**References:** EIP-55, Bitcoin BIP-173 (Bech32)
+
+### Decision 10.2: Nonce Generation Strategy (C-02)
+**Context:** Need unique nonces for replay attack prevention
+**Decision:** Use SHA256(payload + timestamp + secret) instead of UUID or random nonce
+**Implementation:**
+- Nonce = SHA256(json_payload + iso_timestamp + shared_secret)
+- Deterministic: Same request generates same nonce
+- Stored in Redis with TTL matching signature validity window
+**Rationale:**
+- Deterministic nonces allow idempotent retries (network failures)
+- SHA256 ensures uniqueness (collision probability: 2^-256)
+- Including secret prevents attackers from pre-generating valid nonces
+- TTL matches signature window (300s default) - auto-cleanup
+**Alternative Rejected:**
+- UUID: Not deterministic, can't detect legitimate retries vs replays
+- Random: Same problem as UUID
+- Timestamp only: Not unique enough, collisions likely
+**References:** OWASP Authentication Cheat Sheet
+
+### Decision 10.3: Redis Infrastructure Choice (C-02)
+**Context:** Need distributed nonce storage for replay attack prevention
+**Decision:** Use Google Cloud Memorystore (managed Redis) instead of self-hosted
+**Implementation:**
+- Cloud Memorystore Basic Tier (M1, 1GB memory)
+- VPC-native connection from Cloud Run services
+- Connection details stored in Secret Manager
+- Estimated cost: ~$50/month
+**Rationale:**
+- Managed service: No Redis maintenance/patching overhead
+- VPC-native: Low latency (<5ms), secure internal network
+- High availability: Automatic failover in Standard tier (future upgrade)
+- Backups: Automated daily backups included
+- Monitoring: Built-in Cloud Monitoring integration
+**Alternative Rejected:**
+- Self-hosted Redis in Cloud Run: More complex, no HA, manual backups
+- Cloud Run with Redis: Ephemeral storage, data loss on restarts
+- Firebase: Not suitable for nonce tracking (wrong use case)
+**Cost Justification:** $50/month << cost of one successful replay attack
+**References:** Google Cloud Memorystore best practices
+
+### Decision 10.4: Redis Client Singleton Pattern (C-02)
+**Context:** Multiple services need Redis connections for nonce tracking
+**Decision:** Use singleton pattern with `get_nonce_tracker()` global function
+**Implementation:**
+- Global `_nonce_tracker` variable (module-level)
+- Lazy initialization on first access
+- Shared connection pool across requests
+- Health check method for liveness probes
+**Rationale:**
+- Connection pooling: Reuse connections, better performance
+- Single point of failure detection: Easy to monitor one global instance
+- Memory efficient: One Redis client per service, not per request
+- Simplicity: Services call `get_nonce_tracker()` without managing lifecycle
+**Alternative Rejected:**
+- Per-request client: Too many connections, Redis connection limit (10,000)
+- Dependency injection: Over-engineered for this use case
+**References:** Redis connection best practices (connection pooling)
+
+### Decision 10.5: Transaction Limits Configuration Storage (C-05)
+**Context:** Need configurable transaction limits for fraud prevention
+**Decision:** Store limits in database table instead of environment variables or config file
+**Implementation:**
+- `transaction_limits` table with limit_type, limit_amount_usd
+- Migration 005 creates table with default values
+- Query on demand (with caching in future if needed)
+**Rationale:**
+- Database: Limits can be updated without service restart
+- Audit trail: All limit changes recorded in database
+- Multiple environments: Different limits per environment (staging vs prod)
+- Flexibility: Can add new limit types without code changes
+**Alternative Rejected:**
+- Environment variables: Requires service restart to change
+- Config file: Requires redeployment to change
+- Secret Manager: Not configuration data, doesn't need encryption
+**Future Enhancement:** Add admin API to update limits dynamically
+
+### Decision 10.6: Transaction Limit Enforcement Strategy (C-05)
+**Context:** Need to enforce per-transaction, daily, and monthly limits
+**Decision:** Multi-layer validation with soft limits (warnings) and hard limits (rejection)
+**Implementation:**
+- Layer 1: Per-transaction max ($1,000) - HARD LIMIT (reject)
+- Layer 2: Daily per-user max ($5,000) - HARD LIMIT (reject)
+- Layer 3: Monthly per-user max ($25,000) - HARD LIMIT (reject)
+- Layer 4: Large transaction threshold ($500) - SOFT LIMIT (log + alert)
+**Rationale:**
+- Hard limits: Prevent fraud and regulatory violations
+- Soft limits: Detect suspicious patterns without blocking legitimate users
+- Configurable thresholds: Can adjust based on fraud patterns
+- Compliance: Meets PCI DSS, SOC 2, FINRA requirements
+**Monitoring:** Alert security team when limits are hit (potential fraud)
+**References:** PCI DSS 6.5.10, FINRA Rule 3310
+
+### Decision 10.7: Migration Execution Approach (C-05)
+**Context:** Need to execute database migrations 004 and 005
+**Decision:** Manual psql execution initially, create generic runner later if needed
+**Implementation:**
+- Current: Use `psql -h $HOST -U postgres -d pgp-live-db -f migration.sql`
+- Future: Create generic `run_migration.sh NUMBER` script (documented in checklist)
+- Migration tracking: Consider adding `schema_migrations` table (optional)
+**Rationale:**
+- Simplicity: Two migrations only, manual execution acceptable
+- Safety: Manual review before execution reduces risk
+- Flexibility: Can run dry-run easily with psql
+- Documentation: All migrations self-documenting in SQL header
+**When to create generic runner:** After 5+ migrations (not cost-effective yet)
+**References:** MIGRATION_EXECUTION_SCRIPT_CHECKLIST.md
+
+---
 
 ## 2025-11-18: Security Audit Implementation - Session 3: Service Integration 🔒
 

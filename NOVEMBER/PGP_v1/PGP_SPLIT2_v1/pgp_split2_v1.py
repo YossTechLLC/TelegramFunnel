@@ -117,9 +117,9 @@ def process_usdt_eth_estimate():
 
         logger.info(f"👤 [ENDPOINT] User ID: {user_id}")
         logger.info(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
-        print(f"💱 [ENDPOINT] Swap Currency: {swap_currency}")  # ✅ NEW LOG
-        print(f"🎯 [ENDPOINT] Payout Mode: {payout_mode}")  # ✅ NEW LOG
-        print(f"💰 [ENDPOINT] Amount: {adjusted_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic
+        logger.info(f"💱 [ENDPOINT] Swap Currency: {swap_currency}")  # ✅ NEW LOG
+        logger.info(f"🎯 [ENDPOINT] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+        logger.info(f"💰 [ENDPOINT] Amount: {adjusted_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic
         logger.info(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
         logger.info(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
@@ -154,7 +154,7 @@ def process_usdt_eth_estimate():
         withdrawal_fee = estimate_response.get('withdrawalFee', 0)
 
         logger.info(f"✅ [ENDPOINT] ChangeNow estimate received")
-        print(f"💰 [ENDPOINT] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
+        logger.info(f"💰 [ENDPOINT] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
         logger.info(f"💰 [ENDPOINT] To: {to_amount} {payout_currency.upper()} (post-fee)")
         logger.debug(f"📊 [ENDPOINT] Deposit fee: {deposit_fee}")
         logger.debug(f"📊 [ENDPOINT] Withdrawal fee: {withdrawal_fee}")

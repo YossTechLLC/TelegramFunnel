@@ -113,7 +113,6 @@ def process_batches():
                 payout_network = client_data['payout_network']
                 threshold = client_data['threshold']
 
-                print(f"")
                 logger.info(f"💰 [ENDPOINT] Processing client: {client_id}")
                 logger.debug(f"📊 [ENDPOINT] Total USDT: ${total_usdt} (threshold: ${threshold})")
                 logger.debug(f"📊 [ENDPOINT] Payment count: {payment_count}")
@@ -217,7 +216,6 @@ def process_batches():
                 errors.append(f"Client {client_data.get('client_id', 'unknown')}: {str(e)}")
                 continue
 
-        print(f"")
         logger.info(f"🎉 [ENDPOINT] Batch processing completed")
         logger.info(f"✅ [ENDPOINT] Batches created: {len(batches_created)}")
         if errors:

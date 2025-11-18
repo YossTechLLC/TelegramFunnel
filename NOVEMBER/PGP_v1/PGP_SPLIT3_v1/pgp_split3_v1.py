@@ -117,9 +117,9 @@ def process_eth_client_swap():
         logger.debug(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
         logger.info(f"👤 [ENDPOINT] User ID: {user_id}")
         logger.info(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
-        print(f"💱 [ENDPOINT] Swap Currency: {swap_currency}")  # ✅ NEW LOG
-        print(f"🎯 [ENDPOINT] Payout Mode: {payout_mode}")  # ✅ NEW LOG
-        print(f"💰 [ENDPOINT] Swap Amount: {swap_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic
+        logger.info(f"💱 [ENDPOINT] Swap Currency: {swap_currency}")  # ✅ NEW LOG
+        logger.info(f"🎯 [ENDPOINT] Payout Mode: {payout_mode}")  # ✅ NEW LOG
+        logger.info(f"💰 [ENDPOINT] Swap Amount: {swap_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic
         logger.info(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
         logger.info(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
@@ -163,7 +163,7 @@ def process_eth_client_swap():
         logger.info(f"✅ [ENDPOINT] ChangeNow transaction created")
         logger.debug(f"🆔 [ENDPOINT] ChangeNow API ID: {cn_api_id}")
         logger.info(f"🏦 [ENDPOINT] Payin address: {api_payin_address}")
-        print(f"💰 [ENDPOINT] From: {api_from_amount} {api_from_currency.upper()}")  # ✅ UPDATED: Dynamic currency
+        logger.info(f"💰 [ENDPOINT] From: {api_from_amount} {api_from_currency.upper()}")  # ✅ UPDATED: Dynamic currency
         logger.info(f"💰 [ENDPOINT] To: {api_to_amount} {api_to_currency.upper()}")
 
         # Encrypt response token for PGP_SPLIT1_v1
