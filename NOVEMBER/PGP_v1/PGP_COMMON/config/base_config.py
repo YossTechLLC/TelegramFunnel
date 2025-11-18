@@ -7,6 +7,7 @@ import os
 from google.cloud import secretmanager
 from typing import Optional, Dict
 from abc import ABC, abstractmethod
+from flask import g
 
 
 class BaseConfigManager(ABC):
@@ -14,7 +15,8 @@ class BaseConfigManager(ABC):
     Base class for configuration management across all PGP_v1 services.
 
     This class provides common methods for:
-    - Fetching secrets from environment variables (Cloud Run secret injection)
+    - Fetching secrets from environment variables (Cloud Run secret injection) - STATIC
+    - Fetching secrets from Secret Manager API dynamically - HOT-RELOADABLE
     - Fetching environment variables
     - Fetching database configuration
     - Fetching Cloud Tasks configuration
@@ -33,10 +35,103 @@ class BaseConfigManager(ABC):
         self.client = secretmanager.SecretManagerServiceClient()
         print(f"⚙️ [CONFIG] ConfigManager initialized for {service_name}")
 
+    def build_secret_path(self, secret_name: str, version: str = "latest") -> str:
+        """
+        Build full Secret Manager resource path.
+
+        Args:
+            secret_name: Name of the secret (e.g., 'CHANGENOW_API_KEY')
+            version: Version of the secret (default: 'latest')
+
+        Returns:
+            Full Secret Manager path (e.g., 'projects/pgp-live/secrets/CHANGENOW_API_KEY/versions/latest')
+        """
+        project_id = os.getenv('CLOUD_TASKS_PROJECT_ID', 'pgp-live')
+        return f"projects/{project_id}/secrets/{secret_name}/versions/{version}"
+
+    def fetch_secret_dynamic(
+        self,
+        secret_path: str,
+        description: str = "",
+        cache_key: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Fetch secret dynamically from Secret Manager API (HOT-RELOADABLE).
+
+        This method fetches secrets at request time, allowing for zero-downtime secret rotation.
+        Use this for: API keys, service URLs, queue names, webhook secrets, config values.
+
+        NEVER use this for:
+        - HOST_WALLET_PRIVATE_KEY (ETH wallet private key)
+        - SUCCESS_URL_SIGNING_KEY (JWT signing key)
+        - TPS_HOSTPAY_SIGNING_KEY (HMAC signing key)
+        - DATABASE_PASSWORD_SECRET (requires connection pool restart)
+
+        Args:
+            secret_path: Full Secret Manager path (use build_secret_path())
+            description: Human-readable description for logging
+            cache_key: Optional request-level cache key (prevents duplicate API calls)
+
+        Returns:
+            Secret value or None if error
+
+        Example:
+            secret_path = self.build_secret_path("CHANGENOW_API_KEY")
+            api_key = self.fetch_secret_dynamic(
+                secret_path,
+                "ChangeNow API key",
+                cache_key="changenow_api_key"
+            )
+        """
+        # Request-level caching: prevent duplicate Secret Manager API calls within same request
+        if cache_key:
+            try:
+                # Try to get from Flask request context
+                if hasattr(g, 'secret_cache'):
+                    cached_value = g.secret_cache.get(cache_key)
+                    if cached_value:
+                        print(f"🔄 [CONFIG] Using cached {description or cache_key}")
+                        return cached_value
+            except RuntimeError:
+                # Flask context not available (e.g., during init) - skip caching
+                pass
+
+        try:
+            # Fetch from Secret Manager API
+            response = self.client.access_secret_version(request={"name": secret_path})
+            secret_value = response.payload.data.decode("UTF-8").strip()
+
+            if not secret_value:
+                print(f"❌ [CONFIG] Secret {description or secret_path} is empty")
+                return None
+
+            print(f"✅ [CONFIG] Hot-reloaded {description or secret_path}")
+
+            # Store in request-level cache if cache_key provided
+            if cache_key:
+                try:
+                    if not hasattr(g, 'secret_cache'):
+                        g.secret_cache = {}
+                    g.secret_cache[cache_key] = secret_value
+                except RuntimeError:
+                    # Flask context not available - skip caching
+                    pass
+
+            return secret_value
+
+        except Exception as e:
+            print(f"❌ [CONFIG] Error fetching {description or secret_path}: {e}")
+            return None
+
     def fetch_secret(self, secret_name_env: str, description: str = "") -> Optional[str]:
         """
-        Fetch a secret value from environment variable.
+        Fetch a secret value from environment variable (STATIC - loaded at container startup).
+
         Cloud Run automatically injects secret values when using --set-secrets.
+        Use this method for secrets that should NEVER be hot-reloaded:
+        - Private keys (HOST_WALLET_PRIVATE_KEY, SUCCESS_URL_SIGNING_KEY, TPS_HOSTPAY_SIGNING_KEY)
+        - Database credentials (DATABASE_PASSWORD_SECRET)
+        - Infrastructure config (CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION)
 
         This method is 100% identical across all PGP_v1 services.
 
@@ -54,7 +149,7 @@ class BaseConfigManager(ABC):
                 print(f"❌ [CONFIG] Environment variable {secret_name_env} is not set or empty")
                 return None
 
-            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env}")
+            print(f"✅ [CONFIG] Successfully loaded {description or secret_name_env} (static)")
             return secret_value
 
         except Exception as e:

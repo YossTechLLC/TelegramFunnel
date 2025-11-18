@@ -47,13 +47,10 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
     cloudtasks_client = None
 
-# Initialize ChangeNow client
+# Initialize ChangeNow client with config_manager for hot-reload
 try:
-    api_key = config.get('changenow_api_key')
-    if not api_key:
-        raise ValueError("CHANGENOW_API_KEY not available")
-    changenow_client = ChangeNowClient(api_key)
-    print(f"✅ [APP] ChangeNow client initialized")
+    changenow_client = ChangeNowClient(config_manager)
+    print(f"✅ [APP] ChangeNow client initialized (hot-reload enabled)")
 except Exception as e:
     print(f"❌ [APP] Failed to initialize ChangeNow client: {e}")
     changenow_client = None
@@ -184,16 +181,17 @@ def process_usdt_eth_estimate():
             print(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        gcsplit1_response_queue = config.get('gcsplit1_response_queue')
-        pgp_split1_url = config.get('pgp_split1_url')
+        # Fetch hot-reloadable secrets dynamically
+        split1_response_queue = config_manager.get_split1_response_queue()
+        split1_url = config_manager.get_split1_url()
 
-        if not gcsplit1_response_queue or not pgp_split1_url:
+        if not split1_response_queue or not split1_url:
             print(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split1_estimate_response(
-            queue_name=gcsplit1_response_queue,
-            target_url=pgp_split1_url,
+            queue_name=split1_response_queue,
+            target_url=split1_url,
             encrypted_token=encrypted_response_token
         )
 

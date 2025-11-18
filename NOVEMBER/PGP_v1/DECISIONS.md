@@ -1,12 +1,337 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **Comprehensive Deployment Documentation Strategy** 📋
+**Last Updated:** 2025-01-18 - **Security Architecture - IAM Authentication & Service Accounts** 🔒
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-01-18: Security Architecture - IAM Authentication & Defense in Depth 🔒
+
+**Decision:** Remove `--allow-unauthenticated` and implement multi-layered security architecture with IAM authentication
+
+**Context:**
+- **Critical Vulnerability:** All 17 Cloud Run services deployed with `--allow-unauthenticated` flag
+- **Risk:** Payment webhooks handling sensitive financial data accessible without authentication
+- **Requirement:** PCI DSS compliance for payment processing
+- **Constraint:** Services must communicate with each other (service-to-service calls)
+
+**Architecture Decision:**
+
+### 1. Service Classification & Authentication Strategy
+
+**Decision:** Classify services into 3 categories with different authentication requirements:
+
+**🌐 Public Services (1 service):**
+- `pgp-web-v1` - Frontend web application
+- **Authentication:** `--allow-unauthenticated` (users need direct access)
+- **Protection:** Cloud Armor (Phase 2) for DDoS protection, rate limiting
+
+**🔒 Authenticated Webhooks (2 services):**
+- `pgp-np-ipn-v1` - NowPayments IPN webhook
+- `pgp-server-v1` - Telegram Bot webhook
+- **Authentication:** `--no-allow-unauthenticated` (require auth)
+- **Access Method:** Via Cloud Load Balancer + Cloud Armor (Phase 2)
+- **Protection:** IP whitelist (NowPayments IPs, Telegram IPs), HMAC signature verification
+
+**🔐 Internal Services (14 services):**
+- All other services (orchestrator, split, hostpay, batch, notifications, etc.)
+- **Authentication:** `--no-allow-unauthenticated` (require IAM)
+- **Access Method:** Service-to-service with identity tokens
+- **Protection:** IAM roles/run.invoker permissions
+
+**Rationale:**
+- **Defense in Depth:** Multiple security layers (HTTPS, Load Balancer, Cloud Armor, IAM, HMAC)
+- **Least Privilege:** Only frontend is public, webhooks protected by Load Balancer, internals require IAM
+- **PCI DSS Compliance:** Payment data protected by authentication at multiple layers
+
+**Alternative Considered:**
+- **All Public with HMAC-only:** `--allow-unauthenticated` for all services, rely on HMAC
+  - **Rejected:** Single point of failure, no defense in depth, violates PCI DSS
+
+### 2. Service Account Architecture
+
+**Decision:** Create 17 dedicated service accounts (one per service) with minimal IAM permissions
+
+**Service Account Naming Convention:**
+- Pattern: `{service-name}-sa@{project-id}.iam.gserviceaccount.com`
+- Example: `pgp-server-v1-sa@pgp-live.iam.gserviceaccount.com`
+
+**Minimal Permissions Granted:**
+- `roles/cloudsql.client` - All services (database access)
+- `roles/secretmanager.secretAccessor` - All services (secret access)
+- `roles/cloudtasks.enqueuer` - Services that send tasks (orchestrator, split, hostpay, etc.)
+- `roles/logging.logWriter` - All services (logging)
+- `roles/run.invoker` - Per-service basis (configured via configure_invoker_permissions.sh)
+
+**Rationale:**
+- **Least Privilege:** Each service only has permissions it needs
+- **Audit Trail:** Each service's actions traceable via service account
+- **Security:** Compromised service cannot access resources outside its scope
+- **Best Practice:** Google Cloud Run security best practices
+
+**Alternative Considered:**
+- **Single Shared Service Account:** One service account for all 17 services
+  - **Rejected:** Violates least privilege, no per-service audit trail, security risk
+
+### 3. Service-to-Service Authentication Implementation
+
+**Decision:** Use Google Cloud IAM identity tokens for service-to-service authentication
+
+**Implementation:**
+- **Module:** `/PGP_COMMON/auth/service_auth.py`
+- **Helper Function:** `call_authenticated_service(url, method, json_data, timeout)`
+- **Authentication Method:** Compute Engine ID tokens via `google.auth.compute_engine.IDTokenCredentials`
+- **Token Caching:** Per-target-audience caching to minimize token generation overhead
+
+**Code Pattern:**
+```python
+# Before (INSECURE)
+response = requests.post(orchestrator_url, json=payload)
+
+# After (SECURE)
+from PGP_COMMON.auth import call_authenticated_service
+response = call_authenticated_service(
+    url=orchestrator_url,
+    method="POST",
+    json_data=payload
+)
+```
+
+**Rationale:**
+- **Security:** IAM identity tokens verified by Cloud Run automatically
+- **Simplicity:** Single helper function replaces all `requests.post()` calls
+- **Performance:** Token caching reduces overhead
+- **Best Practice:** Recommended by Google Cloud for Cloud Run → Cloud Run authentication
+
+**Alternative Considered:**
+- **Shared Secret (Bearer Token):** Static shared secret between services
+  - **Rejected:** Secret rotation difficult, no automatic verification, less secure than IAM
+
+### 4. Cloud Tasks with OIDC Tokens
+
+**Decision:** Update Cloud Tasks to use OIDC tokens for authenticated task delivery
+
+**Implementation:**
+```python
+task = {
+    'http_request': {
+        'http_method': tasks_v2.HttpMethod.POST,
+        'url': target_url,
+        'oidc_token': {
+            'service_account_email': 'pgp-orchestrator-v1-sa@pgp-live.iam.gserviceaccount.com',
+            'audience': target_url
+        }
+    }
+}
+```
+
+**Rationale:**
+- **Consistency:** Same authentication method as direct service-to-service calls
+- **Security:** OIDC tokens verified by Cloud Run automatically
+- **Best Practice:** Recommended for authenticated Cloud Tasks
+
+**Alternative Considered:**
+- **HTTP Basic Auth:** Username/password in Cloud Tasks
+  - **Rejected:** Less secure than OIDC, requires secret management
+
+### 5. Deployment Script Architecture
+
+**Decision:** Extend `deploy_service()` function with authentication and service account parameters
+
+**New Parameters:**
+- `AUTHENTICATION` - "require" or "allow-unauthenticated" (default: "require")
+- `SERVICE_ACCOUNT` - Service account email (optional)
+
+**Implementation:**
+- Color-coded authentication status display (Green for authenticated, Yellow for public)
+- Clear documentation in deployment script comments
+- Per-service authentication configuration
+
+**Rationale:**
+- **Clarity:** Explicit authentication requirement for each service
+- **Safety:** Default to "require" (secure by default)
+- **Flexibility:** Can override for specific services (e.g., frontend)
+- **Maintainability:** Single deployment script for all services
+
+**Alternative Considered:**
+- **Separate Deployment Scripts:** One script for authenticated, one for public
+  - **Rejected:** Code duplication, harder to maintain
+
+### 6. Script Organization
+
+**Decision:** Create separate scripts for each security configuration step
+
+**Scripts Created:**
+1. `create_service_accounts.sh` - Create all 17 service accounts
+2. `grant_iam_permissions.sh` - Grant minimal IAM permissions
+3. `configure_invoker_permissions.sh` - Configure service-to-service permissions
+4. `deploy_all_pgp_services.sh` (modified) - Deploy with authentication
+
+**Execution Order:**
+1. Create service accounts
+2. Grant IAM permissions
+3. Deploy services
+4. Configure invoker permissions (after deployment)
+
+**Rationale:**
+- **Separation of Concerns:** Each script has single responsibility
+- **Idempotency:** Scripts can be re-run safely (check if resources exist)
+- **Debugging:** Easy to identify which step failed
+- **Rollback:** Can rollback individual steps if needed
+
+**Alternative Considered:**
+- **Monolithic Script:** Single script doing all steps
+  - **Rejected:** Hard to debug, no granular rollback, poor separation of concerns
+
+---
+
+## 2025-11-18: Hot-Reload Secret Management Implementation Strategy 🔄
+
+**Decision:** Implement hot-reloadable secrets using Secret Manager API for 43 approved secrets while keeping 3 security-critical secrets static
+
+**Context:**
+- Current architecture: All secrets loaded once at container startup via environment variables
+- Problem: Secret rotation requires service restart (downtime for users)
+- Need: Zero-downtime API key rotation, blue-green deployments, queue migrations
+- Security constraint: Private keys (wallet, JWT signing, HMAC signing) MUST NEVER be hot-reloadable
+
+**Architecture Decision:**
+
+### 1. Dual-Method Secret Fetching Pattern
+
+**Decision:** Implement two separate methods in BaseConfigManager:
+- `fetch_secret()` - STATIC secrets from environment variables (os.getenv)
+- `fetch_secret_dynamic()` - HOT-RELOADABLE secrets from Secret Manager API
+
+**Rationale:**
+- **Clarity:** Explicit distinction between static and dynamic secrets
+- **Security:** Impossible to accidentally make private keys hot-reloadable (different method)
+- **Performance:** Static secrets cached at startup, dynamic secrets request-level cached
+- **Backward Compatibility:** Existing `fetch_secret()` unchanged, new method added
+
+**Alternative Considered:**
+- **Single Method with Flag:** `fetch_secret(name, hot_reload=False)`
+  - **Rejected:** Too easy to accidentally flip flag, less explicit, security risk
+
+### 2. Request-Level Caching Strategy
+
+**Decision:** Implement request-level caching using Flask `g` context object
+
+**Rationale:**
+- **Cost Optimization:** Without caching, every API call = Secret Manager API call (~$75/month vs $7.50/month)
+- **Performance:** Single Secret Manager fetch per request (<5ms latency increase)
+- **Simplicity:** Flask `g` automatically cleared between requests, no manual cache invalidation
+- **Safety:** Cache never stale beyond single request (hot-reload still effective)
+
+**Alternative Considered:**
+- **Time-Based Caching (TTL):** Cache secrets for 60 seconds
+  - **Rejected:** Defeats purpose of hot-reload (secrets not immediately effective)
+- **No Caching:** Fetch from Secret Manager on every usage
+  - **Rejected:** Too expensive ($75/month), too slow (>50ms per request)
+
+### 3. Security-Critical Secrets Classification
+
+**Decision:** Three secrets NEVER hot-reloadable (enforced via architecture):
+- `HOST_WALLET_PRIVATE_KEY` - Ethereum wallet private key (PGP_HOSTPAY3_v1)
+- `SUCCESS_URL_SIGNING_KEY` - JWT signing key (PGP_ORCHESTRATOR_v1)
+- `TPS_HOSTPAY_SIGNING_KEY` - HMAC signing key (PGP_SERVER_v1, PGP_HOSTPAY1_v1)
+
+**Rationale:**
+- **Security:** Changing signing keys mid-flight breaks all active sessions/tokens
+- **Correctness:** Private key rotation requires careful wallet migration (not instant)
+- **Auditability:** Static secrets easier to audit (logged once at startup, not per-request)
+- **Compliance:** Private key access must be logged and monitored (startup only)
+
+**Enforcement:**
+- Only use `fetch_secret()` (static method) for these secrets
+- Add docstring warnings in config managers
+- Security audit via Cloud Audit Logs (verify NEVER accessed during requests)
+
+### 4. Pilot Service Strategy
+
+**Decision:** Implement PGP_SPLIT2_v1 as pilot service before rolling out to all 17 services
+
+**Rationale:**
+- **Risk Mitigation:** Test hot-reload on non-critical service first
+- **Learning:** Identify issues before touching security-critical services
+- **Pattern Validation:** Validate implementation pattern works correctly
+- **Confidence Building:** Monitor for 48 hours before proceeding
+
+**Pilot Service Selection Rationale (PGP_SPLIT2_v1):**
+- ✅ Uses hot-reloadable secret (CHANGENOW_API_KEY)
+- ✅ Uses queue names and service URLs
+- ✅ No security-critical secrets (SUCCESS_URL_SIGNING_KEY is static)
+- ✅ Medium traffic volume (good test case)
+- ✅ Easy to rollback (not in critical path)
+
+### 5. Implementation Pattern for Client Classes
+
+**Decision:** Pass `config_manager` reference to client classes instead of secret values
+
+**Pattern:**
+```python
+# OLD (static):
+changenow_client = ChangeNowClient(api_key)
+
+# NEW (hot-reload):
+changenow_client = ChangeNowClient(config_manager)
+
+# Client usage:
+api_key = self.config_manager.get_changenow_api_key()  # Fetched dynamically
+```
+
+**Rationale:**
+- **Flexibility:** Clients can fetch secrets on-demand (hot-reload enabled)
+- **Simplicity:** Single pattern across all services
+- **Testability:** Easy to mock config_manager in unit tests
+- **Consistency:** All services follow same pattern
+
+**Alternative Considered:**
+- **Global Config Singleton:** Single global config object
+  - **Rejected:** Hard to test, tight coupling, not idiomatic Flask
+
+### 6. Staged Rollout Plan
+
+**Decision:** Deploy hot-reload in 5-week staged rollout:
+- Week 1: Pilot (PGP_SPLIT2_v1)
+- Week 2: Core payment services (5 services)
+- Week 3: Webhook & bot services (5 services)
+- Week 4: Remaining services (7 services)
+- Week 5: Validation & documentation
+
+**Rationale:**
+- **Risk Mitigation:** Issues detected early affect fewer services
+- **Monitoring:** 48-hour monitoring period between batches
+- **Rollback:** Easy to rollback individual batches
+- **Learning:** Apply lessons learned to subsequent batches
+
+**Rollout Priority Order:**
+1. Pilot service (validate pattern)
+2. Non-critical services (low risk)
+3. Security-critical services (extra validation)
+4. Remaining services (confidence built)
+
+### 7. Cost vs. Security Tradeoff
+
+**Decision:** Accept ~$7.50/month cost increase for hot-reload capability
+
+**Cost Analysis:**
+- Secret Manager API calls: ~500k/month (with request-level caching)
+- Cost: $0.03 per 10k accesses = ~$7.50/month
+- Without caching: ~5M/month = ~$75/month (10x higher)
+
+**Value Analysis:**
+- Zero-downtime API key rotation: Prevents revenue loss during rotation
+- Blue-green deployments: Reduces deployment risk
+- Queue migration: Infrastructure flexibility
+- Feature flags: Faster iteration
+
+**Conclusion:** Benefits far outweigh costs ($7.50/month negligible vs operational benefits)
+
+**Impact:** Improved operational flexibility, reduced downtime risk, faster incident response
 
 ## 2025-11-18: Comprehensive Deployment Documentation & 8-Phase Migration Strategy 📋
 

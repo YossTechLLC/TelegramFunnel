@@ -13,26 +13,27 @@ class ChangeNowClient:
     """
     Client for interacting with ChangeNow API v2 with built-in retry logic.
     Retries infinitely (up to Cloud Tasks 24-hour limit) on rate limiting or errors.
+
+    HOT-RELOAD ENABLED: API key is fetched dynamically from Secret Manager on each request.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, config_manager):
         """
         Initialize ChangeNow client.
 
         Args:
-            api_key: ChangeNow API key for authentication
+            config_manager: ConfigManager instance for dynamic secret fetching
         """
-        self.api_key = api_key
+        self.config_manager = config_manager
         self.base_url_v2 = "https://api.changenow.io/v2"
         self.session = requests.Session()
 
-        # Set default headers
+        # Set default headers (API key will be updated per-request)
         self.session.headers.update({
-            'x-changenow-api-key': self.api_key,
             'Content-Type': 'application/json'
         })
 
-        print(f"🔗 [CHANGENOW_CLIENT] Initialized with API key: {api_key[:8]}...")
+        print(f"🔗 [CHANGENOW_CLIENT] Initialized with hot-reloadable API key")
 
     def get_estimated_amount_v2_with_retry(
         self,
@@ -89,6 +90,16 @@ class ChangeNowClient:
                 }
 
                 print(f"📦 [CHANGENOW_ESTIMATE_V2] Request params: {params}")
+
+                # Fetch API key dynamically (HOT-RELOAD)
+                api_key = self.config_manager.get_changenow_api_key()
+                if not api_key:
+                    print(f"❌ [CHANGENOW_RETRY] API key not available, waiting 60 seconds...")
+                    time.sleep(60)
+                    continue  # Retry
+
+                # Update session header with dynamically fetched API key
+                self.session.headers.update({'x-changenow-api-key': api_key})
 
                 # Make API request
                 url = f"{self.base_url_v2}/exchange/estimated-amount"

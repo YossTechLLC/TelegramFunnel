@@ -63,6 +63,8 @@ deploy_service() {
     local MIN_INSTANCES=${4:-0}
     local MAX_INSTANCES=${5:-10}
     local TIMEOUT=${6:-300}
+    local AUTHENTICATION=${7:-"require"}         # NEW: "require" or "allow-unauthenticated"
+    local SERVICE_ACCOUNT=${8:-""}               # NEW: Service account email
 
     echo ""
     echo -e "${BLUE}────────────────────────────────────────────────────────────────────${NC}"
@@ -78,11 +80,32 @@ deploy_service() {
 
     cd "$SERVICE_DIR"
 
+    # Determine authentication flag
+    local AUTH_FLAG=""
+    local AUTH_STATUS=""
+    if [ "$AUTHENTICATION" = "allow-unauthenticated" ]; then
+        AUTH_FLAG="--allow-unauthenticated"
+        AUTH_STATUS="${YELLOW}⚠️  PUBLIC ACCESS (unauthenticated)${NC}"
+    else
+        AUTH_FLAG="--no-allow-unauthenticated"
+        AUTH_STATUS="${GREEN}🔒 AUTHENTICATED (IAM required)${NC}"
+    fi
+
+    # Build service account flag
+    local SA_FLAG=""
+    if [ -n "$SERVICE_ACCOUNT" ]; then
+        SA_FLAG="--service-account=${SERVICE_ACCOUNT}"
+    fi
+
     echo "📋 Service Configuration:"
     echo "   Memory: $MEMORY"
     echo "   Min Instances: $MIN_INSTANCES"
     echo "   Max Instances: $MAX_INSTANCES"
     echo "   Timeout: ${TIMEOUT}s"
+    echo -e "   Authentication: ${AUTH_STATUS}"
+    if [ -n "$SERVICE_ACCOUNT" ]; then
+        echo "   Service Account: $SERVICE_ACCOUNT"
+    fi
 
     # Build and deploy
     echo ""
@@ -98,7 +121,8 @@ deploy_service() {
         --timeout "$TIMEOUT" \
         --set-env-vars "GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=$REGION" \
         --add-cloudsql-instances "$CLOUD_SQL_INSTANCE" \
-        --allow-unauthenticated \
+        $AUTH_FLAG \
+        $SA_FLAG \
         --quiet; then
 
         echo -e "${GREEN}✅ $SERVICE_NAME deployed successfully${NC}"
@@ -128,62 +152,79 @@ echo ""
 echo -e "${GREEN}Phase 1: Core Infrastructure Services${NC}"
 echo "========================================="
 
-# 1. Database-dependent services first
-deploy_service "pgp-server-v1" "$BASE_DIR/PGP_SERVER_v1" "1Gi" "1" "20" "300"
+# 1. Telegram Bot Server - REQUIRES AUTH (webhooks will come via Load Balancer)
+deploy_service "pgp-server-v1" "$BASE_DIR/PGP_SERVER_v1" "1Gi" "1" "20" "300" \
+    "require" "pgp-server-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 2. Frontend
-deploy_service "pgp-web-v1" "$BASE_DIR/PGP_WEB_v1" "128Mi" "0" "5" "60"
+# 2. Frontend - PUBLIC ACCESS (users need to access without auth)
+deploy_service "pgp-web-v1" "$BASE_DIR/PGP_WEB_v1" "128Mi" "0" "5" "60" \
+    "allow-unauthenticated" "pgp-web-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 3. Web API
-deploy_service "pgp-webapi-v1" "$BASE_DIR/PGP_WEBAPI_v1" "512Mi" "0" "10" "300"
+# 3. Web API - REQUIRES AUTH (called by frontend with IAM token)
+deploy_service "pgp-webapi-v1" "$BASE_DIR/PGP_WEBAPI_v1" "512Mi" "0" "10" "300" \
+    "require" "pgp-webapi-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo ""
 echo -e "${GREEN}Phase 2: Payment Processing Pipeline${NC}"
 echo "========================================="
 
-# 4. Entry point: NowPayments IPN
-deploy_service "pgp-np-ipn-v1" "$BASE_DIR/PGP_NP_IPN_v1" "512Mi" "0" "20" "300"
+# 4. NowPayments IPN - REQUIRES AUTH (webhook via Load Balancer + Cloud Armor)
+deploy_service "pgp-np-ipn-v1" "$BASE_DIR/PGP_NP_IPN_v1" "512Mi" "0" "20" "300" \
+    "require" "pgp-np-ipn-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 5. Orchestrator
-deploy_service "pgp-orchestrator-v1" "$BASE_DIR/PGP_ORCHESTRATOR_v1" "512Mi" "0" "20" "300"
+# 5. Orchestrator - REQUIRES AUTH (internal service-to-service only)
+deploy_service "pgp-orchestrator-v1" "$BASE_DIR/PGP_ORCHESTRATOR_v1" "512Mi" "0" "20" "300" \
+    "require" "pgp-orchestrator-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 6. Invite service
-deploy_service "pgp-invite-v1" "$BASE_DIR/PGP_INVITE_v1" "512Mi" "0" "10" "300"
+# 6. Invite service - REQUIRES AUTH (internal service-to-service only)
+deploy_service "pgp-invite-v1" "$BASE_DIR/PGP_INVITE_v1" "512Mi" "0" "10" "300" \
+    "require" "pgp-invite-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 7. Split services (3-stage pipeline)
-deploy_service "pgp-split1-v1" "$BASE_DIR/PGP_SPLIT1_v1" "512Mi" "0" "15" "300"
-deploy_service "pgp-split2-v1" "$BASE_DIR/PGP_SPLIT2_v1" "512Mi" "0" "15" "300"
-deploy_service "pgp-split3-v1" "$BASE_DIR/PGP_SPLIT3_v1" "512Mi" "0" "15" "300"
+# 7. Split services (3-stage pipeline) - ALL REQUIRE AUTH (internal only)
+deploy_service "pgp-split1-v1" "$BASE_DIR/PGP_SPLIT1_v1" "512Mi" "0" "15" "300" \
+    "require" "pgp-split1-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+deploy_service "pgp-split2-v1" "$BASE_DIR/PGP_SPLIT2_v1" "512Mi" "0" "15" "300" \
+    "require" "pgp-split2-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+deploy_service "pgp-split3-v1" "$BASE_DIR/PGP_SPLIT3_v1" "512Mi" "0" "15" "300" \
+    "require" "pgp-split3-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo ""
 echo -e "${GREEN}Phase 3: Payout Services${NC}"
 echo "========================================="
 
-# 8. HostPay services (3-stage pipeline)
-deploy_service "pgp-hostpay1-v1" "$BASE_DIR/PGP_HOSTPAY1_v1" "512Mi" "0" "15" "300"
-deploy_service "pgp-hostpay2-v1" "$BASE_DIR/PGP_HOSTPAY2_v1" "512Mi" "0" "15" "300"
-deploy_service "pgp-hostpay3-v1" "$BASE_DIR/PGP_HOSTPAY3_v1" "512Mi" "0" "15" "300"
+# 8. HostPay services (3-stage pipeline) - ALL REQUIRE AUTH (internal only)
+deploy_service "pgp-hostpay1-v1" "$BASE_DIR/PGP_HOSTPAY1_v1" "512Mi" "0" "15" "300" \
+    "require" "pgp-hostpay1-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+deploy_service "pgp-hostpay2-v1" "$BASE_DIR/PGP_HOSTPAY2_v1" "512Mi" "0" "15" "300" \
+    "require" "pgp-hostpay2-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+deploy_service "pgp-hostpay3-v1" "$BASE_DIR/PGP_HOSTPAY3_v1" "512Mi" "0" "15" "300" \
+    "require" "pgp-hostpay3-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo ""
 echo -e "${GREEN}Phase 4: Batch Processing Services${NC}"
 echo "========================================="
 
-# 9. Accumulator
-deploy_service "pgp-accumulator-v1" "$BASE_DIR/PGP_ACCUMULATOR_v1" "512Mi" "0" "10" "300"
+# 9. Accumulator - REQUIRES AUTH (internal only)
+deploy_service "pgp-accumulator-v1" "$BASE_DIR/PGP_ACCUMULATOR_v1" "512Mi" "0" "10" "300" \
+    "require" "pgp-accumulator-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 10. Batch processors
-deploy_service "pgp-batchprocessor-v1" "$BASE_DIR/PGP_BATCHPROCESSOR_v1" "512Mi" "0" "10" "300"
-deploy_service "pgp-microbatchprocessor-v1" "$BASE_DIR/PGP_MICROBATCHPROCESSOR_v1" "512Mi" "0" "10" "300"
+# 10. Batch processors - ALL REQUIRE AUTH (internal only)
+deploy_service "pgp-batchprocessor-v1" "$BASE_DIR/PGP_BATCHPROCESSOR_v1" "512Mi" "0" "10" "300" \
+    "require" "pgp-batchprocessor-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+deploy_service "pgp-microbatchprocessor-v1" "$BASE_DIR/PGP_MICROBATCHPROCESSOR_v1" "512Mi" "0" "10" "300" \
+    "require" "pgp-microbatchprocessor-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo ""
 echo -e "${GREEN}Phase 5: Notification & Broadcast Services${NC}"
 echo "========================================="
 
-# 11. Notifications
-deploy_service "pgp-notifications-v1" "$BASE_DIR/PGP_NOTIFICATIONS_v1" "512Mi" "0" "10" "300"
+# 11. Notifications - REQUIRES AUTH (internal only)
+deploy_service "pgp-notifications-v1" "$BASE_DIR/PGP_NOTIFICATIONS_v1" "512Mi" "0" "10" "300" \
+    "require" "pgp-notifications-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 12. Broadcast scheduler
-deploy_service "pgp-broadcast-v1" "$BASE_DIR/PGP_BROADCAST_v1" "512Mi" "1" "5" "300"
+# 12. Broadcast scheduler - REQUIRES AUTH (internal only)
+deploy_service "pgp-broadcast-v1" "$BASE_DIR/PGP_BROADCAST_v1" "512Mi" "1" "5" "300" \
+    "require" "pgp-broadcast-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
 ################################################################################
 # Deployment Summary
