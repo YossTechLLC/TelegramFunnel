@@ -17,6 +17,7 @@ MONITOR FOR THIS PACKAGE ERROR - google-cloud-sql-connector is not a package, in
 I have given you MCP access to context7 mcp & google mcp & cloudflare mcp so your architecture designs can be checked against the best practices knowledgebase to verify that your implementation meets together to work seamlessly, securely and reliably .
 I have given you MCP access to gcloud and observability, you'll see that you're working in the pgp-live project.
 You'll have explicit read only permissions to the telepaypsql database instance.
+REMEMBER telepaypsql is the old psql server with client_table database on project id telepay-459221 we are using to scafold the new psql server pgp-live-psql with pgp-live-db database on project id pgp-live 
 YOU ARE NOT TO DEPLOY ANYTHING TO GOOGLE --> All changes must be local to the /NOVEMBER/PGP_v1 directory only.
 YOU ARE NOT TO MAKE ANY CHANGES ON CLOUDFLARE --> All changes must be local to the /NOVEMBER/PGP_v1 directory only.
 YOU ARE NOT TO DEPLOY ANYTHING TO GITHUB --> All changes must be local to the /NOVEMBER/PGP_v1 directory only
