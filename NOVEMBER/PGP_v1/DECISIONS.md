@@ -1,12 +1,319 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-16 - **Security Documentation Standards** ✅
+**Last Updated:** 2025-11-16 - **OWASP Security Remediation Strategy** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-16: OWASP Top 10 2021 Compliance & Payment Industry Security Standards 🔐
+
+**Decision:** Implement 4-tier remediation plan to address 73 identified security vulnerabilities and achieve PCI DSS/SOC 2 compliance
+
+**Context:**
+- Comprehensive OWASP Top 10 2021 security analysis completed (1,892-line report)
+- 73 security vulnerabilities identified across 7 OWASP categories
+- Current compliance status: PCI DSS NON-COMPLIANT, SOC 2 NON-COMPLIANT
+- 8 new critical vulnerabilities discovered beyond original 65 findings
+- Payment system handling cryptocurrency transactions requires stringent security
+
+**Strategic Architectural Security Decisions:**
+
+### 1. CRITICAL: Wallet Address Validation (P1 - 0-7 days)
+**Decision:** Implement EIP-55 checksum validation for all Ethereum wallet addresses
+**Rationale:**
+- Prevents permanent fund loss from invalid wallet addresses
+- OWASP A03:2021 - Injection prevention
+- Industry standard for Ethereum address validation
+**Implementation:** Add Web3.py checksum validation before payment processing
+
+### 2. CRITICAL: Replay Attack Prevention (P1 - 0-7 days)
+**Decision:** Add Redis-based nonce tracking to existing timestamp validation
+**Rationale:**
+- Current 5-minute timestamp window allows replay attacks
+- OWASP A07:2021 - Authentication Failures mitigation
+- Prevents duplicate payment processing
+**Implementation:** Track unique request IDs in Redis with 5-minute TTL
+
+### 3. CRITICAL: IP Whitelist Security (P1 - 0-7 days)
+**Decision:** Trust only rightmost X-Forwarded-For IP from Cloud Run or migrate to Cloud NAT static IPs
+**Rationale:**
+- Current implementation vulnerable to X-Forwarded-For spoofing
+- OWASP A01:2021 - Broken Access Control mitigation
+- Cloud Run provides trusted X-Forwarded-For from rightmost proxy
+**Implementation:** Use `request.headers.get('X-Forwarded-For').split(',')[-1].strip()` or Cloud NAT
+
+### 4. CRITICAL: Race Condition Prevention (P1 - 0-7 days)
+**Decision:** Replace UPDATE-then-INSERT pattern with PostgreSQL UPSERT or SELECT FOR UPDATE
+**Rationale:**
+- Concurrent requests creating duplicate subscription records
+- OWASP A04:2021 - Insecure Design mitigation
+- PostgreSQL provides ACID guarantees with proper locking
+**Implementation:** Use `INSERT ... ON CONFLICT DO UPDATE` or row-level locking
+
+### 5. CRITICAL: Transaction Limits (P1 - 0-7 days)
+**Decision:** Implement configurable transaction amount limits (per-transaction and daily)
+**Rationale:**
+- Prevents fraud and money laundering
+- Required for PCI DSS 11.3, SOC 2 CC6.1, FINRA 3310 compliance
+- OWASP A04:2021 - Insecure Design mitigation
+**Implementation:** Add transaction_limits table with configurable thresholds
+
+### 6. HIGH: Service-to-Service mTLS (P2 - 30 days)
+**Decision:** Implement mutual TLS for all service-to-service communication
+**Rationale:**
+- OWASP A01:2021 - Broken Access Control prevention
+- Prevents service impersonation attacks
+- GCP best practice for Cloud Run service mesh
+**Implementation:** Use Cloud Run service identity and mTLS certificates
+
+### 7. HIGH: Role-Based Access Control (P2 - 30 days)
+**Decision:** Implement RBAC for all authenticated endpoints
+**Rationale:**
+- OWASP A01:2021 - Broken Access Control prevention
+- Required for SOC 2 CC6.1 compliance
+- Principle of least privilege enforcement
+**Implementation:** Add roles table, JWT role claims, decorator-based authorization
+
+### 8. HIGH: SIEM Integration (P2 - 30 days)
+**Decision:** Integrate Cloud Logging with SIEM solution (Cloud Security Command Center or third-party)
+**Rationale:**
+- OWASP A09:2021 - Logging Failures mitigation
+- Required for PCI DSS 10.6, SOC 2 CC7.2 compliance
+- Real-time security monitoring and alerting
+**Implementation:** Configure Cloud Logging exports to SIEM with security event filtering
+
+### 9. MEDIUM: Idempotency Keys (P3 - 90 days)
+**Decision:** Implement idempotency key support for all payment endpoints
+**Rationale:**
+- OWASP A04:2021 - Insecure Design mitigation
+- Prevents duplicate payments in distributed system
+- Industry best practice (Stripe, PayPal pattern)
+**Implementation:** Add idempotency_keys table with 24-hour TTL
+
+### 10. MEDIUM: Argon2id Password Hashing (P3 - 90 days)
+**Decision:** Migrate from bcrypt to Argon2id for password hashing
+**Rationale:**
+- OWASP A02:2021 - Cryptographic Failures mitigation
+- Argon2id is OWASP recommended (2021 Password Hashing Competition winner)
+- Superior resistance to GPU/ASIC attacks vs bcrypt
+**Implementation:** Phased migration with dual-hash support during transition
+
+**Compliance Roadmap:**
+- **PCI DSS 3.2.1:** 6-month timeline to compliance (requires all P1/P2 fixes)
+- **SOC 2 Type II:** 12-month timeline to certification (requires all P1/P2/P3 fixes)
+- **OWASP ASVS Level 2:** 3-6 months to 100% compliance (currently 60%)
+
+**Trade-offs:**
+- **Performance:** Redis nonce tracking adds ~5ms latency, acceptable for security gain
+- **Complexity:** RBAC adds complexity, mitigated by using proven libraries (Flask-RBAC)
+- **Cost:** SIEM integration adds $200-500/month, required for compliance
+- **Development Time:** 4-tier remediation = 180 days total, phased approach minimizes disruption
+
+**Alternatives Considered:**
+- **Nonce Tracking:** Considered database-based nonce storage (rejected: too slow, Redis 10x faster)
+- **IP Whitelist:** Considered VPC Service Controls (rejected: overkill for current scale)
+- **Password Hashing:** Considered scrypt (rejected: Argon2id superior memory-hard properties)
+- **SIEM:** Considered building custom (rejected: compliance requires proven SIEM solutions)
+
+**References:**
+- OWASP Top 10 2021: https://owasp.org/Top10/
+- OWASP ASVS 4.0: https://owasp.org/www-project-application-security-verification-standard/
+- PCI DSS 3.2.1: https://www.pcisecuritystandards.org/
+- NIST Cryptographic Standards: https://csrc.nist.gov/publications/
+- Full Analysis: `SECURITY_VULNERABILITY_ANALYSIS_OWASP_VERIFICATION.md`
+
+---
+
+## 2025-11-16: Adopt GCP-Recommended Authentication Patterns 🔐
+
+**Decision:** Migrate from custom authentication patterns (HMAC, passwords) to GCP-native authentication (OIDC tokens, IAM database auth)
+
+**Context:**
+- Current PGP_v1 implementation uses manual HMAC authentication for Cloud Tasks
+- Current PGP_v1 uses password-based authentication for Cloud SQL
+- Official GCP documentation (Nov 2025) recommends OIDC and IAM auth instead
+- Security verification revealed 87% of findings confirmed by GCP best practices
+- 4 critical security gaps identified related to authentication
+
+**Analysis of Current vs GCP-Recommended Patterns:**
+
+**1. Cloud Tasks Authentication:**
+
+**Current Implementation (HMAC-based):**
+```python
+# PGP_COMMON/cloudtasks/base_client.py
+headers = {
+    'X-Signature': generate_hmac(payload),
+    'X-Timestamp': str(int(time.time())),
+}
+```
+- ❌ Manual HMAC secret management
+- ❌ Manual signature generation and verification
+- ❌ Manual timestamp validation
+- ❌ Manual nonce tracking required for replay protection
+- ❌ No IAM integration
+- ❌ No service account identity preservation
+
+**GCP-Recommended Implementation (OIDC):**
+```python
+# PGP_COMMON/cloudtasks/base_client.py
+task = {
+    "http_request": {
+        "oidc_token": {
+            "service_account_email": "pgp-tasks@pgp-live.iam.gserviceaccount.com",
+            "audience": target_url
+        }
+    }
+}
+```
+- ✅ Automatic OIDC token generation
+- ✅ Automatic signature by Google
+- ✅ Built-in expiration (1 hour)
+- ✅ Built-in replay protection (jti claim)
+- ✅ IAM-based authorization (roles/run.invoker)
+- ✅ Service account identity in logs
+
+**2. Cloud SQL Authentication:**
+
+**Current Implementation (Password-based):**
+```python
+# PGP_COMMON/database/database_manager.py
+connector.connect(
+    user=db_user,
+    password=db_password,  # From Secret Manager
+)
+```
+- ❌ Password stored in Secret Manager (unlimited lifetime)
+- ❌ Breaks identity chain (anyone with password can impersonate)
+- ❌ Manual rotation required
+- ❌ SSL optional
+- ❌ Limited audit trail
+
+**GCP-Recommended Implementation (IAM Auth):**
+```python
+# PGP_COMMON/database/database_manager.py
+connector.connect(
+    user="pgp-server@pgp-live.iam",
+    enable_iam_auth=True,
+)
+```
+- ✅ Short-lived tokens (1 hour max)
+- ✅ Identity chain preserved (per-service account)
+- ✅ Automatic rotation
+- ✅ SSL enforced
+- ✅ Comprehensive audit trail
+
+**GCP Official Quotes Supporting This Decision:**
+
+**On IAM Database Authentication:**
+> "IAM database authentication is **more secure and reliable** than built-in authentication. Using username and password authentication **breaks the identity chain**, as whoever knows the password can impersonate a database role, making it impossible to ascribe actions on an audit file to a specific person."
+>
+> Source: [Cloud SQL IAM Authentication](https://cloud.google.com/sql/docs/postgres/iam-authentication)
+
+**On Cloud Tasks OIDC:**
+> "Cloud Tasks creates tasks with **OIDC tokens** to send to Cloud Run, Cloud Functions, or external URLs. The service account used for authentication must be within the same project as the queue."
+>
+> Source: [Create HTTP Tasks with Authentication](https://cloud.google.com/tasks/docs/samples/cloud-tasks-create-http-task-with-token)
+
+**Decision Rationale:**
+
+**Why Migrate to OIDC for Cloud Tasks:**
+1. **Reduced Complexity:** No manual HMAC secret management
+2. **Better Security:** Built-in replay protection, expiration, IAM integration
+3. **Auditability:** Service account identity preserved in logs
+4. **GCP Native:** Automatic token validation by Cloud Run
+5. **Future-Proof:** Aligned with GCP roadmap and best practices
+
+**Why Migrate to IAM Auth for Cloud SQL:**
+1. **Enhanced Security:** Short-lived tokens instead of long-lived passwords
+2. **Identity Preservation:** Clear audit trail of which service performed which action
+3. **Automatic Rotation:** Tokens auto-expire every hour
+4. **Compliance:** Better alignment with SOC 2, PCI DSS requirements
+5. **SSL Enforcement:** IAM auth requires SSL connections
+
+**Migration Strategy:**
+
+**Phase 1: Cloud Tasks OIDC Migration (Sprint 2)**
+1. Create service account: `pgp-tasks@pgp-live.iam.gserviceaccount.com`
+2. Grant `roles/iam.serviceAccountTokenCreator` to Cloud Tasks service agent
+3. Grant `roles/run.invoker` to service account for each target Cloud Run service
+4. Update `PGP_COMMON/cloudtasks/base_client.py` to use OIDC tokens
+5. Remove HMAC verification middleware from all Cloud Run services
+6. Test task delivery with OIDC tokens
+7. Deploy to production with rollback plan
+
+**Phase 2: Cloud SQL IAM Auth Migration (Sprint 2)**
+1. Grant `roles/cloudsql.client` to each service account
+2. Create IAM database users for each service:
+   - `pgp-server@pgp-live.iam`
+   - `pgp-orchestrator@pgp-live.iam`
+   - `pgp-webapi@pgp-live.iam`
+3. Grant database permissions to IAM users
+4. Update `PGP_COMMON/database/database_manager.py` to use `enable_iam_auth=True`
+5. Test database connections with IAM auth
+6. Deploy to production with password fallback
+7. Remove password-based secrets after 7-day soak period
+
+**Rollback Plan:**
+- Phase 1: Revert to HMAC authentication (keep middleware code for 30 days)
+- Phase 2: Fallback to password auth (keep secrets for 30 days)
+
+**Impact Assessment:**
+
+**Benefits:**
+- ✅ Improved security posture (CRITICAL to LOW-MEDIUM risk reduction)
+- ✅ Better compliance with GCP best practices (48% → 100%)
+- ✅ Reduced operational overhead (no manual secret rotation)
+- ✅ Enhanced auditability (service account identity in logs)
+
+**Costs:**
+- 💰 **$0 additional cost** (OIDC and IAM auth are free)
+- ⏱️ 28 hours development effort (12h IAM + 16h OIDC)
+- ⚠️ Breaking change (requires coordinated deployment)
+
+**Risks:**
+- ⚠️ **MEDIUM:** Breaking change requires all services to deploy simultaneously
+- ⚠️ **LOW:** IAM permission misconfiguration could block database access
+- ⚠️ **LOW:** Service account token creator role misconfiguration could block task delivery
+
+**Mitigation:**
+- ✅ Test thoroughly in staging environment
+- ✅ Deploy during low-traffic hours
+- ✅ Keep rollback plan ready (HMAC/password fallback)
+- ✅ Monitor Cloud Logging for authentication errors
+- ✅ Set up alerts for IAM auth failures
+
+**Alternatives Considered:**
+
+**Alternative 1: Keep HMAC + Add Timestamp Validation + Nonce Tracking**
+- ❌ More complex than OIDC
+- ❌ Requires Redis for distributed nonce storage (+$50/mo)
+- ❌ Still manual secret management
+- ❌ Not aligned with GCP best practices
+
+**Alternative 2: Keep Password Auth + Implement Rotation**
+- ❌ Still breaks identity chain
+- ❌ Manual rotation complexity
+- ❌ Doesn't solve compliance issues
+- ❌ Not aligned with GCP best practices
+
+**Decision:** Adopt GCP-native patterns (OIDC + IAM auth) for long-term maintainability and security.
+
+**Timeline:**
+- Sprint 1 (Week 1-2): Documentation and testing
+- Sprint 2 (Week 3-4): Implementation and migration
+- Sprint 3 (Week 5): Monitoring and optimization
+
+**Success Metrics:**
+- ✅ 100% of Cloud Tasks use OIDC tokens
+- ✅ 100% of database connections use IAM auth
+- ✅ Zero authentication failures in production
+- ✅ GCP compliance score: 100%
+
+---
 
 ## 2025-11-16: Security Documentation Standards 📋
 

@@ -40,7 +40,11 @@
       "Bash(do sed -i 's/PROJECT_ID = \"\"\"\"telepay-459221\"\"\"\"/PROJECT_ID = \"\"\"\"pgp-live\"\"\"\"/g' \"$FILE\" sed -i 's/project_id = \"\"\"\"telepay-459221\"\"\"\"/project_id = \"\"\"\"pgp-live\"\"\"\"/g' \"$FILE\" sed -i 's/telepay-459221:us-central1:telepaypsql/pgp-live:us-central1:pgp-telepaypsql/g' \"$FILE\" echo \"✅ Updated: $FILE\" done)",
       "Bash(for file in backfill_missing_broadcast_entries.py check_broadcast_manager_table.py check_client_table_db.py check_conversion_status_schema.py check_migration_002.py check_payment_amounts.py check_payout_details.py check_payout_schema.py check_schema.py check_schema_details.py fix_payout_accumulation_schema.py populate_broadcast_manager.py run_migration_002_email_change.py run_migration_unique_constraints.py test_batch_query.py test_fetch_due_broadcasts.py test_idempotency_constraint.py test_manual_broadcast_message_tracking.py test_notification_flow.py test_payout_database_methods.py verify_batch_success.py)",
       "Bash(do if [ -f \"$file\" ])",
-      "Bash(then sed -i 's/PROJECT_ID = \"\"telepay-459221\"\"/PROJECT_ID = \"\"pgp-live\"\"/g; s/project_id = \"\"telepay-459221\"\"/project_id = \"\"pgp-live\"\"/g; s/telepay-459221:us-central1:telepaypsql/pgp-live:us-central1:pgp-telepaypsql/g' \"$file\")"
+      "Bash(then sed -i 's/PROJECT_ID = \"\"telepay-459221\"\"/PROJECT_ID = \"\"pgp-live\"\"/g; s/project_id = \"\"telepay-459221\"\"/project_id = \"\"pgp-live\"\"/g; s/telepay-459221:us-central1:telepaypsql/pgp-live:us-central1:pgp-telepaypsql/g' \"$file\")",
+      "Bash(python3:*)",
+      "Bash(/tmp/complete_schema_output.txt)",
+      "Bash(claude mcp:*)",
+      "Bash(../migrations/002_populate_currency_to_network.sql)"
     ],
     "deny": [
       "Bash(gcloud deploy:*)",
