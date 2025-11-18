@@ -14,9 +14,9 @@ from config_manager import ConfigManager
 from database_manager import DatabaseManager
 from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
-from changenow_client import ChangeNowClient
 
 from PGP_COMMON.logging import setup_logger
+from PGP_COMMON.utils import ChangeNowClient
 logger = setup_logger(__name__)
 
 app = Flask(__name__)
@@ -64,10 +64,7 @@ except Exception as e:
 
 # Initialize ChangeNow client
 try:
-    changenow_api_key = config.get('changenow_api_key')
-    if not changenow_api_key:
-        raise ValueError("CHANGENOW_API_KEY not available")
-    changenow_client = ChangeNowClient(changenow_api_key)
+    changenow_client = ChangeNowClient(config_manager)
     logger.info(f"✅ [APP] ChangeNow client initialized")
 except Exception as e:
     logger.error(f"❌ [APP] Failed to initialize ChangeNow client: {e}", exc_info=True)

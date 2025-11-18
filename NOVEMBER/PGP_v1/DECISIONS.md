@@ -1,12 +1,44 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **Security Audit Session 4: C-01, C-02, C-05 Implementation** 🔒
+**Last Updated:** 2025-11-18 - **Code Centralization: PGP_MICROBATCHPROCESSOR_v1 ChangeNow Client Cleanup** ♻️
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-18: Code Centralization - ChangeNow Client Migration ♻️
+
+### Decision 11.1: Remove Duplicate ChangeNow Client from PGP_MICROBATCHPROCESSOR_v1
+**Context:** PGP_MICROBATCHPROCESSOR_v1 had a local copy of changenow_client.py (314 lines) duplicating PGP_COMMON/utils/changenow_client.py
+**Decision:** Delete local duplicate and use PGP_COMMON version exclusively
+**Implementation:**
+- Removed `PGP_MICROBATCHPROCESSOR_v1/changenow_client.py`
+- Updated import: `from PGP_COMMON.utils import ChangeNowClient`
+- Updated initialization: `ChangeNowClient(config_manager)` instead of `ChangeNowClient(api_key)`
+**Rationale:**
+- **Code Duplication**: Maintaining 314 duplicate lines creates maintenance burden
+- **Missing Features**: Local version didn't support hot-reload (hardcoded API key in `__init__`)
+- **Consistency**: PGP_SPLIT2_v1 and PGP_SPLIT3_v1 already use PGP_COMMON version
+- **Best Practice**: Single source of truth for shared functionality (DRY principle)
+- **Hot-Reload Support**: PGP_COMMON version supports dynamic API key updates via config_manager
+**Trade-offs:**
+- ✅ Maintainability: One version to update vs two
+- ✅ Features: Hot-reload capability vs static initialization
+- ✅ Consistency: All services use same implementation
+- ✅ Code size: Reduced by 314 lines
+- ⚠️ Migration risk: Minimal (same API, just different initialization pattern)
+**Files Modified:**
+- `PGP_MICROBATCHPROCESSOR_v1/pgp_microbatchprocessor_v1.py:16-19` (import)
+- `PGP_MICROBATCHPROCESSOR_v1/pgp_microbatchprocessor_v1.py:65-71` (initialization)
+**Files Deleted:**
+- `PGP_MICROBATCHPROCESSOR_v1/changenow_client.py` (314 lines)
+**Verification:**
+- Dockerfile uses `COPY . .` (no specific reference to deleted file)
+- Import pattern tested in PGP_SPLIT2_v1 and PGP_SPLIT3_v1 (working in production)
+
+---
 
 ## 2025-11-18: Security Audit Implementation - Session 4: Remaining Vulnerabilities 🔒
 
