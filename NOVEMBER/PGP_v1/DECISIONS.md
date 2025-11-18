@@ -1,12 +1,219 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-16 - **OWASP Security Remediation Strategy** ✅
+**Last Updated:** 2025-11-18 - **Comprehensive Deployment Documentation Strategy** 📋
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-18: Comprehensive Deployment Documentation & 8-Phase Migration Strategy 📋
+
+**Decision:** Create complete deployment documentation (DATABASE_SCHEMA_DOCUMENTATION.md) with 8-phase migration plan before initiating any pgp-live infrastructure deployment
+
+**Context:**
+- pgp-live GCP project is greenfield (no infrastructure deployed)
+- 17 microservices ready for deployment but no clear deployment sequence documented
+- Multiple deployment scripts exist but no unified documentation
+- Risk of deployment failures without proper planning and checklists
+- Need to track deployment status across 8 phases and 75+ deployment steps
+
+**Documentation Architecture Decision:**
+
+### Phase-Based Deployment Strategy
+
+**Decision:** Organize deployment into 8 sequential phases with validation gates between each phase
+
+**Rationale:**
+- **Risk Mitigation:** Each phase can be validated before proceeding (fail-fast approach)
+- **Rollback Capability:** Clear rollback procedures for each phase minimize deployment risk
+- **Resource Coordination:** Dependencies between phases explicitly documented (e.g., secrets before services)
+- **Progress Tracking:** Clear metrics for completion (Phase X of 8, percentage complete)
+- **Team Coordination:** Multiple team members can work on different phases concurrently (with dependencies respected)
+
+**8 Phases Selected:**
+1. GCP Project Setup (foundation)
+2. Secret Manager (configuration)
+3. Cloud SQL + Database Schema (persistence)
+4. Cloud Tasks (async processing)
+5. Cloud Run Services (compute)
+6. External Configuration (integrations)
+7. Testing & Validation (quality assurance)
+8. Production Hardening (security & operations)
+
+**Alternative Considered:**
+- **Big Bang Deployment:** Deploy all resources at once
+  - **Rejected:** Too risky, difficult to troubleshoot, no rollback points
+- **Service-by-Service:** Deploy one service at a time
+  - **Rejected:** Ignores dependencies, inefficient (e.g., all services need secrets first)
+
+### Checklist-Driven Deployment
+
+**Decision:** Provide 150+ actionable checklist items across all phases with verification steps
+
+**Rationale:**
+- **Accountability:** Each step can be assigned and tracked
+- **Quality Assurance:** Verification steps ensure each action completed correctly
+- **Repeatability:** Deployment can be reproduced (staging → production)
+- **Training:** New team members can follow checklists to learn deployment process
+- **Compliance:** Audit trail of deployment steps for compliance requirements
+
+**Checklist Structure:**
+- [ ] Action item (what to do)
+- Expected outcome (what should happen)
+- Verification command (how to verify)
+- Troubleshooting (what if it fails)
+- Time estimate (planning)
+
+### Documentation-First Before Deployment
+
+**Decision:** Complete documentation before starting infrastructure deployment (current state)
+
+**Rationale:**
+- **Planning:** Identify all requirements before spending cloud costs
+- **Review:** Stakeholders can review and approve plan before execution
+- **Resource Estimation:** Accurate cost and time estimates before commitment
+- **Risk Identification:** Potential issues identified during documentation phase
+- **Coordination:** Allows parallel work on different phases after approval
+
+**Deployment Status Tracking:**
+- Current: Phase 0 of 8 (Documentation Complete, Deployment Not Started)
+- Target: Phase 8 of 8 (Production Hardening Complete)
+
+### Comprehensive Appendices for Reference
+
+**Decision:** Include 6 appendices with complete reference information
+
+**Rationale:**
+- **Single Source of Truth:** All deployment information in one document
+- **Quick Reference:** No need to search multiple files for deployment commands
+- **Onboarding:** New team members have complete context
+- **Troubleshooting:** Common issues and solutions documented
+- **Cost Planning:** Cost optimization strategies included
+
+**Appendices:**
+- A: Complete file reference (deployment scripts, migrations, tests)
+- B: Secret naming scheme reference (75+ secrets)
+- C: Service naming scheme (PGP_v1 → Cloud Run mapping)
+- D: Database schema ERD (15 tables, 4 ENUMs)
+- E: Comprehensive troubleshooting guide (common issues)
+- F: Cost optimization strategies ($185 → $303/month analysis)
+
+### Timeline & Cost Transparency
+
+**Decision:** Include explicit timeline estimates and cost analysis in documentation
+
+**Rationale:**
+- **Planning:** Management can allocate resources appropriately
+- **Expectations:** Clear communication of deployment duration (5-8 weeks)
+- **Budgeting:** Cost increase documented ($118/month increase for standard deployment)
+- **Trade-offs:** Optimization options presented (standard vs optimized deployment)
+- **Decision Support:** Data-driven decisions on deployment scope and timeline
+
+**Timeline Estimates:**
+- **Minimum (Staging):** 3-4 weeks
+- **Standard (Production):** 5-8 weeks
+- **With Full Security Hardening:** 10-12 weeks
+
+**Cost Analysis:**
+- Current (telepay-459221): $185/month
+- pgp-live (Standard): $303/month (+64%)
+- pgp-live (Optimized): $253/month (+37%)
+
+### Security Integration in Deployment
+
+**Decision:** Include security vulnerability remediation as Phase 8 (Production Hardening)
+
+**Rationale:**
+- **Security-First:** Security not an afterthought, explicitly planned
+- **Compliance Roadmap:** PCI DSS and SOC 2 compliance timeline documented
+- **OWASP Alignment:** 73 identified vulnerabilities mapped to deployment phases
+- **Risk Awareness:** 7 CRITICAL vulnerabilities flagged for immediate attention
+- **Audit Trail:** Security decisions documented for compliance audits
+
+**Security Phases:**
+- P1 (0-7 days): 7 CRITICAL vulnerabilities
+- P2 (30 days): 15 HIGH vulnerabilities
+- P3 (90 days): 26 MEDIUM vulnerabilities
+- P4 (180 days): 25 LOW vulnerabilities
+
+### Rollback Procedures for All Phases
+
+**Decision:** Document complete rollback procedures for each of 8 phases
+
+**Rationale:**
+- **Risk Management:** Ability to revert changes if deployment fails
+- **Confidence:** Team can deploy knowing rollback is possible
+- **Learning:** Failed deployments can be analyzed and retried
+- **Production Safety:** Minimize downtime if issues discovered post-deployment
+
+**Rollback Strategy:**
+- Phase-specific rollback commands documented
+- Data preservation considerations (e.g., database backups)
+- Time estimates for rollback (emergency response planning)
+- Testing rollback procedures (part of Phase 7 validation)
+
+### Benefits Realized
+
+**Deployment Confidence:**
+- Clear roadmap eliminates deployment anxiety
+- Step-by-step checklists reduce human error
+- Verification steps catch issues early
+- Rollback procedures provide safety net
+
+**Team Efficiency:**
+- No ambiguity on what to do next
+- Parallel work possible (e.g., Phase 2 secrets while Phase 1 completes)
+- Time estimates enable accurate sprint planning
+- Troubleshooting guide reduces debugging time
+
+**Stakeholder Communication:**
+- Status easily communicated ("Phase 3 of 8, 37% complete")
+- Cost implications transparent
+- Timeline expectations set correctly
+- Risk factors explicitly documented
+
+**Compliance & Audit:**
+- Complete audit trail of deployment steps
+- Security decisions documented
+- Cost optimization decisions justified
+- Rollback procedures demonstrate risk management
+
+### Implementation Details
+
+**File:** `DATABASE_SCHEMA_DOCUMENTATION.md`
+**Size:** 48KB, 2,550+ lines
+**Structure:**
+- Executive Summary (deployment status, metrics, risk assessment)
+- 8 Phase Sections (objectives, prerequisites, checklists, verification, rollback)
+- 6 Appendices (references, troubleshooting, cost optimization)
+- Version history and conclusion
+
+**Maintenance:**
+- Update deployment status as phases complete
+- Add lessons learned to troubleshooting sections
+- Update cost analysis with actual costs
+- Version control in git for change tracking
+
+### Related Decisions
+
+This decision builds on:
+- 2025-11-16: OWASP Security Remediation Strategy (security integrated into deployment)
+- 2025-11-16: GCP Best Practices Adoption (deployment follows GCP standards)
+- 2025-11-16: Comprehensive Codebase Analysis (deployment of analyzed architecture)
+
+### Next Actions
+
+1. Review DATABASE_SCHEMA_DOCUMENTATION.md with stakeholders
+2. Obtain approval for deployment timeline and budget
+3. Begin Phase 1: GCP Project Setup (if approved)
+4. Track deployment progress in PROGRESS.md
+5. Update deployment documentation with lessons learned
+
+**Documentation Complete - Awaiting Deployment Approval**
+
+---
 
 ## 2025-11-16: OWASP Top 10 2021 Compliance & Payment Industry Security Standards 🔐
 
@@ -1678,189 +1885,6 @@ return hmac.compare_digest(expected_signature, provided_signature)
 - Add @deprecated markers to code during gradual refactoring
 - Track migration status in PROGRESS.md
 - Code review should flag duplicate functionality
-
----
-
-## 2025-01-15: Phase 3.2 - Atomic Rename Strategy + Correction ✅
-
-**Decision:** Rename all function definitions and call sites simultaneously in a single atomic commit, rather than using wrapper functions for gradual migration.
-
-**CORRECTION MADE:** Initial implementation only renamed 17 functions, discovered 30 missed functions. Commit was amended to include all 47 functions using git commit --amend and force push.
-
-**Context:**
-- 47 unique functions needed renaming from GC* to PGP_* naming (not 17 as initially scoped)
-- Functions are part of token_manager.py API contracts between services
-- Functions called across multiple services (e.g., `encrypt_gchostpay1_to_gchostpay2_token` called by both HOSTPAY1 and HOSTPAY2)
-- Need to maintain service compatibility during renaming
-- Initial script missed SPLIT1/SPLIT2/SPLIT3 services entirely (24 functions)
-
-**Options Considered:**
-
-1. **Atomic Rename (CHOSEN)** ✅
-   - Rename all definitions and call sites in one commit
-   - Pros:
-     - Clean, no duplicate code
-     - Single source of truth
-     - No deprecation period needed
-     - Easy to verify completeness (grep for old names)
-   - Cons:
-     - Higher risk if deployment fails
-     - All services must deploy together
-   - **Selected because:** Services are tightly coupled via token encryption, coordinated deployment required anyway
-
-2. **Wrapper Functions**
-   - Keep old functions as wrappers calling new functions
-   - Pros:
-     - Gradual migration possible
-     - Lower deployment risk
-   - Cons:
-     - Duplicate function definitions (34 wrappers needed)
-     - Deprecation tracking overhead
-     - Cleanup phase required
-   - **Rejected because:** Token manager is internal API, not public library
-
-3. **Service-by-Service Migration**
-   - Rename one service at a time
-   - Cons:
-     - Breaking changes at each step
-     - Complex intermediate states
-     - Would require dual function names
-   - **Rejected because:** Function calls cross service boundaries
-
-**Implementation:**
-- Initial script `/tmp/phase_3_2_function_rename.py` - Only renamed 17 functions (INCOMPLETE)
-- Corrected script `/tmp/phase_3_2_complete_function_rename.py` - Renamed all 47 functions
-- Sorted renames by length (longest first) to avoid partial replacements
-- Regex patterns matched both definitions (`def name(`) and calls (`name(`)
-- Verification: grep confirmed 0 remaining old function names after correction
-
-**Missed Functions Breakdown:**
-- SPLIT1/SPLIT2/SPLIT3: 24 inter-split communication functions (ALL missed)
-- ACCUMULATOR: 2 additional decrypt functions (partial miss)
-- HOSTPAY1: 3 retry/response functions (partial miss)
-- MICROBATCH: 1 decrypt function (partial miss)
-
-**Git Commits:**
-- `74de155` - Original incomplete commit (17 functions)
-- `cae7de4` - Amended commit with all 47 functions (30 added)
-- Force push required to update remote history
-
-**Risk Mitigation:**
-- Python syntax validation on all files before commit
-- Rollback plan: `git revert cae7de4` (or `git revert 74de155` for original)
-- All services tested together before production deployment
-
-**Lessons Learned from Incomplete Implementation:**
-1. **Inadequate Scope Analysis:** Initial script only analyzed ACCUMULATOR, ORCHESTRATOR, HOSTPAY, and MICROBATCH services. Failed to check SPLIT services.
-2. **Insufficient Verification:** grep search only checked files that were modified, not all potential files
-3. **Solution:** Created comprehensive inventory of ALL services before running corrected script
-4. **Prevention:** Always run `grep -r "def .*gc.*("` across ALL service directories, not just expected ones
-
-**Why Correction Was Necessary:**
-- SPLIT services handle critical payment splitting logic
-- Token functions enable secure communication between splits
-- Incomplete renaming would cause runtime errors when SPLIT services call each other
-- All 3 SPLIT services use same token manager functions (24 functions total)
-
-**Related Decisions:**
-- Phase 3.1: Variable rename (similar atomic strategy, but properly scoped)
-- Phase 3.3: Database schema (staged strategy due to schema risk)
-
----
-
-## 2025-01-15: Phase 3.3 - Staged Database Migration Strategy ✅
-
-**Decision:** Update code references first (backward compatible), then provide SQL migration script for separate database schema update.
-
-**Context:**
-- Database columns `gcwebhook1_processed` and `gcwebhook1_processed_at` need renaming to `pgp_orchestrator_*`
-- Code references exist in PGP_ORCHESTRATOR_v1 and PGP_NP_IPN_v1
-- Database migrations are higher risk than code changes (harder to rollback)
-- Production database must remain available during migration
-
-**Options Considered:**
-
-1. **Code Changes Before Schema (CHOSEN)** ✅
-   - Update code to use new column names
-   - Deploy code changes
-   - Run SQL migration separately
-   - Pros:
-     - Code changes reversible via git
-     - Database migration done when ready
-     - Can test code changes before schema update
-     - Clear rollback path for each step
-   - Cons:
-     - Requires code to handle both old and new names temporarily
-   - **Selected because:** Minimizes production risk, allows staged rollout
-
-2. **Schema Changes Before Code**
-   - Run SQL migration first
-   - Deploy code changes after
-   - Cons:
-     - Old code breaks immediately after schema change
-     - Forces immediate code deployment
-     - Higher risk of downtime
-   - **Rejected because:** No graceful degradation if code deployment fails
-
-3. **Atomic Code + Schema**
-   - Deploy code and run migration simultaneously
-   - Cons:
-     - Complex coordination required
-     - Harder to rollback
-     - Higher chance of inconsistent state
-   - **Rejected because:** Too risky for production database
-
-**Implementation:**
-
-**Step 1: Code Changes (Backward Compatible)**
-```python
-# Updated queries use NEW column names
-SELECT pgp_orchestrator_processed, pgp_orchestrator_processed_at
-UPDATE ... SET pgp_orchestrator_processed = TRUE
-```
-
-**Step 2: SQL Migration Script**
-```sql
--- migrations/003_rename_gcwebhook1_columns.sql
-ALTER TABLE processed_payments
-    RENAME COLUMN gcwebhook1_processed TO pgp_orchestrator_processed;
-
-ALTER TABLE processed_payments
-    RENAME COLUMN gcwebhook1_processed_at TO pgp_orchestrator_processed_at;
-```
-
-**Step 3: Rollback Script**
-```sql
--- migrations/003_rollback.sql
-ALTER TABLE processed_payments
-    RENAME COLUMN pgp_orchestrator_processed TO gcwebhook1_processed;
-
-ALTER TABLE processed_payments
-    RENAME COLUMN pgp_orchestrator_processed_at TO gcwebhook1_processed_at;
-```
-
-**Deployment Sequence:**
-1. Deploy code changes (commit `98a206c`)
-2. Verify code deployment successful
-3. Execute SQL migration during low-traffic window
-4. Verify column renames successful
-5. Monitor production for errors
-
-**Rollback Plan:**
-- Code rollback: `git revert 98a206c` and redeploy
-- Database rollback: Execute `migrations/003_rollback.sql`
-
-**Risk Level:** CRITICAL
-- Database schema changes affect payment processing
-- Idempotency check logic depends on these columns
-- Downtime unacceptable for payment system
-
-**Testing:**
-- Verified SQL syntax on test database
-- Confirmed code references updated correctly
-- Python syntax validation passed
-
-**Git Commit:** `98a206c` - "Phase 3.3 COMPLETE: Database schema column renaming"
 
 ---
 

@@ -1,3 +1,186 @@
+## 2025-01-15: Phase 3.2 - Atomic Rename Strategy + Correction ✅
+
+**Decision:** Rename all function definitions and call sites simultaneously in a single atomic commit, rather than using wrapper functions for gradual migration.
+
+**CORRECTION MADE:** Initial implementation only renamed 17 functions, discovered 30 missed functions. Commit was amended to include all 47 functions using git commit --amend and force push.
+
+**Context:**
+- 47 unique functions needed renaming from GC* to PGP_* naming (not 17 as initially scoped)
+- Functions are part of token_manager.py API contracts between services
+- Functions called across multiple services (e.g., `encrypt_gchostpay1_to_gchostpay2_token` called by both HOSTPAY1 and HOSTPAY2)
+- Need to maintain service compatibility during renaming
+- Initial script missed SPLIT1/SPLIT2/SPLIT3 services entirely (24 functions)
+
+**Options Considered:**
+
+1. **Atomic Rename (CHOSEN)** ✅
+   - Rename all definitions and call sites in one commit
+   - Pros:
+     - Clean, no duplicate code
+     - Single source of truth
+     - No deprecation period needed
+     - Easy to verify completeness (grep for old names)
+   - Cons:
+     - Higher risk if deployment fails
+     - All services must deploy together
+   - **Selected because:** Services are tightly coupled via token encryption, coordinated deployment required anyway
+
+2. **Wrapper Functions**
+   - Keep old functions as wrappers calling new functions
+   - Pros:
+     - Gradual migration possible
+     - Lower deployment risk
+   - Cons:
+     - Duplicate function definitions (34 wrappers needed)
+     - Deprecation tracking overhead
+     - Cleanup phase required
+   - **Rejected because:** Token manager is internal API, not public library
+
+3. **Service-by-Service Migration**
+   - Rename one service at a time
+   - Cons:
+     - Breaking changes at each step
+     - Complex intermediate states
+     - Would require dual function names
+   - **Rejected because:** Function calls cross service boundaries
+
+**Implementation:**
+- Initial script `/tmp/phase_3_2_function_rename.py` - Only renamed 17 functions (INCOMPLETE)
+- Corrected script `/tmp/phase_3_2_complete_function_rename.py` - Renamed all 47 functions
+- Sorted renames by length (longest first) to avoid partial replacements
+- Regex patterns matched both definitions (`def name(`) and calls (`name(`)
+- Verification: grep confirmed 0 remaining old function names after correction
+
+**Missed Functions Breakdown:**
+- SPLIT1/SPLIT2/SPLIT3: 24 inter-split communication functions (ALL missed)
+- ACCUMULATOR: 2 additional decrypt functions (partial miss)
+- HOSTPAY1: 3 retry/response functions (partial miss)
+- MICROBATCH: 1 decrypt function (partial miss)
+
+**Git Commits:**
+- `74de155` - Original incomplete commit (17 functions)
+- `cae7de4` - Amended commit with all 47 functions (30 added)
+- Force push required to update remote history
+
+**Risk Mitigation:**
+- Python syntax validation on all files before commit
+- Rollback plan: `git revert cae7de4` (or `git revert 74de155` for original)
+- All services tested together before production deployment
+
+**Lessons Learned from Incomplete Implementation:**
+1. **Inadequate Scope Analysis:** Initial script only analyzed ACCUMULATOR, ORCHESTRATOR, HOSTPAY, and MICROBATCH services. Failed to check SPLIT services.
+2. **Insufficient Verification:** grep search only checked files that were modified, not all potential files
+3. **Solution:** Created comprehensive inventory of ALL services before running corrected script
+4. **Prevention:** Always run `grep -r "def .*gc.*("` across ALL service directories, not just expected ones
+
+**Why Correction Was Necessary:**
+- SPLIT services handle critical payment splitting logic
+- Token functions enable secure communication between splits
+- Incomplete renaming would cause runtime errors when SPLIT services call each other
+- All 3 SPLIT services use same token manager functions (24 functions total)
+
+**Related Decisions:**
+- Phase 3.1: Variable rename (similar atomic strategy, but properly scoped)
+- Phase 3.3: Database schema (staged strategy due to schema risk)
+
+---
+
+## 2025-01-15: Phase 3.3 - Staged Database Migration Strategy ✅
+
+**Decision:** Update code references first (backward compatible), then provide SQL migration script for separate database schema update.
+
+**Context:**
+- Database columns `gcwebhook1_processed` and `gcwebhook1_processed_at` need renaming to `pgp_orchestrator_*`
+- Code references exist in PGP_ORCHESTRATOR_v1 and PGP_NP_IPN_v1
+- Database migrations are higher risk than code changes (harder to rollback)
+- Production database must remain available during migration
+
+**Options Considered:**
+
+1. **Code Changes Before Schema (CHOSEN)** ✅
+   - Update code to use new column names
+   - Deploy code changes
+   - Run SQL migration separately
+   - Pros:
+     - Code changes reversible via git
+     - Database migration done when ready
+     - Can test code changes before schema update
+     - Clear rollback path for each step
+   - Cons:
+     - Requires code to handle both old and new names temporarily
+   - **Selected because:** Minimizes production risk, allows staged rollout
+
+2. **Schema Changes Before Code**
+   - Run SQL migration first
+   - Deploy code changes after
+   - Cons:
+     - Old code breaks immediately after schema change
+     - Forces immediate code deployment
+     - Higher risk of downtime
+   - **Rejected because:** No graceful degradation if code deployment fails
+
+3. **Atomic Code + Schema**
+   - Deploy code and run migration simultaneously
+   - Cons:
+     - Complex coordination required
+     - Harder to rollback
+     - Higher chance of inconsistent state
+   - **Rejected because:** Too risky for production database
+
+**Implementation:**
+
+**Step 1: Code Changes (Backward Compatible)**
+```python
+# Updated queries use NEW column names
+SELECT pgp_orchestrator_processed, pgp_orchestrator_processed_at
+UPDATE ... SET pgp_orchestrator_processed = TRUE
+```
+
+**Step 2: SQL Migration Script**
+```sql
+-- migrations/003_rename_gcwebhook1_columns.sql
+ALTER TABLE processed_payments
+    RENAME COLUMN gcwebhook1_processed TO pgp_orchestrator_processed;
+
+ALTER TABLE processed_payments
+    RENAME COLUMN gcwebhook1_processed_at TO pgp_orchestrator_processed_at;
+```
+
+**Step 3: Rollback Script**
+```sql
+-- migrations/003_rollback.sql
+ALTER TABLE processed_payments
+    RENAME COLUMN pgp_orchestrator_processed TO gcwebhook1_processed;
+
+ALTER TABLE processed_payments
+    RENAME COLUMN pgp_orchestrator_processed_at TO gcwebhook1_processed_at;
+```
+
+**Deployment Sequence:**
+1. Deploy code changes (commit `98a206c`)
+2. Verify code deployment successful
+3. Execute SQL migration during low-traffic window
+4. Verify column renames successful
+5. Monitor production for errors
+
+**Rollback Plan:**
+- Code rollback: `git revert 98a206c` and redeploy
+- Database rollback: Execute `migrations/003_rollback.sql`
+
+**Risk Level:** CRITICAL
+- Database schema changes affect payment processing
+- Idempotency check logic depends on these columns
+- Downtime unacceptable for payment system
+
+**Testing:**
+- Verified SQL syntax on test database
+- Confirmed code references updated correctly
+- Python syntax validation passed
+
+**Git Commit:** `98a206c` - "Phase 3.3 COMPLETE: Database schema column renaming"
+
+---
+
 ## 2025-01-15: Phase 3.1 - Simple String Replacement for Internal Variables ✅
 
 **Decision:** Use simple string replacement (not regex) for internal variable renaming, prioritizing longest variable names first.

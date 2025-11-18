@@ -44,7 +44,14 @@
       "Bash(python3:*)",
       "Bash(/tmp/complete_schema_output.txt)",
       "Bash(claude mcp:*)",
-      "Bash(../migrations/002_populate_currency_to_network.sql)"
+      "Bash(../migrations/002_populate_currency_to_network.sql)",
+      "Bash(if [ -f PROGRESS_ARCH.md ])",
+      "Bash(then cat /tmp/progress_to_archive.txt PROGRESS_ARCH.md)",
+      "Bash(/tmp/progress_arch_new.txt)",
+      "Bash(else cat /tmp/progress_to_archive.txt)",
+      "Bash(if [ -f DECISIONS_ARCH.md ])",
+      "Bash(then cat /tmp/decisions_to_archive.txt DECISIONS_ARCH.md)",
+      "Bash(test:*)"
     ],
     "deny": [
       "Bash(gcloud deploy:*)",
