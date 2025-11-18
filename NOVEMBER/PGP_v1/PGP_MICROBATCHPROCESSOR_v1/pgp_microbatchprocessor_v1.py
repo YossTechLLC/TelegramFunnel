@@ -16,10 +16,13 @@ from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 from changenow_client import ChangeNowClient
 
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_MICROBATCHPROCESSOR_v1 Micro-Batch Conversion Service")
+logger.info(f"🚀 [APP] Initializing PGP_MICROBATCHPROCESSOR_v1 Micro-Batch Conversion Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -31,9 +34,9 @@ try:
         db_user=config['db_user'],
         db_password=config['db_password']
     )
-    print(f"✅ [APP] Database manager initialized")
+    logger.info(f"✅ [APP] Database manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize database manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     db_manager = None
 
 # Initialize token manager
@@ -42,9 +45,9 @@ try:
     if not signing_key:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
     token_manager = TokenManager(signing_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize Cloud Tasks client
@@ -54,9 +57,9 @@ try:
     if not project_id or not location:
         raise ValueError("Cloud Tasks configuration incomplete")
     cloudtasks_client = CloudTasksClient(project_id, location)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info(f"✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 # Initialize ChangeNow client
@@ -65,9 +68,9 @@ try:
     if not changenow_api_key:
         raise ValueError("CHANGENOW_API_KEY not available")
     changenow_client = ChangeNowClient(changenow_api_key)
-    print(f"✅ [APP] ChangeNow client initialized")
+    logger.info(f"✅ [APP] ChangeNow client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize ChangeNow client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize ChangeNow client: {e}", exc_info=True)
     changenow_client = None
 
 
@@ -89,13 +92,13 @@ def check_threshold():
         JSON response with processing summary
     """
     try:
-        print(f"🎯 [ENDPOINT] Threshold check triggered")
-        print(f"⏰ [ENDPOINT] Timestamp: {int(time.time())}")
+        logger.info(f"🎯 [ENDPOINT] Threshold check triggered")
+        logger.info(f"⏰ [ENDPOINT] Timestamp: {int(time.time())}")
         sys.stdout.flush()  # Force immediate log output
 
         # Validate managers
         if not db_manager or not token_manager or not cloudtasks_client or not changenow_client:
-            print(f"❌ [ENDPOINT] Required managers not available")
+            logger.error(f"❌ [ENDPOINT] Required managers not available")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -105,26 +108,26 @@ def check_threshold():
         # Get threshold from config (already fetched at startup)
         threshold = config.get('micro_batch_threshold')
         if not threshold:
-            print(f"❌ [ENDPOINT] Threshold not available in config")
+            logger.error(f"❌ [ENDPOINT] Threshold not available in config")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Threshold configuration missing"
             }), 500
-        print(f"💰 [ENDPOINT] Using threshold: ${threshold}")
+        logger.info(f"💰 [ENDPOINT] Using threshold: ${threshold}")
 
         # Query total pending USD and ACTUAL ETH
-        print(f"🔍 [ENDPOINT] Querying total pending USD")
+        logger.debug(f"🔍 [ENDPOINT] Querying total pending USD")
         total_pending = db_manager.get_total_pending_usd()
-        print(f"📊 [ENDPOINT] Total pending: ${total_pending}")
+        logger.debug(f"📊 [ENDPOINT] Total pending: ${total_pending}")
 
-        print(f"🔍 [ENDPOINT] Querying total pending ACTUAL ETH")
+        logger.debug(f"🔍 [ENDPOINT] Querying total pending ACTUAL ETH")
         total_actual_eth = db_manager.get_total_pending_actual_eth()
-        print(f"💎 [ENDPOINT] Total ACTUAL ETH: {total_actual_eth} ETH")
+        logger.info(f"💎 [ENDPOINT] Total ACTUAL ETH: {total_actual_eth} ETH")
 
         # Check if threshold reached
         if total_pending < threshold:
-            print(f"⏳ [ENDPOINT] Total pending (${total_pending}) < Threshold (${threshold}) - no action")
+            logger.info(f"⏳ [ENDPOINT] Total pending (${total_pending}) < Threshold (${threshold}) - no action")
             return jsonify({
                 "status": "success",
                 "message": "Below threshold, no batch conversion needed",
@@ -133,50 +136,50 @@ def check_threshold():
                 "batch_created": False
             }), 200
 
-        print(f"✅ [ENDPOINT] Threshold reached! Creating batch conversion")
-        print(f"📊 [ENDPOINT] Total pending: ${total_pending} >= Threshold: ${threshold}")
+        logger.info(f"✅ [ENDPOINT] Threshold reached! Creating batch conversion")
+        logger.debug(f"📊 [ENDPOINT] Total pending: ${total_pending} >= Threshold: ${threshold}")
 
         # Fetch all pending records
-        print(f"🔍 [ENDPOINT] Fetching all pending payment records")
+        logger.debug(f"🔍 [ENDPOINT] Fetching all pending payment records")
         pending_records = db_manager.get_all_pending_records()
 
         if not pending_records:
-            print(f"⚠️ [ENDPOINT] No pending records found (race condition?)")
+            logger.warning(f"⚠️ [ENDPOINT] No pending records found (race condition?)")
             return jsonify({
                 "status": "success",
                 "message": "No pending records to process",
                 "batch_created": False
             }), 200
 
-        print(f"📊 [ENDPOINT] Found {len(pending_records)} pending record(s)")
+        logger.debug(f"📊 [ENDPOINT] Found {len(pending_records)} pending record(s)")
 
         # Generate batch conversion ID
         batch_conversion_id = str(uuid.uuid4())
-        print(f"🆔 [ENDPOINT] Generated batch conversion ID: {batch_conversion_id}")
+        logger.debug(f"🆔 [ENDPOINT] Generated batch conversion ID: {batch_conversion_id}")
 
         # Get host wallet address
         host_wallet_usdt = config.get('host_wallet_usdt_address')
         if not host_wallet_usdt:
-            print(f"❌ [ENDPOINT] Host USDT wallet address not configured")
+            logger.error(f"❌ [ENDPOINT] Host USDT wallet address not configured")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Host wallet configuration missing"
             }), 500
 
-        print(f"🏦 [ENDPOINT] Host USDT wallet: {host_wallet_usdt}")
+        logger.info(f"🏦 [ENDPOINT] Host USDT wallet: {host_wallet_usdt}")
 
         # Determine ETH amount to use for swap
         # Priority: ACTUAL ETH > USD estimate fallback
         if total_actual_eth > 0:
             eth_for_swap = total_actual_eth
-            print(f"✅ [ENDPOINT] Using ACTUAL ETH from NowPayments: {eth_for_swap} ETH")
-            print(f"📊 [ENDPOINT] This represents ${total_pending} USD in accumulated payments")
+            logger.info(f"✅ [ENDPOINT] Using ACTUAL ETH from NowPayments: {eth_for_swap} ETH")
+            logger.debug(f"📊 [ENDPOINT] This represents ${total_pending} USD in accumulated payments")
         else:
-            print(f"⚠️ [ENDPOINT] WARNING: No actual ETH found, falling back to USD→ETH estimation")
-            print(f"📊 [ENDPOINT] Step 1: Converting USD to ETH equivalent")
-            print(f"💰 [ENDPOINT] Total pending: ${total_pending} USD")
-            print(f"🔄 [ENDPOINT] Calling ChangeNow estimate API: USDT → ETH")
+            logger.warning(f"⚠️ [ENDPOINT] WARNING: No actual ETH found, falling back to USD→ETH estimation")
+            logger.debug(f"📊 [ENDPOINT] Step 1: Converting USD to ETH equivalent")
+            logger.info(f"💰 [ENDPOINT] Total pending: ${total_pending} USD")
+            logger.info(f"🔄 [ENDPOINT] Calling ChangeNow estimate API: USDT → ETH")
 
             # Fallback: Use USDT→ETH estimate to find ETH equivalent of USD amount
             estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
@@ -190,7 +193,7 @@ def check_threshold():
             )
 
             if not estimate_response or 'toAmount' not in estimate_response:
-                print(f"❌ [ENDPOINT] Failed to get ETH estimate from ChangeNow")
+                logger.error(f"❌ [ENDPOINT] Failed to get ETH estimate from ChangeNow")
                 sys.stdout.flush()
                 return jsonify({
                     "status": "error",
@@ -198,12 +201,12 @@ def check_threshold():
                 }), 500
 
             eth_for_swap = estimate_response['toAmount']
-            print(f"✅ [ENDPOINT] USD→ETH conversion estimate received")
-            print(f"💰 [ENDPOINT] ${total_pending} USD ≈ {eth_for_swap} ETH")
+            logger.info(f"✅ [ENDPOINT] USD→ETH conversion estimate received")
+            logger.info(f"💰 [ENDPOINT] ${total_pending} USD ≈ {eth_for_swap} ETH")
 
         # Create ETH→USDT swap with determined ETH amount
-        print(f"📊 [ENDPOINT] Creating ChangeNow swap: ETH → USDT")
-        print(f"💰 [ENDPOINT] Swap amount: {eth_for_swap} ETH → ~${total_pending} USDT")
+        logger.debug(f"📊 [ENDPOINT] Creating ChangeNow swap: ETH → USDT")
+        logger.info(f"💰 [ENDPOINT] Swap amount: {eth_for_swap} ETH → ~${total_pending} USDT")
 
         swap_result = changenow_client.create_fixed_rate_transaction_with_retry(
             from_currency='eth',
@@ -215,7 +218,7 @@ def check_threshold():
         )
 
         if not swap_result or 'id' not in swap_result:
-            print(f"❌ [ENDPOINT] Failed to create ChangeNow swap")
+            logger.error(f"❌ [ENDPOINT] Failed to create ChangeNow swap")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -225,12 +228,12 @@ def check_threshold():
         cn_api_id = swap_result['id']
         payin_address = swap_result.get('payinAddress')
 
-        print(f"✅ [ENDPOINT] ChangeNow swap created successfully")
-        print(f"🆔 [ENDPOINT] ChangeNow ID: {cn_api_id}")
-        print(f"📬 [ENDPOINT] Payin address: {payin_address}")
+        logger.info(f"✅ [ENDPOINT] ChangeNow swap created successfully")
+        logger.debug(f"🆔 [ENDPOINT] ChangeNow ID: {cn_api_id}")
+        logger.info(f"📬 [ENDPOINT] Payin address: {payin_address}")
 
         # Create batch_conversions record
-        print(f"💾 [ENDPOINT] Creating batch_conversions record")
+        logger.info(f"💾 [ENDPOINT] Creating batch_conversions record")
         batch_created = db_manager.create_batch_conversion(
             batch_conversion_id=batch_conversion_id,
             total_eth_usd=total_pending,
@@ -240,7 +243,7 @@ def check_threshold():
         )
 
         if not batch_created:
-            print(f"❌ [ENDPOINT] Failed to create batch_conversions record")
+            logger.error(f"❌ [ENDPOINT] Failed to create batch_conversions record")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -248,27 +251,27 @@ def check_threshold():
             }), 500
 
         # Update all pending records to 'swapping'
-        print(f"💾 [ENDPOINT] Updating all pending records to 'swapping' status")
+        logger.info(f"💾 [ENDPOINT] Updating all pending records to 'swapping' status")
         records_updated = db_manager.update_records_to_swapping(batch_conversion_id)
 
         if not records_updated:
-            print(f"❌ [ENDPOINT] Failed to update records to swapping")
+            logger.error(f"❌ [ENDPOINT] Failed to update records to swapping")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Failed to update records"
             }), 500
 
-        print(f"✅ [ENDPOINT] Updated {len(pending_records)} record(s) to 'swapping' status")
+        logger.info(f"✅ [ENDPOINT] Updated {len(pending_records)} record(s) to 'swapping' status")
 
         # Enqueue to PGP_HOSTPAY1_v1 for execution
-        print(f"📤 [ENDPOINT] Enqueueing batch execution task to PGP_HOSTPAY1_v1")
+        logger.info(f"📤 [ENDPOINT] Enqueueing batch execution task to PGP_HOSTPAY1_v1")
 
         pgp_hostpay1_batch_queue = config.get('pgp_hostpay1_batch_queue')
         pgp_hostpay1_url = config.get('pgp_hostpay1_url')
 
         if not pgp_hostpay1_batch_queue or not pgp_hostpay1_url:
-            print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 batch configuration missing")
+            logger.error(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 batch configuration missing")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -276,8 +279,8 @@ def check_threshold():
             }), 500
 
         # Encrypt token for PGP_HOSTPAY1_v1
-        print(f"🔐 [ENDPOINT] Encrypting token for PGP_HOSTPAY1_v1")
-        print(f"💰 [ENDPOINT] Passing ACTUAL ETH amount: {eth_for_swap} ETH")
+        logger.info(f"🔐 [ENDPOINT] Encrypting token for PGP_HOSTPAY1_v1")
+        logger.info(f"💰 [ENDPOINT] Passing ACTUAL ETH amount: {eth_for_swap} ETH")
 
         encrypted_token = token_manager.encrypt_microbatch_to_pgp_hostpay1_token(
             batch_conversion_id=batch_conversion_id,
@@ -289,7 +292,7 @@ def check_threshold():
         )
 
         if not encrypted_token:
-            print(f"❌ [ENDPOINT] Failed to encrypt token")
+            logger.error(f"❌ [ENDPOINT] Failed to encrypt token")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -303,16 +306,16 @@ def check_threshold():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT] Failed to create Cloud Task")
+            logger.error(f"❌ [ENDPOINT] Failed to create Cloud Task")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Failed to enqueue execution task"
             }), 500
 
-        print(f"✅ [ENDPOINT] Batch execution task enqueued successfully")
-        print(f"🆔 [ENDPOINT] Task: {task_name}")
-        print(f"🎉 [ENDPOINT] Batch conversion process initiated successfully")
+        logger.info(f"✅ [ENDPOINT] Batch execution task enqueued successfully")
+        logger.debug(f"🆔 [ENDPOINT] Task: {task_name}")
+        logger.info(f"🎉 [ENDPOINT] Batch conversion process initiated successfully")
 
         return jsonify({
             "status": "success",
@@ -327,7 +330,7 @@ def check_threshold():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
         sys.stdout.flush()
@@ -353,12 +356,12 @@ def swap_executed():
         JSON response with distribution summary
     """
     try:
-        print(f"🎯 [ENDPOINT] Swap execution callback received")
-        print(f"⏰ [ENDPOINT] Timestamp: {int(time.time())}")
+        logger.info(f"🎯 [ENDPOINT] Swap execution callback received")
+        logger.info(f"⏰ [ENDPOINT] Timestamp: {int(time.time())}")
 
         # Validate managers
         if not db_manager or not token_manager:
-            print(f"❌ [ENDPOINT] Required managers not available")
+            logger.error(f"❌ [ENDPOINT] Required managers not available")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -375,7 +378,7 @@ def swap_executed():
                     "message": "Invalid JSON payload"
                 }), 400
         except Exception as e:
-            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT] JSON parsing error: {e}", exc_info=True)
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -384,18 +387,18 @@ def swap_executed():
 
         encrypted_token = request_data.get('token')
         if not encrypted_token:
-            print(f"❌ [ENDPOINT] Missing encrypted token")
+            logger.error(f"❌ [ENDPOINT] Missing encrypted token", exc_info=True)
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Missing token"
             }), 400
 
-        print(f"🔐 [ENDPOINT] Decrypting token from PGP_HOSTPAY1_v1")
+        logger.info(f"🔐 [ENDPOINT] Decrypting token from PGP_HOSTPAY1_v1")
         decrypted_data = token_manager.decrypt_pgp_hostpay1_to_microbatch_token(encrypted_token)
 
         if not decrypted_data:
-            print(f"❌ [ENDPOINT] Token decryption failed")
+            logger.error(f"❌ [ENDPOINT] Token decryption failed")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -407,35 +410,35 @@ def swap_executed():
         tx_hash = decrypted_data.get('tx_hash')
         actual_usdt_received = Decimal(str(decrypted_data.get('actual_usdt_received')))
 
-        print(f"✅ [ENDPOINT] Token decrypted successfully")
-        print(f"🆔 [ENDPOINT] Batch Conversion ID: {batch_conversion_id}")
-        print(f"🆔 [ENDPOINT] ChangeNow ID: {cn_api_id}")
-        print(f"💰 [ENDPOINT] Actual USDT received: ${actual_usdt_received}")
-        print(f"🔗 [ENDPOINT] TX Hash: {tx_hash}")
+        logger.info(f"✅ [ENDPOINT] Token decrypted successfully")
+        logger.debug(f"🆔 [ENDPOINT] Batch Conversion ID: {batch_conversion_id}")
+        logger.debug(f"🆔 [ENDPOINT] ChangeNow ID: {cn_api_id}")
+        logger.info(f"💰 [ENDPOINT] Actual USDT received: ${actual_usdt_received}")
+        logger.info(f"🔗 [ENDPOINT] TX Hash: {tx_hash}")
 
         # Fetch all records for this batch
-        print(f"🔍 [ENDPOINT] Fetching records for batch conversion")
+        logger.debug(f"🔍 [ENDPOINT] Fetching records for batch conversion")
         batch_records = db_manager.get_records_by_batch(batch_conversion_id)
 
         if not batch_records:
-            print(f"❌ [ENDPOINT] No records found for batch {batch_conversion_id}")
+            logger.error(f"❌ [ENDPOINT] No records found for batch {batch_conversion_id}")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Batch records not found"
             }), 404
 
-        print(f"📊 [ENDPOINT] Found {len(batch_records)} record(s) in batch")
+        logger.debug(f"📊 [ENDPOINT] Found {len(batch_records)} record(s) in batch")
 
         # Distribute USDT proportionally
-        print(f"💰 [ENDPOINT] Calculating proportional USDT distribution")
+        logger.info(f"💰 [ENDPOINT] Calculating proportional USDT distribution")
         distributions = db_manager.distribute_usdt_proportionally(
             pending_records=batch_records,
             actual_usdt_received=actual_usdt_received
         )
 
         if not distributions:
-            print(f"❌ [ENDPOINT] Failed to calculate distributions")
+            logger.error(f"❌ [ENDPOINT] Failed to calculate distributions")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
@@ -443,7 +446,7 @@ def swap_executed():
             }), 500
 
         # Update each record with usdt_share
-        print(f"💾 [ENDPOINT] Updating records with USDT shares")
+        logger.info(f"💾 [ENDPOINT] Updating records with USDT shares")
         for distribution in distributions:
             record_id = distribution['id']
             usdt_share = distribution['usdt_share']
@@ -455,12 +458,12 @@ def swap_executed():
             )
 
             if success:
-                print(f"✅ [ENDPOINT] Record {record_id}: ${usdt_share} USDT")
+                logger.info(f"✅ [ENDPOINT] Record {record_id}: ${usdt_share} USDT")
             else:
-                print(f"❌ [ENDPOINT] Failed to update record {record_id}")
+                logger.error(f"❌ [ENDPOINT] Failed to update record {record_id}")
 
         # Finalize batch conversion
-        print(f"💾 [ENDPOINT] Finalizing batch conversion")
+        logger.info(f"💾 [ENDPOINT] Finalizing batch conversion")
         batch_finalized = db_manager.finalize_batch_conversion(
             batch_conversion_id=batch_conversion_id,
             actual_usdt_received=actual_usdt_received,
@@ -468,15 +471,15 @@ def swap_executed():
         )
 
         if not batch_finalized:
-            print(f"❌ [ENDPOINT] Failed to finalize batch conversion")
+            logger.error(f"❌ [ENDPOINT] Failed to finalize batch conversion")
             sys.stdout.flush()
             return jsonify({
                 "status": "error",
                 "message": "Failed to finalize batch"
             }), 500
 
-        print(f"✅ [ENDPOINT] Batch conversion finalized successfully")
-        print(f"🎉 [ENDPOINT] Proportional distribution completed")
+        logger.info(f"✅ [ENDPOINT] Batch conversion finalized successfully")
+        logger.info(f"🎉 [ENDPOINT] Proportional distribution completed")
 
         return jsonify({
             "status": "success",
@@ -488,7 +491,7 @@ def swap_executed():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
         sys.stdout.flush()

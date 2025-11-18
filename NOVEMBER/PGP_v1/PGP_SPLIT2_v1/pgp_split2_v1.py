@@ -17,10 +17,13 @@ from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 from PGP_COMMON.utils import ChangeNowClient
 
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_SPLIT2_v1 USDT→ETH Estimator Service")
+logger.info(f"🚀 [APP] Initializing PGP_SPLIT2_v1 USDT→ETH Estimator Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -30,9 +33,9 @@ try:
     if not signing_key:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
     token_manager = TokenManager(signing_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize Cloud Tasks client
@@ -42,17 +45,17 @@ try:
     if not project_id or not location:
         raise ValueError("Cloud Tasks configuration incomplete")
     cloudtasks_client = CloudTasksClient(project_id, location)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info(f"✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 # Initialize ChangeNow client with config_manager for hot-reload
 try:
     changenow_client = ChangeNowClient(config_manager)
-    print(f"✅ [APP] ChangeNow client initialized (hot-reload enabled)")
+    logger.info(f"✅ [APP] ChangeNow client initialized (hot-reload enabled)")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize ChangeNow client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize ChangeNow client: {e}", exc_info=True)
     changenow_client = None
 
 
@@ -75,7 +78,7 @@ def process_usdt_eth_estimate():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT] USDT→ETH estimate request received (from PGP_SPLIT1_v1)")
+        logger.info(f"🎯 [ENDPOINT] USDT→ETH estimate request received (from PGP_SPLIT1_v1)")
 
         # Parse JSON payload
         try:
@@ -83,22 +86,22 @@ def process_usdt_eth_estimate():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         encrypted_token = request_data.get('token')
         if not encrypted_token:
-            print(f"❌ [ENDPOINT] Missing token")
+            logger.error(f"❌ [ENDPOINT] Missing token", exc_info=True)
             abort(400, "Missing token")
 
         # Decrypt token
         if not token_manager:
-            print(f"❌ [ENDPOINT] Token manager not available")
+            logger.error(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
 
         decrypted_data = token_manager.decrypt_pgp_split1_to_pgp_split2_token(encrypted_token)
         if not decrypted_data:
-            print(f"❌ [ENDPOINT] Failed to decrypt token")
+            logger.error(f"❌ [ENDPOINT] Failed to decrypt token")
             abort(401, "Invalid token")
 
         # Extract data
@@ -112,20 +115,20 @@ def process_usdt_eth_estimate():
         swap_currency = decrypted_data.get('swap_currency', 'usdt')  # ✅ NEW: Extract swap_currency
         payout_mode = decrypted_data.get('payout_mode', 'instant')  # ✅ NEW: Extract payout_mode
 
-        print(f"👤 [ENDPOINT] User ID: {user_id}")
-        print(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
+        logger.info(f"👤 [ENDPOINT] User ID: {user_id}")
+        logger.info(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
         print(f"💱 [ENDPOINT] Swap Currency: {swap_currency}")  # ✅ NEW LOG
         print(f"🎯 [ENDPOINT] Payout Mode: {payout_mode}")  # ✅ NEW LOG
         print(f"💰 [ENDPOINT] Amount: {adjusted_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic
-        print(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
-        print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
+        logger.info(f"💎 [ENDPOINT] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
+        logger.info(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
         # Call ChangeNow API with infinite retry
         if not changenow_client:
-            print(f"❌ [ENDPOINT] ChangeNow client not available")
+            logger.error(f"❌ [ENDPOINT] ChangeNow client not available")
             abort(500, "ChangeNow client unavailable")
 
-        print(f"🌐 [ENDPOINT] Calling ChangeNow API for {swap_currency.upper()}→{payout_currency.upper()} estimate (with retry)")
+        logger.info(f"🌐 [ENDPOINT] Calling ChangeNow API for {swap_currency.upper()}→{payout_currency.upper()} estimate (with retry)")
 
         estimate_response = changenow_client.get_estimated_amount_v2_with_retry(
             from_currency=swap_currency,  # ✅ UPDATED: Dynamic (eth or usdt)
@@ -141,7 +144,7 @@ def process_usdt_eth_estimate():
         # due to infinite retry in ChangeNowClient
         if not estimate_response:
             # This should never happen due to infinite retry, but handle it anyway
-            print(f"❌ [ENDPOINT] ChangeNow API returned None (should not happen)")
+            logger.error(f"❌ [ENDPOINT] ChangeNow API returned None (should not happen)")
             abort(500, "ChangeNow API failure")
 
         # Extract estimate data
@@ -150,11 +153,11 @@ def process_usdt_eth_estimate():
         deposit_fee = estimate_response.get('depositFee', 0)
         withdrawal_fee = estimate_response.get('withdrawalFee', 0)
 
-        print(f"✅ [ENDPOINT] ChangeNow estimate received")
+        logger.info(f"✅ [ENDPOINT] ChangeNow estimate received")
         print(f"💰 [ENDPOINT] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
-        print(f"💰 [ENDPOINT] To: {to_amount} {payout_currency.upper()} (post-fee)")
-        print(f"📊 [ENDPOINT] Deposit fee: {deposit_fee}")
-        print(f"📊 [ENDPOINT] Withdrawal fee: {withdrawal_fee}")
+        logger.info(f"💰 [ENDPOINT] To: {to_amount} {payout_currency.upper()} (post-fee)")
+        logger.debug(f"📊 [ENDPOINT] Deposit fee: {deposit_fee}")
+        logger.debug(f"📊 [ENDPOINT] Withdrawal fee: {withdrawal_fee}")
 
         # Encrypt response token for PGP_SPLIT1_v1
         encrypted_response_token = token_manager.encrypt_pgp_split2_to_pgp_split1_token(
@@ -173,12 +176,12 @@ def process_usdt_eth_estimate():
         )
 
         if not encrypted_response_token:
-            print(f"❌ [ENDPOINT] Failed to encrypt response token")
+            logger.error(f"❌ [ENDPOINT] Failed to encrypt response token")
             abort(500, "Token encryption failed")
 
         # Enqueue Cloud Task back to PGP_SPLIT1_v1
         if not cloudtasks_client:
-            print(f"❌ [ENDPOINT] Cloud Tasks client not available")
+            logger.error(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
         # Fetch hot-reloadable secrets dynamically
@@ -186,7 +189,7 @@ def process_usdt_eth_estimate():
         split1_url = config_manager.get_split1_url()
 
         if not split1_response_queue or not split1_url:
-            print(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
+            logger.error(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split1_estimate_response(
@@ -196,11 +199,11 @@ def process_usdt_eth_estimate():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT] Failed to create Cloud Task")
+            logger.error(f"❌ [ENDPOINT] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT] Successfully enqueued response to PGP_SPLIT1_v1")
-        print(f"🆔 [ENDPOINT] Task: {task_name}")
+        logger.info(f"✅ [ENDPOINT] Successfully enqueued response to PGP_SPLIT1_v1")
+        logger.debug(f"🆔 [ENDPOINT] Task: {task_name}")
 
         return jsonify({
             "status": "success",
@@ -209,7 +212,7 @@ def process_usdt_eth_estimate():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -236,7 +239,7 @@ def health_check():
         }), 200
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_SPLIT2_v1 USDT→ETH Estimator",
@@ -249,5 +252,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_SPLIT2_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_SPLIT2_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

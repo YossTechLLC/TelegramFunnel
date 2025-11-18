@@ -20,10 +20,14 @@ from wallet_manager import WalletManager, TOKEN_CONFIGS
 from error_classifier import ErrorClassifier
 from alerting import AlertingService
 
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+# Initialize logger
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_HOSTPAY3_v1 ETH Payment Executor Service")
+logger.info(f"🚀 [APP] Initializing PGP_HOSTPAY3_v1 ETH Payment Executor Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -37,9 +41,9 @@ try:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
 
     token_manager = TokenManager(tps_hostpay_key, internal_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize wallet manager
@@ -53,9 +57,9 @@ try:
         raise ValueError("Wallet configuration incomplete")
 
     wallet_manager = WalletManager(wallet_address, private_key, rpc_url, alchemy_api_key)
-    print(f"✅ [APP] Wallet manager initialized")
+    logger.info(f"✅ [APP] Wallet manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize wallet manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize wallet manager: {e}", exc_info=True)
     wallet_manager = None
 
 # Initialize database manager
@@ -69,9 +73,9 @@ try:
         raise ValueError("Database configuration incomplete")
 
     db_manager = DatabaseManager(instance_connection_name, db_name, db_user, db_password)
-    print(f"✅ [APP] Database manager initialized")
+    logger.info(f"✅ [APP] Database manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize database manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     db_manager = None
 
 # Initialize Cloud Tasks client
@@ -83,9 +87,9 @@ try:
         raise ValueError("Cloud Tasks configuration incomplete")
 
     cloudtasks_client = CloudTasksClient(project_id, location)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info(f"✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 # Initialize Alerting Service (NEW)
@@ -98,9 +102,9 @@ try:
         slack_webhook_url=slack_webhook,
         alerting_enabled=alerting_enabled
     )
-    print(f"✅ [APP] Alerting service initialized (enabled: {alerting_enabled})")
+    logger.info(f"✅ [APP] Alerting service initialized (enabled: {alerting_enabled})")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize alerting service: {e}")
+    logger.error(f"❌ [APP] Failed to initialize alerting service: {e}", exc_info=True)
     alerting_service = None
 
 
@@ -128,7 +132,7 @@ def execute_eth_payment():
         JSON response with status (always 200 to prevent Cloud Tasks auto-retry)
     """
     try:
-        print(f"🎯 [ENDPOINT] Payment execution request received")
+        logger.info(f"🎯 [ENDPOINT] Payment execution request received")
 
         # Parse JSON payload
         try:
@@ -136,23 +140,23 @@ def execute_eth_payment():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         token = request_data.get('token')
         if not token:
-            print(f"❌ [ENDPOINT] Missing token")
+            logger.error(f"❌ [ENDPOINT] Missing token", exc_info=True)
             abort(400, "Missing token")
 
         # Decrypt token
         if not token_manager:
-            print(f"❌ [ENDPOINT] Token manager not available")
+            logger.error(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
 
         try:
             decrypted_data = token_manager.decrypt_pgp_hostpay1_to_pgp_hostpay3_token(token)
             if not decrypted_data:
-                print(f"❌ [ENDPOINT] Failed to decrypt token")
+                logger.error(f"❌ [ENDPOINT] Failed to decrypt token")
                 abort(401, "Invalid token")
 
             unique_id = decrypted_data['unique_id']
@@ -173,37 +177,37 @@ def execute_eth_payment():
             # ✅ CRITICAL: Determine payment amount (ACTUAL or fallback to estimate)
             if actual_eth_amount > 0:
                 payment_amount = actual_eth_amount
-                print(f"✅ [ENDPOINT] Using ACTUAL ETH from NowPayments: {payment_amount}")
+                logger.info(f"✅ [ENDPOINT] Using ACTUAL ETH from NowPayments: {payment_amount}")
             elif estimated_eth_amount > 0:
                 payment_amount = estimated_eth_amount
-                print(f"⚠️ [ENDPOINT] Using ESTIMATED ETH (actual not available): {payment_amount}")
+                logger.warning(f"⚠️ [ENDPOINT] Using ESTIMATED ETH (actual not available): {payment_amount}")
             elif from_amount > 0:
                 payment_amount = from_amount
-                print(f"⚠️ [ENDPOINT] Using legacy from_amount (backward compat): {payment_amount}")
+                logger.warning(f"⚠️ [ENDPOINT] Using legacy from_amount (backward compat): {payment_amount}")
             else:
-                print(f"❌ [ENDPOINT] No valid amount found in token!")
+                logger.error(f"❌ [ENDPOINT] No valid amount found in token!")
                 abort(400, "Invalid payment amount")
 
-            print(f"✅ [ENDPOINT] Token decoded successfully")
-            print(f"🔢 [ENDPOINT] Attempt #{attempt_count}/3")
-            print(f"📋 [ENDPOINT] Context: {context}")
-            print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
-            print(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
+            logger.info(f"✅ [ENDPOINT] Token decoded successfully")
+            logger.info(f"🔢 [ENDPOINT] Attempt #{attempt_count}/3")
+            logger.info(f"📋 [ENDPOINT] Context: {context}")
+            logger.debug(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
+            logger.debug(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
             print(f"💰 [ENDPOINT] Currency: {from_currency.upper()}")  # ✅ SHOW CURRENCY TYPE
-            print(f"💎 [ENDPOINT] ACTUAL: {actual_eth_amount} {from_currency.upper()} (from NowPayments)")
-            print(f"📊 [ENDPOINT] ESTIMATED: {estimated_eth_amount} {from_currency.upper()} (from ChangeNow)")
+            logger.info(f"💎 [ENDPOINT] ACTUAL: {actual_eth_amount} {from_currency.upper()} (from NowPayments)")
+            logger.debug(f"📊 [ENDPOINT] ESTIMATED: {estimated_eth_amount} {from_currency.upper()} (from ChangeNow)")
             print(f"💰 [ENDPOINT] PAYMENT AMOUNT: {payment_amount} {from_currency.upper()}")  # ✅ DYNAMIC CURRENCY
-            print(f"🏦 [ENDPOINT] Payin Address: {payin_address}")
+            logger.info(f"🏦 [ENDPOINT] Payin Address: {payin_address}")
             if last_error_code:
-                print(f"⚠️ [ENDPOINT] Previous error: {last_error_code}")
+                logger.warning(f"⚠️ [ENDPOINT] Previous error: {last_error_code}")
 
         except Exception as e:
-            print(f"❌ [ENDPOINT] Token validation error: {e}")
+            logger.error(f"❌ [ENDPOINT] Token validation error: {e}", exc_info=True)
             abort(400, f"Token error: {e}")
 
         # NEW: Check attempt limit (prevent Cloud Tasks duplicate retry)
         if attempt_count > 3:
-            print(f"⚠️ [ENDPOINT] Attempt count exceeds limit - skipping (Cloud Tasks retry bug)")
+            logger.warning(f"⚠️ [ENDPOINT] Attempt count exceeds limit - skipping (Cloud Tasks retry bug)")
             return jsonify({
                 "status": "skipped",
                 "reason": "attempt_limit_exceeded",
@@ -212,23 +216,23 @@ def execute_eth_payment():
 
         # Execute payment (SINGLE ATTEMPT - NO INFINITE RETRY)
         if not wallet_manager:
-            print(f"❌ [ENDPOINT] Wallet manager not available")
+            logger.error(f"❌ [ENDPOINT] Wallet manager not available")
             abort(500, "Wallet manager unavailable")
 
         # ============================================================================
         # CURRENCY TYPE DETECTION & BALANCE CHECKING
         # ============================================================================
 
-        print(f"🔍 [ENDPOINT] Detecting currency type: {from_currency}")
+        logger.debug(f"🔍 [ENDPOINT] Detecting currency type: {from_currency}")
 
         # Determine if this is native ETH or ERC-20 token
         if from_currency.lower() == 'eth':
             # Native ETH transfer
             currency_type = 'native'
-            print(f"💎 [ENDPOINT] Currency type: NATIVE ETH")
+            logger.info(f"💎 [ENDPOINT] Currency type: NATIVE ETH")
 
             # Check ETH balance
-            print(f"🔍 [ENDPOINT] Checking ETH balance...")
+            logger.debug(f"🔍 [ENDPOINT] Checking ETH balance...")
             wallet_balance = wallet_manager.get_wallet_balance()
             balance_label = "ETH"
 
@@ -236,12 +240,12 @@ def execute_eth_payment():
             # ERC-20 token transfer
             currency_type = 'erc20'
             token_config = TOKEN_CONFIGS[from_currency.lower()]
-            print(f"💎 [ENDPOINT] Currency type: ERC-20 TOKEN ({token_config['name']})")
-            print(f"📝 [ENDPOINT] Contract: {token_config['address']}")
-            print(f"🔢 [ENDPOINT] Decimals: {token_config['decimals']}")
+            logger.info(f"💎 [ENDPOINT] Currency type: ERC-20 TOKEN ({token_config['name']})")
+            logger.info(f"📝 [ENDPOINT] Contract: {token_config['address']}")
+            logger.info(f"🔢 [ENDPOINT] Decimals: {token_config['decimals']}")
 
             # Check ERC-20 token balance
-            print(f"🔍 [ENDPOINT] Checking {from_currency.upper()} balance...")
+            logger.debug(f"🔍 [ENDPOINT] Checking {from_currency.upper()} balance...")
             wallet_balance = wallet_manager.get_erc20_balance(
                 token_contract_address=token_config['address'],
                 token_decimals=token_config['decimals']
@@ -251,29 +255,29 @@ def execute_eth_payment():
         else:
             # Unsupported currency
             error_msg = f"Unsupported currency: {from_currency}"
-            print(f"❌ [ENDPOINT] {error_msg}")
+            logger.error(f"❌ [ENDPOINT] {error_msg}")
             abort(400, error_msg)
 
         # Validate sufficient balance
         if wallet_balance < payment_amount:
             error_msg = f"Insufficient funds: need {payment_amount} {balance_label}, have {wallet_balance} {balance_label}"
-            print(f"❌ [ENDPOINT] {error_msg}")
+            logger.error(f"❌ [ENDPOINT] {error_msg}")
             abort(400, error_msg)
         else:
-            print(f"✅ [ENDPOINT] Sufficient balance: {wallet_balance} {balance_label} >= {payment_amount} {balance_label}")
+            logger.info(f"✅ [ENDPOINT] Sufficient balance: {wallet_balance} {balance_label} >= {payment_amount} {balance_label}")
 
         # ============================================================================
         # PAYMENT EXECUTION - Route based on currency type
         # ============================================================================
 
-        print(f"💰 [ENDPOINT] Executing {balance_label} payment (attempt {attempt_count}/3)")
-        print(f"💎 [ENDPOINT] Amount to send: {payment_amount} {balance_label}")
+        logger.info(f"💰 [ENDPOINT] Executing {balance_label} payment (attempt {attempt_count}/3)")
+        logger.info(f"💎 [ENDPOINT] Amount to send: {payment_amount} {balance_label}")
 
         # NEW: Wrap payment execution in try/except to catch failures
         try:
             if currency_type == 'native':
                 # Native ETH transfer
-                print(f"🔀 [ENDPOINT] Routing to native ETH transfer method")
+                logger.info(f"🔀 [ENDPOINT] Routing to native ETH transfer method")
                 tx_result = wallet_manager.send_eth_payment_with_infinite_retry(
                     to_address=payin_address,
                     amount=payment_amount,
@@ -282,7 +286,7 @@ def execute_eth_payment():
 
             elif currency_type == 'erc20':
                 # ERC-20 token transfer
-                print(f"🔀 [ENDPOINT] Routing to ERC-20 token transfer method")
+                logger.info(f"🔀 [ENDPOINT] Routing to ERC-20 token transfer method")
                 tx_result = wallet_manager.send_erc20_token(
                     token_contract_address=token_config['address'],
                     to_address=payin_address,
@@ -301,15 +305,15 @@ def execute_eth_payment():
             # ========================================================================
             # SUCCESS PATH
             # ========================================================================
-            print(f"✅ [ENDPOINT] Payment successful after {attempt_count} attempt(s)")
-            print(f"🔗 [ENDPOINT] TX Hash: {tx_result['tx_hash']}")
-            print(f"📊 [ENDPOINT] TX Status: {tx_result['status']}")
-            print(f"⛽ [ENDPOINT] Gas Used: {tx_result['gas_used']}")
-            print(f"📦 [ENDPOINT] Block Number: {tx_result['block_number']}")
+            logger.info(f"✅ [ENDPOINT] Payment successful after {attempt_count} attempt(s)")
+            logger.info(f"🔗 [ENDPOINT] TX Hash: {tx_result['tx_hash']}")
+            logger.debug(f"📊 [ENDPOINT] TX Status: {tx_result['status']}")
+            logger.info(f"⛽ [ENDPOINT] Gas Used: {tx_result['gas_used']}")
+            logger.info(f"📦 [ENDPOINT] Block Number: {tx_result['block_number']}")
 
             # Log to database (ONLY after successful payment)
             if not db_manager:
-                print(f"⚠️ [ENDPOINT] Database manager not available - skipping database log")
+                logger.warning(f"⚠️ [ENDPOINT] Database manager not available - skipping database log")
             else:
                 try:
                     db_success = db_manager.insert_hostpay_transaction(
@@ -328,12 +332,12 @@ def execute_eth_payment():
                     )
 
                     if db_success:
-                        print(f"✅ [ENDPOINT] Database: Successfully logged payment")
+                        logger.info(f"✅ [ENDPOINT] Database: Successfully logged payment")
                     else:
-                        print(f"⚠️ [ENDPOINT] Database: Failed to log payment (non-fatal)")
+                        logger.warning(f"⚠️ [ENDPOINT] Database: Failed to log payment (non-fatal)")
 
                 except Exception as e:
-                    print(f"❌ [ENDPOINT] Database error: {e} (non-fatal)")
+                    logger.error(f"❌ [ENDPOINT] Database error: {e} (non-fatal)", exc_info=True)
 
             # Encrypt response token
             encrypted_response_token = token_manager.encrypt_pgp_hostpay3_to_pgp_hostpay1_token(
@@ -346,48 +350,48 @@ def execute_eth_payment():
             )
 
             if not encrypted_response_token:
-                print(f"❌ [ENDPOINT] Failed to encrypt response token")
+                logger.error(f"❌ [ENDPOINT] Failed to encrypt response token")
                 abort(500, "Token encryption failed")
 
             # Enqueue response based on context (NEW: Conditional routing)
             if not cloudtasks_client:
-                print(f"❌ [ENDPOINT] Cloud Tasks client not available")
+                logger.error(f"❌ [ENDPOINT] Cloud Tasks client not available")
                 abort(500, "Cloud Tasks unavailable")
 
             # Determine routing based on context
             if context == 'threshold':
                 # Route to PGP_ACCUMULATOR for threshold payouts
-                print(f"🎯 [ENDPOINT] Context: threshold → Routing to PGP_ACCUMULATOR")
+                logger.info(f"🎯 [ENDPOINT] Context: threshold → Routing to PGP_ACCUMULATOR")
 
                 pgp_accumulator_response_queue = config.get('pgp_accumulator_response_queue')
                 pgp_accumulator_url = config.get('pgp_accumulator_url')
 
                 if not pgp_accumulator_response_queue or not pgp_accumulator_url:
-                    print(f"❌ [ENDPOINT] PGP_ACCUMULATOR configuration missing")
+                    logger.error(f"❌ [ENDPOINT] PGP_ACCUMULATOR configuration missing")
                     abort(500, "Service configuration error")
 
                 # Target the /swap-executed endpoint
                 target_url = f"{pgp_accumulator_url}/swap-executed"
                 queue_name = pgp_accumulator_response_queue
 
-                print(f"📤 [ENDPOINT] Routing to: {target_url}")
+                logger.info(f"📤 [ENDPOINT] Routing to: {target_url}")
 
             else:
                 # Route to PGP_HOSTPAY1_v1 for instant payouts (existing behavior)
-                print(f"🎯 [ENDPOINT] Context: instant → Routing to PGP_HOSTPAY1_v1")
+                logger.info(f"🎯 [ENDPOINT] Context: instant → Routing to PGP_HOSTPAY1_v1")
 
                 pgp_hostpay1_response_queue = config.get('pgp_hostpay1_response_queue')
                 pgp_hostpay1_url = config.get('pgp_hostpay1_url')
 
                 if not pgp_hostpay1_response_queue or not pgp_hostpay1_url:
-                    print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
+                    logger.error(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
                     abort(500, "Service configuration error")
 
                 # Target the /payment-completed endpoint
                 target_url = f"{pgp_hostpay1_url}/payment-completed"
                 queue_name = pgp_hostpay1_response_queue
 
-                print(f"📤 [ENDPOINT] Routing to: {target_url}")
+                logger.info(f"📤 [ENDPOINT] Routing to: {target_url}")
 
             # Enqueue response to appropriate service
             task_name = cloudtasks_client.enqueue_pgp_hostpay1_payment_response(
@@ -397,11 +401,11 @@ def execute_eth_payment():
             )
 
             if not task_name:
-                print(f"❌ [ENDPOINT] Failed to create Cloud Task")
+                logger.error(f"❌ [ENDPOINT] Failed to create Cloud Task")
                 abort(500, "Failed to enqueue task")
 
-            print(f"✅ [ENDPOINT] Successfully enqueued response")
-            print(f"🆔 [ENDPOINT] Task: {task_name}")
+            logger.info(f"✅ [ENDPOINT] Successfully enqueued response")
+            logger.debug(f"🆔 [ENDPOINT] Task: {task_name}")
 
             return jsonify({
                 "status": "success",
@@ -420,23 +424,23 @@ def execute_eth_payment():
             # ========================================================================
             # FAILURE PATH
             # ========================================================================
-            print(f"❌ [ENDPOINT] Payment execution failed: {payment_error}")
+            logger.error(f"❌ [ENDPOINT] Payment execution failed: {payment_error}", exc_info=True)
 
             # Classify error
             error_code, is_retryable = ErrorClassifier.classify_error(payment_error)
             error_message = str(payment_error)
 
-            print(f"📊 [ENDPOINT] Error classified: {error_code} (retryable: {is_retryable})")
+            logger.debug(f"📊 [ENDPOINT] Error classified: {error_code} (retryable: {is_retryable})")
 
             # DECISION: RETRY OR STORE?
             if attempt_count < 3:
                 # ====================================================================
                 # RETRY PATH (Attempt 1 or 2)
                 # ====================================================================
-                print(f"🔄 [ENDPOINT] Retrying (attempt {attempt_count}/3)")
+                logger.info(f"🔄 [ENDPOINT] Retrying (attempt {attempt_count}/3)")
 
                 if not cloudtasks_client:
-                    print(f"❌ [ENDPOINT] Cloud Tasks client not available for retry")
+                    logger.error(f"❌ [ENDPOINT] Cloud Tasks client not available for retry")
                     return jsonify({
                         "status": "error",
                         "message": "Cannot retry without Cloud Tasks client",
@@ -451,7 +455,7 @@ def execute_eth_payment():
                 )
 
                 if not retry_token:
-                    print(f"❌ [ENDPOINT] Failed to encrypt retry token")
+                    logger.error(f"❌ [ENDPOINT] Failed to encrypt retry token")
                     return jsonify({
                         "status": "error",
                         "message": "Failed to create retry token",
@@ -463,7 +467,7 @@ def execute_eth_payment():
                 pgp_hostpay3_url = config.get('pgp_hostpay3_url')
 
                 if not pgp_hostpay3_retry_queue or not pgp_hostpay3_url:
-                    print(f"❌ [ENDPOINT] PGP_HOSTPAY3_v1 retry configuration missing")
+                    logger.error(f"❌ [ENDPOINT] PGP_HOSTPAY3_v1 retry configuration missing")
                     return jsonify({
                         "status": "error",
                         "message": "Retry configuration incomplete",
@@ -478,14 +482,14 @@ def execute_eth_payment():
                 )
 
                 if not retry_task:
-                    print(f"❌ [ENDPOINT] Failed to enqueue retry task")
+                    logger.error(f"❌ [ENDPOINT] Failed to enqueue retry task")
                     return jsonify({
                         "status": "error",
                         "message": "Failed to enqueue retry",
                         "unique_id": unique_id
                     }), 500
 
-                print(f"✅ [ENDPOINT] Retry task enqueued: {retry_task}")
+                logger.info(f"✅ [ENDPOINT] Retry task enqueued: {retry_task}")
 
                 return jsonify({
                     "status": "retry_scheduled",
@@ -503,8 +507,8 @@ def execute_eth_payment():
                 # ====================================================================
                 # FAILED PATH (Attempt 3 - Final Failure)
                 # ====================================================================
-                print(f"💀 [ENDPOINT] FINAL FAILURE after 3 attempts")
-                print(f"📊 [ENDPOINT] Storing in failed_transactions table")
+                logger.info(f"💀 [ENDPOINT] FINAL FAILURE after 3 attempts")
+                logger.debug(f"📊 [ENDPOINT] Storing in failed_transactions table")
 
                 # Build error details
                 error_details = {
@@ -534,15 +538,15 @@ def execute_eth_payment():
                         )
 
                         if db_success:
-                            print(f"✅ [ENDPOINT] Failed transaction stored successfully")
+                            logger.info(f"✅ [ENDPOINT] Failed transaction stored successfully")
                         else:
-                            print(f"❌ [ENDPOINT] Failed to store failed transaction")
+                            logger.error(f"❌ [ENDPOINT] Failed to store failed transaction")
 
                     except Exception as db_error:
-                        print(f"❌ [ENDPOINT] Database error storing failed transaction: {db_error}")
+                        logger.error(f"❌ [ENDPOINT] Database error storing failed transaction: {db_error}", exc_info=True)
 
                 else:
-                    print(f"⚠️ [ENDPOINT] Database manager not available - cannot store failed transaction")
+                    logger.warning(f"⚠️ [ENDPOINT] Database manager not available - cannot store failed transaction")
 
                 # Send failure alert
                 if alerting_service:
@@ -560,17 +564,17 @@ def execute_eth_payment():
                         )
 
                         if alert_sent:
-                            print(f"✅ [ENDPOINT] Failure alert sent")
+                            logger.info(f"✅ [ENDPOINT] Failure alert sent")
                         else:
-                            print(f"⚠️ [ENDPOINT] Alert sending failed (non-fatal)")
+                            logger.warning(f"⚠️ [ENDPOINT] Alert sending failed (non-fatal)")
 
                     except Exception as alert_error:
-                        print(f"❌ [ENDPOINT] Alert error: {alert_error} (non-fatal)")
+                        logger.error(f"❌ [ENDPOINT] Alert error: {alert_error} (non-fatal)", exc_info=True)
 
                 else:
-                    print(f"⚠️ [ENDPOINT] Alerting service not available - skipping alert")
+                    logger.warning(f"⚠️ [ENDPOINT] Alerting service not available - skipping alert")
 
-                print(f"🛑 [ENDPOINT] Payment permanently failed - no more retries")
+                logger.info(f"🛑 [ENDPOINT] Payment permanently failed - no more retries")
 
                 return jsonify({
                     "status": "failed_permanently",
@@ -584,7 +588,7 @@ def execute_eth_payment():
                 }), 200  # Return 200 to prevent Cloud Tasks auto-retry
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -612,7 +616,7 @@ def health_check():
         }), 200
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_HOSTPAY3_v1 ETH Payment Executor",
@@ -625,5 +629,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_HOSTPAY3_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_HOSTPAY3_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

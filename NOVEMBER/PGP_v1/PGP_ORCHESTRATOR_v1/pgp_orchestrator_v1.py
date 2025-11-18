@@ -5,9 +5,16 @@ Receives success_url from NOWPayments API, processes payment confirmation,
 writes to database, and enqueues tasks to PGP_INVITE_v1 (Telegram invite)
 and PGP_SPLIT1_v1 (payment split).
 """
+import os
 import time
 from datetime import datetime, timedelta
 from flask import Flask, request, abort, jsonify
+
+# Import logging
+from PGP_COMMON.logging import setup_logger
+
+# Import security utilities (C-07 fix)
+from PGP_COMMON.utils import sanitize_error_for_user, create_error_response
 
 # Import service modules
 from config_manager import ConfigManager
@@ -17,8 +24,11 @@ from cloudtasks_client import CloudTasksClient
 
 app = Flask(__name__)
 
+# Initialize logger
+logger = setup_logger(__name__)
+
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_ORCHESTRATOR_v1 Payment Processor Service")
+logger.info("🚀 [APP] Initializing PGP_ORCHESTRATOR_v1 Payment Processor Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -28,9 +38,9 @@ try:
     if not signing_key:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
     token_manager = TokenManager(signing_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info("✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize database manager
@@ -44,9 +54,9 @@ try:
         raise ValueError("Database configuration incomplete")
 
     db_manager = DatabaseManager(instance_connection_name, db_name, db_user, db_password)
-    print(f"✅ [APP] Database manager initialized")
+    logger.info("✅ [APP] Database manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize database manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     db_manager = None
 
 # Initialize Cloud Tasks client
@@ -59,9 +69,9 @@ try:
         raise ValueError("Cloud Tasks configuration incomplete")
 
     cloudtasks_client = CloudTasksClient(project_id, location, signing_key)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info("✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 
@@ -91,8 +101,8 @@ def calculate_expiration_time(subscription_time_days: int) -> tuple:
     expire_time = expiration_datetime.strftime('%H:%M:%S')
     expire_date = expiration_datetime.strftime('%Y-%m-%d')
 
-    print(f"🕒 [CALC] Expiration calculation: {subscription_time_days} days from {now.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"📅 [CALC] Results: expire_time={expire_time}, expire_date={expire_date}")
+    logger.debug(f"🕒 [CALC] Expiration calculation: {subscription_time_days} days from {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.debug(f"📅 [CALC] Results: expire_time={expire_time}, expire_date={expire_date}")
 
     return expire_time, expire_date
 
@@ -118,37 +128,37 @@ def process_payment():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT] Payment confirmation received from NOWPayments")
+        logger.info(f"🎯 [ENDPOINT] Payment confirmation received from NOWPayments")
 
         # Extract token from URL
         token = request.args.get("token")
         if not token:
-            print(f"❌ [ENDPOINT] Missing token parameter")
+            logger.error(f"❌ [ENDPOINT] Missing token parameter", exc_info=True)
             abort(400, "Missing token")
 
         # Decode and verify token
         if not token_manager:
-            print(f"❌ [ENDPOINT] Token manager not available")
+            logger.error(f"❌ [ENDPOINT] Token manager not available", exc_info=True)
             abort(500, "Service configuration error")
 
         try:
             user_id, closed_channel_id, wallet_address, payout_currency, payout_network, subscription_time_days, subscription_price = token_manager.decode_and_verify_token(token)
-            print(f"✅ [ENDPOINT] Token decoded successfully")
-            print(f"👤 [ENDPOINT] User: {user_id}, Channel: {closed_channel_id}")
-            print(f"💰 [ENDPOINT] Price: ${subscription_price}, Duration: {subscription_time_days} days")
-            print(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
-            print(f"🌐 [ENDPOINT] Currency: {payout_currency}, Network: {payout_network}")
+            logger.info(f"✅ [ENDPOINT] Token decoded successfully")
+            logger.info(f"👤 [ENDPOINT] User: {user_id}, Channel: {closed_channel_id}")
+            logger.info(f"💰 [ENDPOINT] Price: ${subscription_price}, Duration: {subscription_time_days} days")
+            logger.info(f"🏦 [ENDPOINT] Wallet: {wallet_address}")
+            logger.info(f"🌐 [ENDPOINT] Currency: {payout_currency}, Network: {payout_network}")
         except Exception as e:
-            print(f"❌ [ENDPOINT] Token validation error: {e}")
+            logger.error(f"❌ [ENDPOINT] Token validation error: {e}", exc_info=True)
             abort(400, f"Token error: {e}")
 
         # Calculate expiration time and date
         expire_time, expire_date = calculate_expiration_time(subscription_time_days)
-        print(f"📅 [ENDPOINT] Calculated expiration: {expire_time} on {expire_date}")
+        logger.info(f"📅 [ENDPOINT] Calculated expiration: {expire_time} on {expire_date}")
 
         # Write to database
         if not db_manager:
-            print(f"❌ [ENDPOINT] Database manager not available")
+            logger.error(f"❌ [ENDPOINT] Database manager not available", exc_info=True)
             abort(500, "Database unavailable")
 
         try:
@@ -162,28 +172,28 @@ def process_payment():
                 is_active=True
             )
             if success:
-                print(f"✅ [ENDPOINT] Database: Successfully recorded subscription")
+                logger.info(f"✅ [ENDPOINT] Database: Successfully recorded subscription")
             else:
-                print(f"⚠️ [ENDPOINT] Database: Failed to record subscription")
+                logger.warning(f"⚠️ [ENDPOINT] Database: Failed to record subscription")
                 # Continue anyway
         except Exception as e:
-            print(f"❌ [ENDPOINT] Database error: {e}")
+            logger.error(f"❌ [ENDPOINT] Database error: {e}", exc_info=True)
             # Continue anyway
 
         # ============================================================================
         # DEPRECATED: Payment queuing removed
         # ============================================================================
-        print(f"")
-        print(f"⚠️ [DEPRECATED] This endpoint no longer queues payments")
-        print(f"ℹ️ [DEPRECATED] Payment processing happens via /process-validated-payment")
-        print(f"ℹ️ [DEPRECATED] Triggered by np-webhook after IPN validation")
-        print(f"")
+        logger.debug("")
+        logger.warning(f"⚠️ [DEPRECATED] This endpoint no longer queues payments")
+        logger.info(f"ℹ️ [DEPRECATED] Payment processing happens via /process-validated-payment")
+        logger.info(f"ℹ️ [DEPRECATED] Triggered by np-webhook after IPN validation")
+        logger.debug("")
 
-        print(f"🎉 [ENDPOINT] Payment processing completed successfully")
+        logger.info(f"🎉 [ENDPOINT] Payment processing completed successfully")
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -217,15 +227,15 @@ def process_validated_payment():
     the ACTUAL crypto outcome value in USD, not the declared subscription price.
     """
     try:
-        print(f"")
-        print(f"=" * 80)
-        print(f"🎯 [VALIDATED] Received validated payment from NP-Webhook")
+        logger.debug("")
+        logger.info(f"=" * 80)
+        logger.info(f"🎯 [VALIDATED] Received validated payment from NP-Webhook")
 
         # Get validated payment data from NP-Webhook
         payment_data = request.get_json()
 
         if not payment_data:
-            print(f"❌ [VALIDATED] No JSON payload received")
+            logger.error(f"❌ [VALIDATED] No JSON payload received", exc_info=True)
             abort(400, "Missing payment data")
 
         # ============================================================================
@@ -236,61 +246,45 @@ def process_validated_payment():
         nowpayments_payment_id = payment_data.get('nowpayments_payment_id')
 
         if not nowpayments_payment_id:
-            print(f"❌ [VALIDATED] Missing nowpayments_payment_id")
+            logger.error(f"❌ [VALIDATED] Missing nowpayments_payment_id", exc_info=True)
             abort(400, "Missing payment_id for idempotency tracking")
 
-        print(f"")
-        print(f"🔍 [IDEMPOTENCY] Checking if payment {nowpayments_payment_id} already processed...")
+        logger.debug("")
+        logger.debug(f"🔍 [IDEMPOTENCY] Atomically checking and marking payment {nowpayments_payment_id}...")
 
         if not db_manager:
-            print(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
-            print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+            logger.warning(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
+            logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
         else:
             try:
-                conn = db_manager.get_connection()
-                if conn:
-                    cur = conn.cursor()
-                    cur.execute("""
-                        SELECT
-                            pgp_orchestrator_processed,
-                            pgp_orchestrator_processed_at
-                        FROM processed_payments
-                        WHERE payment_id = %s
-                    """, (nowpayments_payment_id,))
-                    existing = cur.fetchone()
-                    cur.close()
-                    conn.close()
-                else:
-                    existing = None
+                # Use atomic UPSERT to prevent race conditions (C-04 fix)
+                is_new_payment = db_manager.mark_payment_processed_atomic(
+                    payment_id=nowpayments_payment_id,
+                    service_name='pgp_orchestrator'
+                )
 
-                if existing and existing[0]:  # pgp_orchestrator_processed is index 0
-                    # Payment already processed - return success without re-processing
-                    # Tuple indexes: 0=pgp_orchestrator_processed, 1=pgp_orchestrator_processed_at
-                    pgp_orchestrator_processed = existing[0]
-                    processed_at = existing[1]
-
-                    print(f"✅ [IDEMPOTENCY] Payment already processed")
-                    print(f"   Processed at: {processed_at}")
-                    print(f"   Payment ID: {nowpayments_payment_id}")
-                    print(f"🎉 [VALIDATED] Returning success (no duplicate processing)")
-                    print(f"=" * 80)
+                if not is_new_payment:
+                    # Payment already processed by another request (race condition prevented)
+                    logger.info(f"✅ [IDEMPOTENCY] Payment already processed (atomic check)")
+                    logger.info(f"   Payment ID: {nowpayments_payment_id}")
+                    logger.info(f"🎉 [VALIDATED] Returning success (duplicate prevented)")
+                    logger.info(f"=" * 80)
 
                     return jsonify({
                         "status": "success",
                         "message": "Payment already processed",
-                        "payment_id": nowpayments_payment_id,
-                        "processed_at": str(processed_at)
+                        "payment_id": nowpayments_payment_id
                     }), 200
                 else:
-                    print(f"🆕 [IDEMPOTENCY] Payment not yet processed - proceeding...")
+                    logger.info(f"🆕 [IDEMPOTENCY] Payment atomically marked as processing - proceeding...")
 
             except Exception as e:
-                print(f"⚠️ [IDEMPOTENCY] Error checking payment status: {e}")
+                logger.warning(f"⚠️ [IDEMPOTENCY] Error in atomic payment check: {e}")
                 import traceback
                 traceback.print_exc()
-                print(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+                logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
 
-        print(f"")
+        logger.debug("")
 
         # ============================================================================
         # CRITICAL: Defense-in-depth - Validate payment_status again
@@ -299,19 +293,19 @@ def process_validated_payment():
 
         ALLOWED_PAYMENT_STATUSES = ['finished']
 
-        print(f"🔍 [GCWEBHOOK1] Payment status received: '{payment_status}'")
-        print(f"✅ [GCWEBHOOK1] Allowed statuses: {ALLOWED_PAYMENT_STATUSES}")
+        logger.debug(f"🔍 [GCWEBHOOK1] Payment status received: '{payment_status}'")
+        logger.info(f"✅ [GCWEBHOOK1] Allowed statuses: {ALLOWED_PAYMENT_STATUSES}")
 
         if payment_status not in ALLOWED_PAYMENT_STATUSES:
-            print(f"=" * 80)
-            print(f"⏸️ [GCWEBHOOK1] PAYMENT STATUS VALIDATION FAILED (Second Layer)")
-            print(f"=" * 80)
-            print(f"📊 [GCWEBHOOK1] Current status: '{payment_status}'")
-            print(f"⏳ [GCWEBHOOK1] Required status: 'finished'")
-            print(f"👤 [GCWEBHOOK1] User ID: {payment_data.get('user_id')}")
-            print(f"💰 [GCWEBHOOK1] Amount: {payment_data.get('subscription_price')}")
-            print(f"🛡️ [GCWEBHOOK1] Defense-in-depth check prevented processing")
-            print(f"=" * 80)
+            logger.info(f"=" * 80)
+            logger.info(f"⏸️ [GCWEBHOOK1] PAYMENT STATUS VALIDATION FAILED (Second Layer)")
+            logger.info(f"=" * 80)
+            logger.info(f"📊 [GCWEBHOOK1] Current status: '{payment_status}'")
+            logger.info(f"⏳ [GCWEBHOOK1] Required status: 'finished'")
+            logger.info(f"👤 [GCWEBHOOK1] User ID: {payment_data.get('user_id')}")
+            logger.info(f"💰 [GCWEBHOOK1] Amount: {payment_data.get('subscription_price')}")
+            logger.info(f"🛡️ [GCWEBHOOK1] Defense-in-depth check prevented processing")
+            logger.info(f"=" * 80)
 
             # Return 200 OK to prevent Cloud Tasks retry
             # This should never happen if np-webhook is working correctly
@@ -324,10 +318,10 @@ def process_validated_payment():
             }), 200
 
         # If we reach here, payment_status is 'finished' - proceed with routing
-        print(f"=" * 80)
-        print(f"✅ [GCWEBHOOK1] PAYMENT STATUS VALIDATED (Second Layer): '{payment_status}'")
-        print(f"✅ [GCWEBHOOK1] Proceeding with instant/threshold routing")
-        print(f"=" * 80)
+        logger.info(f"=" * 80)
+        logger.info(f"✅ [GCWEBHOOK1] PAYMENT STATUS VALIDATED (Second Layer): '{payment_status}'")
+        logger.info(f"✅ [GCWEBHOOK1] Proceeding with instant/threshold routing")
+        logger.info(f"=" * 80)
 
         # Extract all required fields
         user_id = payment_data.get('user_id')
@@ -352,48 +346,48 @@ def process_validated_payment():
             closed_channel_id = int(closed_channel_id) if closed_channel_id is not None else None
             subscription_time_days = int(subscription_time_days) if subscription_time_days is not None else None
         except (ValueError, TypeError) as e:
-            print(f"❌ [VALIDATED] Type conversion error for integer fields: {e}")
-            print(f"   user_id: {payment_data.get('user_id')} (type: {type(payment_data.get('user_id'))})")
-            print(f"   closed_channel_id: {payment_data.get('closed_channel_id')} (type: {type(payment_data.get('closed_channel_id'))})")
-            print(f"   subscription_time_days: {payment_data.get('subscription_time_days')} (type: {type(payment_data.get('subscription_time_days'))})")
+            logger.error(f"❌ [VALIDATED] Type conversion error for integer fields: {e}", exc_info=True)
+            logger.info(f"   user_id: {payment_data.get('user_id')} (type: {type(payment_data.get('user_id'))})")
+            logger.info(f"   closed_channel_id: {payment_data.get('closed_channel_id')} (type: {type(payment_data.get('closed_channel_id'))})")
+            logger.info(f"   subscription_time_days: {payment_data.get('subscription_time_days')} (type: {type(payment_data.get('subscription_time_days'))})")
             abort(400, f"Invalid integer field types: {e}")
 
-        print(f"")
-        print(f"✅ [VALIDATED] Payment Data Received:")
-        print(f"   User ID: {user_id}")
-        print(f"   Channel ID: {closed_channel_id}")
-        print(f"   Wallet: {wallet_address}")
-        print(f"   Payout: {payout_currency} on {payout_network}")
-        print(f"   Subscription Days: {subscription_time_days}")
-        print(f"   Declared Price: ${subscription_price}")
-        print(f"   💰 ACTUAL Outcome (USD): ${outcome_amount_usd}")
-        print(f"   💰 ACTUAL Outcome (ETH): {nowpayments_outcome_amount}")  # ✅ ADD LOG
-        print(f"   Payment ID: {nowpayments_payment_id}")
+        logger.debug("")
+        logger.info(f"✅ [VALIDATED] Payment Data Received:")
+        logger.info(f"   User ID: {user_id}")
+        logger.info(f"   Channel ID: {closed_channel_id}")
+        logger.info(f"   Wallet: {wallet_address}")
+        logger.info(f"   Payout: {payout_currency} on {payout_network}")
+        logger.info(f"   Subscription Days: {subscription_time_days}")
+        logger.info(f"   Declared Price: ${subscription_price}")
+        logger.info(f"   💰 ACTUAL Outcome (USD): ${outcome_amount_usd}")
+        logger.info(f"   💰 ACTUAL Outcome (ETH): {nowpayments_outcome_amount}")  # ✅ ADD LOG
+        logger.info(f"   Payment ID: {nowpayments_payment_id}")
 
         # Validate required fields
         if not all([user_id, closed_channel_id, outcome_amount_usd]):
-            print(f"❌ [VALIDATED] Missing required fields")
-            print(f"   user_id: {user_id}")
-            print(f"   closed_channel_id: {closed_channel_id}")
-            print(f"   outcome_amount_usd: {outcome_amount_usd}")
+            logger.error(f"❌ [VALIDATED] Missing required fields", exc_info=True)
+            logger.info(f"   user_id: {user_id}")
+            logger.info(f"   closed_channel_id: {closed_channel_id}")
+            logger.info(f"   outcome_amount_usd: {outcome_amount_usd}")
             abort(400, "Missing required payment data")
 
         # ========================================================================
         # PAYOUT ROUTING DECISION
         # ========================================================================
-        print(f"")
-        print(f"🔍 [VALIDATED] Checking payout strategy for channel {closed_channel_id}")
+        logger.debug("")
+        logger.debug(f"🔍 [VALIDATED] Checking payout strategy for channel {closed_channel_id}")
 
         if not db_manager:
-            print(f"❌ [VALIDATED] Database manager not available")
+            logger.error(f"❌ [VALIDATED] Database manager not available", exc_info=True)
             abort(500, "Database unavailable")
 
         payout_mode, payout_threshold = db_manager.get_payout_strategy(closed_channel_id)
-        print(f"💰 [VALIDATED] Payout mode: {payout_mode}")
+        logger.info(f"💰 [VALIDATED] Payout mode: {payout_mode}")
 
         if payout_mode == "threshold":
-            print(f"🎯 [VALIDATED] Threshold payout mode - ${payout_threshold} threshold")
-            print(f"📊 [VALIDATED] Routing to PGP_ACCUMULATOR for accumulation")
+            logger.info(f"🎯 [VALIDATED] Threshold payout mode - ${payout_threshold} threshold")
+            logger.info(f"📊 [VALIDATED] Routing to PGP_ACCUMULATOR for accumulation")
 
             # Get subscription ID for accumulation record
             subscription_id = db_manager.get_subscription_id(user_id, closed_channel_id)
@@ -403,13 +397,13 @@ def process_validated_payment():
             pgp_accumulator_url = config.get('pgp_accumulator_url')
 
             if not pgp_accumulator_queue or not pgp_accumulator_url:
-                print(f"❌ [VALIDATED] PGP_ACCUMULATOR configuration missing")
+                logger.error(f"❌ [VALIDATED] PGP_ACCUMULATOR configuration missing", exc_info=True)
                 abort(500, "PGP_ACCUMULATOR configuration error")
 
             # Queue to PGP_ACCUMULATOR with ACTUAL outcome amount
-            print(f"")
-            print(f"🚀 [VALIDATED] Queuing to PGP_ACCUMULATOR...")
-            print(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
+            logger.debug("")
+            logger.info(f"🚀 [VALIDATED] Queuing to PGP_ACCUMULATOR...")
+            logger.info(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
 
             task_name = cloudtasks_client.enqueue_pgp_accumulator_payment(
                 queue_name=pgp_accumulator_queue,
@@ -427,28 +421,28 @@ def process_validated_payment():
             )
 
             if task_name:
-                print(f"✅ [VALIDATED] Successfully enqueued to PGP_ACCUMULATOR")
-                print(f"🆔 [VALIDATED] Task: {task_name}")
+                logger.info(f"✅ [VALIDATED] Successfully enqueued to PGP_ACCUMULATOR")
+                logger.info(f"🆔 [VALIDATED] Task: {task_name}")
             else:
-                print(f"❌ [VALIDATED] Failed to enqueue to PGP_ACCUMULATOR")
+                logger.error(f"❌ [VALIDATED] Failed to enqueue to PGP_ACCUMULATOR", exc_info=True)
                 abort(500, "Failed to enqueue to PGP_ACCUMULATOR")
 
         else:  # instant payout
-            print(f"⚡ [VALIDATED] Instant payout mode - processing immediately")
-            print(f"📊 [VALIDATED] Routing to PGP_SPLIT1_v1 for payment split")
+            logger.info(f"⚡ [VALIDATED] Instant payout mode - processing immediately")
+            logger.info(f"📊 [VALIDATED] Routing to PGP_SPLIT1_v1 for payment split")
 
             # Get PGP_SPLIT1_v1 configuration
             pgp_split1_queue = config.get('pgp_split1_queue')
             pgp_split1_url = config.get('pgp_split1_url')
 
             if not pgp_split1_queue or not pgp_split1_url:
-                print(f"❌ [VALIDATED] PGP_SPLIT1_v1 configuration missing")
+                logger.error(f"❌ [VALIDATED] PGP_SPLIT1_v1 configuration missing", exc_info=True)
                 abort(500, "PGP_SPLIT1_v1 configuration error")
 
             # Queue to PGP_SPLIT1_v1 with ACTUAL outcome amount
-            print(f"")
-            print(f"🚀 [VALIDATED] Queuing to PGP_SPLIT1_v1...")
-            print(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
+            logger.debug("")
+            logger.info(f"🚀 [VALIDATED] Queuing to PGP_SPLIT1_v1...")
+            logger.info(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
 
             task_name = cloudtasks_client.enqueue_pgp_split1_payment_split(
                 queue_name=pgp_split1_queue,
@@ -464,27 +458,27 @@ def process_validated_payment():
             )
 
             if task_name:
-                print(f"✅ [VALIDATED] Successfully enqueued to PGP_SPLIT1_v1")
-                print(f"🆔 [VALIDATED] Task: {task_name}")
+                logger.info(f"✅ [VALIDATED] Successfully enqueued to PGP_SPLIT1_v1")
+                logger.info(f"🆔 [VALIDATED] Task: {task_name}")
             else:
-                print(f"❌ [VALIDATED] Failed to enqueue to PGP_SPLIT1_v1")
+                logger.error(f"❌ [VALIDATED] Failed to enqueue to PGP_SPLIT1_v1", exc_info=True)
                 abort(500, "Failed to enqueue to PGP_SPLIT1_v1")
 
         # ========================================================================
         # TELEGRAM INVITE
         # ========================================================================
-        print(f"")
-        print(f"📱 [VALIDATED] Queuing Telegram invite to PGP_INVITE_v1")
+        logger.debug("")
+        logger.info(f"📱 [VALIDATED] Queuing Telegram invite to PGP_INVITE_v1")
 
         if not token_manager:
-            print(f"❌ [VALIDATED] Token manager not available")
+            logger.error(f"❌ [VALIDATED] Token manager not available", exc_info=True)
             abort(500, "Token manager unavailable")
 
         # Validate subscription data before encryption
         if not subscription_time_days or not subscription_price:
-            print(f"❌ [VALIDATED] Missing subscription data:")
-            print(f"   subscription_time_days: {subscription_time_days} (type: {type(subscription_time_days)})")
-            print(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
+            logger.error(f"❌ [VALIDATED] Missing subscription data:", exc_info=True)
+            logger.info(f"   subscription_time_days: {subscription_time_days} (type: {type(subscription_time_days)})")
+            logger.info(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
             abort(400, "Missing subscription data from payment")
 
         # Ensure subscription_price is string for token encryption
@@ -492,8 +486,8 @@ def process_validated_payment():
         try:
             subscription_price = str(subscription_price)
         except (ValueError, TypeError) as e:
-            print(f"❌ [VALIDATED] Invalid type for subscription_price: {e}")
-            print(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
+            logger.error(f"❌ [VALIDATED] Invalid type for subscription_price: {e}", exc_info=True)
+            logger.info(f"   subscription_price: {subscription_price} (type: {type(subscription_price)})")
             abort(400, "Invalid subscription_price type")
 
         encrypted_token = token_manager.encrypt_token_for_pgp_invite(
@@ -507,14 +501,14 @@ def process_validated_payment():
         )
 
         if not encrypted_token:
-            print(f"❌ [VALIDATED] Failed to encrypt token for PGP_INVITE_v1")
+            logger.error(f"❌ [VALIDATED] Failed to encrypt token for PGP_INVITE_v1", exc_info=True)
             abort(500, "Token encryption failed")
 
         pgp_invite_queue = config.get('pgp_invite_queue')
         pgp_invite_url = config.get('pgp_invite_url')
 
         if not pgp_invite_queue or not pgp_invite_url:
-            print(f"⚠️ [VALIDATED] PGP_INVITE_v1 configuration missing - skipping invite")
+            logger.warning(f"⚠️ [VALIDATED] PGP_INVITE_v1 configuration missing - skipping invite")
         else:
             task_name_gcwebhook2 = cloudtasks_client.enqueue_pgp_invite_telegram_invite(
                 queue_name=pgp_invite_queue,
@@ -524,43 +518,21 @@ def process_validated_payment():
             )
 
             if task_name_gcwebhook2:
-                print(f"✅ [VALIDATED] Enqueued Telegram invite to PGP_INVITE_v1")
-                print(f"🆔 [VALIDATED] Task: {task_name_gcwebhook2}")
+                logger.info(f"✅ [VALIDATED] Enqueued Telegram invite to PGP_INVITE_v1")
+                logger.info(f"🆔 [VALIDATED] Task: {task_name_gcwebhook2}")
             else:
-                print(f"⚠️ [VALIDATED] Failed to enqueue Telegram invite")
+                logger.warning(f"⚠️ [VALIDATED] Failed to enqueue Telegram invite")
 
         # ============================================================================
         # IDEMPOTENCY: Mark payment as processed
         # ============================================================================
+        # NOTE: Payment already marked as processed atomically at the start (C-04 fix)
+        # The atomic UPSERT prevents race conditions and ensures idempotency
+        # No need for separate UPDATE here - it was done in one atomic operation
 
-        try:
-            conn = db_manager.get_connection()
-            if conn:
-                cur = conn.cursor()
-                cur.execute("""
-                    UPDATE processed_payments
-                    SET
-                        pgp_orchestrator_processed = TRUE,
-                        pgp_orchestrator_processed_at = CURRENT_TIMESTAMP,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE payment_id = %s
-                """, (nowpayments_payment_id,))
-                conn.commit()
-                cur.close()
-                conn.close()
-
-                print(f"")
-                print(f"✅ [IDEMPOTENCY] Marked payment {nowpayments_payment_id} as processed")
-            else:
-                print(f"⚠️ [IDEMPOTENCY] Could not get database connection")
-        except Exception as e:
-            # Non-critical error - payment already enqueued successfully
-            print(f"⚠️ [IDEMPOTENCY] Failed to mark payment as processed: {e}")
-            print(f"⚠️ [IDEMPOTENCY] Payment processing will continue (non-blocking error)")
-
-        print(f"")
-        print(f"🎉 [VALIDATED] Payment processing completed successfully")
-        print(f"=" * 80)
+        logger.debug("")
+        logger.info(f"🎉 [VALIDATED] Payment processing completed successfully")
+        logger.info(f"=" * 80)
 
         return jsonify({
             "status": "success",
@@ -571,13 +543,67 @@ def process_validated_payment():
         }), 200
 
     except Exception as e:
-        print(f"❌ [VALIDATED] Unexpected error: {e}")
+        logger.error(f"❌ [VALIDATED] Unexpected error: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
+
+
+# ============================================================================
+# GLOBAL ERROR HANDLERS (C-07: Error Sanitization)
+# ============================================================================
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """
+    Global error handler that sanitizes error messages based on environment.
+
+    C-07 Fix: Prevents sensitive data exposure through error messages.
+    - Production: Returns generic error with error ID
+    - Development: Returns detailed error for debugging
+    """
+    # Get environment (defaults to production for safety)
+    environment = os.getenv('ENVIRONMENT', 'production')
+
+    # Sanitize error message (shows details only in development)
+    sanitized_message = sanitize_error_for_user(e, environment)
+
+    # Create standardized error response with error ID
+    error_response, status_code = create_error_response(
+        status_code=500,
+        message=sanitized_message,
+        include_error_id=True
+    )
+
+    # Log full error details internally (always, regardless of environment)
+    logger.error(
+        f"❌ [ERROR] Unhandled exception in PGP_ORCHESTRATOR_v1",
+        extra={
+            'error_id': error_response.get('error_id'),
+            'error_type': type(e).__name__,
+            'environment': environment
+        },
+        exc_info=True
+    )
+
+    return jsonify(error_response), status_code
+
+
+@app.errorhandler(400)
+def handle_bad_request(e):
+    """Handle 400 Bad Request errors with sanitized messages."""
+    error_response, _ = create_error_response(400, str(e))
+    return jsonify(error_response), 400
+
+
+@app.errorhandler(404)
+def handle_not_found(e):
+    """Handle 404 Not Found errors."""
+    error_response, _ = create_error_response(404, "Endpoint not found")
+    return jsonify(error_response), 404
 
 
 # ============================================================================
@@ -600,7 +626,7 @@ def health_check():
         }), 200
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_ORCHESTRATOR_v1 Payment Processor",
@@ -613,5 +639,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_ORCHESTRATOR_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_ORCHESTRATOR_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

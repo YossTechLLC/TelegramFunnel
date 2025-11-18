@@ -14,10 +14,13 @@ from database_manager import DatabaseManager
 from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_ACCUMULATOR_v1 Payment Accumulation Service")
+logger.info(f"🚀 [APP] Initializing PGP_ACCUMULATOR_v1 Payment Accumulation Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -29,9 +32,9 @@ try:
         db_user=config['db_user'],
         db_password=config['db_password']
     )
-    print(f"✅ [APP] Database manager initialized")
+    logger.info(f"✅ [APP] Database manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize database manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     db_manager = None
 
 # Initialize token manager
@@ -40,9 +43,9 @@ try:
     if not signing_key:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
     token_manager = TokenManager(signing_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize Cloud Tasks client
@@ -52,9 +55,9 @@ try:
     if not project_id or not location:
         raise ValueError("Cloud Tasks configuration incomplete")
     cloudtasks_client = CloudTasksClient(project_id, location)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info(f"✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 # ChangeNow client removed - conversion now handled by PGP_SPLIT2_v1 via Cloud Tasks
@@ -76,7 +79,7 @@ def accumulate_payment():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT] Payment accumulation request received")
+        logger.info(f"🎯 [ENDPOINT] Payment accumulation request received")
 
         # Parse JSON payload
         try:
@@ -84,7 +87,7 @@ def accumulate_payment():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         # Extract payment data
@@ -102,38 +105,38 @@ def accumulate_payment():
         nowpayments_pay_address = request_data.get('nowpayments_pay_address')
         nowpayments_outcome_amount = request_data.get('nowpayments_outcome_amount')
 
-        print(f"👤 [ENDPOINT] User ID: {user_id}")
-        print(f"🏢 [ENDPOINT] Client ID: {client_id}")
-        print(f"💰 [ENDPOINT] Payment Amount: ${payment_amount_usd}")
-        print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
+        logger.info(f"👤 [ENDPOINT] User ID: {user_id}")
+        logger.info(f"🏢 [ENDPOINT] Client ID: {client_id}")
+        logger.info(f"💰 [ENDPOINT] Payment Amount: ${payment_amount_usd}")
+        logger.info(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
         if nowpayments_payment_id:
-            print(f"💳 [ENDPOINT] NowPayments Payment ID: {nowpayments_payment_id}")
-            print(f"📬 [ENDPOINT] Pay Address: {nowpayments_pay_address}")
-            print(f"💰 [ENDPOINT] Outcome Amount: {nowpayments_outcome_amount}")
+            logger.info(f"💳 [ENDPOINT] NowPayments Payment ID: {nowpayments_payment_id}")
+            logger.info(f"📬 [ENDPOINT] Pay Address: {nowpayments_pay_address}")
+            logger.info(f"💰 [ENDPOINT] Outcome Amount: {nowpayments_outcome_amount}")
         else:
-            print(f"⚠️ [ENDPOINT] NowPayments payment_id not available (may arrive via IPN later)")
+            logger.warning(f"⚠️ [ENDPOINT] NowPayments payment_id not available (may arrive via IPN later)")
 
         # Calculate adjusted amount (remove TP fee like PGP_SPLIT1_v1 does)
         tp_flat_fee = Decimal(config.get('tp_flat_fee', '3'))
         fee_amount = payment_amount_usd * (tp_flat_fee / Decimal('100'))
         adjusted_amount_usd = payment_amount_usd - fee_amount
 
-        print(f"💸 [ENDPOINT] TP fee ({tp_flat_fee}%): ${fee_amount}")
-        print(f"✅ [ENDPOINT] Adjusted amount: ${adjusted_amount_usd}")
+        logger.info(f"💸 [ENDPOINT] TP fee ({tp_flat_fee}%): ${fee_amount}")
+        logger.info(f"✅ [ENDPOINT] Adjusted amount: ${adjusted_amount_usd}")
 
         # Store accumulated_eth (the adjusted USD amount pending conversion)
         # Conversion will happen asynchronously via PGP_SPLIT2_v1
         accumulated_eth = adjusted_amount_usd
-        print(f"⏳ [ENDPOINT] Storing payment with accumulated_eth (pending conversion)")
-        print(f"💰 [ENDPOINT] Accumulated ETH value: ${accumulated_eth}")
+        logger.info(f"⏳ [ENDPOINT] Storing payment with accumulated_eth (pending conversion)")
+        logger.info(f"💰 [ENDPOINT] Accumulated ETH value: ${accumulated_eth}")
 
         # Write to payout_accumulation table
         if not db_manager:
-            print(f"❌ [ENDPOINT] Database manager not available")
+            logger.error(f"❌ [ENDPOINT] Database manager not available")
             abort(500, "Database unavailable")
 
-        print(f"💾 [ENDPOINT] Inserting into payout_accumulation (pending conversion)")
+        logger.info(f"💾 [ENDPOINT] Inserting into payout_accumulation (pending conversion)")
 
         accumulation_id = db_manager.insert_payout_accumulation_pending(
             client_id=client_id,
@@ -152,14 +155,14 @@ def accumulate_payment():
         )
 
         if not accumulation_id:
-            print(f"❌ [ENDPOINT] Failed to insert into database")
+            logger.error(f"❌ [ENDPOINT] Failed to insert into database")
             abort(500, "Database insertion failed")
 
-        print(f"✅ [ENDPOINT] Database insertion successful")
-        print(f"🆔 [ENDPOINT] Accumulation ID: {accumulation_id}")
+        logger.info(f"✅ [ENDPOINT] Database insertion successful")
+        logger.debug(f"🆔 [ENDPOINT] Accumulation ID: {accumulation_id}")
 
-        print(f"✅ [ENDPOINT] Payment accumulated (awaiting micro-batch conversion)")
-        print(f"⏳ [ENDPOINT] Conversion will occur when batch threshold reached")
+        logger.info(f"✅ [ENDPOINT] Payment accumulated (awaiting micro-batch conversion)")
+        logger.info(f"⏳ [ENDPOINT] Conversion will occur when batch threshold reached")
 
         return jsonify({
             "status": "success",
@@ -170,7 +173,7 @@ def accumulate_payment():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -193,7 +196,7 @@ def health_check():
         }), 200
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_ACCUMULATOR_v1 Payment Accumulation",
@@ -202,5 +205,5 @@ def health_check():
 
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_ACCUMULATOR_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_ACCUMULATOR_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

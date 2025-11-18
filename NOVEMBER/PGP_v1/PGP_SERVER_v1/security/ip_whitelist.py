@@ -8,6 +8,7 @@ from functools import wraps
 from flask import request, abort
 from ipaddress import ip_address, ip_network
 from typing import List
+from PGP_COMMON.utils import get_real_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -69,15 +70,16 @@ class IPWhitelist:
             @ip_whitelist.require_whitelisted_ip
             def webhook():
                 return jsonify({'status': 'ok'})
+
+        Security Note:
+            Uses get_real_client_ip() to prevent IP spoofing via X-Forwarded-For.
+            Cloud Run adds 1 trusted proxy, so we use trusted_proxy_count=1.
         """
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # Get client IP (handle proxy)
-            client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-
-            # Handle multiple IPs in X-Forwarded-For (use first one)
-            if ',' in client_ip:
-                client_ip = client_ip.split(',')[0].strip()
+            # Get real client IP (secure against spoofing)
+            # Cloud Run environment has 1 trusted proxy
+            client_ip = get_real_client_ip(request, trusted_proxy_count=1)
 
             if not self.is_allowed(client_ip):
                 logger.warning("⚠️ [IP_WHITELIST] Blocked request from {}".format(

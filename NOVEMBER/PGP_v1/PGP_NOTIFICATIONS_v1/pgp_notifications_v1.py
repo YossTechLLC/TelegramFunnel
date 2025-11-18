@@ -10,17 +10,13 @@ from config_manager import ConfigManager
 from database_manager import DatabaseManager
 from notification_handler import NotificationHandler
 from telegram_client import TelegramClient
+from PGP_COMMON.logging import setup_logger
 import logging
 import sys
 import os
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout
-)
-logger = logging.getLogger(__name__)
+# Initialize logger with LOG_LEVEL environment variable support
+logger = setup_logger(__name__)
 
 
 def create_app():

@@ -16,7 +16,6 @@ Deployment:
 - Region: us-central1
 """
 import os
-import logging
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -27,17 +26,10 @@ from api.routes.account import account_bp
 from api.routes.channels import channels_bp
 from api.routes.mappings import mappings_bp
 from api.middleware.rate_limiter import setup_rate_limiting, get_rate_limit_error_handler
+from PGP_COMMON.logging import setup_logger
 
-# Configure logging
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Suppress httpx INFO logs (too verbose)
-logging.getLogger('httpx').setLevel(logging.WARNING)
+# Initialize logger with LOG_LEVEL environment variable support
+logger = setup_logger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)

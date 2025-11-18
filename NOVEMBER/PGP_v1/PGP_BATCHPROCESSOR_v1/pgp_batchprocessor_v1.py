@@ -13,10 +13,13 @@ from database_manager import DatabaseManager
 from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_BATCHPROCESSOR_v1 Batch Payout Processor Service")
+logger.info(f"🚀 [APP] Initializing PGP_BATCHPROCESSOR_v1 Batch Payout Processor Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -28,9 +31,9 @@ try:
         db_user=config['db_user'],
         db_password=config['db_password']
     )
-    print(f"✅ [APP] Database manager initialized")
+    logger.info(f"✅ [APP] Database manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize database manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     db_manager = None
 
 # Initialize token manager
@@ -39,9 +42,9 @@ try:
     if not signing_key:
         raise ValueError("TPS_HOSTPAY_SIGNING_KEY not available")
     token_manager = TokenManager(signing_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize Cloud Tasks client
@@ -51,9 +54,9 @@ try:
     if not project_id or not location:
         raise ValueError("Cloud Tasks configuration incomplete")
     cloudtasks_client = CloudTasksClient(project_id, location)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info(f"✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 
@@ -74,27 +77,27 @@ def process_batches():
         JSON response with processing summary
     """
     try:
-        print(f"🎯 [ENDPOINT] Batch processing triggered")
-        print(f"⏰ [ENDPOINT] Timestamp: {int(time.time())}")
+        logger.info(f"🎯 [ENDPOINT] Batch processing triggered")
+        logger.info(f"⏰ [ENDPOINT] Timestamp: {int(time.time())}")
 
         # Validate managers
         if not db_manager or not token_manager or not cloudtasks_client:
-            print(f"❌ [ENDPOINT] Required managers not available")
+            logger.error(f"❌ [ENDPOINT] Required managers not available")
             abort(500, "Service not properly initialized")
 
         # Find clients over threshold
-        print(f"🔍 [ENDPOINT] Searching for clients over threshold")
+        logger.debug(f"🔍 [ENDPOINT] Searching for clients over threshold")
         clients_over_threshold = db_manager.find_clients_over_threshold()
 
         if not clients_over_threshold:
-            print(f"✅ [ENDPOINT] No clients over threshold - nothing to process")
+            logger.info(f"✅ [ENDPOINT] No clients over threshold - nothing to process")
             return jsonify({
                 "status": "success",
                 "message": "No batches to process",
                 "batches_created": 0
             }), 200
 
-        print(f"📊 [ENDPOINT] Found {len(clients_over_threshold)} client(s) ready for payout")
+        logger.debug(f"📊 [ENDPOINT] Found {len(clients_over_threshold)} client(s) ready for payout")
 
         batches_created = []
         errors = []
@@ -111,22 +114,22 @@ def process_batches():
                 threshold = client_data['threshold']
 
                 print(f"")
-                print(f"💰 [ENDPOINT] Processing client: {client_id}")
-                print(f"📊 [ENDPOINT] Total USDT: ${total_usdt} (threshold: ${threshold})")
-                print(f"📊 [ENDPOINT] Payment count: {payment_count}")
-                print(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
+                logger.info(f"💰 [ENDPOINT] Processing client: {client_id}")
+                logger.debug(f"📊 [ENDPOINT] Total USDT: ${total_usdt} (threshold: ${threshold})")
+                logger.debug(f"📊 [ENDPOINT] Payment count: {payment_count}")
+                logger.info(f"🎯 [ENDPOINT] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
                 # Get summed ACTUAL ETH for this client (for PGP_HOSTPAY1_v1 payment)
                 actual_eth_total = db_manager.get_accumulated_actual_eth(client_id)
-                print(f"💎 [ENDPOINT] ACTUAL ETH accumulated: {actual_eth_total} ETH")
+                logger.info(f"💎 [ENDPOINT] ACTUAL ETH accumulated: {actual_eth_total} ETH")
 
                 if actual_eth_total <= 0:
-                    print(f"⚠️ [ENDPOINT] WARNING: No actual ETH found for client {client_id}")
-                    print(f"⚠️ [ENDPOINT] Will use USD→ETH conversion fallback")
+                    logger.warning(f"⚠️ [ENDPOINT] WARNING: No actual ETH found for client {client_id}")
+                    logger.warning(f"⚠️ [ENDPOINT] Will use USD→ETH conversion fallback")
 
                 # Generate batch ID
                 batch_id = str(uuid.uuid4())
-                print(f"🆔 [ENDPOINT] Generated batch ID: {batch_id}")
+                logger.debug(f"🆔 [ENDPOINT] Generated batch ID: {batch_id}")
 
                 # Create batch record
                 batch_created = db_manager.create_payout_batch(
@@ -140,7 +143,7 @@ def process_batches():
                 )
 
                 if not batch_created:
-                    print(f"❌ [ENDPOINT] Failed to create batch record for client {client_id}")
+                    logger.error(f"❌ [ENDPOINT] Failed to create batch record for client {client_id}")
                     errors.append(f"Client {client_id}: batch creation failed")
                     continue
 
@@ -159,7 +162,7 @@ def process_batches():
                 )
 
                 if not batch_token:
-                    print(f"❌ [ENDPOINT] Failed to encrypt token for batch {batch_id}")
+                    logger.error(f"❌ [ENDPOINT] Failed to encrypt token for batch {batch_id}")
                     db_manager.update_batch_status(batch_id, 'failed')
                     errors.append(f"Client {client_id}: token encryption failed")
                     continue
@@ -169,12 +172,12 @@ def process_batches():
                 pgp_split1_url = config.get('pgp_split1_url')
 
                 if not pgp_split1_queue or not pgp_split1_url:
-                    print(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
+                    logger.error(f"❌ [ENDPOINT] PGP_SPLIT1_v1 configuration missing")
                     db_manager.update_batch_status(batch_id, 'failed')
                     errors.append(f"Client {client_id}: PGP_SPLIT1_v1 config missing")
                     continue
 
-                print(f"🚀 [ENDPOINT] Enqueueing to PGP_SPLIT1_v1")
+                logger.info(f"🚀 [ENDPOINT] Enqueueing to PGP_SPLIT1_v1")
 
                 task_payload = {
                     'token': batch_token,
@@ -188,16 +191,16 @@ def process_batches():
                 )
 
                 if not task_name:
-                    print(f"❌ [ENDPOINT] Failed to enqueue task for batch {batch_id}")
+                    logger.error(f"❌ [ENDPOINT] Failed to enqueue task for batch {batch_id}")
                     db_manager.update_batch_status(batch_id, 'failed')
                     errors.append(f"Client {client_id}: task enqueue failed")
                     continue
 
-                print(f"✅ [ENDPOINT] Task enqueued successfully: {task_name}")
+                logger.info(f"✅ [ENDPOINT] Task enqueued successfully: {task_name}")
 
                 # Mark accumulations as paid
                 marked_count = db_manager.mark_accumulations_paid(client_id, batch_id)
-                print(f"✅ [ENDPOINT] Marked {marked_count} accumulation(s) as paid")
+                logger.info(f"✅ [ENDPOINT] Marked {marked_count} accumulation(s) as paid")
 
                 batches_created.append({
                     'batch_id': batch_id,
@@ -207,18 +210,18 @@ def process_batches():
                     'task_name': task_name
                 })
 
-                print(f"🎉 [ENDPOINT] Batch {batch_id} processed successfully")
+                logger.info(f"🎉 [ENDPOINT] Batch {batch_id} processed successfully")
 
             except Exception as e:
-                print(f"❌ [ENDPOINT] Error processing client {client_data.get('client_id', 'unknown')}: {e}")
+                logger.error(f"❌ [ENDPOINT] Error processing client {client_data.get('client_id', 'unknown')}: {e}", exc_info=True)
                 errors.append(f"Client {client_data.get('client_id', 'unknown')}: {str(e)}")
                 continue
 
         print(f"")
-        print(f"🎉 [ENDPOINT] Batch processing completed")
-        print(f"✅ [ENDPOINT] Batches created: {len(batches_created)}")
+        logger.info(f"🎉 [ENDPOINT] Batch processing completed")
+        logger.info(f"✅ [ENDPOINT] Batches created: {len(batches_created)}")
         if errors:
-            print(f"⚠️ [ENDPOINT] Errors encountered: {len(errors)}")
+            logger.warning(f"⚠️ [ENDPOINT] Errors encountered: {len(errors)}")
 
         return jsonify({
             "status": "success",
@@ -229,7 +232,7 @@ def process_batches():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -252,7 +255,7 @@ def health_check():
         }), 200
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_BATCHPROCESSOR_v1 Batch Payout Processor",
@@ -261,5 +264,5 @@ def health_check():
 
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_BATCHPROCESSOR_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_BATCHPROCESSOR_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

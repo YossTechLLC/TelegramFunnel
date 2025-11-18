@@ -10,6 +10,7 @@ from flask import request, abort
 from collections import defaultdict
 from threading import Lock
 from typing import Dict, Tuple
+from PGP_COMMON.utils import get_real_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -99,13 +100,16 @@ class RateLimiter:
             @rate_limiter.limit
             def webhook():
                 return jsonify({'status': 'ok'})
+
+        Security Note:
+            Uses get_real_client_ip() to prevent IP spoofing via X-Forwarded-For.
+            Cloud Run adds 1 trusted proxy, so we use trusted_proxy_count=1.
         """
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-
-            if ',' in client_ip:
-                client_ip = client_ip.split(',')[0].strip()
+            # Get real client IP (secure against spoofing)
+            # Cloud Run environment has 1 trusted proxy
+            client_ip = get_real_client_ip(request, trusted_proxy_count=1)
 
             if not self.allow_request(client_ip):
                 logger.warning("⚠️ [RATE_LIMIT] Rate limit exceeded for {}".format(

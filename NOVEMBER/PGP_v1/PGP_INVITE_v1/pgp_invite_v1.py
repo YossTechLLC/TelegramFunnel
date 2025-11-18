@@ -22,6 +22,7 @@ Key Implementation:
 - asyncio.run() creates isolated event loop for async telegram operations
 - Event loop and connections properly cleaned up after each request
 """
+import os
 import time
 import asyncio
 from flask import Flask, request, abort, jsonify
@@ -33,10 +34,17 @@ from config_manager import ConfigManager
 from token_manager import TokenManager
 from database_manager import DatabaseManager
 
+# Import security utilities (C-07 fix)
+from PGP_COMMON.utils import sanitize_error_for_user, create_error_response
+
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+# Initialize logger
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_INVITE_v1 Telegram Invite Sender Service")
+logger.info(f"🚀 [APP] Initializing PGP_INVITE_v1 Telegram Invite Sender Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -50,10 +58,10 @@ try:
         payment_min_tolerance=config.get('payment_min_tolerance', 0.50),
         payment_fallback_tolerance=config.get('payment_fallback_tolerance', 0.75)
     )
-    print(f"✅ [APP] Database manager initialized for payment validation")
+    logger.info(f"✅ [APP] Database manager initialized for payment validation")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize database manager: {e}")
-    print(f"⚠️ [APP] Payment validation will fail without database connection")
+    logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
+    logger.warning(f"⚠️ [APP] Payment validation will fail without database connection")
     db_manager = None
 
 # Initialize token manager
@@ -62,9 +70,9 @@ try:
     if not signing_key:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
     token_manager = TokenManager(signing_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Store bot token at module level (Bot instance created per-request)
@@ -72,9 +80,9 @@ try:
     bot_token = config.get('telegram_bot_token')
     if not bot_token:
         raise ValueError("TELEGRAM_BOT_TOKEN not available")
-    print(f"✅ [APP] Telegram bot token loaded (Bot instance will be created per-request)")
+    logger.info(f"✅ [APP] Telegram bot token loaded (Bot instance will be created per-request)")
 except Exception as e:
-    print(f"❌ [APP] Failed to load Telegram bot token: {e}")
+    logger.error(f"❌ [APP] Failed to load Telegram bot token: {e}", exc_info=True)
     bot_token = None
 
 
@@ -100,7 +108,7 @@ def send_telegram_invite():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT] Telegram invite request received (from PGP_ORCHESTRATOR_v1)")
+        logger.info(f"🎯 [ENDPOINT] Telegram invite request received (from PGP_ORCHESTRATOR_v1)")
 
         # Parse JSON payload
         try:
@@ -108,32 +116,31 @@ def send_telegram_invite():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         encrypted_token = request_data.get('token')
         payment_id = request_data.get('payment_id')
 
         if not encrypted_token:
-            print(f"❌ [ENDPOINT] Missing token")
+            logger.error(f"❌ [ENDPOINT] Missing token")
             abort(400, "Missing token")
 
         if not payment_id:
-            print(f"❌ [ENDPOINT] Missing payment_id")
+            logger.error(f"❌ [ENDPOINT] Missing payment_id")
             abort(400, "Missing payment_id for idempotency tracking")
 
-        print(f"📋 [ENDPOINT] Payment ID: {payment_id}")
+        logger.info(f"📋 [ENDPOINT] Payment ID: {payment_id}")
 
         # ================================================================
         # IDEMPOTENCY CHECK: Check if invite already sent for this payment
         # ================================================================
 
-        print(f"")
-        print(f"🔍 [IDEMPOTENCY] Checking if invite already sent for payment {payment_id}...")
+        logger.debug(f"🔍 [IDEMPOTENCY] Checking if invite already sent for payment {payment_id}...")
 
         if not db_manager:
-            print(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
-            print(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
+            logger.warning(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
+            logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
         else:
             try:
                 conn = db_manager.get_connection()
@@ -160,10 +167,10 @@ def send_telegram_invite():
                     existing_link = existing_invite[1]
                     sent_at = existing_invite[2]
 
-                    print(f"✅ [IDEMPOTENCY] Invite already sent for payment {payment_id}")
-                    print(f"   Sent at: {sent_at}")
-                    print(f"   Link: {existing_link}")
-                    print(f"🎉 [ENDPOINT] Returning success (invite already sent)")
+                    logger.info(f"✅ [IDEMPOTENCY] Invite already sent for payment {payment_id}")
+                    logger.info(f"   Sent at: {sent_at}")
+                    logger.info(f"   Link: {existing_link}")
+                    logger.info(f"🎉 [ENDPOINT] Returning success (invite already sent)")
 
                     return jsonify({
                         "status": "success",
@@ -172,38 +179,34 @@ def send_telegram_invite():
                         "invite_sent_at": str(sent_at)
                     }), 200
                 else:
-                    print(f"🆕 [IDEMPOTENCY] No existing invite found - proceeding to send")
+                    logger.debug(f"🆕 [IDEMPOTENCY] No existing invite found - proceeding to send")
 
             except Exception as e:
-                print(f"⚠️ [IDEMPOTENCY] Error checking invite status: {e}")
-                import traceback
-                traceback.print_exc()
-                print(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
-
-        print(f"")
+                logger.warning(f"⚠️ [IDEMPOTENCY] Error checking invite status: {e}", exc_info=True)
+                logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
 
         # Decrypt token
         if not token_manager:
-            print(f"❌ [ENDPOINT] Token manager not available")
+            logger.error(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
 
         try:
             user_id, closed_channel_id, wallet_address, payout_currency, payout_network, subscription_time_days, subscription_price = token_manager.decode_and_verify_token(encrypted_token)
-            print(f"✅ [ENDPOINT] Token decoded successfully")
-            print(f"👤 [ENDPOINT] User: {user_id}, Channel: {closed_channel_id}")
-            print(f"💰 [ENDPOINT] Price: ${subscription_price}, Duration: {subscription_time_days} days")
+            logger.info(f"✅ [ENDPOINT] Token decoded successfully")
+            logger.info(f"👤 [ENDPOINT] User: {user_id}, Channel: {closed_channel_id}")
+            logger.info(f"💰 [ENDPOINT] Price: ${subscription_price}, Duration: {subscription_time_days} days")
         except Exception as e:
-            print(f"❌ [ENDPOINT] Token validation error: {e}")
+            logger.error(f"❌ [ENDPOINT] Token validation error: {e}", exc_info=True)
             abort(400, f"Token error: {e}")
 
         # ============================================================================
         # PAYMENT VALIDATION - Verify payment completed before sending invite
         # ============================================================================
         if not db_manager:
-            print(f"❌ [ENDPOINT] Database manager not available - cannot validate payment")
+            logger.error(f"❌ [ENDPOINT] Database manager not available - cannot validate payment")
             abort(500, "Payment validation service unavailable")
 
-        print(f"🔐 [ENDPOINT] Validating payment completion...")
+        logger.info(f"🔐 [ENDPOINT] Validating payment completion...")
         is_valid, error_message = db_manager.validate_payment_complete(
             user_id=user_id,
             closed_channel_id=closed_channel_id,
@@ -213,20 +216,20 @@ def send_telegram_invite():
         if not is_valid:
             if "IPN callback" in error_message or "pending" in error_message:
                 # IPN not yet processed - return 503 for Cloud Tasks retry
-                print(f"⏳ [ENDPOINT] Payment validation pending - Cloud Tasks will retry")
-                print(f"🔄 [ENDPOINT] Retry reason: {error_message}")
+                logger.info(f"⏳ [ENDPOINT] Payment validation pending - Cloud Tasks will retry")
+                logger.info(f"🔄 [ENDPOINT] Retry reason: {error_message}")
                 abort(503, error_message)
             else:
                 # Payment invalid - return 400 (no retry)
-                print(f"❌ [ENDPOINT] Payment validation failed - will not retry")
-                print(f"🚫 [ENDPOINT] Failure reason: {error_message}")
+                logger.error(f"❌ [ENDPOINT] Payment validation failed - will not retry")
+                logger.warning(f"🚫 [ENDPOINT] Failure reason: {error_message}")
                 abort(400, error_message)
 
-        print(f"✅ [ENDPOINT] Payment validation successful - proceeding with invitation")
+        logger.info(f"✅ [ENDPOINT] Payment validation successful - proceeding with invitation")
 
         # Check bot token availability
         if not bot_token:
-            print(f"❌ [ENDPOINT] Telegram bot token not available")
+            logger.error(f"❌ [ENDPOINT] Telegram bot token not available")
             abort(500, "Telegram bot configuration error")
 
         # Fetch channel and subscription details for enhanced message
@@ -239,8 +242,8 @@ def send_telegram_invite():
                     subscription_time_days=subscription_time_days
                 )
             except Exception as e:
-                print(f"⚠️ [ENDPOINT] Could not fetch channel details: {e}")
-                print(f"⚠️ [ENDPOINT] Using fallback values for message")
+                logger.warning(f"⚠️ [ENDPOINT] Could not fetch channel details: {e}")
+                logger.warning(f"⚠️ [ENDPOINT] Using fallback values for message")
 
         channel_title = channel_details.get('channel_title', 'Premium Channel')
         tier_number = channel_details.get('tier_number', 'Unknown')
@@ -255,7 +258,7 @@ def send_telegram_invite():
             bot = Bot(bot_token)
 
             try:
-                print(f"📨 [ENDPOINT] Creating Telegram invite link for channel {closed_channel_id}")
+                logger.info(f"📨 [ENDPOINT] Creating Telegram invite link for channel {closed_channel_id}")
 
                 # Create one-time invite link (expires in 1 hour, 1 use only)
                 invite = await bot.create_chat_invite_link(
@@ -263,7 +266,7 @@ def send_telegram_invite():
                     expire_date=int(time.time()) + 3600,
                     member_limit=1
                 )
-                print(f"✅ [ENDPOINT] Invite link created: {invite.invite_link}")
+                logger.info(f"✅ [ENDPOINT] Invite link created: {invite.invite_link}")
 
                 # Send invite message to user with enhanced format
                 await bot.send_message(
@@ -279,8 +282,8 @@ def send_telegram_invite():
                     ),
                     disable_web_page_preview=True
                 )
-                print(f"✅ [ENDPOINT] Enhanced invite message sent to user {user_id}")
-                print(f"📺 [ENDPOINT] Message details: {channel_title}, Tier {tier_number}, ${subscription_price}, {subscription_time_days} days")
+                logger.info(f"✅ [ENDPOINT] Enhanced invite message sent to user {user_id}")
+                logger.info(f"📺 [ENDPOINT] Message details: {channel_title}, Tier {tier_number}, ${subscription_price}, {subscription_time_days} days")
 
                 return {
                     "success": True,
@@ -289,14 +292,14 @@ def send_telegram_invite():
 
             except TelegramError as te:
                 # Telegram API error - Cloud Tasks will retry
-                print(f"❌ [ENDPOINT] Telegram API error: {te}")
-                print(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
+                logger.error(f"❌ [ENDPOINT] Telegram API error: {te}", exc_info=True)
+                logger.info(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
                 raise
 
             except Exception as e:
                 # Other error - Cloud Tasks will retry
-                print(f"❌ [ENDPOINT] Unexpected error sending invite: {e}")
-                print(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
+                logger.error(f"❌ [ENDPOINT] Unexpected error sending invite: {e}", exc_info=True)
+                logger.info(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
                 raise
 
         # Execute async function in isolated event loop
@@ -327,19 +330,19 @@ def send_telegram_invite():
                         cur.close()
                         conn.close()
 
-                        print(f"✅ [IDEMPOTENCY] Marked invite as sent for payment {payment_id}")
-                        print(f"   Link stored: {invite_link}")
+                        logger.info(f"✅ [IDEMPOTENCY] Marked invite as sent for payment {payment_id}")
+                        logger.info(f"   Link stored: {invite_link}")
                     else:
-                        print(f"⚠️ [IDEMPOTENCY] Could not get database connection")
+                        logger.warning(f"⚠️ [IDEMPOTENCY] Could not get database connection")
                 except Exception as e:
                     # Non-critical error - invite already sent to user
-                    print(f"⚠️ [IDEMPOTENCY] Failed to mark invite as sent: {e}")
-                    print(f"⚠️ [IDEMPOTENCY] User received invite, but DB update failed")
-                    print(f"⚠️ [IDEMPOTENCY] Will retry DB update on next task execution")
+                    logger.warning(f"⚠️ [IDEMPOTENCY] Failed to mark invite as sent: {e}")
+                    logger.warning(f"⚠️ [IDEMPOTENCY] User received invite, but DB update failed")
+                    logger.warning(f"⚠️ [IDEMPOTENCY] Will retry DB update on next task execution")
             else:
-                print(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot mark invite as sent")
+                logger.warning(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot mark invite as sent")
 
-            print(f"🎉 [ENDPOINT] Telegram invite completed successfully")
+            logger.info(f"🎉 [ENDPOINT] Telegram invite completed successfully")
             return jsonify({
                 "status": "success",
                 "message": "Telegram invite sent successfully",
@@ -357,7 +360,7 @@ def send_telegram_invite():
             abort(500, f"Error sending invite: {e}")
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -387,7 +390,7 @@ def health_check():
         }), 200
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_INVITE_v1 Telegram Invite Sender (with Payment Validation)",
@@ -396,9 +399,63 @@ def health_check():
 
 
 # ============================================================================
+# GLOBAL ERROR HANDLERS (C-07: Error Sanitization)
+# ============================================================================
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """
+    Global error handler that sanitizes error messages based on environment.
+
+    C-07 Fix: Prevents sensitive data exposure through error messages.
+    - Production: Returns generic error with error ID
+    - Development: Returns detailed error for debugging
+    """
+    # Get environment (defaults to production for safety)
+    environment = os.getenv('ENVIRONMENT', 'production')
+
+    # Sanitize error message (shows details only in development)
+    sanitized_message = sanitize_error_for_user(e, environment)
+
+    # Create standardized error response with error ID
+    error_response, status_code = create_error_response(
+        status_code=500,
+        message=sanitized_message,
+        include_error_id=True
+    )
+
+    # Log full error details internally (always, regardless of environment)
+    logger.error(
+        f"❌ [ERROR] Unhandled exception in PGP_INVITE_v1",
+        extra={
+            'error_id': error_response.get('error_id'),
+            'error_type': type(e).__name__,
+            'environment': environment
+        },
+        exc_info=True
+    )
+
+    return jsonify(error_response), status_code
+
+
+@app.errorhandler(400)
+def handle_bad_request(e):
+    """Handle 400 Bad Request errors with sanitized messages."""
+    error_response, _ = create_error_response(400, str(e))
+    return jsonify(error_response), 400
+
+
+@app.errorhandler(404)
+def handle_not_found(e):
+    """Handle 404 Not Found errors."""
+    error_response, _ = create_error_response(404, "Endpoint not found")
+    return jsonify(error_response), 404
+
+
+# ============================================================================
 # FLASK ENTRYPOINT
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_INVITE_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_INVITE_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

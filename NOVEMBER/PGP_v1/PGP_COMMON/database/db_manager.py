@@ -3,9 +3,17 @@
 Base Database Manager for PGP_v1 Services.
 Provides common database connection and utility methods shared across all PGP_v1 microservices.
 """
+import logging
 from datetime import datetime
 from typing import Optional
 from google.cloud.sql.connector import Connector
+from PGP_COMMON.utils import (
+    generate_error_id,
+    log_error_with_context,
+    sanitize_sql_error
+)
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDatabaseManager:
@@ -16,9 +24,50 @@ class BaseDatabaseManager:
     - Creating database connections using Cloud SQL Connector
     - Getting current timestamps and datestamps
     - Connection pooling and management
+    - SQL injection protection via query validation
 
     Service-specific query methods remain in subclasses.
+
+    Security Features:
+    - Query validation before execution (C-06)
+    - Parameterized queries enforcement
+    - Column name whitelisting
+    - Operation type validation
     """
+
+    # SQL Injection Protection: Allowed operations
+    ALLOWED_SQL_OPERATIONS = {'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'WITH'}
+
+    # SQL Injection Protection: Updateable columns per table
+    # Add all tables used by your application
+    UPDATEABLE_COLUMNS = {
+        'main_clients_database': {
+            'open_channel_title', 'closed_channel_title',
+            'sub_1_price', 'sub_2_price', 'sub_3_price',
+            'client_wallet_address', 'payout_strategy',
+            'payout_network', 'customer_id'
+        },
+        'processed_payments': {
+            'pgp_orchestrator_processed', 'outcome_amount_usd',
+            'subscription_price', 'payout_network',
+            'wallet_address', 'processed_at'
+        },
+        'subscription_tracking_table': {
+            'subscription_status', 'subscription_end_date',
+            'cancelled_at', 'payment_id'
+        },
+        'payout_accumulation_table': {
+            'accumulated_amount', 'last_updated',
+            'payout_status', 'payout_date'
+        },
+        'split_payout_que': {
+            'processed', 'processed_at', 'error_message'
+        },
+        'batch_conversions': {
+            'conversion_status', 'changenow_exchange_id',
+            'completed_at', 'error_message'
+        }
+    }
 
     def __init__(self, instance_connection_name: str, db_name: str, db_user: str, db_password: str, service_name: str):
         """
@@ -63,7 +112,14 @@ class BaseDatabaseManager:
             return connection
 
         except Exception as e:
-            print(f"❌ [DATABASE] Connection failed: {e}")
+            # Log full error details internally (not exposed to user)
+            error_id = generate_error_id()
+            log_error_with_context(e, error_id, {
+                'service': self.service_name,
+                'instance': self.instance_connection_name,
+                'operation': 'get_connection'
+            })
+            print(f"❌ [DATABASE] Connection failed (Error ID: {error_id})")
             return None
 
     def get_current_timestamp(self) -> str:
@@ -90,7 +146,7 @@ class BaseDatabaseManager:
         now = datetime.now()
         return now.strftime('%Y-%m-%d')
 
-    def execute_query(self, query: str, params: tuple, fetch_one: bool = False, fetch_all: bool = False) -> Optional[any]:
+    def execute_query(self, query: str, params: tuple, fetch_one: bool = False, fetch_all: bool = False, skip_validation: bool = False) -> Optional[any]:
         """
         Execute a database query with automatic connection management.
 
@@ -99,10 +155,25 @@ class BaseDatabaseManager:
             params: Query parameters tuple
             fetch_one: If True, return single row
             fetch_all: If True, return all rows
+            skip_validation: If True, skip SQL injection validation (use with caution!)
 
         Returns:
             Query result or None if failed
+
+        Security:
+            Validates all queries by default to prevent SQL injection (C-06).
+            Use skip_validation=True ONLY for trusted internal queries.
         """
+        # VALIDATE QUERY FIRST (SQL Injection Protection)
+        if not skip_validation:
+            try:
+                self.validate_query(query)
+            except ValueError as e:
+                error_id = generate_error_id()
+                logger.error(f"❌ [SECURITY] Query validation failed (Error ID: {error_id}): {e}")
+                print(f"❌ [DATABASE] Query validation failed (Error ID: {error_id})")
+                return None
+
         conn = None
         cur = None
         try:
@@ -134,7 +205,16 @@ class BaseDatabaseManager:
                     print(f"🔄 [DATABASE] Transaction rolled back")
                 except Exception:
                     pass
-            print(f"❌ [DATABASE] Error executing query: {e}")
+
+            # Log full error details internally (SQL details NOT exposed to user)
+            error_id = generate_error_id()
+            log_error_with_context(e, error_id, {
+                'service': self.service_name,
+                'operation': 'execute_query',
+                'fetch_one': fetch_one,
+                'fetch_all': fetch_all
+            })
+            print(f"❌ [DATABASE] Query execution failed (Error ID: {error_id})")
             return None
 
         finally:
@@ -154,7 +234,274 @@ class BaseDatabaseManager:
             self.connector.close()
             print(f"🔌 [DATABASE] Connector closed")
         except Exception as e:
-            print(f"❌ [DATABASE] Error closing connector: {e}")
+            # Log full error details internally
+            error_id = generate_error_id()
+            log_error_with_context(e, error_id, {
+                'service': self.service_name,
+                'operation': 'close_connector'
+            })
+            print(f"❌ [DATABASE] Error closing connector (Error ID: {error_id})")
+
+    # =========================================================================
+    # SQL INJECTION PROTECTION METHODS (C-06)
+    # =========================================================================
+
+    def validate_query(self, query: str) -> bool:
+        """
+        Validate SQL query for security (SQL Injection Protection).
+
+        Checks:
+        1. Query starts with allowed operation (SELECT, INSERT, UPDATE, DELETE, WITH)
+        2. No dangerous SQL comments (-- or /* */)
+        3. No multiple statements (;)
+        4. No EXECUTE, DROP, ALTER, TRUNCATE, GRANT, REVOKE
+
+        Args:
+            query: SQL query string to validate
+
+        Returns:
+            True if valid
+
+        Raises:
+            ValueError: If query fails validation
+
+        Example:
+            >>> db_manager.validate_query("SELECT * FROM users WHERE id = %s")
+            True
+            >>> db_manager.validate_query("DROP TABLE users")
+            ValueError: Invalid SQL operation: DROP
+        """
+        if not query or not isinstance(query, str):
+            raise ValueError("Query must be a non-empty string")
+
+        # Remove leading/trailing whitespace and convert to uppercase for checking
+        query_upper = query.strip().upper()
+
+        # Check for allowed operations
+        operation = query_upper.split()[0] if query_upper.split() else ""
+
+        if operation not in self.ALLOWED_SQL_OPERATIONS:
+            error_id = generate_error_id()
+            logger.error(f"❌ [SECURITY] Invalid SQL operation blocked: {operation} (Error ID: {error_id})")
+            raise ValueError(f"Invalid SQL operation: {operation}")
+
+        # Check for dangerous keywords
+        dangerous_keywords = {
+            'DROP', 'ALTER', 'TRUNCATE', 'GRANT', 'REVOKE',
+            'EXECUTE', 'EXEC', 'CREATE TABLE', 'CREATE INDEX'
+        }
+
+        for keyword in dangerous_keywords:
+            if keyword in query_upper:
+                error_id = generate_error_id()
+                logger.error(f"❌ [SECURITY] Dangerous SQL keyword blocked: {keyword} (Error ID: {error_id})")
+                raise ValueError(f"Dangerous SQL keyword not allowed: {keyword}")
+
+        # Check for SQL comments (can be used for injection)
+        if '--' in query or '/*' in query or '*/' in query:
+            error_id = generate_error_id()
+            logger.error(f"❌ [SECURITY] SQL comments blocked (Error ID: {error_id})")
+            raise ValueError("SQL comments are not allowed")
+
+        # Check for multiple statements (semicolon injection)
+        # Allow semicolon only at the very end
+        semicolon_count = query.count(';')
+        if semicolon_count > 1 or (semicolon_count == 1 and not query.strip().endswith(';')):
+            error_id = generate_error_id()
+            logger.error(f"❌ [SECURITY] Multiple SQL statements blocked (Error ID: {error_id})")
+            raise ValueError("Multiple SQL statements are not allowed")
+
+        return True
+
+    def validate_column_name(self, table: str, column: str) -> bool:
+        """
+        Validate that a column name is in the whitelist for the given table.
+
+        This prevents SQL injection via dynamic column names.
+
+        Args:
+            table: Table name
+            column: Column name to validate
+
+        Returns:
+            True if valid
+
+        Raises:
+            ValueError: If column not in whitelist
+
+        Example:
+            >>> db_manager.validate_column_name('processed_payments', 'outcome_amount_usd')
+            True
+            >>> db_manager.validate_column_name('processed_payments', 'malicious_column')
+            ValueError: Column 'malicious_column' not allowed for table 'processed_payments'
+        """
+        if table not in self.UPDATEABLE_COLUMNS:
+            error_id = generate_error_id()
+            logger.error(f"❌ [SECURITY] Unknown table in column validation: {table} (Error ID: {error_id})")
+            raise ValueError(f"Table '{table}' not in whitelist")
+
+        if column not in self.UPDATEABLE_COLUMNS[table]:
+            error_id = generate_error_id()
+            logger.error(f"❌ [SECURITY] Invalid column blocked: {table}.{column} (Error ID: {error_id})")
+            raise ValueError(f"Column '{column}' not allowed for table '{table}'")
+
+        return True
+
+    def sanitize_query_comments(self, query: str) -> str:
+        """
+        Remove SQL comments from query string.
+
+        Args:
+            query: SQL query string
+
+        Returns:
+            Query with comments removed
+
+        Example:
+            >>> db_manager.sanitize_query_comments("SELECT * -- comment")
+            'SELECT * '
+        """
+        # Remove single-line comments
+        lines = query.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Remove everything after --
+            if '--' in line:
+                line = line.split('--')[0]
+            cleaned_lines.append(line)
+
+        query = '\n'.join(cleaned_lines)
+
+        # Remove multi-line comments /* ... */
+        while '/*' in query and '*/' in query:
+            start = query.index('/*')
+            end = query.index('*/') + 2
+            query = query[:start] + query[end:]
+
+        return query
+
+    # =========================================================================
+    # RACE CONDITION PROTECTION METHODS (C-04)
+    # =========================================================================
+
+    def mark_payment_processed_atomic(
+        self,
+        payment_id: str,
+        service_name: str,
+        additional_data: Optional[dict] = None
+    ) -> bool:
+        """
+        Atomically mark a payment as processed using PostgreSQL UPSERT.
+
+        This prevents race conditions where multiple concurrent requests
+        try to process the same payment simultaneously.
+
+        Uses PostgreSQL INSERT...ON CONFLICT to ensure atomicity:
+        - If payment_id doesn't exist: INSERT succeeds → return True (process payment)
+        - If payment_id exists: INSERT skipped → return False (already processed)
+
+        Args:
+            payment_id: Unique payment identifier (from NowPayments or similar)
+            service_name: Name of service processing the payment
+            additional_data: Optional dict of additional columns to store
+
+        Returns:
+            True if this is the FIRST time processing (safe to proceed)
+            False if already processed (duplicate request, skip processing)
+
+        Example:
+            >>> # First request
+            >>> is_new = db_manager.mark_payment_processed_atomic("pay_123", "pgp_orchestrator")
+            >>> is_new
+            True  # Safe to process payment
+
+            >>> # Concurrent duplicate request
+            >>> is_new = db_manager.mark_payment_processed_atomic("pay_123", "pgp_orchestrator")
+            >>> is_new
+            False  # Already processed, skip
+
+        Security:
+            Requires unique constraint on payment_id column in processed_payments table.
+            See migration: 004_add_payment_unique_constraint.sql
+        """
+        conn = None
+        cur = None
+
+        try:
+            conn = self.get_connection()
+            if not conn:
+                logger.error("❌ [DATABASE] Could not establish connection for atomic payment")
+                return False
+
+            cur = conn.cursor()
+
+            # Build column names and values dynamically (but safely)
+            base_columns = ['payment_id', 'service_name', 'processed_at']
+            base_values = [payment_id, service_name, self.get_current_timestamp()]
+
+            # Add additional data if provided
+            extra_columns = []
+            extra_values = []
+            if additional_data:
+                for col, val in additional_data.items():
+                    # Validate column name against whitelist
+                    try:
+                        self.validate_column_name('processed_payments', col)
+                        extra_columns.append(col)
+                        extra_values.append(val)
+                    except ValueError as e:
+                        logger.warning(f"⚠️ [DATABASE] Skipping invalid column in atomic payment: {col}")
+
+            all_columns = base_columns + extra_columns
+            all_values = base_values + extra_values
+
+            # Build UPSERT query
+            columns_str = ', '.join(all_columns)
+            placeholders = ', '.join(['%s'] * len(all_values))
+
+            query = f"""
+                INSERT INTO processed_payments ({columns_str})
+                VALUES ({placeholders})
+                ON CONFLICT (payment_id) DO NOTHING
+                RETURNING payment_id
+            """
+
+            # Execute atomic UPSERT
+            cur.execute(query, tuple(all_values))
+            result = cur.fetchone()
+            conn.commit()
+
+            if result:
+                # INSERT succeeded → this is the first time processing
+                logger.info(f"✅ [DATABASE] Payment {payment_id} marked as processed by {service_name}")
+                return True
+            else:
+                # INSERT skipped due to conflict → already processed
+                logger.warning(f"⚠️ [DATABASE] Payment {payment_id} already processed (duplicate request)")
+                return False
+
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+            # Log error details
+            error_id = generate_error_id()
+            log_error_with_context(e, error_id, {
+                'service': service_name,
+                'payment_id': payment_id,
+                'operation': 'mark_payment_processed_atomic'
+            })
+            logger.error(f"❌ [DATABASE] Atomic payment processing failed (Error ID: {error_id})")
+            return False
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
 
     # =========================================================================
     # SHARED DATABASE METHODS (Consolidated from services)

@@ -20,19 +20,23 @@ from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 from PGP_COMMON.utils import verify_sha256_signature
 
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+# Initialize logger
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_SPLIT1_v1 Orchestrator Service")
+logger.info(f"🚀 [APP] Initializing PGP_SPLIT1_v1 Orchestrator Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
 # Initialize database manager
 try:
     database_manager = DatabaseManager(config)
-    print(f"✅ [APP] Database manager initialized")
+    logger.info(f"✅ [APP] Database manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize database manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     database_manager = None
 
 # Initialize token manager
@@ -42,11 +46,11 @@ try:
     if not signing_key:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
     if not batch_signing_key:
-        print(f"⚠️ [APP] TPS_HOSTPAY_SIGNING_KEY not available - batch token decryption may fail")
+        logger.warning(f"⚠️ [APP] TPS_HOSTPAY_SIGNING_KEY not available - batch token decryption may fail")
     token_manager = TokenManager(signing_key, batch_signing_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize Cloud Tasks client
@@ -56,9 +60,9 @@ try:
     if not project_id or not location:
         raise ValueError("Cloud Tasks configuration incomplete")
     cloudtasks_client = CloudTasksClient(project_id, location)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info(f"✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 
@@ -91,15 +95,15 @@ def calculate_adjusted_amount(subscription_price: str, tp_flat_fee: str) -> Tupl
         fee_amount = original_amount * (fee_percentage / Decimal("100"))
         adjusted_amount = original_amount - fee_amount
 
-        print(f"💰 [FEE_CALC] Original: ${original_amount}")
-        print(f"📊 [FEE_CALC] TP fee: {fee_percentage}%")
-        print(f"💸 [FEE_CALC] Fee amount: ${fee_amount}")
-        print(f"✅ [FEE_CALC] Adjusted: ${adjusted_amount}")
+        logger.info(f"💰 [FEE_CALC] Original: ${original_amount}")
+        logger.debug(f"📊 [FEE_CALC] TP fee: {fee_percentage}%")
+        logger.info(f"💸 [FEE_CALC] Fee amount: ${fee_amount}")
+        logger.info(f"✅ [FEE_CALC] Adjusted: ${adjusted_amount}")
 
         return (float(original_amount), float(adjusted_amount))
 
     except Exception as e:
-        print(f"❌ [FEE_CALC] Error: {e}")
+        logger.error(f"❌ [FEE_CALC] Error: {e}", exc_info=True)
         return (float(subscription_price), float(subscription_price))
 
 
@@ -131,7 +135,7 @@ def build_hostpay_token(
         Base64 URL-safe encoded token or None if failed
     """
     try:
-        print(f"🔐 [HOSTPAY_TOKEN] Building GCHostPay token")
+        logger.info(f"🔐 [HOSTPAY_TOKEN] Building GCHostPay token")
 
         unique_id_bytes = unique_id.encode('utf-8')[:16].ljust(16, b'\x00')
         cn_api_id_bytes = cn_api_id.encode('utf-8')
@@ -164,16 +168,16 @@ def build_hostpay_token(
         final_data = bytes(packed_data) + truncated_signature
         token = base64.urlsafe_b64encode(final_data).rstrip(b'=').decode('utf-8')
 
-        print(f"✅ [HOSTPAY_TOKEN] Token generated successfully ({len(token)} chars)")
-        print(f"🆔 [HOSTPAY_TOKEN] Unique ID: {unique_id}")
-        print(f"🆔 [HOSTPAY_TOKEN] CN API ID: {cn_api_id}")
+        logger.info(f"✅ [HOSTPAY_TOKEN] Token generated successfully ({len(token)} chars)")
+        logger.debug(f"🆔 [HOSTPAY_TOKEN] Unique ID: {unique_id}")
+        logger.debug(f"🆔 [HOSTPAY_TOKEN] CN API ID: {cn_api_id}")
         print(f"💰 [HOSTPAY_TOKEN] ACTUAL amount: {actual_eth_amount} {from_currency.upper()}")       # ✅ LOG ACTUAL
         print(f"💰 [HOSTPAY_TOKEN] ESTIMATED amount: {estimated_eth_amount} {from_currency.upper()}") # ✅ LOG ESTIMATED
 
         return token
 
     except Exception as e:
-        print(f"❌ [HOSTPAY_TOKEN] Error building token: {e}")
+        logger.error(f"❌ [HOSTPAY_TOKEN] Error building token: {e}", exc_info=True)
         return None
 
 
@@ -203,36 +207,36 @@ def calculate_pure_market_conversion(
         Pure market conversion amount (ETH) without fees
     """
     try:
-        print(f"🧮 [MARKET_CALC] Calculating pure market conversion")
-        print(f"   From Amount: {from_amount}")
-        print(f"   To Amount (post-fee): {to_amount_post_fee}")
-        print(f"   Deposit Fee: {deposit_fee}")
-        print(f"   Withdrawal Fee: {withdrawal_fee}")
+        logger.info(f"🧮 [MARKET_CALC] Calculating pure market conversion")
+        logger.info(f"   From Amount: {from_amount}")
+        logger.info(f"   To Amount (post-fee): {to_amount_post_fee}")
+        logger.info(f"   Deposit Fee: {deposit_fee}")
+        logger.info(f"   Withdrawal Fee: {withdrawal_fee}")
 
         amount_swapped = from_amount - deposit_fee
         amount_before_withdrawal = to_amount_post_fee + withdrawal_fee
 
-        print(f"   Amount swapped: {amount_swapped}")
-        print(f"   Amount before withdrawal: {amount_before_withdrawal}")
+        logger.info(f"   Amount swapped: {amount_swapped}")
+        logger.info(f"   Amount before withdrawal: {amount_before_withdrawal}")
 
         if amount_swapped <= 0:
-            print(f"❌ [MARKET_CALC] Invalid amount_swapped: {amount_swapped}")
+            logger.error(f"❌ [MARKET_CALC] Invalid amount_swapped: {amount_swapped}")
             return to_amount_post_fee  # Fallback
 
         market_rate = amount_before_withdrawal / amount_swapped
-        print(f"   Market Rate: {market_rate}")
+        logger.info(f"   Market Rate: {market_rate}")
 
         pure_market_value = from_amount * market_rate
 
-        print(f"✅ [MARKET_CALC] Pure market value: {pure_market_value}")
-        print(f"   (True market value of {from_amount})")
-        print(f"   Difference from post-fee: +{pure_market_value - to_amount_post_fee}")
+        logger.info(f"✅ [MARKET_CALC] Pure market value: {pure_market_value}")
+        logger.info(f"   (True market value of {from_amount})")
+        logger.info(f"   Difference from post-fee: +{pure_market_value - to_amount_post_fee}")
 
         return pure_market_value
 
     except Exception as e:
-        print(f"❌ [MARKET_CALC] Error: {e}")
-        print(f"⚠️ [MARKET_CALC] Falling back to post-fee amount")
+        logger.error(f"❌ [MARKET_CALC] Error: {e}", exc_info=True)
+        logger.warning(f"⚠️ [MARKET_CALC] Falling back to post-fee amount")
         return to_amount_post_fee
 
 
@@ -260,13 +264,13 @@ def initial_webhook():
         payload = request.get_data()
         signature = request.headers.get('X-Webhook-Signature', '')
 
-        print(f"🎯 [ENDPOINT_1] Initial webhook called (from GCWebhook)")
-        print(f"📦 [ENDPOINT_1] Payload size: {len(payload)} bytes")
+        logger.info(f"🎯 [ENDPOINT_1] Initial webhook called (from GCWebhook)")
+        logger.info(f"📦 [ENDPOINT_1] Payload size: {len(payload)} bytes")
 
         # Verify signature using shared utility
         signing_key = config.get('success_url_signing_key')
         if signing_key and not verify_sha256_signature(payload, signature, signing_key):
-            print(f"❌ [ENDPOINT_1] Invalid signature")
+            logger.error(f"❌ [ENDPOINT_1] Invalid signature")
             abort(401, "Invalid webhook signature")
 
         # Parse JSON payload
@@ -275,7 +279,7 @@ def initial_webhook():
             if not webhook_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT_1] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT_1] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         # Extract required data with null-safe handling
@@ -295,21 +299,21 @@ def initial_webhook():
         # Threshold: USDT→ClientCurrency (use accumulated USDT)
         swap_currency = 'eth' if payout_mode == 'instant' else 'usdt'
 
-        print(f"👤 [ENDPOINT_1] User ID: {user_id}")
-        print(f"🏢 [ENDPOINT_1] Channel ID: {closed_channel_id}")
-        print(f"💰 [ENDPOINT_1] Subscription Price: ${subscription_price}")
-        print(f"💎 [ENDPOINT_1] ACTUAL ETH Amount (NowPayments): {actual_eth_amount}")
+        logger.info(f"👤 [ENDPOINT_1] User ID: {user_id}")
+        logger.info(f"🏢 [ENDPOINT_1] Channel ID: {closed_channel_id}")
+        logger.info(f"💰 [ENDPOINT_1] Subscription Price: ${subscription_price}")
+        logger.info(f"💎 [ENDPOINT_1] ACTUAL ETH Amount (NowPayments): {actual_eth_amount}")
         print(f"🎯 [ENDPOINT_1] Payout Mode: {payout_mode}")  # ✅ NEW LOG
         print(f"💱 [ENDPOINT_1] Swap Currency: {swap_currency}")  # ✅ NEW LOG
-        print(f"🏦 [ENDPOINT_1] Target: {wallet_address} ({payout_currency.upper()} on {payout_network.upper()})")
+        logger.info(f"🏦 [ENDPOINT_1] Target: {wallet_address} ({payout_currency.upper()} on {payout_network.upper()})")
 
         # ✅ ADDED: Validation warning if actual_eth_amount is missing/zero
         if actual_eth_amount == 0.0:
-            print(f"⚠️ [ENDPOINT_1] WARNING: actual_eth_amount is zero (backward compat mode - using estimates)")
+            logger.warning(f"⚠️ [ENDPOINT_1] WARNING: actual_eth_amount is zero (backward compat mode - using estimates)")
 
         # Validate required fields
         if not all([user_id, closed_channel_id, wallet_address, payout_currency, payout_network, subscription_price]):
-            print(f"❌ [ENDPOINT_1] Missing required fields")
+            logger.error(f"❌ [ENDPOINT_1] Missing required fields")
             return jsonify({
                 "status": "error",
                 "message": "Missing required fields",
@@ -332,18 +336,18 @@ def initial_webhook():
             # Instant payout: Use ACTUAL ETH received from NowPayments MINUS TP fee
             tp_fee_decimal = float(tp_flat_fee if tp_flat_fee else "3") / 100
             adjusted_amount = actual_eth_amount * (1 - tp_fee_decimal)
-            print(f"⚡ [ENDPOINT_1] Instant payout mode detected")
-            print(f"   💎 ACTUAL ETH from NowPayments: {actual_eth_amount}")
-            print(f"   📊 TP Fee: {tp_flat_fee}%")
-            print(f"   ✅ Adjusted amount (post-TP-fee): {adjusted_amount} ETH")
+            logger.info(f"⚡ [ENDPOINT_1] Instant payout mode detected")
+            logger.info(f"   💎 ACTUAL ETH from NowPayments: {actual_eth_amount}")
+            logger.debug(f"   📊 TP Fee: {tp_flat_fee}%")
+            logger.info(f"   ✅ Adjusted amount (post-TP-fee): {adjusted_amount} ETH")
         else:
             # Threshold payout: Calculate USDT amount (USD - TP fee)
             original_amount, adjusted_amount = calculate_adjusted_amount(subscription_price, tp_flat_fee)
-            print(f"🎯 [ENDPOINT_1] Threshold payout - calculated adjusted USDT: ${adjusted_amount}")
+            logger.info(f"🎯 [ENDPOINT_1] Threshold payout - calculated adjusted USDT: ${adjusted_amount}")
 
         # Encrypt token for PGP_SPLIT2_v1
         if not token_manager:
-            print(f"❌ [ENDPOINT_1] Token manager not available")
+            logger.error(f"❌ [ENDPOINT_1] Token manager not available")
             abort(500, "Service configuration error")
 
         encrypted_token = token_manager.encrypt_pgp_split1_to_pgp_split2_token(
@@ -359,19 +363,19 @@ def initial_webhook():
         )
 
         if not encrypted_token:
-            print(f"❌ [ENDPOINT_1] Failed to encrypt token")
+            logger.error(f"❌ [ENDPOINT_1] Failed to encrypt token")
             abort(500, "Token encryption failed")
 
         # Enqueue Cloud Task to PGP_SPLIT2_v1
         if not cloudtasks_client:
-            print(f"❌ [ENDPOINT_1] Cloud Tasks client not available")
+            logger.error(f"❌ [ENDPOINT_1] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
         gcsplit2_queue = config.get('gcsplit2_queue')
         pgp_split2_url = config.get('pgp_split2_url')
 
         if not gcsplit2_queue or not pgp_split2_url:
-            print(f"❌ [ENDPOINT_1] PGP_SPLIT2_v1 configuration missing")
+            logger.error(f"❌ [ENDPOINT_1] PGP_SPLIT2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
@@ -381,11 +385,11 @@ def initial_webhook():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT_1] Failed to create Cloud Task")
+            logger.error(f"❌ [ENDPOINT_1] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_1] Successfully enqueued to PGP_SPLIT2_v1")
-        print(f"🆔 [ENDPOINT_1] Task: {task_name}")
+        logger.info(f"✅ [ENDPOINT_1] Successfully enqueued to PGP_SPLIT2_v1")
+        logger.debug(f"🆔 [ENDPOINT_1] Task: {task_name}")
 
         return jsonify({
             "status": "success",
@@ -394,7 +398,7 @@ def initial_webhook():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT_1] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT_1] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Webhook error: {str(e)}"
@@ -421,7 +425,7 @@ def receive_usdt_eth_estimate():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_2] USDT→ETH estimate received (from PGP_SPLIT2_v1)")
+        logger.info(f"🎯 [ENDPOINT_2] USDT→ETH estimate received (from PGP_SPLIT2_v1)")
 
         # Parse JSON payload
         try:
@@ -429,22 +433,22 @@ def receive_usdt_eth_estimate():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT_2] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT_2] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         encrypted_token = request_data.get('token')
         if not encrypted_token:
-            print(f"❌ [ENDPOINT_2] Missing token")
+            logger.error(f"❌ [ENDPOINT_2] Missing token", exc_info=True)
             abort(400, "Missing token")
 
         # Decrypt token
         if not token_manager:
-            print(f"❌ [ENDPOINT_2] Token manager not available")
+            logger.error(f"❌ [ENDPOINT_2] Token manager not available")
             abort(500, "Service configuration error")
 
         decrypted_data = token_manager.decrypt_pgp_split2_to_pgp_split1_token(encrypted_token)
         if not decrypted_data:
-            print(f"❌ [ENDPOINT_2] Failed to decrypt token")
+            logger.error(f"❌ [ENDPOINT_2] Failed to decrypt token")
             abort(401, "Invalid token")
 
         # Extract data
@@ -461,12 +465,12 @@ def receive_usdt_eth_estimate():
         swap_currency = decrypted_data.get('swap_currency', 'usdt')  # ✅ NEW: Extract swap_currency
         payout_mode = decrypted_data.get('payout_mode', 'instant')  # ✅ NEW: Extract payout_mode
 
-        print(f"👤 [ENDPOINT_2] User ID: {user_id}")
+        logger.info(f"👤 [ENDPOINT_2] User ID: {user_id}")
         print(f"💱 [ENDPOINT_2] Swap Currency: {swap_currency}")  # ✅ NEW LOG
         print(f"🎯 [ENDPOINT_2] Payout Mode: {payout_mode}")  # ✅ NEW LOG
         print(f"💰 [ENDPOINT_2] From: {from_amount} {swap_currency.upper()}")  # ✅ UPDATED: Dynamic currency
         print(f"💰 [ENDPOINT_2] To (post-fee): {to_amount_post_fee} {payout_currency.upper()}")  # ✅ FIXED
-        print(f"💎 [ENDPOINT_2] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
+        logger.info(f"💎 [ENDPOINT_2] ACTUAL ETH (from NowPayments): {actual_eth_amount}")
 
         # Calculate pure market conversion
         pure_market_value = calculate_pure_market_conversion(
@@ -475,12 +479,12 @@ def receive_usdt_eth_estimate():
 
         # Insert into split_payout_request table
         if not database_manager:
-            print(f"❌ [ENDPOINT_2] Database manager not available")
+            logger.error(f"❌ [ENDPOINT_2] Database manager not available")
             abort(500, "Database unavailable")
 
-        print(f"💾 [ENDPOINT_2] Inserting into split_payout_request")
-        print(f"   NOTE: to_amount = PURE MARKET VALUE ({pure_market_value} {payout_currency.upper()})")
-        print(f"   💎 ACTUAL ETH: {actual_eth_amount}")
+        logger.info(f"💾 [ENDPOINT_2] Inserting into split_payout_request")
+        logger.info(f"   NOTE: to_amount = PURE MARKET VALUE ({pure_market_value} {payout_currency.upper()})")
+        logger.info(f"   💎 ACTUAL ETH: {actual_eth_amount}")
 
         unique_id = database_manager.insert_split_payout_request(
             user_id=user_id,
@@ -499,11 +503,11 @@ def receive_usdt_eth_estimate():
         )
 
         if not unique_id:
-            print(f"❌ [ENDPOINT_2] Failed to insert into database")
+            logger.error(f"❌ [ENDPOINT_2] Failed to insert into database")
             abort(500, "Database insertion failed")
 
-        print(f"✅ [ENDPOINT_2] Database insertion successful")
-        print(f"🆔 [ENDPOINT_2] Unique ID: {unique_id}")
+        logger.info(f"✅ [ENDPOINT_2] Database insertion successful")
+        logger.debug(f"🆔 [ENDPOINT_2] Unique ID: {unique_id}")
 
         # Encrypt token for PGP_SPLIT3_v1
         encrypted_token_for_split3 = token_manager.encrypt_pgp_split1_to_pgp_split3_token(
@@ -520,19 +524,19 @@ def receive_usdt_eth_estimate():
         )
 
         if not encrypted_token_for_split3:
-            print(f"❌ [ENDPOINT_2] Failed to encrypt token for PGP_SPLIT3_v1")
+            logger.error(f"❌ [ENDPOINT_2] Failed to encrypt token for PGP_SPLIT3_v1")
             abort(500, "Token encryption failed")
 
         # Enqueue Cloud Task to PGP_SPLIT3_v1
         if not cloudtasks_client:
-            print(f"❌ [ENDPOINT_2] Cloud Tasks client not available")
+            logger.error(f"❌ [ENDPOINT_2] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
         gcsplit3_queue = config.get('gcsplit3_queue')
         pgp_split3_url = config.get('pgp_split3_url')
 
         if not gcsplit3_queue or not pgp_split3_url:
-            print(f"❌ [ENDPOINT_2] PGP_SPLIT3_v1 configuration missing")
+            logger.error(f"❌ [ENDPOINT_2] PGP_SPLIT3_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split3_swap_request(
@@ -542,11 +546,11 @@ def receive_usdt_eth_estimate():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT_2] Failed to create Cloud Task")
+            logger.error(f"❌ [ENDPOINT_2] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_2] Successfully enqueued to PGP_SPLIT3_v1")
-        print(f"🆔 [ENDPOINT_2] Task: {task_name}")
+        logger.info(f"✅ [ENDPOINT_2] Successfully enqueued to PGP_SPLIT3_v1")
+        logger.debug(f"🆔 [ENDPOINT_2] Task: {task_name}")
 
         return jsonify({
             "status": "success",
@@ -556,7 +560,7 @@ def receive_usdt_eth_estimate():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT_2] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT_2] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -582,7 +586,7 @@ def receive_eth_client_swap():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_3] ETH→Client swap received (from PGP_SPLIT3_v1)")
+        logger.info(f"🎯 [ENDPOINT_3] ETH→Client swap received (from PGP_SPLIT3_v1)")
 
         # Parse JSON payload
         try:
@@ -590,22 +594,22 @@ def receive_eth_client_swap():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT_3] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT_3] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         encrypted_token = request_data.get('token')
         if not encrypted_token:
-            print(f"❌ [ENDPOINT_3] Missing token")
+            logger.error(f"❌ [ENDPOINT_3] Missing token", exc_info=True)
             abort(400, "Missing token")
 
         # Decrypt token
         if not token_manager:
-            print(f"❌ [ENDPOINT_3] Token manager not available")
+            logger.error(f"❌ [ENDPOINT_3] Token manager not available")
             abort(500, "Service configuration error")
 
         decrypted_data = token_manager.decrypt_pgp_split3_to_pgp_split1_token(encrypted_token)
         if not decrypted_data:
-            print(f"❌ [ENDPOINT_3] Failed to decrypt token")
+            logger.error(f"❌ [ENDPOINT_3] Failed to decrypt token")
             abort(401, "Invalid token")
 
         # Extract data
@@ -626,73 +630,73 @@ def receive_eth_client_swap():
         type_ = decrypted_data['type']
         actual_eth_amount = decrypted_data.get('actual_eth_amount', 0.0)  # ✅ ADDED: ACTUAL ETH from NowPayments
 
-        print(f"🆔 [ENDPOINT_3] Unique ID: {unique_id}")
-        print(f"🆔 [ENDPOINT_3] ChangeNow API ID: {cn_api_id}")
-        print(f"👤 [ENDPOINT_3] User ID: {user_id}")
-        print(f"💰 [ENDPOINT_3] ChangeNow from_amount: {from_amount} {from_currency.upper()}")
-        print(f"💰 [ENDPOINT_3] To: {to_amount} {to_currency.upper()}")
+        logger.debug(f"🆔 [ENDPOINT_3] Unique ID: {unique_id}")
+        logger.debug(f"🆔 [ENDPOINT_3] ChangeNow API ID: {cn_api_id}")
+        logger.info(f"👤 [ENDPOINT_3] User ID: {user_id}")
+        logger.info(f"💰 [ENDPOINT_3] ChangeNow from_amount: {from_amount} {from_currency.upper()}")
+        logger.info(f"💰 [ENDPOINT_3] To: {to_amount} {to_currency.upper()}")
 
         # ✅ UPDATED: Currency-aware payment amount logic
         # For instant (ETH): Compare ChangeNow estimate vs ACTUAL ETH from NowPayments
         # For threshold (USDT): Use from_amount directly (no comparison needed)
         if from_currency.lower() == 'eth':
-            print(f"⚡ [ENDPOINT_3] Instant payout mode - ETH swap")
-            print(f"💎 [ENDPOINT_3] ACTUAL ETH (from NowPayments): {actual_eth_amount} ETH")
+            logger.info(f"⚡ [ENDPOINT_3] Instant payout mode - ETH swap")
+            logger.info(f"💎 [ENDPOINT_3] ACTUAL ETH (from NowPayments): {actual_eth_amount} ETH")
 
             # Validation - Compare actual vs estimate
             if actual_eth_amount > 0 and from_amount > 0:
                 discrepancy = abs(from_amount - actual_eth_amount)
                 discrepancy_pct = (discrepancy / actual_eth_amount) * 100
 
-                print(f"📊 [ENDPOINT_3] Amount comparison:")
-                print(f"   ChangeNow estimate: {from_amount} ETH")
-                print(f"   ACTUAL from NowPayments: {actual_eth_amount} ETH")
-                print(f"   Discrepancy: {discrepancy} ETH ({discrepancy_pct:.2f}%)")
+                logger.debug(f"📊 [ENDPOINT_3] Amount comparison:")
+                logger.info(f"   ChangeNow estimate: {from_amount} ETH")
+                logger.info(f"   ACTUAL from NowPayments: {actual_eth_amount} ETH")
+                logger.info(f"   Discrepancy: {discrepancy} ETH ({discrepancy_pct:.2f}%)")
 
                 if discrepancy_pct > 10:
-                    print(f"⚠️ [ENDPOINT_3] WARNING: Large discrepancy (>10%)!")
+                    logger.warning(f"⚠️ [ENDPOINT_3] WARNING: Large discrepancy (>10%)!")
                 elif discrepancy_pct > 5:
-                    print(f"⚠️ [ENDPOINT_3] Moderate discrepancy (>5%)")
+                    logger.warning(f"⚠️ [ENDPOINT_3] Moderate discrepancy (>5%)")
                 else:
-                    print(f"✅ [ENDPOINT_3] Amounts match within tolerance (<5%)")
+                    logger.info(f"✅ [ENDPOINT_3] Amounts match within tolerance (<5%)")
 
             # Use ACTUAL ETH for payment
             if actual_eth_amount > 0:
                 payment_amount_eth = actual_eth_amount
                 estimated_amount_eth = from_amount
-                print(f"✅ [ENDPOINT_3] Using ACTUAL ETH for payment: {payment_amount_eth}")
+                logger.info(f"✅ [ENDPOINT_3] Using ACTUAL ETH for payment: {payment_amount_eth}")
             else:
                 payment_amount_eth = from_amount
                 estimated_amount_eth = from_amount
-                print(f"⚠️ [ENDPOINT_3] ACTUAL ETH not available, using ChangeNow estimate: {payment_amount_eth}")
+                logger.warning(f"⚠️ [ENDPOINT_3] ACTUAL ETH not available, using ChangeNow estimate: {payment_amount_eth}")
 
         else:  # from_currency == 'usdt'
-            print(f"🎯 [ENDPOINT_3] Threshold payout mode - USDT swap")
+            logger.info(f"🎯 [ENDPOINT_3] Threshold payout mode - USDT swap")
             # For USDT swaps, use the from_amount directly (this is accumulated USDT)
             payment_amount_eth = from_amount  # Actually USDT, but variable name maintained for compatibility
             estimated_amount_eth = from_amount
-            print(f"✅ [ENDPOINT_3] Using USDT amount for swap: {payment_amount_eth} USDT")
+            logger.info(f"✅ [ENDPOINT_3] Using USDT amount for swap: {payment_amount_eth} USDT")
 
         # ============================================================================
         # CRITICAL: Idempotency Check - Prevent Duplicate Insertions
         # ============================================================================
         if not database_manager:
-            print(f"❌ [ENDPOINT_3] Database manager not available")
+            logger.error(f"❌ [ENDPOINT_3] Database manager not available")
             abort(500, "Database unavailable")
 
         # Check if this ChangeNow transaction already exists
-        print(f"🔍 [ENDPOINT_3] Checking for existing ChangeNow transaction")
+        logger.debug(f"🔍 [ENDPOINT_3] Checking for existing ChangeNow transaction")
         existing_record = database_manager.check_split_payout_que_by_cn_api_id(cn_api_id)
 
         if existing_record:
             print(f"=" * 80)
-            print(f"🛡️ [ENDPOINT_3] IDEMPOTENT REQUEST DETECTED")
+            logger.info(f"🛡️ [ENDPOINT_3] IDEMPOTENT REQUEST DETECTED")
             print(f"=" * 80)
-            print(f"✅ [ENDPOINT_3] ChangeNow transaction already processed: {cn_api_id}")
-            print(f"🆔 [ENDPOINT_3] Linked unique_id: {existing_record['unique_id']}")
-            print(f"🕒 [ENDPOINT_3] Original insertion: {existing_record['created_at']}")
-            print(f"🔄 [ENDPOINT_3] This is likely a Cloud Tasks retry")
-            print(f"✅ [ENDPOINT_3] Returning success to prevent retry loop")
+            logger.info(f"✅ [ENDPOINT_3] ChangeNow transaction already processed: {cn_api_id}")
+            logger.debug(f"🆔 [ENDPOINT_3] Linked unique_id: {existing_record['unique_id']}")
+            logger.info(f"🕒 [ENDPOINT_3] Original insertion: {existing_record['created_at']}")
+            logger.info(f"🔄 [ENDPOINT_3] This is likely a Cloud Tasks retry")
+            logger.info(f"✅ [ENDPOINT_3] Returning success to prevent retry loop")
             print(f"=" * 80)
 
             # Return 200 OK to prevent Cloud Tasks from retrying
@@ -708,7 +712,7 @@ def receive_eth_client_swap():
             }), 200
 
         # If we reach here, this is a NEW transaction - proceed with insertion
-        print(f"💾 [ENDPOINT_3] Inserting into split_payout_que")
+        logger.info(f"💾 [ENDPOINT_3] Inserting into split_payout_que")
 
         que_success = database_manager.insert_split_payout_que(
             unique_id=unique_id,
@@ -730,15 +734,15 @@ def receive_eth_client_swap():
         )
 
         if not que_success:
-            print(f"❌ [ENDPOINT_3] Failed to insert into split_payout_que")
+            logger.error(f"❌ [ENDPOINT_3] Failed to insert into split_payout_que")
 
             # Double-check if failure is due to race condition (concurrent insertion)
-            print(f"🔍 [ENDPOINT_3] Checking for concurrent insertion (race condition)")
+            logger.debug(f"🔍 [ENDPOINT_3] Checking for concurrent insertion (race condition)")
             existing_record = database_manager.check_split_payout_que_by_cn_api_id(cn_api_id)
 
             if existing_record:
-                print(f"✅ [ENDPOINT_3] Record inserted by concurrent request")
-                print(f"✅ [ENDPOINT_3] Treating as idempotent success")
+                logger.info(f"✅ [ENDPOINT_3] Record inserted by concurrent request")
+                logger.info(f"✅ [ENDPOINT_3] Treating as idempotent success")
 
                 return jsonify({
                     "status": "success",
@@ -752,13 +756,13 @@ def receive_eth_client_swap():
                 # Genuine insertion failure (not duplicate)
                 abort(500, "Database insertion failed")
 
-        print(f"✅ [ENDPOINT_3] Database insertion successful")
-        print(f"🔗 [ENDPOINT_3] Linked to split_payout_request via unique_id: {unique_id}")
+        logger.info(f"✅ [ENDPOINT_3] Database insertion successful")
+        logger.info(f"🔗 [ENDPOINT_3] Linked to split_payout_request via unique_id: {unique_id}")
 
         # Build PGP_HOSTPAY1_v1 token
         tps_hostpay_signing_key = config.get('tps_hostpay_signing_key')
         if not tps_hostpay_signing_key:
-            print(f"❌ [ENDPOINT_3] HostPay signing key not available")
+            logger.error(f"❌ [ENDPOINT_3] HostPay signing key not available")
             abort(500, "HostPay configuration missing")
 
         hostpay_token = build_hostpay_token(
@@ -773,19 +777,19 @@ def receive_eth_client_swap():
         )
 
         if not hostpay_token:
-            print(f"❌ [ENDPOINT_3] Failed to build HostPay token")
+            logger.error(f"❌ [ENDPOINT_3] Failed to build HostPay token")
             abort(500, "HostPay token generation failed")
 
         # Enqueue Cloud Task to PGP_HOSTPAY1_v1
         if not cloudtasks_client:
-            print(f"❌ [ENDPOINT_3] Cloud Tasks client not available")
+            logger.error(f"❌ [ENDPOINT_3] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
         hostpay_queue = config.get('hostpay_queue')
         hostpay_webhook_url = config.get('hostpay_webhook_url')
 
         if not hostpay_queue or not hostpay_webhook_url:
-            print(f"❌ [ENDPOINT_3] HostPay configuration missing")
+            logger.error(f"❌ [ENDPOINT_3] HostPay configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_hostpay_trigger(
@@ -795,12 +799,12 @@ def receive_eth_client_swap():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT_3] Failed to create Cloud Task")
+            logger.error(f"❌ [ENDPOINT_3] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_3] Successfully enqueued to GCHostPay")
-        print(f"🆔 [ENDPOINT_3] Task: {task_name}")
-        print(f"🎉 [ENDPOINT_3] Complete payment split workflow finished!")
+        logger.info(f"✅ [ENDPOINT_3] Successfully enqueued to GCHostPay")
+        logger.debug(f"🆔 [ENDPOINT_3] Task: {task_name}")
+        logger.info(f"🎉 [ENDPOINT_3] Complete payment split workflow finished!")
 
         return jsonify({
             "status": "success",
@@ -811,7 +815,7 @@ def receive_eth_client_swap():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT_3] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT_3] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -838,7 +842,7 @@ def batch_payout():
         JSON response with status
     """
     try:
-        print(f"🎯 [ENDPOINT_4] Batch payout request received (from PGP_BATCHPROCESSOR)")
+        logger.info(f"🎯 [ENDPOINT_4] Batch payout request received (from PGP_BATCHPROCESSOR)")
 
         # Parse JSON payload
         try:
@@ -846,27 +850,27 @@ def batch_payout():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT_4] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT_4] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         encrypted_token = request_data.get('token')
         batch_mode = request_data.get('batch_mode', False)
 
         if not encrypted_token:
-            print(f"❌ [ENDPOINT_4] Missing token")
+            logger.error(f"❌ [ENDPOINT_4] Missing token", exc_info=True)
             abort(400, "Missing token")
 
         if not batch_mode:
-            print(f"⚠️ [ENDPOINT_4] batch_mode flag not set, proceeding anyway")
+            logger.warning(f"⚠️ [ENDPOINT_4] batch_mode flag not set, proceeding anyway")
 
         # Decrypt batch token
         if not token_manager:
-            print(f"❌ [ENDPOINT_4] Token manager not available")
+            logger.error(f"❌ [ENDPOINT_4] Token manager not available")
             abort(500, "Service configuration error")
 
         decrypted_data = token_manager.decrypt_batch_token(encrypted_token)
         if not decrypted_data:
-            print(f"❌ [ENDPOINT_4] Failed to decrypt batch token")
+            logger.error(f"❌ [ENDPOINT_4] Failed to decrypt batch token")
             abort(401, "Invalid token")
 
         # Extract data
@@ -877,14 +881,14 @@ def batch_payout():
         payout_network = decrypted_data.get('payout_network')
         amount_usdt = decrypted_data.get('amount_usdt')
 
-        print(f"🆔 [ENDPOINT_4] Batch ID: {batch_id}")
-        print(f"🏢 [ENDPOINT_4] Client ID: {client_id}")
-        print(f"💰 [ENDPOINT_4] Total Amount: ${amount_usdt} USDT")
-        print(f"🎯 [ENDPOINT_4] Target: {payout_currency.upper()} on {payout_network.upper()}")
+        logger.debug(f"🆔 [ENDPOINT_4] Batch ID: {batch_id}")
+        logger.info(f"🏢 [ENDPOINT_4] Client ID: {client_id}")
+        logger.info(f"💰 [ENDPOINT_4] Total Amount: ${amount_usdt} USDT")
+        logger.info(f"🎯 [ENDPOINT_4] Target: {payout_currency.upper()} on {payout_network.upper()}")
 
         # Validate required fields
         if not all([batch_id, client_id, wallet_address, payout_currency, payout_network, amount_usdt]):
-            print(f"❌ [ENDPOINT_4] Missing required fields in decrypted token")
+            logger.error(f"❌ [ENDPOINT_4] Missing required fields in decrypted token")
             return jsonify({
                 "status": "error",
                 "message": "Missing required fields in token",
@@ -902,7 +906,7 @@ def batch_payout():
         # The batch aggregates multiple user payments for the same client
         batch_user_id = 0
 
-        print(f"📝 [ENDPOINT_4] Using user_id={batch_user_id} for batch payout")
+        logger.info(f"📝 [ENDPOINT_4] Using user_id={batch_user_id} for batch payout")
 
         # Encrypt token for PGP_SPLIT2_v1 (USDT estimate request)
         encrypted_token_for_split2 = token_manager.encrypt_pgp_split1_to_pgp_split2_token(
@@ -918,19 +922,19 @@ def batch_payout():
         )
 
         if not encrypted_token_for_split2:
-            print(f"❌ [ENDPOINT_4] Failed to encrypt token for PGP_SPLIT2_v1")
+            logger.error(f"❌ [ENDPOINT_4] Failed to encrypt token for PGP_SPLIT2_v1")
             abort(500, "Token encryption failed")
 
         # Enqueue Cloud Task to PGP_SPLIT2_v1
         if not cloudtasks_client:
-            print(f"❌ [ENDPOINT_4] Cloud Tasks client not available")
+            logger.error(f"❌ [ENDPOINT_4] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
         gcsplit2_queue = config.get('gcsplit2_queue')
         pgp_split2_url = config.get('pgp_split2_url')
 
         if not gcsplit2_queue or not pgp_split2_url:
-            print(f"❌ [ENDPOINT_4] PGP_SPLIT2_v1 configuration missing")
+            logger.error(f"❌ [ENDPOINT_4] PGP_SPLIT2_v1 configuration missing")
             abort(500, "Service configuration error")
 
         task_name = cloudtasks_client.enqueue_pgp_split2_estimate_request(
@@ -940,11 +944,11 @@ def batch_payout():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT_4] Failed to create Cloud Task")
+            logger.error(f"❌ [ENDPOINT_4] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT_4] Successfully enqueued batch payout to PGP_SPLIT2_v1")
-        print(f"🆔 [ENDPOINT_4] Task: {task_name}")
+        logger.info(f"✅ [ENDPOINT_4] Successfully enqueued batch payout to PGP_SPLIT2_v1")
+        logger.debug(f"🆔 [ENDPOINT_4] Task: {task_name}")
 
         return jsonify({
             "status": "success",
@@ -954,7 +958,7 @@ def batch_payout():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT_4] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT_4] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Batch payout error: {str(e)}"
@@ -992,7 +996,7 @@ def health_check():
         }), 200 if db_healthy else 503
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_SPLIT1_v1 Orchestrator",
@@ -1005,5 +1009,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_SPLIT1_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_SPLIT1_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

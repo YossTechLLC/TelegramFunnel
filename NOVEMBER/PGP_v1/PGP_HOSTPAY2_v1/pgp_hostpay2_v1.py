@@ -15,10 +15,13 @@ from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
 from changenow_client import ChangeNowClient
 
+from PGP_COMMON.logging import setup_logger
+logger = setup_logger(__name__)
+
 app = Flask(__name__)
 
 # Initialize managers
-print(f"🚀 [APP] Initializing PGP_HOSTPAY2_v1 ChangeNow Status Checker Service")
+logger.info(f"🚀 [APP] Initializing PGP_HOSTPAY2_v1 ChangeNow Status Checker Service")
 config_manager = ConfigManager()
 config = config_manager.initialize_config()
 
@@ -32,9 +35,9 @@ try:
         raise ValueError("SUCCESS_URL_SIGNING_KEY not available")
 
     token_manager = TokenManager(tps_hostpay_key, internal_key)
-    print(f"✅ [APP] Token manager initialized")
+    logger.info(f"✅ [APP] Token manager initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize token manager: {e}")
+    logger.error(f"❌ [APP] Failed to initialize token manager: {e}", exc_info=True)
     token_manager = None
 
 # Initialize ChangeNow client
@@ -44,9 +47,9 @@ try:
         raise ValueError("CHANGENOW_API_KEY not available")
 
     changenow_client = ChangeNowClient(changenow_api_key)
-    print(f"✅ [APP] ChangeNow client initialized")
+    logger.info(f"✅ [APP] ChangeNow client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize ChangeNow client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize ChangeNow client: {e}", exc_info=True)
     changenow_client = None
 
 # Initialize Cloud Tasks client
@@ -58,9 +61,9 @@ try:
         raise ValueError("Cloud Tasks configuration incomplete")
 
     cloudtasks_client = CloudTasksClient(project_id, location)
-    print(f"✅ [APP] Cloud Tasks client initialized")
+    logger.info(f"✅ [APP] Cloud Tasks client initialized")
 except Exception as e:
-    print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
+    logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
 
@@ -85,7 +88,7 @@ def check_changenow_status():
         JSON response with status (or 500 to trigger Cloud Tasks retry)
     """
     try:
-        print(f"🎯 [ENDPOINT] Status check request received (from PGP_HOSTPAY1_v1)")
+        logger.info(f"🎯 [ENDPOINT] Status check request received (from PGP_HOSTPAY1_v1)")
 
         # Parse JSON payload
         try:
@@ -93,23 +96,23 @@ def check_changenow_status():
             if not request_data:
                 abort(400, "Invalid JSON payload")
         except Exception as e:
-            print(f"❌ [ENDPOINT] JSON parsing error: {e}")
+            logger.error(f"❌ [ENDPOINT] JSON parsing error: {e}", exc_info=True)
             abort(400, "Malformed JSON payload")
 
         token = request_data.get('token')
         if not token:
-            print(f"❌ [ENDPOINT] Missing token")
+            logger.error(f"❌ [ENDPOINT] Missing token", exc_info=True)
             abort(400, "Missing token")
 
         # Decrypt token
         if not token_manager:
-            print(f"❌ [ENDPOINT] Token manager not available")
+            logger.error(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
 
         try:
             decrypted_data = token_manager.decrypt_pgp_hostpay1_to_pgp_hostpay2_token(token)
             if not decrypted_data:
-                print(f"❌ [ENDPOINT] Failed to decrypt token")
+                logger.error(f"❌ [ENDPOINT] Failed to decrypt token")
                 abort(401, "Invalid token")
 
             unique_id = decrypted_data['unique_id']
@@ -119,31 +122,31 @@ def check_changenow_status():
             from_amount = decrypted_data['from_amount']
             payin_address = decrypted_data['payin_address']
 
-            print(f"✅ [ENDPOINT] Token decoded successfully")
-            print(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
-            print(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
-            print(f"💰 [ENDPOINT] Amount: {from_amount} {from_currency.upper()}")
+            logger.info(f"✅ [ENDPOINT] Token decoded successfully")
+            logger.debug(f"🆔 [ENDPOINT] Unique ID: {unique_id}")
+            logger.debug(f"🆔 [ENDPOINT] CN API ID: {cn_api_id}")
+            logger.info(f"💰 [ENDPOINT] Amount: {from_amount} {from_currency.upper()}")
 
         except Exception as e:
-            print(f"❌ [ENDPOINT] Token validation error: {e}")
+            logger.error(f"❌ [ENDPOINT] Token validation error: {e}", exc_info=True)
             abort(400, f"Token error: {e}")
 
         # Check ChangeNow status with INFINITE RETRY
         if not changenow_client:
-            print(f"❌ [ENDPOINT] ChangeNow client not available")
+            logger.error(f"❌ [ENDPOINT] ChangeNow client not available", exc_info=True)
             abort(500, "ChangeNow client unavailable")
 
-        print(f"🌐 [ENDPOINT] Checking ChangeNow status with infinite retry")
+        logger.info(f"🌐 [ENDPOINT] Checking ChangeNow status with infinite retry")
 
         status = changenow_client.check_transaction_status_with_retry(cn_api_id)
 
         # Note: status will always return (or timeout after 24h) due to infinite retry
         if not status:
             # This should never happen due to infinite retry, but handle it anyway
-            print(f"❌ [ENDPOINT] ChangeNow API returned None (should not happen)")
+            logger.error(f"❌ [ENDPOINT] ChangeNow API returned None (should not happen)")
             abort(500, "ChangeNow API failure")
 
-        print(f"✅ [ENDPOINT] ChangeNow status retrieved: {status}")
+        logger.info(f"✅ [ENDPOINT] ChangeNow status retrieved: {status}")
 
         # Encrypt response token (with ALL payment details)
         encrypted_response_token = token_manager.encrypt_pgp_hostpay2_to_pgp_hostpay1_token(
@@ -157,19 +160,19 @@ def check_changenow_status():
         )
 
         if not encrypted_response_token:
-            print(f"❌ [ENDPOINT] Failed to encrypt response token")
+            logger.error(f"❌ [ENDPOINT] Failed to encrypt response token")
             abort(500, "Token encryption failed")
 
         # Enqueue response back to PGP_HOSTPAY1_v1
         if not cloudtasks_client:
-            print(f"❌ [ENDPOINT] Cloud Tasks client not available")
+            logger.error(f"❌ [ENDPOINT] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
         pgp_hostpay1_response_queue = config.get('pgp_hostpay1_response_queue')
         pgp_hostpay1_url = config.get('pgp_hostpay1_url')
 
         if not pgp_hostpay1_response_queue or not pgp_hostpay1_url:
-            print(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
+            logger.error(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
             abort(500, "Service configuration error")
 
         # Target the /status-verified endpoint
@@ -182,11 +185,11 @@ def check_changenow_status():
         )
 
         if not task_name:
-            print(f"❌ [ENDPOINT] Failed to create Cloud Task")
+            logger.error(f"❌ [ENDPOINT] Failed to create Cloud Task")
             abort(500, "Failed to enqueue task")
 
-        print(f"✅ [ENDPOINT] Successfully enqueued response to PGP_HOSTPAY1_v1")
-        print(f"🆔 [ENDPOINT] Task: {task_name}")
+        logger.info(f"✅ [ENDPOINT] Successfully enqueued response to PGP_HOSTPAY1_v1")
+        logger.debug(f"🆔 [ENDPOINT] Task: {task_name}")
 
         return jsonify({
             "status": "success",
@@ -198,7 +201,7 @@ def check_changenow_status():
         }), 200
 
     except Exception as e:
-        print(f"❌ [ENDPOINT] Unexpected error: {e}")
+        logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)
         return jsonify({
             "status": "error",
             "message": f"Processing error: {str(e)}"
@@ -225,7 +228,7 @@ def health_check():
         }), 200
 
     except Exception as e:
-        print(f"❌ [HEALTH] Health check failed: {e}")
+        logger.error(f"❌ [HEALTH] Health check failed: {e}", exc_info=True)
         return jsonify({
             "status": "unhealthy",
             "service": "PGP_HOSTPAY2_v1 ChangeNow Status Checker",
@@ -238,5 +241,5 @@ def health_check():
 # ============================================================================
 
 if __name__ == "__main__":
-    print(f"🚀 [APP] Starting PGP_HOSTPAY2_v1 on port 8080")
+    logger.info(f"🚀 [APP] Starting PGP_HOSTPAY2_v1 on port 8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

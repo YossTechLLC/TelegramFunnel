@@ -58,7 +58,14 @@
       "Bash(paste:*)",
       "Bash(/tmp/hostpay2_clean.py)",
       "Bash(/tmp/split3_clean.py)",
-      "Bash(/tmp/hostpay1_clean.py)"
+      "Bash(/tmp/hostpay1_clean.py)",
+      "Bash(__NEW_LINE__ echo \"=== PROGRESS.md - Last 5 lines ===\")",
+      "Bash(__NEW_LINE__ echo \"=== DECISIONS.md - Last 5 lines ===\")",
+      "Bash(__NEW_LINE__ echo \"=== BUGS.md - Last 5 lines ===\")",
+      "Bash(__NEW_LINE__ echo \"=== PROGRESS.md - Sessions remaining ===\")",
+      "Bash(__NEW_LINE__ echo \"=== Summary of Truncation ===\")",
+      "Bash(for service in PGP_SPLIT2_v1 PGP_SPLIT3_v1 PGP_BATCHPROCESSOR_v1 PGP_MICROBATCHPROCESSOR_v1)",
+      "Bash(do)"
     ],
     "deny": [
       "Bash(gcloud deploy:*)",

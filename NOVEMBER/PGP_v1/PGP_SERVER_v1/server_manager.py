@@ -15,6 +15,9 @@ from security.hmac_auth import init_hmac_auth
 from security.ip_whitelist import init_ip_whitelist
 from security.rate_limiter import init_rate_limiter
 
+# Import security utilities (C-07 fix)
+from PGP_COMMON.utils import sanitize_error_for_user, create_error_response
+
 # Import Flask security extensions
 from flask_wtf.csrf import CSRFProtect
 from flask_talisman import Talisman
@@ -239,11 +242,65 @@ def create_app(config: dict = None):
 
         logger.info("🔒 [APP_FACTORY] Rate limiting applied to external webhooks (NowPayments, Telegram)")
 
+    # ============================================================================
+    # GLOBAL ERROR HANDLERS (C-07: Error Sanitization)
+    # ============================================================================
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        """
+        Global error handler that sanitizes error messages based on environment.
+
+        C-07 Fix: Prevents sensitive data exposure through error messages.
+        - Production: Returns generic error with error ID
+        - Development: Returns detailed error for debugging
+        """
+        # Get environment (defaults to production for safety)
+        environment = os.getenv('ENVIRONMENT', 'production')
+
+        # Sanitize error message (shows details only in development)
+        sanitized_message = sanitize_error_for_user(e, environment)
+
+        # Create standardized error response with error ID
+        error_response, status_code = create_error_response(
+            status_code=500,
+            message=sanitized_message,
+            include_error_id=True
+        )
+
+        # Log full error details internally (always, regardless of environment)
+        logger.error(
+            f"❌ [ERROR] Unhandled exception in PGP_SERVER_v1",
+            extra={
+                'error_id': error_response.get('error_id'),
+                'error_type': type(e).__name__,
+                'environment': environment
+            },
+            exc_info=True
+        )
+
+        return jsonify(error_response), status_code
+
+    @app.errorhandler(400)
+    def handle_bad_request(e):
+        """Handle 400 Bad Request errors with sanitized messages."""
+        error_response, _ = create_error_response(400, str(e))
+        return jsonify(error_response), 400
+
+    @app.errorhandler(404)
+    def handle_not_found(e):
+        """Handle 404 Not Found errors."""
+        error_response, _ = create_error_response(404, "Endpoint not found")
+        return jsonify(error_response), 404
+
+    logger.info("✅ [APP_FACTORY] Global error handlers configured")
+
     logger.info("✅ [APP_FACTORY] Flask app created successfully with security stack:")
     logger.info("   ✅ CSRF Protection (flask-wtf)")
     logger.info("   ✅ Security Headers (flask-talisman)")
     logger.info("   ✅ HMAC Authentication (custom)")
     logger.info("   ✅ IP Whitelist (custom)")
     logger.info("   ✅ Rate Limiting (custom)")
+    logger.info("   ✅ Error Sanitization (custom)")
 
     return app

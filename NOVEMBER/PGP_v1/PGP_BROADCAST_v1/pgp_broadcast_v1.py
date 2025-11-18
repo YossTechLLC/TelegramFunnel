@@ -19,12 +19,11 @@ from broadcast_scheduler import BroadcastScheduler
 from broadcast_executor import BroadcastExecutor
 from broadcast_web_api import create_broadcast_web_api
 
-# Configure logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+# Import centralized logging
+from PGP_COMMON.logging import setup_logger
+
+# Initialize logger with LOG_LEVEL environment variable support
+logger = setup_logger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
