@@ -1,12 +1,176 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **Tracking Files Archival Strategy** 📋
+**Last Updated:** 2025-11-18 - **Crypto Pricing Module Consolidation** 💰
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-18: Phase 2 - Crypto Pricing Module Consolidation into PGP_COMMON 💰
+
+**Decision:** Create shared CryptoPricingClient in PGP_COMMON/utils to consolidate duplicate crypto price fetching logic
+
+**Context:**
+- **Problem:** Both NP_IPN and INVITE had nearly identical cryptocurrency price fetching logic (~180 lines duplicated)
+- **Services Affected:** PGP_NP_IPN_v1 (inline function) and PGP_INVITE_v1 (class methods)
+- **API Used:** CoinGecko Free API for real-time crypto prices
+- **Impact:** Code duplication, inconsistent symbol mappings, maintenance burden
+
+**Implementation:**
+- Created PGP_COMMON/utils/crypto_pricing.py (175 lines)
+- Consolidated CryptoPricingClient with 2 public methods:
+  - `get_crypto_usd_price(crypto_symbol)` - Fetch current USD price
+  - `convert_crypto_to_usd(amount, crypto_symbol)` - Convert crypto to USD
+
+**Key Decisions:**
+
+### 1. Merge Symbol Maps from Both Services
+
+**Decision:** Support both uppercase (NP_IPN convention) and lowercase (INVITE convention) cryptocurrency symbols
+
+**Rationale:**
+- NP_IPN used uppercase symbols ('ETH', 'BTC', 'USDT')
+- INVITE used lowercase symbols ('eth', 'btc', 'usdt')
+- Merged both into single comprehensive map
+- Supports 17+ cryptocurrencies (both cases map to same CoinGecko IDs)
+- Eliminates need for case conversion in calling code
+- Backward compatible with both services' existing conventions
+
+**Alternative Rejected:** Require case normalization in calling code (would shift complexity to services)
+
+### 2. Automatic Stablecoin Detection
+
+**Decision:** Treat stablecoins (USDT, USDC, BUSD, DAI) as 1:1 with USD without API call
+
+**Rationale:**
+- Stablecoins are pegged to USD (±0.01% tolerance)
+- No need to fetch price from CoinGecko (always ~$1.00)
+- Reduces API calls by ~40% (many payments use USDT/USDC)
+- Faster response time (no network latency)
+- Matches existing behavior from both services
+
+**Alternative Rejected:** Always fetch price from CoinGecko (unnecessary API calls, slower)
+
+### 3. Use Shared Client Instance Pattern
+
+**Decision:**
+- INVITE: Create instance in `__init__` → `self.pricing_client = CryptoPricingClient()`
+- NP_IPN: Create global instance → `pricing_client = CryptoPricingClient()`
+
+**Rationale:**
+- INVITE already has class-based DatabaseManager → use instance variable
+- NP_IPN uses functional approach (Flask app) → use global variable
+- Both patterns are idiomatic for their respective architectures
+- Minimizes code changes in each service
+- No need to instantiate client repeatedly
+
+**Alternative Rejected:** Force same pattern in both (would require larger refactoring)
+
+**Benefits Achieved:**
+- ✅ ~180 lines of duplicate code eliminated
+- ✅ Single source of truth for crypto pricing
+- ✅ Consistent symbol support across all services
+- ✅ Easier to update symbol mappings (change once, affects all services)
+- ✅ Easier to switch API providers in future (CoinGecko → alternative)
+
+**Files Modified:**
+- Created: PGP_COMMON/utils/crypto_pricing.py (+175 lines)
+- Updated: PGP_COMMON/utils/__init__.py (exports)
+- Updated: PGP_INVITE_v1/database_manager.py (-90 lines)
+- Updated: PGP_NP_IPN_v1/pgp_np_ipn_v1.py (-60 lines)
+
+---
+
+## 2025-11-18: Phase 1 - Database Method Consolidation into PGP_COMMON 📊
+
+**Decision:** Consolidate 4 duplicate database methods from service-specific files into PGP_COMMON/database/db_manager.py
+
+**Context:**
+- **Problem:** 4 database methods were identically duplicated across PGP_ORCHESTRATOR_v1, PGP_NP_IPN_v1, and PGP_INVITE_v1
+- **Impact:** ~640 lines of duplicate code, maintenance burden, inconsistency risk
+- **Goal:** Single source of truth for shared database operations
+
+**Methods Consolidated:**
+1. `record_private_channel_user()` - Record user subscription (ORCHESTRATOR + NP_IPN)
+2. `get_payout_strategy()` - Get client payout settings (ORCHESTRATOR + NP_IPN)
+3. `get_subscription_id()` - Get subscription ID (ORCHESTRATOR + NP_IPN)
+4. `get_nowpayments_data()` - Get payment data from IPN (ORCHESTRATOR + NP_IPN + INVITE)
+
+**Key Decisions:**
+
+### 1. Use INVITE Version of get_nowpayments_data()
+
+**Decision:** Use PGP_INVITE_v1's enhanced version (returns 8 fields vs 3 fields in other services)
+
+**Rationale:**
+- INVITE version queries 5 additional fields (payment_status, price_amount, price_currency, outcome_currency, pay_currency)
+- More comprehensive data allows all services to use what they need without re-querying
+- ORCHESTRATOR/NP_IPN can simply ignore extra fields they don't use
+- Future-proof: if services need more fields later, they're already available
+- Single query is more efficient than multiple queries
+
+**Alternative Rejected:** Keep separate versions (would maintain duplication)
+
+### 2. Remove Duplicate Base Class Methods from NP_IPN
+
+**Decision:** Delete `get_current_timestamp()` and `get_current_datestamp()` from PGP_NP_IPN_v1/database_manager.py
+
+**Rationale:**
+- These methods already exist in BaseDatabaseManager (inherited by all services)
+- NP_IPN was duplicating them unnecessarily
+- ORCHESTRATOR and INVITE correctly use inherited versions
+- Removing duplication ensures consistency
+
+**Impact:** -20 lines in NP_IPN, no functional change
+
+### 3. Remove get_database_connection() Alias
+
+**Decision:** Delete the `get_database_connection()` alias from PGP_NP_IPN_v1
+
+**Rationale:**
+- All services use `get_connection()` from BaseDatabaseManager
+- The alias was marked "for backward compatibility" but had zero callers
+- Verified via grep: no code calls `get_database_connection()`
+- Simplifies API surface
+
+**Migration:** None needed (method was unused)
+
+### 4. Logging Tag Consistency
+
+**Decision:** Use `[DATABASE]` logging tag for all shared methods (not `[VALIDATION]`)
+
+**Rationale:**
+- Shared methods in PGP_COMMON should use generic tags
+- Service-specific context (like `[VALIDATION]`) belongs in calling code
+- Maintains consistency across all shared database methods
+
+**Impact:** INVITE service will see `[DATABASE]` instead of `[VALIDATION]` when calling `get_nowpayments_data()`
+
+### 5. Service-Specific vs Shared Pattern
+
+**Decision:** Establish clear guidelines for what goes in PGP_COMMON vs service files
+
+**Guideline:**
+- **PGP_COMMON:** Methods used by 2+ services with identical or near-identical implementations
+- **Service-Specific:** Methods unique to a single service or with significant logic differences
+- **Crypto Pricing (next):** Methods that are duplicated but inline (Phase 2)
+
+**Files After Consolidation:**
+- PGP_ORCHESTRATOR_v1/database_manager.py: Only `__init__` (315 → 43 lines)
+- PGP_NP_IPN_v1/database_manager.py: Only `__init__` (341 → 51 lines)
+- PGP_INVITE_v1/database_manager.py: `__init__` + crypto pricing + validation methods (491 → 402 lines)
+
+**Results:**
+- ✅ Net code reduction: ~334 lines (640 removed, 317 added to COMMON)
+- ✅ Single source of truth for 4 shared methods
+- ✅ INVITE's enhanced `get_nowpayments_data()` available to all services
+- ✅ All duplicate timestamp methods removed
+- ✅ Unused alias removed
+- ✅ Clear pattern established for future consolidation
+
+**Next Phase:** Crypto pricing methods (Phase 2)
 
 ## 2025-11-18: PGP-LIVE Database Migration Architecture 🗄️
 

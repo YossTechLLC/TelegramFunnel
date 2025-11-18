@@ -5,8 +5,8 @@ Validates payment status before sending Telegram invitation links.
 Queries private_channel_users_database to verify payment completion via IPN.
 """
 from typing import Optional
-import requests
 from PGP_COMMON.database import BaseDatabaseManager
+from PGP_COMMON.utils import CryptoPricingClient
 
 
 class DatabaseManager(BaseDatabaseManager):
@@ -45,193 +45,27 @@ class DatabaseManager(BaseDatabaseManager):
         self.payment_min_tolerance = payment_min_tolerance
         self.payment_fallback_tolerance = payment_fallback_tolerance
 
+        # Initialize crypto pricing client (shared utility)
+        self.pricing_client = CryptoPricingClient()
+
         print(f"🗄️ [DATABASE] DatabaseManager initialized for payment validation")
         print(f"📊 [DATABASE] Min tolerance: {payment_min_tolerance} ({payment_min_tolerance*100}%)")
         print(f"📊 [DATABASE] Fallback tolerance: {payment_fallback_tolerance} ({payment_fallback_tolerance*100}%)")
 
-    def get_nowpayments_data(self, user_id: int, closed_channel_id: int) -> Optional[dict]:
-        """
-        Get NowPayments payment_id and related data for a user/channel subscription.
+    # =========================================================================
+    # SHARED METHOD CONSOLIDATION
+    # =========================================================================
+    # get_nowpayments_data() has been moved to PGP_COMMON/database/db_manager.py
+    # It now returns 8 fields (enhanced version with all payment data).
+    # =========================================================================
 
-        This data is populated by the np-webhook service when it receives IPN callbacks
-        from NowPayments. If the IPN hasn't arrived yet, this will return None.
-
-        Args:
-            user_id: User's Telegram ID
-            closed_channel_id: The closed (private) channel ID
-
-        Returns:
-            Dict with NowPayments fields or None if not available:
-            {
-                'nowpayments_payment_id': str,
-                'nowpayments_payment_status': str,
-                'nowpayments_pay_address': str,
-                'nowpayments_outcome_amount': Decimal
-            }
-        """
-        conn = None
-        cur = None
-        try:
-            print(f"🔍 [VALIDATION] Looking up NowPayments payment data for user {user_id}, channel {closed_channel_id}")
-
-            conn = self.get_connection()
-            if not conn:
-                print(f"❌ [VALIDATION] Could not establish connection")
-                return None
-
-            cur = conn.cursor()
-
-            # Query for NowPayments data from most recent subscription
-            query = """
-                SELECT
-                    nowpayments_payment_id,
-                    nowpayments_payment_status,
-                    nowpayments_pay_address,
-                    nowpayments_outcome_amount,
-                    nowpayments_price_amount,
-                    nowpayments_price_currency,
-                    nowpayments_outcome_currency,
-                    nowpayments_pay_currency
-                FROM private_channel_users_database
-                WHERE user_id = %s AND private_channel_id = %s
-                ORDER BY id DESC
-                LIMIT 1
-            """
-            cur.execute(query, (user_id, closed_channel_id))
-            result = cur.fetchone()
-
-            if result:
-                (payment_id, payment_status, pay_address, outcome_amount,
-                 price_amount, price_currency, outcome_currency, pay_currency) = result
-
-                if payment_id:
-                    print(f"✅ [VALIDATION] Found NowPayments payment_id: {payment_id}")
-                    print(f"📊 [VALIDATION] Payment status: {payment_status}")
-                    print(f"💰 [VALIDATION] Price amount: {price_amount} {price_currency}")
-                    print(f"💰 [VALIDATION] Outcome amount: {outcome_amount} {outcome_currency}")
-                    print(f"📬 [VALIDATION] Pay address: {pay_address}")
-
-                    return {
-                        'nowpayments_payment_id': payment_id,
-                        'nowpayments_payment_status': payment_status,
-                        'nowpayments_pay_address': pay_address,
-                        'nowpayments_outcome_amount': str(outcome_amount) if outcome_amount else None,
-                        'nowpayments_price_amount': str(price_amount) if price_amount else None,
-                        'nowpayments_price_currency': price_currency,
-                        'nowpayments_outcome_currency': outcome_currency,
-                        'nowpayments_pay_currency': pay_currency
-                    }
-                else:
-                    print(f"⚠️ [VALIDATION] Subscription found but payment_id not yet available (IPN pending)")
-                    return None
-            else:
-                print(f"⚠️ [VALIDATION] No subscription record found in database")
-                return None
-
-        except Exception as e:
-            print(f"❌ [VALIDATION] Error fetching NowPayments data: {e}")
-            return None
-
-        finally:
-            if cur:
-                cur.close()
-            if conn:
-                conn.close()
-                print(f"🔌 [VALIDATION] Connection closed")
-
-    def get_crypto_usd_price(self, crypto_symbol: str) -> Optional[float]:
-        """
-        Get current USD price for a cryptocurrency using CoinGecko API.
-
-        Args:
-            crypto_symbol: Crypto currency symbol (eth, btc, ltc, etc.)
-
-        Returns:
-            Current USD price or None if API fails
-        """
-        try:
-            # CoinGecko Free API (no auth required)
-            # Map common symbols to CoinGecko IDs
-            symbol_map = {
-                'eth': 'ethereum',
-                'btc': 'bitcoin',
-                'ltc': 'litecoin',
-                'bch': 'bitcoin-cash',
-                'xrp': 'ripple',
-                'bnb': 'binancecoin',
-                'ada': 'cardano',
-                'doge': 'dogecoin',
-                'trx': 'tron',
-                'usdt': 'tether',
-                'usdc': 'usd-coin',
-                'busd': 'binance-usd',
-                'sol': 'solana',
-                'matic': 'matic-network',
-                'avax': 'avalanche-2',
-                'dot': 'polkadot'
-            }
-
-            crypto_id = symbol_map.get(crypto_symbol.lower())
-            if not crypto_id:
-                print(f"❌ [PRICE] Unknown crypto symbol: {crypto_symbol}")
-                return None
-
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={crypto_id}&vs_currencies=usd"
-
-            print(f"🔍 [PRICE] Fetching {crypto_symbol.upper()} price from CoinGecko...")
-
-            response = requests.get(url, timeout=5)
-
-            if response.status_code == 200:
-                data = response.json()
-                usd_price = data.get(crypto_id, {}).get('usd')
-
-                if usd_price:
-                    print(f"💰 [PRICE] {crypto_symbol.upper()}/USD = ${usd_price:,.2f}")
-                    return float(usd_price)
-                else:
-                    print(f"❌ [PRICE] USD price not found in response")
-                    return None
-            else:
-                print(f"❌ [PRICE] CoinGecko API error: {response.status_code}")
-                return None
-
-        except Exception as e:
-            print(f"❌ [PRICE] Error fetching crypto price: {e}")
-            return None
-
-    def convert_crypto_to_usd(self, amount: float, crypto_symbol: str) -> Optional[float]:
-        """
-        Convert cryptocurrency amount to USD using current market rate.
-
-        Args:
-            amount: Amount of cryptocurrency
-            crypto_symbol: Crypto currency symbol (eth, btc, etc.)
-
-        Returns:
-            USD equivalent or None if conversion fails
-        """
-        try:
-            # Check if stablecoin (1:1 with USD)
-            if crypto_symbol.lower() in ['usd', 'usdt', 'usdc', 'busd', 'dai']:
-                print(f"💰 [CONVERT] {crypto_symbol.upper()} is stablecoin, treating as 1:1 USD")
-                return float(amount)
-
-            # Get current market price
-            usd_price = self.get_crypto_usd_price(crypto_symbol)
-            if not usd_price:
-                print(f"❌ [CONVERT] Could not fetch price for {crypto_symbol}")
-                return None
-
-            # Convert to USD
-            usd_value = float(amount) * usd_price
-            print(f"💰 [CONVERT] {amount} {crypto_symbol.upper()} = ${usd_value:.2f} USD")
-
-            return usd_value
-
-        except Exception as e:
-            print(f"❌ [CONVERT] Conversion error: {e}")
-            return None
+    # =========================================================================
+    # CRYPTO PRICING METHODS - CONSOLIDATED TO PGP_COMMON
+    # =========================================================================
+    # get_crypto_usd_price() and convert_crypto_to_usd() have been moved to
+    # PGP_COMMON/utils/crypto_pricing.py and are now accessed via
+    # self.pricing_client (CryptoPricingClient instance)
+    # =========================================================================
 
     def validate_payment_complete(self, user_id: int, closed_channel_id: int, expected_price: str) -> tuple[bool, str]:
         """
@@ -288,8 +122,8 @@ class DatabaseManager(BaseDatabaseManager):
             if outcome_amount and outcome_currency:
                 print(f"💰 [VALIDATION] Outcome: {outcome_amount} {outcome_currency}")
 
-                # Convert outcome_amount to USD
-                outcome_usd = self.convert_crypto_to_usd(
+                # Convert outcome_amount to USD using shared pricing client
+                outcome_usd = self.pricing_client.convert_crypto_to_usd(
                     amount=float(outcome_amount),
                     crypto_symbol=outcome_currency
                 )

@@ -5,14 +5,13 @@ Receives Instant Payment Notification (IPN) callbacks from NowPayments.
 Verifies signature and updates database with payment_id and payment metadata.
 """
 import os
-import hmac
-import hashlib
 import json
 import requests
 from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 from google.cloud.sql.connector import Connector
 from typing import Optional
+from PGP_COMMON.utils import CryptoPricingClient, verify_sha512_signature
 
 app = Flask(__name__)
 
@@ -148,437 +147,64 @@ else:
 
 print(f"")
 
+# ============================================================================
+# CRYPTO PRICING CLIENT INITIALIZATION
+# ============================================================================
+# Initialize shared crypto pricing client (consolidated from inline function)
+pricing_client = CryptoPricingClient()
+print(f"✅ [PRICING] CryptoPricingClient initialized")
+print(f"💰 [PRICING] Supports both uppercase and lowercase crypto symbols")
+print(f"")
 
 # ============================================================================
-# COINGECKO PRICE FETCHING
+# DATABASE MANAGER INITIALIZATION
 # ============================================================================
-
-def get_crypto_usd_price(crypto_symbol: str) -> Optional[float]:
-    """
-    Fetch current USD price for a cryptocurrency from CoinGecko API.
-
-    Args:
-        crypto_symbol: Cryptocurrency symbol (e.g., 'ETH', 'BTC')
-
-    Returns:
-        Current USD price or None if fetch fails
-    """
-    # Map common symbols to CoinGecko IDs
-    coin_id_map = {
-        'ETH': 'ethereum',
-        'BTC': 'bitcoin',
-        'USDT': 'tether',
-        'USDC': 'usd-coin',
-        'LTC': 'litecoin',
-        'TRX': 'tron',
-        'BNB': 'binancecoin',
-        'SOL': 'solana',
-        'MATIC': 'matic-network'
-    }
-
-    coin_id = coin_id_map.get(crypto_symbol.upper())
-    if not coin_id:
-        print(f"❌ [PRICE] Unsupported crypto symbol: {crypto_symbol}")
-        print(f"💡 [PRICE] Supported symbols: {', '.join(coin_id_map.keys())}")
-        return None
-
+# Initialize database manager (moved from inline functions)
+db_manager = None
+if all([CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD]):
     try:
-        print(f"🔍 [PRICE] Fetching {crypto_symbol} price from CoinGecko...")
-
-        url = f"https://api.coingecko.com/api/v3/simple/price"
-        params = {
-            'ids': coin_id,
-            'vs_currencies': 'usd'
-        }
-
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-
-        data = response.json()
-        usd_price = data.get(coin_id, {}).get('usd')
-
-        if usd_price:
-            print(f"💰 [PRICE] {crypto_symbol}/USD = ${usd_price:,.2f}")
-            return float(usd_price)
-        else:
-            print(f"❌ [PRICE] Price not found in CoinGecko response")
-            return None
-
-    except requests.exceptions.Timeout:
-        print(f"❌ [PRICE] CoinGecko API timeout after 10 seconds")
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"❌ [PRICE] Failed to fetch price from CoinGecko: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ [PRICE] Unexpected error fetching price: {e}")
-        return None
-
-
-# ============================================================================
-# DATABASE FUNCTIONS
-# ============================================================================
-
-def parse_order_id(order_id: str) -> tuple:
-    """
-    Parse NowPayments order_id to extract user_id and open_channel_id.
-
-    Format: PGP-{user_id}|{open_channel_id}
-    Example: PGP-6271402111|-1003268562225
-
-    Also supports old format for backward compatibility:
-    Old Format: PGP-{user_id}-{channel_id} (loses negative sign)
-    Example: PGP-6271402111-1003268562225
-
-    Returns:
-        Tuple of (user_id, open_channel_id) or (None, None) if invalid
-    """
-    try:
-        # Check for new format first (with | separator)
-        if '|' in order_id:
-            # New format: PGP-{user_id}|{open_channel_id}
-            prefix_and_user, channel_id_str = order_id.split('|')
-            if not prefix_and_user.startswith('PGP-'):
-                print(f"❌ [PARSE] order_id does not start with 'PGP-': {order_id}")
-                return None, None
-            user_id_str = prefix_and_user[4:]  # Remove 'PGP-' prefix
-            user_id = int(user_id_str)
-            open_channel_id = int(channel_id_str)  # Preserves negative sign
-            print(f"✅ [PARSE] New format detected")
-            print(f"   User ID: {user_id}")
-            print(f"   Open Channel ID: {open_channel_id}")
-            return user_id, open_channel_id
-
-        # Fallback to old format for backward compatibility (during transition)
-        else:
-            # Old format: PGP-{user_id}-{channel_id} (loses negative sign)
-            parts = order_id.split('-')
-            if len(parts) < 3 or parts[0] != 'PGP':
-                print(f"❌ [PARSE] Invalid order_id format: {order_id}")
-                return None, None
-            user_id = int(parts[1])
-            channel_id = int(parts[2])
-            # FIX: Add negative sign back (all Telegram channels are negative)
-            open_channel_id = -abs(channel_id)
-            print(f"⚠️ [PARSE] Old format detected - added negative sign")
-            print(f"   User ID: {user_id}")
-            print(f"   Open Channel ID: {open_channel_id} (corrected from {channel_id})")
-            return user_id, open_channel_id
-
-    except (ValueError, IndexError) as e:
-        print(f"❌ [PARSE] Failed to parse order_id '{order_id}': {e}")
-        return None, None
-
-
-def get_db_connection():
-    """Create and return a database connection."""
-    if not connector:
-        print(f"❌ [DATABASE] Connector not initialized")
-        return None
-
-    try:
-        connection = connector.connect(
-            CLOUD_SQL_CONNECTION_NAME,
-            "pg8000",
-            user=DATABASE_USER,
-            password=DATABASE_PASSWORD,
-            db=DATABASE_NAME
+        from database_manager import DatabaseManager
+        db_manager = DatabaseManager(
+            instance_connection_name=CLOUD_SQL_CONNECTION_NAME,
+            db_name=DATABASE_NAME,
+            db_user=DATABASE_USER,
+            db_password=DATABASE_PASSWORD
         )
-        print(f"🔗 [DATABASE] Connection established")
-        return connection
+        print(f"✅ [DATABASE] DatabaseManager initialized")
     except Exception as e:
-        print(f"❌ [DATABASE] Connection failed: {e}")
-        return None
+        print(f"❌ [DATABASE] Failed to initialize DatabaseManager: {e}")
+        print(f"⚠️ [DATABASE] Database operations will not work!")
+else:
+    print(f"⚠️ [DATABASE] Skipping DatabaseManager initialization - missing credentials")
 
+print(f"")
 
-def update_payment_data(order_id: str, payment_data: dict) -> bool:
-    """
-    UPSERT payment data into private_channel_users_database.
-
-    This function handles both scenarios:
-    1. UPDATE: Existing record (normal bot flow)
-    2. INSERT: No existing record (direct payment link, race condition)
-
-    Three-step process:
-    1. Parse order_id to get user_id and open_channel_id
-    2. Look up closed_channel_id + client config from main_clients_database
-    3. UPSERT into private_channel_users_database with full client configuration
-
-    Args:
-        order_id: NowPayments order_id (format: PGP-{user_id}|{open_channel_id})
-        payment_data: Dictionary with payment metadata from IPN
-
-    Returns:
-        True if operation successful, False otherwise
-    """
-    conn = None
-    cur = None
-
-    try:
-        # Step 1: Parse order_id
-        user_id, open_channel_id = parse_order_id(order_id)
-        if user_id is None or open_channel_id is None:
-            print(f"❌ [DATABASE] Invalid order_id format: {order_id}")
-            return False
-
-        print(f"")
-        print(f"📝 [DATABASE] Parsed order_id successfully:")
-        print(f"   User ID: {user_id}")
-        print(f"   Open Channel ID: {open_channel_id}")
-
-        conn = get_db_connection()
-        if not conn:
-            return False
-
-        cur = conn.cursor()
-
-        # Step 2: Look up closed_channel_id + client configuration from main_clients_database
-        print(f"")
-        print(f"🔍 [DATABASE] Looking up channel mapping and client config...")
-        print(f"   Searching for open_channel_id: {open_channel_id}")
-
-        cur.execute("""
-            SELECT
-                closed_channel_id,
-                client_wallet_address,
-                client_payout_currency::text,
-                client_payout_network::text
-            FROM main_clients_database
-            WHERE open_channel_id = %s
-        """, (str(open_channel_id),))
-
-        result = cur.fetchone()
-
-        if not result or not result[0]:
-            print(f"")
-            print(f"❌ [DATABASE] No closed_channel_id found for open_channel_id: {open_channel_id}")
-            print(f"⚠️ [DATABASE] This channel may not be registered in main_clients_database")
-            print(f"💡 [HINT] Register this channel first:")
-            print(f"   INSERT INTO main_clients_database (open_channel_id, closed_channel_id, ...)")
-            print(f"   VALUES ('{open_channel_id}', '<closed_channel_id>', ...)")
-            return False
-
-        closed_channel_id = result[0]
-        client_wallet_address = result[1]
-        client_payout_currency = result[2]
-        client_payout_network = result[3]
-
-        print(f"✅ [DATABASE] Found channel mapping:")
-        print(f"   Open Channel ID (public): {open_channel_id}")
-        print(f"   Closed Channel ID (private): {closed_channel_id}")
-        print(f"   Client Wallet: {client_wallet_address}")
-        print(f"   Payout Currency: {client_payout_currency}")
-        print(f"   Payout Network: {client_payout_network}")
-
-        # Step 3: UPSERT into private_channel_users_database
-        # This handles both new records (INSERT) and existing records (UPDATE)
-        print(f"")
-        print(f"🗄️ [DATABASE] Upserting payment record (INSERT or UPDATE)...")
-        print(f"   Target table: private_channel_users_database")
-        print(f"   Key: user_id = {user_id} AND private_channel_id = {closed_channel_id}")
-
-        # Calculate expiration (30 days from now as default)
-        from datetime import datetime, timedelta
-        now = datetime.now()
-        expiration = now + timedelta(days=30)
-        expire_time = expiration.strftime('%H:%M:%S')
-        expire_date = expiration.strftime('%Y-%m-%d')
-        current_timestamp = now.strftime('%H:%M:%S')
-        current_datestamp = now.strftime('%Y-%m-%d')
-
-        # First, check if record exists to determine operation type
-        cur.execute("""
-            SELECT id FROM private_channel_users_database
-            WHERE user_id = %s AND private_channel_id = %s
-            ORDER BY id DESC LIMIT 1
-        """, (user_id, closed_channel_id))
-
-        existing_record = cur.fetchone()
-
-        if existing_record:
-            # Record exists - UPDATE
-            print(f"📝 [DATABASE] Existing record found (id={existing_record[0]}) - will UPDATE")
-
-            update_query = """
-                UPDATE private_channel_users_database
-                SET
-                    nowpayments_payment_id = %s,
-                    nowpayments_invoice_id = %s,
-                    nowpayments_order_id = %s,
-                    nowpayments_pay_address = %s,
-                    nowpayments_payment_status = %s,
-                    nowpayments_pay_amount = %s,
-                    nowpayments_pay_currency = %s,
-                    nowpayments_outcome_amount = %s,
-                    nowpayments_price_amount = %s,
-                    nowpayments_price_currency = %s,
-                    nowpayments_outcome_currency = %s,
-                    payment_status = 'confirmed',
-                    nowpayments_created_at = CURRENT_TIMESTAMP,
-                    nowpayments_updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = %s AND private_channel_id = %s
-                AND id = %s
-            """
-
-            cur.execute(update_query, (
-                payment_data.get('payment_id'),
-                payment_data.get('invoice_id'),
-                payment_data.get('order_id'),
-                payment_data.get('pay_address'),
-                payment_data.get('payment_status'),
-                payment_data.get('pay_amount'),
-                payment_data.get('pay_currency'),
-                payment_data.get('outcome_amount'),
-                payment_data.get('price_amount'),
-                payment_data.get('price_currency'),
-                payment_data.get('outcome_currency'),
-                user_id,
-                closed_channel_id,
-                existing_record[0]
-            ))
-
-            operation = "UPDATED"
-
-        else:
-            # No record exists - INSERT with full client configuration
-            print(f"📝 [DATABASE] No existing record - will INSERT new record")
-            print(f"💡 [DATABASE] Populating default subscription data (30 days)")
-
-            insert_query = """
-                INSERT INTO private_channel_users_database (
-                    user_id,
-                    private_channel_id,
-                    sub_time,
-                    sub_price,
-                    timestamp,
-                    datestamp,
-                    expire_time,
-                    expire_date,
-                    is_active,
-                    payment_status,
-                    nowpayments_payment_id,
-                    nowpayments_invoice_id,
-                    nowpayments_order_id,
-                    nowpayments_pay_address,
-                    nowpayments_payment_status,
-                    nowpayments_pay_amount,
-                    nowpayments_pay_currency,
-                    nowpayments_outcome_amount,
-                    nowpayments_price_amount,
-                    nowpayments_price_currency,
-                    nowpayments_outcome_currency,
-                    nowpayments_created_at,
-                    nowpayments_updated_at
-                )
-                VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-            """
-
-            cur.execute(insert_query, (
-                user_id,
-                closed_channel_id,
-                30,  # Default subscription time: 30 days
-                str(payment_data.get('price_amount')),  # Use price_amount as sub_price
-                current_timestamp,
-                current_datestamp,
-                expire_time,
-                expire_date,
-                True,  # is_active
-                'confirmed',  # payment_status
-                payment_data.get('payment_id'),
-                payment_data.get('invoice_id'),
-                payment_data.get('order_id'),
-                payment_data.get('pay_address'),
-                payment_data.get('payment_status'),
-                payment_data.get('pay_amount'),
-                payment_data.get('pay_currency'),
-                payment_data.get('outcome_amount'),
-                payment_data.get('price_amount'),
-                payment_data.get('price_currency'),
-                payment_data.get('outcome_currency')
-            ))
-
-            operation = "INSERTED"
-
-        conn.commit()
-        rows_affected = cur.rowcount
-
-        print(f"")
-        print(f"✅ [DATABASE] Successfully {operation} {rows_affected} record(s)")
-        print(f"   User ID: {user_id}")
-        print(f"   Private Channel ID: {closed_channel_id}")
-        print(f"   Payment ID: {payment_data.get('payment_id')}")
-        print(f"   Invoice ID: {payment_data.get('invoice_id')}")
-        print(f"   NowPayments Status: {payment_data.get('payment_status')}")
-        print(f"   Payment Status: confirmed ✅")
-        print(f"   Amount: {payment_data.get('outcome_amount')} {payment_data.get('pay_currency')}")
-
-        if operation == "INSERTED":
-            print(f"   Subscription: 30 days")
-            print(f"   Expires: {expire_date} {expire_time}")
-
-        return True
-
-    except Exception as e:
-        print(f"")
-        print(f"❌ [DATABASE] Operation failed with exception: {e}")
-        print(f"🔄 [DATABASE] Rolling back transaction...")
-        if conn:
-            conn.rollback()
-        import traceback
-        traceback.print_exc()
-        return False
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
-            print(f"🔌 [DATABASE] Connection closed")
+# ============================================================================
+# DATABASE FUNCTIONS - MOVED TO database_manager.py
+# ============================================================================
+# The following functions have been moved to PGP_NP_IPN_v1/database_manager.py:
+#   - parse_order_id() → db_manager.parse_order_id()
+#   - update_payment_data() → db_manager.update_payment_data()
+#   - get_db_connection() → db_manager.get_connection()
+#
+# This refactoring improves separation of concerns and reduces main file size.
+# (~270 lines moved to database_manager.py)
+# ============================================================================
 
 
 # ============================================================================
 # IPN SIGNATURE VERIFICATION
 # ============================================================================
 
-def verify_ipn_signature(payload: bytes, signature: str) -> bool:
-    """
-    Verify IPN callback signature from NowPayments.
-
-    Args:
-        payload: Raw request body bytes
-        signature: Signature from x-nowpayments-sig header
-
-    Returns:
-        True if signature valid, False otherwise
-    """
-    if not NOWPAYMENTS_IPN_SECRET:
-        print(f"❌ [IPN] Cannot verify signature - NOWPAYMENTS_IPN_SECRET not configured")
-        return False
-
-    try:
-        # Calculate expected signature
-        expected_sig = hmac.new(
-            NOWPAYMENTS_IPN_SECRET.encode('utf-8'),
-            payload,
-            hashlib.sha512
-        ).hexdigest()
-
-        # Compare signatures
-        if hmac.compare_digest(expected_sig, signature):
-            print(f"✅ [IPN] Signature verified successfully")
-            return True
-        else:
-            print(f"❌ [IPN] Signature verification failed")
-            print(f"   Expected: {expected_sig[:20]}...")
-            print(f"   Received: {signature[:20]}...")
-            return False
-
-    except Exception as e:
-        print(f"❌ [IPN] Signature verification error: {e}")
-        return False
+# ============================================================================
+# IPN SIGNATURE VERIFICATION - Moved to PGP_COMMON/utils/webhook_auth.py
+# ============================================================================
+# The verify_ipn_signature() function has been replaced with:
+#   verify_sha512_signature() from PGP_COMMON.utils
+#
+# This consolidates duplicate signature verification logic across services.
+# (~36 lines moved to shared utility)
+# ============================================================================
 
 
 # ============================================================================
@@ -610,11 +236,17 @@ def handle_ipn():
     payload = request.get_data()
     print(f"📦 [IPN] Payload size: {len(payload)} bytes")
 
-    # Verify signature
-    if not verify_ipn_signature(payload, signature):
+    # Verify signature using shared utility (HMAC-SHA512 for NowPayments)
+    if not NOWPAYMENTS_IPN_SECRET:
+        print(f"❌ [IPN] Cannot verify signature - NOWPAYMENTS_IPN_SECRET not configured")
+        abort(500, "IPN secret not configured")
+
+    if not verify_sha512_signature(payload, signature, NOWPAYMENTS_IPN_SECRET):
         print(f"❌ [IPN] Signature verification failed - rejecting request")
         print(f"=" * 80)
         abort(403, "Invalid signature")
+
+    print(f"✅ [IPN] Signature verified successfully")
 
     # Parse JSON payload
     try:
@@ -705,7 +337,7 @@ def handle_ipn():
         payment_data['outcome_currency'] = payment_data.get('pay_currency')
         print(f"💡 [IPN] outcome_currency not provided, inferring from pay_currency: {payment_data['outcome_currency']}")
 
-    success = update_payment_data(order_id, payment_data)
+    success = db_manager.update_payment_data(order_id, payment_data) if db_manager else False
 
     if not success:
         print(f"")
@@ -732,8 +364,8 @@ def handle_ipn():
         if outcome_amount_usd:
             print(f"✅ [CONVERSION] Already in USD equivalent: ${outcome_amount_usd:.2f}")
     elif outcome_currency and outcome_amount:
-        # Fetch current market price from CoinGecko
-        crypto_usd_price = get_crypto_usd_price(outcome_currency)
+        # Fetch current market price from CoinGecko using shared pricing client
+        crypto_usd_price = pricing_client.get_crypto_usd_price(outcome_currency)
 
         if crypto_usd_price:
             # Calculate USD value
@@ -754,9 +386,9 @@ def handle_ipn():
         # Update database with outcome_amount_usd
         try:
             # Need to get user_id and closed_channel_id again
-            user_id, open_channel_id = parse_order_id(order_id)
-            if user_id and open_channel_id:
-                conn = get_db_connection()
+            user_id, open_channel_id = db_manager.parse_order_id(order_id) if db_manager else (None, None)
+            if user_id and open_channel_id and db_manager:
+                conn = db_manager.get_connection()
                 if conn:
                     cur = conn.cursor()
 
@@ -1109,7 +741,7 @@ def payment_status_api():
 
     try:
         # Parse order_id to get user_id and open_channel_id
-        user_id, open_channel_id = parse_order_id(order_id)
+        user_id, open_channel_id = db_manager.parse_order_id(order_id) if db_manager else (None, None)
 
         if not user_id or not open_channel_id:
             print(f"❌ [API] Invalid order_id format: {order_id}")
@@ -1124,7 +756,7 @@ def payment_status_api():
         print(f"   Open Channel ID: {open_channel_id}")
 
         # Connect to database
-        conn = get_db_connection()
+        conn = db_manager.get_connection() if db_manager else None
         if not conn:
             print(f"❌ [API] Failed to connect to database")
             return jsonify({

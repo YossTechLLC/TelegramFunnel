@@ -13,7 +13,7 @@ from flask import Flask, request, abort, jsonify
 from config_manager import ConfigManager
 from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
-from changenow_client import ChangeNowClient
+from PGP_COMMON.utils import ChangeNowClient
 
 app = Flask(__name__)
 
@@ -45,13 +45,10 @@ except Exception as e:
     print(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}")
     cloudtasks_client = None
 
-# Initialize ChangeNow client
+# Initialize ChangeNow client with config_manager for hot-reload
 try:
-    api_key = config.get('changenow_api_key')
-    if not api_key:
-        raise ValueError("CHANGENOW_API_KEY not available")
-    changenow_client = ChangeNowClient(api_key)
-    print(f"✅ [APP] ChangeNow client initialized")
+    changenow_client = ChangeNowClient(config_manager)
+    print(f"✅ [APP] ChangeNow client initialized (hot-reload enabled)")
 except Exception as e:
     print(f"❌ [APP] Failed to initialize ChangeNow client: {e}")
     changenow_client = None

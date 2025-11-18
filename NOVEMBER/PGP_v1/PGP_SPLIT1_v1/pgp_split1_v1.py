@@ -7,8 +7,6 @@ Handles database operations and integrates with GCHostPay for final ETH transfer
 import os
 import json
 import time
-import hmac
-import hashlib
 import struct
 import base64
 from decimal import Decimal
@@ -20,6 +18,7 @@ from config_manager import ConfigManager
 from database_manager import DatabaseManager
 from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
+from PGP_COMMON.utils import verify_sha256_signature
 
 app = Flask(__name__)
 
@@ -63,33 +62,15 @@ except Exception as e:
     cloudtasks_client = None
 
 
-def verify_webhook_signature(payload: bytes, signature: str, signing_key: str) -> bool:
-    """
-    Verify webhook signature to ensure authentic requests.
-    Uses SUCCESS_URL_SIGNING_KEY for signature verification.
-
-    Args:
-        payload: Raw request payload
-        signature: Provided signature (HMAC-SHA256 hexdigest)
-        signing_key: Secret signing key
-
-    Returns:
-        True if signature is valid, False otherwise
-    """
-    if not signing_key or not signature:
-        return False
-
-    try:
-        expected_signature = hmac.new(
-            signing_key.encode(),
-            payload,
-            hashlib.sha256
-        ).hexdigest()
-
-        return hmac.compare_digest(signature, expected_signature)
-    except Exception as e:
-        print(f"❌ [WEBHOOK_VERIFY] Signature verification error: {e}")
-        return False
+# ============================================================================
+# WEBHOOK SIGNATURE VERIFICATION - Moved to PGP_COMMON/utils/webhook_auth.py
+# ============================================================================
+# The verify_webhook_signature() function has been replaced with:
+#   verify_sha256_signature() from PGP_COMMON.utils
+#
+# This consolidates duplicate signature verification logic across services.
+# (~27 lines moved to shared utility)
+# ============================================================================
 
 
 def calculate_adjusted_amount(subscription_price: str, tp_flat_fee: str) -> Tuple[float, float]:
@@ -282,9 +263,9 @@ def initial_webhook():
         print(f"🎯 [ENDPOINT_1] Initial webhook called (from GCWebhook)")
         print(f"📦 [ENDPOINT_1] Payload size: {len(payload)} bytes")
 
-        # Verify signature
+        # Verify signature using shared utility
         signing_key = config.get('success_url_signing_key')
-        if signing_key and not verify_webhook_signature(payload, signature, signing_key):
+        if signing_key and not verify_sha256_signature(payload, signature, signing_key):
             print(f"❌ [ENDPOINT_1] Invalid signature")
             abort(401, "Invalid webhook signature")
 

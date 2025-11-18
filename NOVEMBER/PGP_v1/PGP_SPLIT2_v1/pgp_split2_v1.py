@@ -15,7 +15,7 @@ from flask import Flask, request, abort, jsonify
 from config_manager import ConfigManager
 from token_manager import TokenManager
 from cloudtasks_client import CloudTasksClient
-from changenow_client import ChangeNowClient
+from PGP_COMMON.utils import ChangeNowClient
 
 app = Flask(__name__)
 
