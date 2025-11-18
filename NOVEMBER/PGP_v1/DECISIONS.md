@@ -1,6 +1,6 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-01-18 - **Security Architecture - IAM Authentication & Service Accounts** 🔒
+**Last Updated:** 2025-11-18 - **Security Architecture - IAM Authentication & Service Accounts** 🔒
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 

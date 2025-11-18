@@ -24,40 +24,20 @@ class ConfigManager(BaseConfigManager):
         self.bot_token = None
         self.database_credentials = {}
 
-    def fetch_secret(self, env_var_name: str, secret_name: str) -> Optional[str]:
-        """
-        Fetch a secret from Google Secret Manager.
+    # ========== HOT-RELOADABLE SECRET GETTERS ==========
 
-        Args:
-            env_var_name: Name of environment variable containing secret path
-            secret_name: Human-readable name for logging
+    def get_telegram_token(self) -> Optional[str]:
+        """
+        Get Telegram bot token (HOT-RELOADABLE).
 
         Returns:
-            Secret value or None if error
+            Telegram bot token or None if not available
         """
-        try:
-            secret_path = os.getenv(env_var_name)
-
-            if not secret_path:
-                logger.error(f"❌ [CONFIG] Environment variable {env_var_name} is not set")
-                return None
-
-            # Use base class method to fetch secret by path
-            response = self.client.access_secret_version(request={"name": secret_path})
-            secret_value = response.payload.data.decode("UTF-8").strip()
-
-            logger.info(f"✅ [CONFIG] Successfully fetched {secret_name}")
-            return secret_value
-
-        except Exception as e:
-            logger.error(f"❌ [CONFIG] Error fetching {secret_name}: {e}")
-            return None
-
-    def fetch_telegram_token(self) -> Optional[str]:
-        """Fetch Telegram bot token from Secret Manager"""
-        return self.fetch_secret(
-            env_var_name="TELEGRAM_BOT_TOKEN_SECRET",
-            secret_name="Telegram Bot Token"
+        secret_path = self.build_secret_path("TELEGRAM_BOT_API_TOKEN")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "Telegram bot token",
+            cache_key="telegram_bot_token"
         )
 
     def fetch_database_credentials(self) -> Dict[str, Optional[str]]:
@@ -100,16 +80,10 @@ class ConfigManager(BaseConfigManager):
         """
         logger.info("🔐 [CONFIG] Initializing configuration...")
 
-        # Fetch bot token
-        self.bot_token = self.fetch_telegram_token()
-
-        # Fetch database credentials
+        # Fetch database credentials (STATIC - loaded at startup)
         self.database_credentials = self.fetch_database_credentials()
 
         # Validate critical config
-        if not self.bot_token:
-            logger.error("❌ [CONFIG] Bot token is missing")
-
         if not all([
             self.database_credentials['instance_connection_name'],
             self.database_credentials['dbname'],
@@ -119,8 +93,9 @@ class ConfigManager(BaseConfigManager):
             logger.error("❌ [CONFIG] Database credentials are incomplete")
 
         logger.info("✅ [CONFIG] Configuration initialized")
+        logger.info("   Hot-reloadable secrets: TELEGRAM_BOT_API_TOKEN")
 
         return {
-            'bot_token': self.bot_token,
             'database_credentials': self.database_credentials
+            # Note: bot_token is NOT fetched here - use get_telegram_token() for hot-reload
         }

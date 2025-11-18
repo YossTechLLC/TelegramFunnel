@@ -32,6 +32,81 @@ class ConfigManager(BaseConfigManager):
         # Service-specific caching layer to reduce Secret Manager API calls
         self._cache = {}
 
+    # ========== HOT-RELOADABLE SECRET GETTERS ==========
+
+    def get_broadcast_auto_interval_dynamic(self) -> float:
+        """Get automated broadcast interval in hours (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("BROADCAST_AUTO_INTERVAL")
+        value_str = self.fetch_secret_dynamic(
+            secret_path,
+            "Broadcast auto interval",
+            cache_key="broadcast_auto_interval"
+        ) or "24"
+        try:
+            interval = float(value_str)
+            self.logger.info(f"⏰ Automated broadcast interval: {interval} hours")
+            return interval
+        except (ValueError, TypeError) as e:
+            self.logger.warning(f"⚠️ Invalid auto interval value, using default (24h): {e}")
+            return 24.0
+
+    def get_broadcast_manual_interval_dynamic(self) -> float:
+        """Get manual trigger rate limit interval in hours (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("BROADCAST_MANUAL_INTERVAL")
+        value_str = self.fetch_secret_dynamic(
+            secret_path,
+            "Broadcast manual interval",
+            cache_key="broadcast_manual_interval"
+        ) or "0.0833"
+        try:
+            interval = float(value_str)
+            self.logger.info(f"⏰ Manual trigger interval: {interval} hours ({interval * 60:.1f} minutes)")
+            return interval
+        except (ValueError, TypeError) as e:
+            self.logger.warning(f"⚠️ Invalid manual interval value, using default (5min): {e}")
+            return 0.0833
+
+    def get_bot_token_dynamic(self) -> str:
+        """Get Telegram bot token (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("TELEGRAM_BOT_API_TOKEN")
+        token = self.fetch_secret_dynamic(
+            secret_path,
+            "Telegram bot token",
+            cache_key="telegram_bot_token"
+        )
+        if not token:
+            raise ValueError("Bot token is required but not found")
+        self.logger.info(f"🤖 Bot token loaded (length: {len(token)})")
+        return token
+
+    def get_bot_username_dynamic(self) -> str:
+        """Get Telegram bot username (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("TELEGRAM_BOT_USERNAME")
+        username = self.fetch_secret_dynamic(
+            secret_path,
+            "Telegram bot username",
+            cache_key="telegram_bot_username"
+        )
+        if not username:
+            raise ValueError("Bot username is required but not found")
+        self.logger.info(f"🤖 Bot username: @{username}")
+        return username
+
+    def get_jwt_secret_key_dynamic(self) -> str:
+        """Get JWT secret key for authentication (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("JWT_SECRET_KEY")
+        secret_key = self.fetch_secret_dynamic(
+            secret_path,
+            "JWT secret key",
+            cache_key="jwt_secret_key"
+        )
+        if not secret_key:
+            raise ValueError("JWT secret key is required but not found")
+        self.logger.info(f"🔑 JWT secret key loaded (length: {len(secret_key)})")
+        return secret_key
+
+    # ========== DEPRECATED METHODS (kept for backward compatibility) ==========
+
     def _fetch_secret(self, secret_env_var: str, default: Optional[str] = None) -> Optional[str]:
         """
         Fetch a secret from Secret Manager with caching layer.

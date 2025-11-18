@@ -19,9 +19,103 @@ class ConfigManager(BaseConfigManager):
         super().__init__(service_name="PGP_WEBAPI_v1")
 
         # 🔐 SECURITY FIX: Use environment variable for project ID instead of hardcoding
-        self.project_id = os.getenv("GCP_PROJECT_ID", "telepay-459221")
+        self.project_id = os.getenv("GCP_PROJECT_ID", "pgp-live")
         if os.getenv("GCP_PROJECT_ID") is None:
-            print("⚠️ GCP_PROJECT_ID not set, using default: telepay-459221")
+            print("⚠️ GCP_PROJECT_ID not set, using default: pgp-live")
+
+    # ========== HOT-RELOADABLE SECRET GETTERS ==========
+
+    def get_jwt_secret_key(self) -> str:
+        """Get JWT secret key (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("JWT_SECRET_KEY")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "JWT secret key",
+            cache_key="jwt_secret_key"
+        )
+
+    def get_signup_secret_key(self) -> str:
+        """Get signup secret key for email verification (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("SIGNUP_SECRET_KEY")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "Signup secret key",
+            cache_key="signup_secret_key"
+        )
+
+    def get_sendgrid_api_key(self) -> str:
+        """Get SendGrid API key (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("SENDGRID_API_KEY")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "SendGrid API key",
+            cache_key="sendgrid_api_key"
+        )
+
+    def get_from_email(self) -> str:
+        """Get from email address (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("FROM_EMAIL")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "From email",
+            cache_key="from_email"
+        )
+
+    def get_from_name(self) -> str:
+        """Get from name (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("FROM_NAME")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "From name",
+            cache_key="from_name"
+        )
+
+    def get_cors_origin(self) -> str:
+        """Get CORS origin (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("CORS_ORIGIN")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "CORS origin",
+            cache_key="cors_origin"
+        ) or "https://www.paygateprime.com"
+
+    def get_base_url(self) -> str:
+        """Get base URL for email links (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("BASE_URL")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "Base URL",
+            cache_key="base_url"
+        ) or "https://www.paygateprime.com"
+
+    def get_cloud_sql_connection_name(self) -> str:
+        """Get Cloud SQL connection name (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("CLOUD_SQL_CONNECTION_NAME")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "Cloud SQL connection name",
+            cache_key="cloud_sql_connection_name"
+        )
+
+    def get_database_name(self) -> str:
+        """Get database name (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("DATABASE_NAME_SECRET")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "Database name",
+            cache_key="database_name"
+        )
+
+    def get_database_user(self) -> str:
+        """Get database user (HOT-RELOADABLE)."""
+        secret_path = self.build_secret_path("DATABASE_USER_SECRET")
+        return self.fetch_secret_dynamic(
+            secret_path,
+            "Database user",
+            cache_key="database_user"
+        )
+
+    # ========== DEPRECATED METHODS (kept for backward compatibility) ==========
 
     def access_secret(self, secret_name: str) -> str:
         """
