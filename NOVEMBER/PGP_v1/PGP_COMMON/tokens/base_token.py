@@ -24,17 +24,21 @@ class BaseTokenManager:
     Service-specific token formats remain in subclasses.
     """
 
-    def __init__(self, signing_key: str, service_name: str):
+    def __init__(self, signing_key: str, service_name: str, secondary_key: Optional[str] = None):
         """
         Initialize the BaseTokenManager.
 
         Args:
-            signing_key: SUCCESS_URL_SIGNING_KEY for token verification and encryption
+            signing_key: Primary signing key (SUCCESS_URL_SIGNING_KEY) for token verification and encryption
             service_name: Name of the service (for logging)
+            secondary_key: Optional secondary signing key for dual-key services (e.g., TPS_HOSTPAY_SIGNING_KEY, PGP_INTERNAL_SIGNING_KEY)
         """
         self.signing_key = signing_key
+        self.secondary_key = secondary_key if secondary_key else signing_key
         self.service_name = service_name
         print(f"🔐 [TOKEN] TokenManager initialized for {service_name}")
+        if secondary_key:
+            print(f"🔐 [TOKEN] Secondary signing key configured for {service_name}")
 
     def generate_hmac_signature(self, data: bytes, truncate_to: int = 16) -> bytes:
         """
@@ -70,6 +74,42 @@ class BaseTokenManager:
             True if signature is valid, False otherwise
         """
         expected_sig = self.generate_hmac_signature(data, truncate_to)
+        return hmac.compare_digest(signature, expected_sig)
+
+    def generate_hmac_signature_secondary(self, data: bytes, truncate_to: int = 16) -> bytes:
+        """
+        Generate HMAC-SHA256 signature using secondary key for dual-key services.
+
+        Args:
+            data: Data to sign
+            truncate_to: Number of bytes to truncate signature to (default 16)
+
+        Returns:
+            HMAC signature bytes (truncated if specified)
+        """
+        full_signature = hmac.new(
+            self.secondary_key.encode(),
+            data,
+            hashlib.sha256
+        ).digest()
+
+        if truncate_to > 0:
+            return full_signature[:truncate_to]
+        return full_signature
+
+    def verify_hmac_signature_secondary(self, data: bytes, signature: bytes, truncate_to: int = 16) -> bool:
+        """
+        Verify HMAC-SHA256 signature using secondary key for dual-key services.
+
+        Args:
+            data: Data that was signed
+            signature: Signature to verify
+            truncate_to: Number of bytes signature was truncated to (default 16)
+
+        Returns:
+            True if signature is valid, False otherwise
+        """
+        expected_sig = self.generate_hmac_signature_secondary(data, truncate_to)
         return hmac.compare_digest(signature, expected_sig)
 
     def pack_string(self, value: str) -> bytes:

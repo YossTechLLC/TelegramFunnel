@@ -54,7 +54,11 @@
       "Bash(test:*)",
       "Bash(bash:*)",
       "Bash(dos2unix:*)",
-      "Bash(./TOOLS_SCRIPTS_TESTS/scripts/truncate_tracking_files.sh:*)"
+      "Bash(./TOOLS_SCRIPTS_TESTS/scripts/truncate_tracking_files.sh:*)",
+      "Bash(paste:*)",
+      "Bash(/tmp/hostpay2_clean.py)",
+      "Bash(/tmp/split3_clean.py)",
+      "Bash(/tmp/hostpay1_clean.py)"
     ],
     "deny": [
       "Bash(gcloud deploy:*)",

@@ -27,22 +27,6 @@ class TokenManager(BaseTokenManager):
         """
         super().__init__(signing_key=signing_key, service_name="PGP_MICROBATCHPROCESSOR_v1")
 
-
-    def _pack_string(self, s: str) -> bytes:
-        """Pack a string with 1-byte length prefix."""
-        s_bytes = s.encode('utf-8')
-        if len(s_bytes) > 255:
-            raise ValueError(f"String too long (max 255 bytes): {s}")
-        return bytes([len(s_bytes)]) + s_bytes
-
-    def _unpack_string(self, data: bytes, offset: int) -> Tuple[str, int]:
-        """Unpack a string with 1-byte length prefix."""
-        length = data[offset]
-        offset += 1
-        s_bytes = data[offset:offset + length]
-        offset += length
-        return s_bytes.decode('utf-8'), offset
-
     def encrypt_microbatch_to_pgp_hostpay1_token(
         self,
         batch_conversion_id: str,
