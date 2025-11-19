@@ -4,11 +4,11 @@
 Flask REST API (no templates, JSON-only responses)
 
 Architecture:
-- TypeScript + React SPA frontend (PGP_WEB_v1)
-- Flask REST API backend (this service)
+- Standalone REST API backend (no frontend - PGP_WEB_v1 removed as ghost service)
 - PostgreSQL database (Cloud SQL)
 - JWT authentication (stateless)
-- CORS-enabled for SPA
+- CORS-enabled for future frontend integration
+- Can be called directly via API clients (Postman, curl, etc.)
 
 Deployment:
 - Cloud Run (serverless)
@@ -167,8 +167,8 @@ def root():
             }
         },
         'documentation': 'See GCREGISTER_MODERNIZATION_ARCHITECTURE.md',
-        'frontend': 'PGP_WEB_v1 (Cloud Storage + CDN)',
-        'cors': 'Enabled for www.paygateprime.com'
+        'frontend': 'None (standalone API - PGP_WEB_v1 removed)',
+        'cors': 'Enabled for future frontend integration'
     }), 200
 
 

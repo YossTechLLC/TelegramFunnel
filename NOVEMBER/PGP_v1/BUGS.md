@@ -1,6 +1,73 @@
 # Bug Tracker - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-16 - OWASP Security Analysis
+**Last Updated:** 2025-11-18 - **Race Condition Fix in PGP_BATCHPROCESSOR_v1** ✅
+
+---
+
+## Recently Fixed Bugs
+
+## 2025-11-18: 🐛 FIXED - Race Condition in PGP_BATCHPROCESSOR_v1 Threshold Detection
+
+**Bug ID:** RACE-001
+**Severity:** 🟡 MEDIUM (Data Integrity Issue)
+**Status:** ✅ FIXED
+**Discovered:** 2025-11-18 during PGP_THRESHOLD_REVIEW.md analysis
+**Fixed:** 2025-11-18
+
+**Description:**
+PGP_BATCHPROCESSOR_v1's `find_clients_over_threshold()` query was missing a check for `is_conversion_complete`, creating a race condition where batch payouts could be triggered before PGP_MICROBATCHPROCESSOR_v1 completed ETH→USDT conversion.
+
+**Impact:**
+- Batch payouts attempted with unconverted payments (accumulated_amount_usdt = NULL or 0)
+- Threshold calculations incorrect (summing NULL values)
+- Potential failed payouts due to insufficient USDT balance
+- Data integrity issue in payout processing
+
+**Race Condition Scenario:**
+```
+1. Payment received → PGP_ORCHESTRATOR writes to payout_accumulation
+   - is_conversion_complete = FALSE
+   - accumulated_amount_usdt = NULL (not yet converted)
+
+2. PGP_BATCHPROCESSOR runs (every 5 minutes)
+   - Query: WHERE is_paid_out = FALSE (MISSING: AND is_conversion_complete = TRUE)
+   - Finds payment with accumulated_amount_usdt = NULL
+   - Attempts to trigger payout → FAILS (no USDT available)
+
+3. PGP_MICROBATCHPROCESSOR runs (every 15 minutes)
+   - Converts ETH → USDT
+   - Updates is_conversion_complete = TRUE
+   - Sets accumulated_amount_usdt = actual value
+```
+
+**Root Cause:**
+Missing WHERE clause condition in SQL query at `PGP_BATCHPROCESSOR_v1/database_manager.py:102`
+
+**Fix Applied:**
+```sql
+-- OLD (BUGGY):
+WHERE pa.is_paid_out = FALSE
+
+-- NEW (FIXED):
+WHERE pa.is_paid_out = FALSE
+  AND pa.is_conversion_complete = TRUE
+```
+
+**Location:**
+- File: `PGP_BATCHPROCESSOR_v1/database_manager.py`
+- Function: `find_clients_over_threshold()`
+- Line: 105
+
+**Verification:**
+- ✅ SQL syntax validated
+- ✅ Query now filters for completed conversions only
+- ✅ Race condition window eliminated
+- ✅ Threshold calculations now use actual USDT amounts
+
+**Related Changes:**
+- Part of PGP_ACCUMULATOR_v1 removal migration (see PROGRESS.md)
+- Identified in THINK/AUTO/PGP_THRESHOLD_REVIEW.md analysis
+- Aligns with two-phase architecture (MICROBATCH → BATCH)
 
 ---
 

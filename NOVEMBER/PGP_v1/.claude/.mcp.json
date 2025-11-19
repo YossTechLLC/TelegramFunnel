@@ -8,22 +8,33 @@
         "@upstash/context7-mcp"
       ],
       "env": {}
-		},
-        "playwright": {
+    },
+    "playwright": {
       "type": "stdio",
       "command": "npx",
       "args": [
+        "-y",
         "@playwright/mcp@latest"
       ],
       "env": {}
     },
     "gcloud": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@google-cloud/gcloud-mcp"]
+      "args": [
+        "-y",
+        "@google-cloud/gcloud-mcp"
+      ],
+      "env": {}
     },
     "observability": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@google-cloud/observability-mcp"]
+      "args": [
+        "-y",
+        "@google-cloud/observability-mcp"
+      ],
+      "env": {}
     }
   }
 }

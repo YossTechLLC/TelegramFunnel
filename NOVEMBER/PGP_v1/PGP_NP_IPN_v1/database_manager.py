@@ -6,6 +6,13 @@ Handles database connections and operations for private_channel_users_database t
 from datetime import datetime
 from typing import Optional
 from PGP_COMMON.database import BaseDatabaseManager
+from PGP_COMMON.utils import (
+    ValidationError,
+    validate_telegram_user_id,
+    validate_telegram_channel_id,
+    validate_payment_id,
+    validate_crypto_amount
+)
 
 
 class DatabaseManager(BaseDatabaseManager):
@@ -77,7 +84,16 @@ class DatabaseManager(BaseDatabaseManager):
                 user_id_str = prefix_and_user[4:]  # Remove 'PGP-' prefix
                 user_id = int(user_id_str)
                 open_channel_id = int(channel_id_str)  # Preserves negative sign
-                print(f"✅ [PARSE] New format detected")
+
+                # ✅ VALIDATE IDS AFTER PARSING
+                try:
+                    user_id = validate_telegram_user_id(user_id, field_name="order_id user_id")
+                    open_channel_id = validate_telegram_channel_id(open_channel_id, field_name="order_id channel_id")
+                except ValidationError as e:
+                    print(f"❌ [PARSE] Validation failed: {e}")
+                    return None, None
+
+                print(f"✅ [PARSE] New format detected and validated")
                 print(f"   User ID: {user_id}")
                 print(f"   Open Channel ID: {open_channel_id}")
                 return user_id, open_channel_id
@@ -93,7 +109,16 @@ class DatabaseManager(BaseDatabaseManager):
                 channel_id = int(parts[2])
                 # FIX: Add negative sign back (all Telegram channels are negative)
                 open_channel_id = -abs(channel_id)
-                print(f"⚠️ [PARSE] Old format detected - added negative sign")
+
+                # ✅ VALIDATE IDS AFTER PARSING
+                try:
+                    user_id = validate_telegram_user_id(user_id, field_name="order_id user_id")
+                    open_channel_id = validate_telegram_channel_id(open_channel_id, field_name="order_id channel_id")
+                except ValidationError as e:
+                    print(f"❌ [PARSE] Validation failed: {e}")
+                    return None, None
+
+                print(f"⚠️ [PARSE] Old format detected - added negative sign and validated")
                 print(f"   User ID: {user_id}")
                 print(f"   Open Channel ID: {open_channel_id} (corrected from {channel_id})")
                 return user_id, open_channel_id
@@ -136,6 +161,44 @@ class DatabaseManager(BaseDatabaseManager):
             print(f"📝 [DATABASE] Parsed order_id successfully:")
             print(f"   User ID: {user_id}")
             print(f"   Open Channel ID: {open_channel_id}")
+
+            # ✅ VALIDATE PAYMENT DATA BEFORE DATABASE OPERATIONS
+            try:
+                # Validate payment_id if present
+                if 'payment_id' in payment_data and payment_data.get('payment_id'):
+                    validated_payment_id = validate_payment_id(
+                        payment_data.get('payment_id'),
+                        field_name="payment_id"
+                    )
+                    payment_data['payment_id'] = validated_payment_id
+
+                # Validate amounts if present
+                if 'pay_amount' in payment_data and payment_data.get('pay_amount') is not None:
+                    validated_pay_amount = validate_crypto_amount(
+                        payment_data.get('pay_amount'),
+                        field_name="pay_amount"
+                    )
+                    payment_data['pay_amount'] = validated_pay_amount
+
+                if 'outcome_amount' in payment_data and payment_data.get('outcome_amount') is not None:
+                    validated_outcome_amount = validate_crypto_amount(
+                        payment_data.get('outcome_amount'),
+                        field_name="outcome_amount"
+                    )
+                    payment_data['outcome_amount'] = validated_outcome_amount
+
+                if 'price_amount' in payment_data and payment_data.get('price_amount') is not None:
+                    validated_price_amount = validate_crypto_amount(
+                        payment_data.get('price_amount'),
+                        field_name="price_amount"
+                    )
+                    payment_data['price_amount'] = validated_price_amount
+
+                print(f"✅ [DATABASE] Payment data validated successfully")
+
+            except ValidationError as e:
+                print(f"❌ [DATABASE] Payment data validation failed: {e}")
+                return False
 
             conn = self.get_connection()
             if not conn:

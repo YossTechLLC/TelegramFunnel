@@ -15,7 +15,8 @@ from PGP_COMMON.utils import (
     CryptoPricingClient,
     verify_sha512_signature,
     sanitize_error_for_user,
-    create_error_response
+    create_error_response,
+    IdempotencyManager
 )
 
 from PGP_COMMON.logging import setup_logger
@@ -126,6 +127,7 @@ PGP_ORCHESTRATOR_URL = (os.getenv('PGP_ORCHESTRATOR_URL') or '').strip() or None
 # 🆕 PGP_NOTIFICATIONS URL for payment notifications (PGP_NOTIFICATIONS_REFACTORING_ARCHITECTURE)
 GCNOTIFICATIONSERVICE_URL = (os.getenv('GCNOTIFICATIONSERVICE_URL') or '').strip() or None
 
+logger.debug(f"📊 [CONFIG] Cloud Tasks Configuration Status:")
 logger.error(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
 logger.error(f"   CLOUD_TASKS_LOCATION: {'✅ Loaded' if CLOUD_TASKS_LOCATION else '❌ Missing'}")
 logger.error(f"   PGP_ORCHESTRATOR_QUEUE: {'✅ Loaded' if PGP_ORCHESTRATOR_QUEUE else '❌ Missing'}")
@@ -176,6 +178,21 @@ if all([CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWO
 else:
     logger.warning(f"⚠️ [DATABASE] Skipping DatabaseManager initialization - missing credentials")
 
+# ============================================================================
+# IDEMPOTENCY MANAGER INITIALIZATION
+# ============================================================================
+# Initialize atomic idempotency manager (prevents race conditions in payment processing)
+idempotency_manager = None
+if db_manager:
+    try:
+        idempotency_manager = IdempotencyManager(db_manager)
+        logger.info(f"✅ [IDEMPOTENCY] IdempotencyManager initialized")
+        logger.info(f"🔒 [IDEMPOTENCY] Atomic payment processing enabled (prevents duplicates)")
+    except Exception as e:
+        logger.error(f"❌ [IDEMPOTENCY] Failed to initialize IdempotencyManager: {e}", exc_info=True)
+        logger.warning(f"⚠️ [IDEMPOTENCY] Race condition protection disabled - proceed with caution!")
+else:
+    logger.warning(f"⚠️ [IDEMPOTENCY] Skipping IdempotencyManager initialization - db_manager not available")
 
 # ============================================================================
 # DATABASE FUNCTIONS - MOVED TO database_manager.py
@@ -420,85 +437,61 @@ def handle_ipn():
                         conn.close()
 
                         # ============================================================================
-                        # IDEMPOTENCY CHECK: Prevent duplicate payment processing
+                        # ATOMIC IDEMPOTENCY CHECK: Prevent duplicate payment processing
                         # ============================================================================
+                        # Uses IdempotencyManager for race-free payment processing.
+                        # The check_and_claim_processing() method uses INSERT...ON CONFLICT to
+                        # atomically claim processing rights, eliminating TOCTOU vulnerabilities.
 
                         nowpayments_payment_id = payment_data['payment_id']
 
                         logger.debug(f"🔍 [IDEMPOTENCY] Checking if payment {nowpayments_payment_id} already processed...")
 
-                        try:
-                            # Query database to check if payment already processed
-                            conn_check = get_db_connection()
-                            if conn_check:
-                                cur_check = conn_check.cursor()
+                        if not idempotency_manager:
+                            logger.warning(f"⚠️ [IDEMPOTENCY] IdempotencyManager not available - skipping idempotency check")
+                            logger.warning(f"⚠️ [IDEMPOTENCY] Race condition protection disabled (fail-open mode)")
+                        else:
+                            try:
+                                # ✅ ATOMIC CHECK: Try to claim processing (INSERT...ON CONFLICT)
+                                can_process, existing_data = idempotency_manager.check_and_claim_processing(
+                                    payment_id=nowpayments_payment_id,
+                                    user_id=user_id,
+                                    channel_id=closed_channel_id,
+                                    service_column='pgp_orchestrator_processed'
+                                )
 
-                                cur_check.execute("""
-                                    SELECT
-                                        pgp_orchestrator_processed,
-                                        telegram_invite_sent,
-                                        telegram_invite_sent_at
-                                    FROM processed_payments
-                                    WHERE payment_id = %s
-                                """, (nowpayments_payment_id,))
-
-                                existing_payment = cur_check.fetchone()
-
-                                cur_check.close()
-                                conn_check.close()
-
-                                if existing_payment and existing_payment[0]:  # pgp_orchestrator_processed = TRUE
+                                if not can_process:
+                                    # Another request already processed this payment
                                     logger.info(f"✅ [IDEMPOTENCY] Payment {nowpayments_payment_id} already processed")
-                                    logger.info(f"   PGP_ORCHESTRATOR_v1 processed: TRUE")
-                                    logger.info(f"   Telegram invite sent: {existing_payment[1]}")
-                                    if existing_payment[2]:
-                                        logger.info(f"   Invite sent at: {existing_payment[2]}")
+                                    logger.info(f"   Service: pgp_orchestrator_processed = TRUE")
+                                    if existing_data:
+                                        logger.info(f"   Payment status: {existing_data.get('payment_status')}")
+                                        logger.info(f"   Telegram invite sent: {existing_data.get('telegram_invite_sent')}")
+                                        logger.info(f"   Created at: {existing_data.get('created_at')}")
 
                                     # Already processed - return success without re-enqueueing
                                     logger.info(f"✅ [IPN] IPN acknowledged (payment already handled)")
                                     return jsonify({
                                         "status": "success",
                                         "message": "IPN processed (already handled)",
-                                        "payment_id": nowpayments_payment_id
+                                        "payment_id": nowpayments_payment_id,
+                                        "already_processed": True
                                     }), 200
 
-                                elif existing_payment:
-                                    # Record exists but not fully processed
-                                    logger.warning(f"⚠️ [IDEMPOTENCY] Payment {nowpayments_payment_id} record exists but processing incomplete")
-                                    logger.info(f"   PGP_ORCHESTRATOR_v1 processed: {existing_payment[0]}")
-                                    logger.info(f"   Will allow re-processing to complete")
-                                else:
-                                    # No existing record - first time processing
-                                    logger.debug(f"🆕 [IDEMPOTENCY] Payment {nowpayments_payment_id} is new - creating processing record")
+                                # ✅ We won the race - safe to process
+                                logger.info(f"🆕 [IDEMPOTENCY] Claimed processing for payment {nowpayments_payment_id}")
+                                logger.info(f"🔒 [IDEMPOTENCY] Atomic lock acquired - safe to proceed")
 
-                                    # Insert initial record (prevents race conditions)
-                                    conn_insert = get_db_connection()
-                                    if conn_insert:
-                                        cur_insert = conn_insert.cursor()
-
-                                        cur_insert.execute("""
-                                            INSERT INTO processed_payments (payment_id, user_id, channel_id)
-                                            VALUES (%s, %s, %s)
-                                            ON CONFLICT (payment_id) DO NOTHING
-                                        """, (nowpayments_payment_id, user_id, closed_channel_id))
-
-                                        conn_insert.commit()
-                                        cur_insert.close()
-                                        conn_insert.close()
-
-                                        logger.info(f"✅ [IDEMPOTENCY] Created processing record for payment {nowpayments_payment_id}")
-                                    else:
-                                        logger.warning(f"⚠️ [IDEMPOTENCY] Failed to create processing record (DB connection failed)")
-                                        logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
-                            else:
-                                logger.warning(f"⚠️ [IDEMPOTENCY] Database connection failed - cannot check idempotency")
+                            except ValueError as e:
+                                # Input validation failed
+                                logger.error(f"❌ [IDEMPOTENCY] Validation error: {e}", exc_info=True)
+                                logger.warning(f"⚠️ [IDEMPOTENCY] Invalid payment data - proceeding with caution")
+                            except Exception as e:
+                                # Unexpected error during idempotency check
+                                logger.error(f"❌ [IDEMPOTENCY] Error during atomic check: {e}", exc_info=True)
+                                import traceback
+                                traceback.print_exc()
                                 logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
-
-                        except Exception as e:
-                            logger.error(f"❌ [IDEMPOTENCY] Error during idempotency check: {e}", exc_info=True)
-                            import traceback
-                            traceback.print_exc()
-                            logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
 
                         logger.info(f"🚀 [ORCHESTRATION] Proceeding to enqueue payment to PGP_ORCHESTRATOR_v1...")
 
@@ -570,8 +563,7 @@ def handle_ipn():
                                                     # Query tier prices from main_clients_database to determine tier
                                                     tier = 1  # Default
                                                     try:
-                                                        conn_tiers = get_db_connection()
-                                                        if conn_tiers:
+                                                        with db_manager.get_connection() as conn_tiers:
                                                             cur_tiers = conn_tiers.cursor()
                                                             cur_tiers.execute("""
                                                                 SELECT sub_1_price, sub_2_price, sub_3_price
@@ -580,23 +572,22 @@ def handle_ipn():
                                                             """, (str(open_channel_id),))
                                                             tier_prices = cur_tiers.fetchone()
                                                             cur_tiers.close()
-                                                            conn_tiers.close()
 
-                                                            if tier_prices:
-                                                                # Convert subscription_price to Decimal for comparison
-                                                                from decimal import Decimal
-                                                                subscription_price_decimal = Decimal(subscription_price)
+                                                        if tier_prices:
+                                                            # Convert subscription_price to Decimal for comparison
+                                                            from decimal import Decimal
+                                                            subscription_price_decimal = Decimal(subscription_price)
 
-                                                                # Match price to determine tier
-                                                                if tier_prices[1] and subscription_price_decimal == tier_prices[1]:
-                                                                    tier = 2
-                                                                elif tier_prices[2] and subscription_price_decimal == tier_prices[2]:
-                                                                    tier = 3
-                                                                # else tier = 1 (already set)
+                                                            # Match price to determine tier
+                                                            if tier_prices[1] and subscription_price_decimal == tier_prices[1]:
+                                                                tier = 2
+                                                            elif tier_prices[2] and subscription_price_decimal == tier_prices[2]:
+                                                                tier = 3
+                                                            # else tier = 1 (already set)
 
-                                                                logger.info(f"🎯 [NOTIFICATION] Determined tier: {tier} (price: ${subscription_price})")
-                                                            else:
-                                                                logger.warning(f"⚠️ [NOTIFICATION] Could not fetch tier prices, defaulting to tier 1")
+                                                            logger.info(f"🎯 [NOTIFICATION] Determined tier: {tier} (price: ${subscription_price})")
+                                                        else:
+                                                            logger.warning(f"⚠️ [NOTIFICATION] Could not fetch tier prices, defaulting to tier 1")
                                                     except Exception as e:
                                                         logger.error(f"❌ [NOTIFICATION] Error determining tier: {e}", exc_info=True)
                                                         logger.warning(f"⚠️ [NOTIFICATION] Defaulting to tier 1")

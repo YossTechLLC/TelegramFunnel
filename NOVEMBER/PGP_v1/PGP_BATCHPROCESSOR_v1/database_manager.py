@@ -88,6 +88,8 @@ class DatabaseManager(BaseDatabaseManager):
                 print(f"🔍 [DATABASE DEBUG]   Client {row[0]}: ${row[1]} / ${row[3]} (over: {is_over})")
 
             # Main query with HAVING clause
+            # CRITICAL FIX: Added is_conversion_complete = TRUE check to prevent race condition
+            # This ensures we only process payments that have been converted to USDT
             cur.execute(
                 """SELECT
                     pa.client_id,
@@ -100,6 +102,7 @@ class DatabaseManager(BaseDatabaseManager):
                 FROM payout_accumulation pa
                 JOIN main_clients_database mc ON pa.client_id = mc.closed_channel_id
                 WHERE pa.is_paid_out = FALSE
+                  AND pa.is_conversion_complete = TRUE
                 GROUP BY
                     pa.client_id,
                     pa.client_wallet_address,

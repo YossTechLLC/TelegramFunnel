@@ -14,7 +14,15 @@ from flask import Flask, request, abort, jsonify
 from PGP_COMMON.logging import setup_logger
 
 # Import security utilities (C-07 fix)
-from PGP_COMMON.utils import sanitize_error_for_user, create_error_response
+from PGP_COMMON.utils import (
+    sanitize_error_for_user,
+    create_error_response,
+    IdempotencyManager,
+    ValidationError,
+    validate_telegram_user_id,
+    validate_telegram_channel_id,
+    validate_payment_id
+)
 
 # Import service modules
 from config_manager import ConfigManager
@@ -58,6 +66,19 @@ try:
 except Exception as e:
     logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     db_manager = None
+
+# Initialize idempotency manager (prevents race conditions in payment processing)
+idempotency_manager = None
+if db_manager:
+    try:
+        idempotency_manager = IdempotencyManager(db_manager)
+        logger.info("✅ [APP] IdempotencyManager initialized")
+        logger.info("🔒 [APP] Atomic payment processing enabled (prevents duplicates)")
+    except Exception as e:
+        logger.error(f"❌ [APP] Failed to initialize IdempotencyManager: {e}", exc_info=True)
+        logger.warning("⚠️ [APP] Race condition protection disabled - proceed with caution!")
+else:
+    logger.warning("⚠️ [APP] Skipping IdempotencyManager initialization - db_manager not available")
 
 # Initialize Cloud Tasks client
 try:
@@ -239,49 +260,82 @@ def process_validated_payment():
             abort(400, "Missing payment data")
 
         # ============================================================================
-        # IDEMPOTENCY CHECK: Verify payment not already processed
+        # INPUT VALIDATION: Validate all inputs BEFORE any processing (C-03 fix)
+        # ============================================================================
+        try:
+            # Validate payment_id
+            nowpayments_payment_id = validate_payment_id(
+                payment_data.get('nowpayments_payment_id'),
+                field_name="nowpayments_payment_id"
+            )
+
+            # Validate user_id
+            user_id = validate_telegram_user_id(
+                payment_data.get('user_id'),
+                field_name="user_id"
+            )
+
+            # Validate closed_channel_id
+            closed_channel_id = validate_telegram_channel_id(
+                payment_data.get('closed_channel_id'),
+                field_name="closed_channel_id"
+            )
+
+            logger.info(f"✅ [VALIDATED] Input validation passed")
+            logger.info(f"   Payment ID: {nowpayments_payment_id}")
+            logger.info(f"   User ID: {user_id}")
+            logger.info(f"   Channel ID: {closed_channel_id}")
+
+        except ValidationError as e:
+            logger.error(f"❌ [VALIDATED] Input validation failed: {e}", exc_info=True)
+            abort(400, f"Invalid request parameters: {e}")
+
+        # ============================================================================
+        # IDEMPOTENCY CHECK: Atomic check using IdempotencyManager
         # ============================================================================
 
-        # Extract payment_id early for idempotency check
-        nowpayments_payment_id = payment_data.get('nowpayments_payment_id')
-
-        if not nowpayments_payment_id:
-            logger.error(f"❌ [VALIDATED] Missing nowpayments_payment_id", exc_info=True)
-            abort(400, "Missing payment_id for idempotency tracking")
-
         logger.debug("")
-        logger.debug(f"🔍 [IDEMPOTENCY] Atomically checking and marking payment {nowpayments_payment_id}...")
+        logger.debug(f"🔍 [IDEMPOTENCY] Checking if payment {nowpayments_payment_id} already processed...")
 
-        if not db_manager:
-            logger.warning(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
-            logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
+        if not idempotency_manager:
+            logger.warning(f"⚠️ [IDEMPOTENCY] IdempotencyManager not available - skipping idempotency check")
+            logger.warning(f"⚠️ [IDEMPOTENCY] Race condition protection disabled (fail-open mode)")
         else:
             try:
-                # Use atomic UPSERT to prevent race conditions (C-04 fix)
-                is_new_payment = db_manager.mark_payment_processed_atomic(
+                # ✅ ATOMIC CHECK: Try to claim processing (INSERT...ON CONFLICT)
+                can_process, existing_data = idempotency_manager.check_and_claim_processing(
                     payment_id=nowpayments_payment_id,
-                    service_name='pgp_orchestrator'
+                    user_id=user_id,
+                    channel_id=closed_channel_id,
+                    service_column='pgp_orchestrator_processed'
                 )
 
-                if not is_new_payment:
-                    # Payment already processed by another request (race condition prevented)
-                    logger.info(f"✅ [IDEMPOTENCY] Payment already processed (atomic check)")
-                    logger.info(f"   Payment ID: {nowpayments_payment_id}")
-                    logger.info(f"🎉 [VALIDATED] Returning success (duplicate prevented)")
+                if not can_process:
+                    # Another request already processed this payment
+                    logger.info(f"✅ [IDEMPOTENCY] Payment {nowpayments_payment_id} already processed")
+                    logger.info(f"   Service: pgp_orchestrator_processed = TRUE")
+                    if existing_data:
+                        logger.info(f"   Payment status: {existing_data.get('payment_status')}")
+                        logger.info(f"   Telegram invite sent: {existing_data.get('telegram_invite_sent')}")
+                        logger.info(f"   Created at: {existing_data.get('created_at')}")
                     logger.info(f"=" * 80)
 
                     return jsonify({
                         "status": "success",
-                        "message": "Payment already processed",
-                        "payment_id": nowpayments_payment_id
+                        "message": "Payment already processed (idempotency check)",
+                        "payment_id": nowpayments_payment_id,
+                        "already_processed": True
                     }), 200
-                else:
-                    logger.info(f"🆕 [IDEMPOTENCY] Payment atomically marked as processing - proceeding...")
 
+                # ✅ We won the race - safe to process
+                logger.info(f"🆕 [IDEMPOTENCY] Claimed processing for payment {nowpayments_payment_id}")
+                logger.info(f"🔒 [IDEMPOTENCY] Atomic lock acquired - safe to proceed")
+
+            except ValueError as e:
+                logger.error(f"❌ [IDEMPOTENCY] Validation error: {e}", exc_info=True)
+                logger.warning(f"⚠️ [IDEMPOTENCY] Invalid payment data - proceeding with caution")
             except Exception as e:
-                logger.warning(f"⚠️ [IDEMPOTENCY] Error in atomic payment check: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"❌ [IDEMPOTENCY] Error during atomic check: {e}", exc_info=True)
                 logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with processing (fail-open mode)")
 
         logger.debug("")
@@ -323,9 +377,7 @@ def process_validated_payment():
         logger.info(f"✅ [GCWEBHOOK1] Proceeding with instant/threshold routing")
         logger.info(f"=" * 80)
 
-        # Extract all required fields
-        user_id = payment_data.get('user_id')
-        closed_channel_id = payment_data.get('closed_channel_id')
+        # Extract remaining required fields (user_id, closed_channel_id, payment_id already extracted for idempotency)
         wallet_address = payment_data.get('wallet_address')
         payout_currency = payment_data.get('payout_currency')
         payout_network = payment_data.get('payout_network')
@@ -335,22 +387,17 @@ def process_validated_payment():
         # CRITICAL: This is the ACTUAL outcome amount in USD from CoinGecko
         outcome_amount_usd = payment_data.get('outcome_amount_usd')
 
-        # NowPayments metadata (payment_id already extracted for idempotency check)
+        # NowPayments metadata
         nowpayments_pay_address = payment_data.get('nowpayments_pay_address')
         nowpayments_outcome_amount = payment_data.get('nowpayments_outcome_amount')
 
-        # Normalize types immediately after extraction (defensive coding)
-        # JSON can send integers as strings, so convert to proper types
+        # Normalize types for subscription_time_days (user_id and closed_channel_id already normalized)
         try:
-            user_id = int(user_id) if user_id is not None else None
-            closed_channel_id = int(closed_channel_id) if closed_channel_id is not None else None
             subscription_time_days = int(subscription_time_days) if subscription_time_days is not None else None
         except (ValueError, TypeError) as e:
-            logger.error(f"❌ [VALIDATED] Type conversion error for integer fields: {e}", exc_info=True)
-            logger.info(f"   user_id: {payment_data.get('user_id')} (type: {type(payment_data.get('user_id'))})")
-            logger.info(f"   closed_channel_id: {payment_data.get('closed_channel_id')} (type: {type(payment_data.get('closed_channel_id'))})")
+            logger.error(f"❌ [VALIDATED] Type conversion error for subscription_time_days: {e}", exc_info=True)
             logger.info(f"   subscription_time_days: {payment_data.get('subscription_time_days')} (type: {type(payment_data.get('subscription_time_days'))})")
-            abort(400, f"Invalid integer field types: {e}")
+            abort(400, f"Invalid subscription_time_days type: {e}")
 
         logger.debug("")
         logger.info(f"✅ [VALIDATED] Payment Data Received:")
@@ -387,45 +434,57 @@ def process_validated_payment():
 
         if payout_mode == "threshold":
             logger.info(f"🎯 [VALIDATED] Threshold payout mode - ${payout_threshold} threshold")
-            logger.info(f"📊 [VALIDATED] Routing to PGP_ACCUMULATOR for accumulation")
+            logger.info(f"📊 [VALIDATED] Processing accumulation inline (PGP_ACCUMULATOR_v1 removed)")
 
             # Get subscription ID for accumulation record
             subscription_id = db_manager.get_subscription_id(user_id, closed_channel_id)
 
-            # Get PGP_ACCUMULATOR configuration
-            pgp_accumulator_queue = config.get('pgp_accumulator_queue')
-            pgp_accumulator_url = config.get('pgp_accumulator_url')
+            # ========================================================================
+            # INLINE ACCUMULATION LOGIC (moved from PGP_ACCUMULATOR_v1)
+            # ========================================================================
+            # Calculate adjusted amount (remove TP fee - same as PGP_ACCUMULATOR did)
+            from decimal import Decimal
 
-            if not pgp_accumulator_queue or not pgp_accumulator_url:
-                logger.error(f"❌ [VALIDATED] PGP_ACCUMULATOR configuration missing", exc_info=True)
-                abort(500, "PGP_ACCUMULATOR configuration error")
+            tp_flat_fee = Decimal('3')  # 3% TelePay fee
+            fee_amount = Decimal(str(outcome_amount_usd)) * (tp_flat_fee / Decimal('100'))
+            adjusted_amount_usd = Decimal(str(outcome_amount_usd)) - fee_amount
 
-            # Queue to PGP_ACCUMULATOR with ACTUAL outcome amount
             logger.debug("")
-            logger.info(f"🚀 [VALIDATED] Queuing to PGP_ACCUMULATOR...")
-            logger.info(f"   💰 Using ACTUAL outcome: ${outcome_amount_usd} (not ${subscription_price})")
+            logger.info(f"💸 [VALIDATED] Calculating accumulation (inline)")
+            logger.info(f"   💰 Original amount: ${outcome_amount_usd}")
+            logger.info(f"   💸 TP fee ({tp_flat_fee}%): ${fee_amount}")
+            logger.info(f"   ✅ Adjusted amount: ${adjusted_amount_usd}")
 
-            task_name = cloudtasks_client.enqueue_pgp_accumulator_payment(
-                queue_name=pgp_accumulator_queue,
-                target_url=pgp_accumulator_url,
-                user_id=user_id,
+            # Store accumulated_eth (the adjusted USD amount pending conversion)
+            accumulated_eth = adjusted_amount_usd
+
+            logger.info(f"💾 [VALIDATED] Writing to payout_accumulation table directly")
+
+            # Write to payout_accumulation table using PGP_COMMON method
+            accumulation_id = db_manager.insert_payout_accumulation_pending(
                 client_id=closed_channel_id,
-                wallet_address=wallet_address,
-                payout_currency=payout_currency,
-                payout_network=payout_network,
-                subscription_price=outcome_amount_usd,  # ✅ ACTUAL USD amount
+                user_id=user_id,
                 subscription_id=subscription_id,
+                payment_amount_usd=outcome_amount_usd,
+                payment_currency='usd',
+                payment_timestamp=datetime.now().isoformat(),
+                accumulated_eth=accumulated_eth,
+                client_wallet_address=wallet_address,
+                client_payout_currency=payout_currency,
+                client_payout_network=payout_network,
                 nowpayments_payment_id=nowpayments_payment_id,
                 nowpayments_pay_address=nowpayments_pay_address,
                 nowpayments_outcome_amount=nowpayments_outcome_amount
             )
 
-            if task_name:
-                logger.info(f"✅ [VALIDATED] Successfully enqueued to PGP_ACCUMULATOR")
-                logger.info(f"🆔 [VALIDATED] Task: {task_name}")
-            else:
-                logger.error(f"❌ [VALIDATED] Failed to enqueue to PGP_ACCUMULATOR", exc_info=True)
-                abort(500, "Failed to enqueue to PGP_ACCUMULATOR")
+            if not accumulation_id:
+                logger.error(f"❌ [VALIDATED] Failed to insert accumulation record", exc_info=True)
+                abort(500, "Failed to store payment accumulation")
+
+            logger.info(f"✅ [VALIDATED] Payment accumulated successfully (inline)")
+            logger.info(f"🆔 [VALIDATED] Accumulation ID: {accumulation_id}")
+            logger.info(f"⏳ [VALIDATED] Awaiting micro-batch conversion by PGP_MICROBATCHPROCESSOR_v1")
+            # ========================================================================
 
         else:  # instant payout
             logger.info(f"⚡ [VALIDATED] Instant payout mode - processing immediately")

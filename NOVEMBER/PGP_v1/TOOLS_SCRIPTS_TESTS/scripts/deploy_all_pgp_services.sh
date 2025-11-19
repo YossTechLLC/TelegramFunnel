@@ -1,9 +1,9 @@
 #!/bin/bash
 ################################################################################
 # Master Deployment Script for All PGP_v1 Services
-# Purpose: Deploy all 17 PayGatePrime services to Google Cloud Run
-# Version: 1.0.0
-# Date: 2025-01-15
+# Purpose: Deploy all 15 PayGatePrime services to Google Cloud Run
+# Version: 1.2.0
+# Date: 2025-11-18 (Updated: PGP_WEB_v1 removed - ghost service)
 # ⚠️  DO NOT RUN WITHOUT TESTING IN DEV ENVIRONMENT FIRST!
 ################################################################################
 
@@ -26,7 +26,7 @@ echo -e "${BLUE}================================================================
 echo -e "${BLUE}🚀 PGP_v1 Master Deployment Script${NC}"
 echo -e "${BLUE}======================================================================${NC}"
 echo ""
-echo -e "${YELLOW}⚠️  WARNING: This will deploy all 17 PGP_v1 services!${NC}"
+echo -e "${YELLOW}⚠️  WARNING: This will deploy all 15 PGP_v1 services!${NC}"
 echo ""
 echo "Configuration:"
 echo "   Project ID: $PROJECT_ID"
@@ -156,11 +156,11 @@ echo "========================================="
 deploy_service "pgp-server-v1" "$BASE_DIR/PGP_SERVER_v1" "1Gi" "1" "20" "300" \
     "require" "pgp-server-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 2. Frontend - PUBLIC ACCESS (users need to access without auth)
-deploy_service "pgp-web-v1" "$BASE_DIR/PGP_WEB_v1" "128Mi" "0" "5" "60" \
-    "allow-unauthenticated" "pgp-web-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+# NOTE: PGP_WEB_v1 has been REMOVED (2025-11-18)
+# Service was a ghost service - empty directory with no source code
+# See: THINK/AUTO/PGP_WEB_v1_CLEANUP_CHECKLIST.md, PROGRESS.md (2025-11-18)
 
-# 3. Web API - REQUIRES AUTH (called by frontend with IAM token)
+# 2. Web API - REQUIRES AUTH (standalone REST API, no frontend exists)
 deploy_service "pgp-webapi-v1" "$BASE_DIR/PGP_WEBAPI_v1" "512Mi" "0" "10" "300" \
     "require" "pgp-webapi-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -168,19 +168,19 @@ echo ""
 echo -e "${GREEN}Phase 2: Payment Processing Pipeline${NC}"
 echo "========================================="
 
-# 4. NowPayments IPN - REQUIRES AUTH (webhook via Load Balancer + Cloud Armor)
+# 3. NowPayments IPN - REQUIRES AUTH (webhook via Load Balancer + Cloud Armor)
 deploy_service "pgp-np-ipn-v1" "$BASE_DIR/PGP_NP_IPN_v1" "512Mi" "0" "20" "300" \
     "require" "pgp-np-ipn-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 5. Orchestrator - REQUIRES AUTH (internal service-to-service only)
+# 4. Orchestrator - REQUIRES AUTH (internal service-to-service only)
 deploy_service "pgp-orchestrator-v1" "$BASE_DIR/PGP_ORCHESTRATOR_v1" "512Mi" "0" "20" "300" \
     "require" "pgp-orchestrator-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 6. Invite service - REQUIRES AUTH (internal service-to-service only)
+# 5. Invite service - REQUIRES AUTH (internal service-to-service only)
 deploy_service "pgp-invite-v1" "$BASE_DIR/PGP_INVITE_v1" "512Mi" "0" "10" "300" \
     "require" "pgp-invite-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 7. Split services (3-stage pipeline) - ALL REQUIRE AUTH (internal only)
+# 6. Split services (3-stage pipeline) - ALL REQUIRE AUTH (internal only)
 deploy_service "pgp-split1-v1" "$BASE_DIR/PGP_SPLIT1_v1" "512Mi" "0" "15" "300" \
     "require" "pgp-split1-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 deploy_service "pgp-split2-v1" "$BASE_DIR/PGP_SPLIT2_v1" "512Mi" "0" "15" "300" \
@@ -192,7 +192,7 @@ echo ""
 echo -e "${GREEN}Phase 3: Payout Services${NC}"
 echo "========================================="
 
-# 8. HostPay services (3-stage pipeline) - ALL REQUIRE AUTH (internal only)
+# 7. HostPay services (3-stage pipeline) - ALL REQUIRE AUTH (internal only)
 deploy_service "pgp-hostpay1-v1" "$BASE_DIR/PGP_HOSTPAY1_v1" "512Mi" "0" "15" "300" \
     "require" "pgp-hostpay1-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 deploy_service "pgp-hostpay2-v1" "$BASE_DIR/PGP_HOSTPAY2_v1" "512Mi" "0" "15" "300" \
@@ -204,11 +204,11 @@ echo ""
 echo -e "${GREEN}Phase 4: Batch Processing Services${NC}"
 echo "========================================="
 
-# 9. Accumulator - REQUIRES AUTH (internal only)
-deploy_service "pgp-accumulator-v1" "$BASE_DIR/PGP_ACCUMULATOR_v1" "512Mi" "0" "10" "300" \
-    "require" "pgp-accumulator-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+# NOTE: PGP_ACCUMULATOR_v1 has been REMOVED (2025-11-18)
+# Accumulation logic moved inline to PGP_ORCHESTRATOR_v1
+# See: THINK/AUTO/PGP_THRESHOLD_REVIEW.md, PROGRESS.md (2025-11-18)
 
-# 10. Batch processors - ALL REQUIRE AUTH (internal only)
+# 8. Batch processors - ALL REQUIRE AUTH (internal only)
 deploy_service "pgp-batchprocessor-v1" "$BASE_DIR/PGP_BATCHPROCESSOR_v1" "512Mi" "0" "10" "300" \
     "require" "pgp-batchprocessor-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 deploy_service "pgp-microbatchprocessor-v1" "$BASE_DIR/PGP_MICROBATCHPROCESSOR_v1" "512Mi" "0" "10" "300" \
@@ -218,11 +218,11 @@ echo ""
 echo -e "${GREEN}Phase 5: Notification & Broadcast Services${NC}"
 echo "========================================="
 
-# 11. Notifications - REQUIRES AUTH (internal only)
+# 9. Notifications - REQUIRES AUTH (internal only)
 deploy_service "pgp-notifications-v1" "$BASE_DIR/PGP_NOTIFICATIONS_v1" "512Mi" "0" "10" "300" \
     "require" "pgp-notifications-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# 12. Broadcast scheduler - REQUIRES AUTH (internal only)
+# 10. Broadcast scheduler - REQUIRES AUTH (internal only)
 deploy_service "pgp-broadcast-v1" "$BASE_DIR/PGP_BROADCAST_v1" "512Mi" "1" "5" "300" \
     "require" "pgp-broadcast-v1-sa@${PROJECT_ID}.iam.gserviceaccount.com"
 

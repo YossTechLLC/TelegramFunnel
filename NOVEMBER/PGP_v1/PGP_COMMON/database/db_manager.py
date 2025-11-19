@@ -819,3 +819,107 @@ class BaseDatabaseManager:
             if conn:
                 conn.close()
                 print(f"🔌 [DATABASE] Connection closed")
+
+    def insert_payout_accumulation_pending(
+        self,
+        client_id: str,
+        user_id: int,
+        subscription_id: int,
+        payment_amount_usd,
+        payment_currency: str,
+        payment_timestamp: str,
+        accumulated_eth,
+        client_wallet_address: str,
+        client_payout_currency: str,
+        client_payout_network: str,
+        nowpayments_payment_id: str = None,
+        nowpayments_pay_address: str = None,
+        nowpayments_outcome_amount: str = None
+    ) -> Optional[int]:
+        """
+        Insert a payment accumulation record with pending conversion status.
+
+        This method is used by PGP_ORCHESTRATOR_v1 for threshold-based payouts.
+        Stores payment data in payout_accumulation table awaiting ETH→USDT conversion
+        by PGP_MICROBATCHPROCESSOR_v1.
+
+        Args:
+            client_id: closed_channel_id from main_clients_database (private channel ID)
+            user_id: Telegram user who made payment
+            subscription_id: FK to private_channel_users_database
+            payment_amount_usd: What user originally paid (Decimal or float)
+            payment_currency: Original payment currency
+            payment_timestamp: When user paid
+            accumulated_eth: USD value pending conversion (Decimal or float, parameter name kept for compatibility)
+            client_wallet_address: Client's payout wallet address
+            client_payout_currency: Target currency (e.g., XMR)
+            client_payout_network: Payout network
+            nowpayments_payment_id: NowPayments payment ID (optional, from IPN)
+            nowpayments_pay_address: Customer's payment address (optional, from IPN)
+            nowpayments_outcome_amount: Actual received amount (optional, from IPN)
+
+        Returns:
+            Accumulation ID if successful, None if failed
+        """
+        from decimal import Decimal
+
+        conn = None
+        cur = None
+
+        try:
+            conn = self.get_connection()
+            if not conn:
+                logger.error(f"❌ [{self.service_name}] Failed to establish connection for accumulation insert")
+                return None
+
+            cur = conn.cursor()
+            logger.info(f"💾 [{self.service_name}] Inserting payout accumulation record (pending conversion)")
+            logger.info(f"👤 [{self.service_name}] User ID: {user_id}, Client ID: {client_id}")
+            logger.info(f"💰 [{self.service_name}] Payment Amount: ${payment_amount_usd}")
+            logger.info(f"💰 [{self.service_name}] Accumulated USD: ${accumulated_eth} (pending conversion)")
+
+            if nowpayments_payment_id:
+                logger.info(f"💳 [{self.service_name}] NowPayments Payment ID: {nowpayments_payment_id}")
+                logger.info(f"📬 [{self.service_name}] Pay Address: {nowpayments_pay_address}")
+                logger.info(f"💰 [{self.service_name}] Outcome Amount: {nowpayments_outcome_amount}")
+
+            cur.execute(
+                """INSERT INTO payout_accumulation (
+                    client_id, user_id, subscription_id,
+                    payment_amount_usd, payment_currency, payment_timestamp,
+                    accumulated_eth, is_conversion_complete, is_paid_out,
+                    client_wallet_address, client_payout_currency, client_payout_network,
+                    nowpayments_payment_id, nowpayments_pay_address, nowpayments_outcome_amount
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id""",
+                (
+                    client_id, user_id, subscription_id,
+                    payment_amount_usd, payment_currency, payment_timestamp,
+                    accumulated_eth, False, False,  # is_conversion_complete=FALSE, is_paid_out=FALSE
+                    client_wallet_address, client_payout_currency, client_payout_network,
+                    nowpayments_payment_id, nowpayments_pay_address, nowpayments_outcome_amount
+                )
+            )
+
+            accumulation_id = cur.fetchone()[0]
+            conn.commit()
+
+            logger.info(f"✅ [{self.service_name}] Accumulation record inserted successfully (pending conversion)")
+            logger.info(f"🆔 [{self.service_name}] Accumulation ID: {accumulation_id}")
+
+            if nowpayments_payment_id:
+                logger.info(f"🔗 [{self.service_name}] Linked to NowPayments payment_id: {nowpayments_payment_id}")
+
+            return accumulation_id
+
+        except Exception as e:
+            logger.error(f"❌ [{self.service_name}] Failed to insert accumulation record: {e}", exc_info=True)
+            if conn:
+                conn.rollback()
+            return None
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()

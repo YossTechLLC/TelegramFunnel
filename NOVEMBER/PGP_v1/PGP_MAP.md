@@ -1,8 +1,13 @@
 # PGP_MAP.md - PayGatePrime Architecture Map
 
 **Last Updated:** 2025-11-18
-**Version:** 1.0
+**Version:** 1.2 (Updated: PGP_WEB_v1 removed - ghost service)
 **Purpose:** Comprehensive mapping of all PGP_X_v1 services in the PayGatePrime Telegram payment gateway system
+
+**⚠️ UPDATE (2025-11-18):**
+- **PGP_ACCUMULATOR_v1** has been **REMOVED** - accumulation logic moved inline to PGP_ORCHESTRATOR_v1
+- **PGP_WEB_v1** has been **REMOVED** - ghost service with no source code (empty directory)
+- The service count is now **15 active services** (down from 18). See PROGRESS.md and DECISIONS.md for details.
 
 ---
 
@@ -19,8 +24,7 @@
 │                                                                 │
 │  🤖 USER INTERFACE                                              │
 │  ├── PGP_SERVER_v1         → Main Telegram bot & server        │
-│  ├── PGP_WEB_v1            → React/TypeScript frontend          │
-│  └── PGP_WEBAPI_v1         → REST API backend                  │
+│  └── PGP_WEBAPI_v1         → REST API backend (no frontend)    │
 │                                                                 │
 │  💳 PAYMENT PROCESSING                                          │
 │  ├── PGP_NP_IPN_v1         → NOWPayments webhook handler       │
@@ -28,7 +32,6 @@
 │  └── PGP_INVITE_v1         → Telegram invite sender            │
 │                                                                 │
 │  💰 PAYOUT PIPELINE (Subscription Revenue Split)                │
-│  ├── PGP_ACCUMULATOR_v1    → Payment accumulation              │
 │  ├── PGP_SPLIT1_v1         → Split orchestrator                │
 │  ├── PGP_SPLIT2_v1         → USDT→ETH estimator                │
 │  ├── PGP_SPLIT3_v1         → ETH→Client currency swapper       │
@@ -62,10 +65,12 @@ IPN Webhook (PGP_NP_IPN_v1) → Updates Database
 Success Callback → PGP_ORCHESTRATOR_v1
     ├→ PGP_INVITE_v1 (sends Telegram invite)
     ├→ PGP_NOTIFICATIONS_v1 (notifies channel owner)
-    └→ PGP_ACCUMULATOR_v1 (accumulates for payout)
+    └→ Inline Accumulation (threshold payouts only)
         ↓
-Scheduled Batch Processing (every 5min) → PGP_BATCHPROCESSOR_v1
-    ↓
+Scheduled Batch Processing:
+    ├→ PGP_MICROBATCHPROCESSOR_v1 (ETH→USDT conversion, every 15min)
+    └→ PGP_BATCHPROCESSOR_v1 (threshold payout dispatch, every 5min)
+        ↓
 Payout Pipeline: PGP_SPLIT1_v1 → SPLIT2 → SPLIT3 → HOSTPAY1 → HOSTPAY2 → HOSTPAY3
     ↓
 Final Payment to Channel Owner's Wallet
@@ -116,36 +121,29 @@ Users need a conversational interface to purchase subscriptions, make donations,
 
 ---
 
-### 🌐 PGP_WEB_v1
-**Frontend Web Application (React + TypeScript SPA)**
+### ~~🌐 PGP_WEB_v1~~ (REMOVED 2025-11-18)
+**⚠️ Ghost Service - Empty Directory with No Source Code**
 
-**Location:** `/PGP_WEB_v1/`
-**Build Output:** `dist/`
-**Technology:** React, TypeScript, Vite
+**Status:** REMOVED (archived to `ARCHIVES_PGP_v1/REMOVED_DEAD_CODE/PGP_WEB_v1_REMOVED_20251118/`)
 
-#### Purpose
-Provides a modern web interface for channel owners to register their channels, configure subscription tiers, manage payouts, and view analytics.
+**Removal Rationale:**
+- Service was an **empty directory** containing only:
+  - 1 HTML file referencing non-existent `/src/main.tsx`
+  - 1 `.env.example` with stale reference to old `GCRegisterAPI`
+  - Empty `dist/` directory (no build output)
+  - `node_modules/` with dependencies but **zero source code**
+- **No React/TypeScript files existed** - documentation described planned features that were never implemented
+- Cannot be deployed (no Dockerfile, no source code)
+- No service references or depends on PGP_WEB_v1
 
-#### Why It Exists
-Channel owners need a professional dashboard to manage their monetization settings without using Telegram commands. A web interface provides better UX for complex configuration tasks.
+**Current State:**
+- PGP_WEBAPI_v1 remains as a **standalone REST API** that can be called directly
+- If frontend is needed in future, build new React app and deploy to Cloud Storage/CDN
+- PGP_WEBAPI_v1 already has CORS enabled and JWT authentication for frontend integration
 
-#### Critical Unique Functions
-1. **Channel Registration UI**: Form-based registration workflow
-2. **Subscription Tier Configuration**: Visual editor for pricing tiers
-3. **Payout Configuration**: Wallet address and currency settings
-4. **Analytics Dashboard**: Revenue and subscriber metrics
-5. **Account Management**: Email and password management
+**Cost Savings:** Minimal (eliminated service account overhead, reduced confusion)
 
-#### Key Components
-- `src/components/` - React components
-- `src/services/` - API client services
-- `src/pages/` - Page components
-- JWT authentication
-- CORS-enabled API communication
-
-#### Dependencies
-- Communicates exclusively with PGP_WEBAPI_v1
-- Deployed as static site (Cloud Storage or Cloud Run)
+**See:** `THINK/AUTO/PGP_WEB_v1_CLEANUP_CHECKLIST.md`, `PROGRESS.md` (2025-11-18), `DECISIONS.md` (Decision 14.1)
 
 ---
 
@@ -157,10 +155,10 @@ Channel owners need a professional dashboard to manage their monetization settin
 **Port:** 8080 (Flask)
 
 #### Purpose
-Provides a stateless REST API backend for the PGP_WEB_v1 frontend, handling authentication, channel registration, and account management.
+Provides a stateless REST API backend for channel registration, handling authentication, channel management, and account operations. Currently operates as a **standalone API service** (no frontend exists - PGP_WEB_v1 was removed as ghost service).
 
 #### Why It Exists
-Separating the API backend from the frontend enables independent scaling, better security boundaries, and a clear separation of concerns.
+Provides programmatic access to channel registration and management functionality. Can be called directly via API clients (Postman, curl) or integrated with a future frontend if needed. CORS is already enabled for frontend integration.
 
 #### Critical Unique Functions
 1. **JWT Authentication**: Stateless token-based auth
@@ -332,38 +330,26 @@ Channel owners need to be notified when they receive payments. This service form
 
 ---
 
-### 💰 PGP_ACCUMULATOR_v1
-**Payment Accumulation Service**
+### ~~💰 PGP_ACCUMULATOR_v1~~ (REMOVED 2025-11-18)
+**⚠️ Service Deprecated - Logic Moved Inline to PGP_ORCHESTRATOR_v1**
 
-**Location:** `/PGP_ACCUMULATOR_v1/`
-**Entry Point:** `pgp_accumulator_v1.py`
-**Port:** 8080 (Flask)
+**Status:** REMOVED (archived to `ARCHIVES_PGP_v1/REMOVED_DEAD_CODE/PGP_ACCUMULATOR_v1_REMOVED_20251118/`)
 
-#### Purpose
-Receives payment data from PGP_ORCHESTRATOR_v1, calculates adjusted amounts (after TelePay fee), and stores in `payout_accumulation` table for batching. Queues conversion tasks to PGP_SPLIT2_v1.
+**Removal Rationale:**
+- Service performed only simple fee calculation (3% TelePay fee) and database write
+- No orchestration logic or complex business rules
+- Added ~200-300ms latency overhead from Cloud Task invocation
+- Moved inline to PGP_ORCHESTRATOR_v1 for performance (52 lines of code)
+- Database method centralized to `PGP_COMMON.insert_payout_accumulation_pending()`
 
-#### Why It Exists
-Channel owners receive 97% of subscription revenue (after 3% TelePay fee). Payments must be accumulated until they reach a threshold before processing payouts to minimize transaction fees.
+**Migration:**
+- Fee calculation logic moved inline to PGP_ORCHESTRATOR_v1 (lines 388-440)
+- Database write uses `BaseDatabaseManager.insert_payout_accumulation_pending()` in PGP_COMMON
+- Cloud Task to PGP_SPLIT2_v1 removed (no longer needed - MICROBATCH handles conversion)
 
-#### Critical Unique Functions
-1. **Fee Calculation**: Applies 3% TelePay fee to subscription payments
-2. **Payment Accumulation**: Stores pending payments in `payout_accumulation` table
-3. **Volatility Protection**: Marks payments for ETH→USDT conversion to eliminate volatility
-4. **Task Queuing**: Enqueues Cloud Task to PGP_SPLIT2_v1 for conversion
-5. **Donation Handling**: Bypasses accumulation for donations (100% to channel owner)
+**Cost Savings:** ~$20/month (~$241/year)
 
-#### Key Components
-- **POST /** - Main accumulation endpoint
-- **GET /health** - Health check endpoint
-- Fee calculation logic
-- Database operations for accumulation
-- Cloud Tasks client
-
-#### Dependencies
-- Uses PGP_COMMON for base classes
-- Connects to PostgreSQL database
-- Creates tasks in `pgp-split2-v1-queue`
-- Triggered by Cloud Tasks from PGP_ORCHESTRATOR_v1
+**See:** `THINK/AUTO/PGP_THRESHOLD_REVIEW.md`, `PROGRESS.md` (2025-11-18), `DECISIONS.md` (Decision 13.1)
 
 ---
 
@@ -688,7 +674,7 @@ Channel owners need to send announcements and broadcasts to their subscribers. T
 3. **Message Tracking**: Tracks broadcast status and delivery
 4. **Web API**: REST endpoints for broadcast management
 5. **JWT Authentication**: Secures API endpoints
-6. **CORS Support**: Enables frontend (PGP_WEB_v1) integration
+6. **CORS Support**: Enables potential future frontend integration
 
 #### Key Components
 - `broadcast_scheduler.py` - Scheduling logic

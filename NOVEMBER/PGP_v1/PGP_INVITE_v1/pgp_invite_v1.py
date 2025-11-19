@@ -35,7 +35,15 @@ from token_manager import TokenManager
 from database_manager import DatabaseManager
 
 # Import security utilities (C-07 fix)
-from PGP_COMMON.utils import sanitize_error_for_user, create_error_response
+from PGP_COMMON.utils import (
+    sanitize_error_for_user,
+    create_error_response,
+    IdempotencyManager,
+    ValidationError,
+    validate_telegram_user_id,
+    validate_telegram_channel_id,
+    validate_payment_id
+)
 
 from PGP_COMMON.logging import setup_logger
 logger = setup_logger(__name__)
@@ -63,6 +71,19 @@ except Exception as e:
     logger.error(f"❌ [APP] Failed to initialize database manager: {e}", exc_info=True)
     logger.warning(f"⚠️ [APP] Payment validation will fail without database connection")
     db_manager = None
+
+# Initialize idempotency manager (prevents race conditions in invite sending)
+idempotency_manager = None
+if db_manager:
+    try:
+        idempotency_manager = IdempotencyManager(db_manager)
+        logger.info(f"✅ [APP] IdempotencyManager initialized")
+        logger.info(f"🔒 [APP] Atomic invite tracking enabled (prevents duplicates)")
+    except Exception as e:
+        logger.error(f"❌ [APP] Failed to initialize IdempotencyManager: {e}", exc_info=True)
+        logger.warning(f"⚠️ [APP] Race condition protection disabled - proceed with caution!")
+else:
+    logger.warning(f"⚠️ [APP] Skipping IdempotencyManager initialization - db_manager not available")
 
 # Initialize token manager
 try:
@@ -132,60 +153,7 @@ def send_telegram_invite():
 
         logger.info(f"📋 [ENDPOINT] Payment ID: {payment_id}")
 
-        # ================================================================
-        # IDEMPOTENCY CHECK: Check if invite already sent for this payment
-        # ================================================================
-
-        logger.debug(f"🔍 [IDEMPOTENCY] Checking if invite already sent for payment {payment_id}...")
-
-        if not db_manager:
-            logger.warning(f"⚠️ [IDEMPOTENCY] Database manager not available - cannot check idempotency")
-            logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
-        else:
-            try:
-                conn = db_manager.get_connection()
-                if conn:
-                    cur = conn.cursor()
-                    cur.execute("""
-                        SELECT
-                            telegram_invite_sent,
-                            telegram_invite_link,
-                            telegram_invite_sent_at
-                        FROM processed_payments
-                        WHERE payment_id = %s
-                    """, (payment_id,))
-                    existing_invite = cur.fetchone()
-                    cur.close()
-                    conn.close()
-                else:
-                    existing_invite = None
-
-                if existing_invite and existing_invite[0]:  # telegram_invite_sent is index 0
-                    # Invite already sent - return success without re-sending
-                    # Tuple indexes: 0=telegram_invite_sent, 1=telegram_invite_link, 2=telegram_invite_sent_at
-                    telegram_invite_sent = existing_invite[0]
-                    existing_link = existing_invite[1]
-                    sent_at = existing_invite[2]
-
-                    logger.info(f"✅ [IDEMPOTENCY] Invite already sent for payment {payment_id}")
-                    logger.info(f"   Sent at: {sent_at}")
-                    logger.info(f"   Link: {existing_link}")
-                    logger.info(f"🎉 [ENDPOINT] Returning success (invite already sent)")
-
-                    return jsonify({
-                        "status": "success",
-                        "message": "Telegram invite already sent",
-                        "payment_id": payment_id,
-                        "invite_sent_at": str(sent_at)
-                    }), 200
-                else:
-                    logger.debug(f"🆕 [IDEMPOTENCY] No existing invite found - proceeding to send")
-
-            except Exception as e:
-                logger.warning(f"⚠️ [IDEMPOTENCY] Error checking invite status: {e}", exc_info=True)
-                logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
-
-        # Decrypt token
+        # Decrypt token first to extract user_id and closed_channel_id for idempotency check
         if not token_manager:
             logger.error(f"❌ [ENDPOINT] Token manager not available")
             abort(500, "Service configuration error")
@@ -198,6 +166,77 @@ def send_telegram_invite():
         except Exception as e:
             logger.error(f"❌ [ENDPOINT] Token validation error: {e}", exc_info=True)
             abort(400, f"Token error: {e}")
+
+        # ============================================================================
+        # INPUT VALIDATION: Validate token data AFTER decryption (C-03 fix)
+        # ============================================================================
+        try:
+            # Validate payment_id
+            payment_id = validate_payment_id(payment_id, field_name="payment_id")
+
+            # Validate user_id from token
+            user_id = validate_telegram_user_id(user_id, field_name="user_id")
+
+            # Validate closed_channel_id from token
+            closed_channel_id = validate_telegram_channel_id(closed_channel_id, field_name="closed_channel_id")
+
+            logger.info(f"✅ [VALIDATED] Token data validation passed")
+            logger.info(f"   Payment ID: {payment_id}")
+            logger.info(f"   User ID: {user_id}")
+            logger.info(f"   Channel ID: {closed_channel_id}")
+
+        except ValidationError as e:
+            logger.error(f"❌ [VALIDATED] Token data validation failed: {e}", exc_info=True)
+            abort(400, f"Invalid token data: {e}")
+
+        # ============================================================================
+        # IDEMPOTENCY CHECK: Atomic check using IdempotencyManager
+        # ============================================================================
+        logger.debug("")
+        logger.debug(f"🔍 [IDEMPOTENCY] Checking if invite already sent for payment {payment_id}...")
+
+        if not idempotency_manager:
+            logger.warning(f"⚠️ [IDEMPOTENCY] IdempotencyManager not available - skipping idempotency check")
+            logger.warning(f"⚠️ [IDEMPOTENCY] Race condition protection disabled (fail-open mode)")
+        else:
+            try:
+                # ✅ ATOMIC CHECK: Try to claim processing (INSERT...ON CONFLICT)
+                can_process, existing_data = idempotency_manager.check_and_claim_processing(
+                    payment_id=payment_id,
+                    user_id=user_id,
+                    channel_id=closed_channel_id,
+                    service_column='telegram_invite_sent'
+                )
+
+                if not can_process:
+                    # Another request already sent the invite
+                    logger.info(f"✅ [IDEMPOTENCY] Invite already sent for payment {payment_id}")
+                    logger.info(f"   Service: telegram_invite_sent = TRUE")
+                    if existing_data:
+                        logger.info(f"   Payment status: {existing_data.get('payment_status')}")
+                        logger.info(f"   Orchestrator processed: {existing_data.get('pgp_orchestrator_processed')}")
+                        logger.info(f"   Created at: {existing_data.get('created_at')}")
+                    logger.info(f"🎉 [ENDPOINT] Returning success (invite already sent)")
+
+                    return jsonify({
+                        "status": "success",
+                        "message": "Telegram invite already sent (idempotency check)",
+                        "payment_id": payment_id,
+                        "already_processed": True
+                    }), 200
+
+                # ✅ We won the race - safe to send invite
+                logger.info(f"🆕 [IDEMPOTENCY] Claimed processing for payment {payment_id}")
+                logger.info(f"🔒 [IDEMPOTENCY] Atomic lock acquired - safe to send invite")
+
+            except ValueError as e:
+                logger.error(f"❌ [IDEMPOTENCY] Validation error: {e}", exc_info=True)
+                logger.warning(f"⚠️ [IDEMPOTENCY] Invalid payment data - proceeding with caution")
+            except Exception as e:
+                logger.error(f"❌ [IDEMPOTENCY] Error during atomic check: {e}", exc_info=True)
+                logger.warning(f"⚠️ [IDEMPOTENCY] Proceeding with invite send (fail-open mode)")
+
+        logger.debug("")
 
         # ============================================================================
         # PAYMENT VALIDATION - Verify payment completed before sending invite
