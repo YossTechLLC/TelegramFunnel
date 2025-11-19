@@ -18,7 +18,7 @@ from config_manager import ConfigManager
 from token_manager import TokenManager
 from database_manager import DatabaseManager
 from cloudtasks_client import CloudTasksClient
-from changenow_client import ChangeNowClient
+from PGP_COMMON.utils import ChangeNowClient
 
 from PGP_COMMON.logging import setup_logger
 logger = setup_logger(__name__)
@@ -75,15 +75,10 @@ except Exception as e:
     logger.error(f"❌ [APP] Failed to initialize Cloud Tasks client: {e}", exc_info=True)
     cloudtasks_client = None
 
-# Initialize ChangeNow client
+# Initialize ChangeNow client (hot-reload enabled)
 try:
-    changenow_api_key = config.get('changenow_api_key')
-
-    if not changenow_api_key:
-        raise ValueError("ChangeNow API key not available")
-
-    changenow_client = ChangeNowClient(changenow_api_key)
-    logger.info(f"✅ [APP] ChangeNow client initialized")
+    changenow_client = ChangeNowClient(config_manager)
+    logger.info(f"✅ [APP] ChangeNow client initialized (hot-reload enabled)")
 except Exception as e:
     logger.error(f"❌ [APP] Failed to initialize ChangeNow client: {e}", exc_info=True)
     changenow_client = None
@@ -144,8 +139,8 @@ def _route_batch_callback(
             logger.error(f"❌ [BATCH_CALLBACK] Cloud Tasks client not available")
             return False
 
-        microbatch_response_queue = config.get('microbatch_response_queue')
-        microbatch_url = config.get('microbatch_url')
+        microbatch_response_queue = config_manager.get_pgp_microbatch_response_queue()
+        microbatch_url = config_manager.get_pgp_microbatch_url()
 
         if not microbatch_response_queue or not microbatch_url:
             logger.error(f"❌ [BATCH_CALLBACK] MicroBatchProcessor config incomplete")
@@ -222,8 +217,8 @@ def _enqueue_delayed_callback_check(
             return False
 
         # Get queue configuration
-        pgp_hostpay1_response_queue = config.get('pgp_hostpay1_response_queue')
-        pgp_hostpay1_url = config.get('pgp_hostpay1_url')
+        pgp_hostpay1_response_queue = config_manager.get_pgp_hostpay1_response_queue()
+        pgp_hostpay1_url = config_manager.get_pgp_hostpay1_url()
 
         if not pgp_hostpay1_response_queue or not pgp_hostpay1_url:
             logger.error(f"❌ [RETRY_ENQUEUE] PGP_HOSTPAY1_v1 response queue config missing")
@@ -427,8 +422,8 @@ def main_webhook():
             logger.error(f"❌ [ENDPOINT_1] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        pgp_hostpay2_queue = config.get('pgp_hostpay2_queue')
-        pgp_hostpay2_url = config.get('pgp_hostpay2_url')
+        pgp_hostpay2_queue = config_manager.get_pgp_hostpay2_queue()
+        pgp_hostpay2_url = config_manager.get_pgp_hostpay2_url()
 
         if not pgp_hostpay2_queue or not pgp_hostpay2_url:
             logger.error(f"❌ [ENDPOINT_1] PGP_HOSTPAY2_v1 configuration missing")
@@ -564,8 +559,8 @@ def status_verified():
             logger.error(f"❌ [ENDPOINT_2] Cloud Tasks client not available")
             abort(500, "Cloud Tasks unavailable")
 
-        pgp_hostpay3_queue = config.get('pgp_hostpay3_queue')
-        pgp_hostpay3_url = config.get('pgp_hostpay3_url')
+        pgp_hostpay3_queue = config_manager.get_pgp_hostpay3_queue()
+        pgp_hostpay3_url = config_manager.get_pgp_hostpay3_url()
 
         if not pgp_hostpay3_queue or not pgp_hostpay3_url:
             logger.error(f"❌ [ENDPOINT_2] PGP_HOSTPAY3_v1 configuration missing")

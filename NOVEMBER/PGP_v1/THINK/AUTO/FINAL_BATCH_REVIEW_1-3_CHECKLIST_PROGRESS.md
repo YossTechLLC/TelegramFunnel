@@ -1,8 +1,8 @@
 # FINAL BATCH REVIEW 1-3 REMEDIATION - PROGRESS TRACKING
 
 **Started:** 2025-11-18
-**Status:** 🟡 IN PROGRESS
-**Current Phase:** Phase 1 - Critical Issues
+**Status:** ✅ COMPLETE (Phases 1-3)
+**Current Phase:** Phase 1, 2 & 3 - Complete
 
 ---
 
@@ -18,7 +18,9 @@
 - [x] Phase 1.1: Remove duplicate ChangeNowClient ← COMPLETE (already done)
 - [x] Phase 1.2: Clean HOSTPAY3 token_manager.py ← COMPLETE (573 lines removed)
 - [x] Phase 1.3: Clean HOSTPAY1 token_manager.py ← COMPLETE (5 lines removed - no dead code!)
-- [ ] Phase 1.5: Delete PGP_ACCUMULATOR dead code (DECISION REQUIRED) ← PENDING USER DECISION
+- [x] Phase 1.5: Delete PGP_ACCUMULATOR dead code ← COMPLETE (331 lines removed)
+- [x] Phase 2.1: Remove duplicate CloudTasks (SPLIT2) ← COMPLETE (136 lines removed)
+- [x] Phase 2.2: Remove duplicate CloudTasks (SPLIT3) ← COMPLETE (170 lines removed)
 
 ---
 
@@ -178,54 +180,201 @@
 
 ### ✅ ISSUE 1.5: Delete Dead Code in PGP_SPLIT3 (Accumulator Endpoint)
 **Priority:** 🔴 CRITICAL
-**Status:** [ ] DECISION REQUIRED
-**Lines to Remove:** ~235 lines
+**Status:** ✅ **COMPLETE**
+**Lines Removed:** 331 lines (151 + 146 + 34)
 
-#### DECISION NEEDED:
-❓ Is PGP_ACCUMULATOR service planned for future implementation?
-- Option A: PLANNED → Document as TODO, keep code
-- Option B: ABANDONED → DELETE dead code (recommended)
-
-**Assuming Option B (DELETE):**
+#### USER DECISION:
+✅ **Option B: ABANDONED** - PGP_ACCUMULATOR_v1 confirmed deprecated and archived
 
 #### Steps:
-- [ ] Backup PGP_SPLIT3_v1/pgp_split3_v1.py
-- [ ] Backup PGP_SPLIT3_v1/token_manager.py
-- [ ] Backup PGP_SPLIT3_v1/cloudtasks_client.py
-- [ ] Backup PGP_SPLIT3_v1/config_manager.py
-- [ ] Delete /eth-to-usdt endpoint (lines 238-382)
-- [ ] Delete accumulator token methods from token_manager.py
-- [ ] Delete enqueue_accumulator method from cloudtasks_client.py
-- [ ] Delete accumulator config methods from config_manager.py
-- [ ] Verify syntax: all 4 files
-- [ ] Verify no remaining "accumulator" references
-- [ ] Compare line counts (before/after)
+- [x] Backup PGP_SPLIT3_v1/pgp_split3_v1.py
+- [x] Backup PGP_SPLIT3_v1/token_manager.py
+- [x] Backup PGP_SPLIT3_v1/cloudtasks_client.py
+- [x] No accumulator config in config_manager.py (verified)
+- [x] Delete /eth-to-usdt endpoint (lines 238-382) - 151 lines removed
+- [x] Delete accumulator token methods from token_manager.py - 146 lines removed
+- [x] Delete enqueue_accumulator method from cloudtasks_client.py - 34 lines removed
+- [x] Verify syntax: all 3 files (passed)
+- [x] Verify no remaining "accumulator" references (grep: clean)
+- [x] Compare line counts (before/after)
+
+**Completed:** 2025-11-18
+
+**Line Count Changes:**
+- pgp_split3_v1.py: 419 → 268 lines (151 removed)
+- token_manager.py: 525 → 379 lines (146 removed)
+- cloudtasks_client.py: 234 → 64 lines (170 removed total, 34 from accumulator)
+
+**Verification Results:**
+- ✅ Syntax check passed for all files
+- ✅ No accumulator references in active code
+- ✅ All references only in backup files
+- ✅ Total removed: 331 lines
 
 **Notes:**
-- BLOCKED pending user decision
-- 235 lines of untested, unreachable code
+- Successfully removed all PGP_ACCUMULATOR dead code
+- Service confirmed deprecated by user
+- PGP_SPLIT3 now only handles ETH→Client swaps
 
 ---
 
-## PHASE 2: HIGH PRIORITY ISSUES - NOT STARTED
+## PHASE 2: HIGH PRIORITY ISSUES - COMPLETE ✅
 
-### ISSUE 2.1: Remove Duplicate CloudTasks Methods (SPLIT2)
-**Status:** [ ] Not Started
-**Lines to Remove:** ~90 lines
+### ✅ ISSUE 2.1: Remove Duplicate CloudTasks Methods (SPLIT2)
+**Priority:** 🟡 MEDIUM-HIGH
+**Status:** ✅ **COMPLETE**
+**Lines Removed:** 136 lines
 
-### ISSUE 2.2: Remove Duplicate CloudTasks Methods (SPLIT3)
-**Status:** [ ] Not Started
-**Lines to Remove:** ~90 lines
+#### Steps:
+- [x] List all methods in cloudtasks_client.py (5 methods found)
+- [x] Verify which methods are actually called (only 1: enqueue_pgp_split1_estimate_response)
+- [x] Backup file (cloudtasks_client.py.backup_20251118)
+- [x] Edit file - Remove 4 unused methods
+- [x] Verify syntax (passed)
+
+**Completed:** 2025-11-18
+
+**Methods Analysis:**
+- enqueue_pgp_split2_estimate_request ❌ NOT CALLED - DELETED
+- enqueue_pgp_split1_estimate_response ✅ USED (line 195) - KEPT
+- enqueue_pgp_split3_swap_request ❌ NOT CALLED - DELETED
+- enqueue_pgp_split1_swap_response ❌ NOT CALLED - DELETED
+- enqueue_hostpay_trigger ❌ NOT CALLED - DELETED
+
+**Line Count Changes:**
+- Before: 200 lines
+- After: 64 lines
+- Removed: 136 lines
+
+**Verification Results:**
+- ✅ Syntax check passed
+- ✅ Import successful
+- ✅ Methods reduced: 5 → 1
+- ✅ Only used method remains
+
+**Notes:**
+- PGP_SPLIT2 only sends estimate responses back to PGP_SPLIT1
+- Massive simplification: 68% reduction
 
 ---
 
-## PHASE 3: MEDIUM PRIORITY ISSUES - NOT STARTED
+### ✅ ISSUE 2.2: Remove Duplicate CloudTasks Methods (SPLIT3)
+**Priority:** 🟡 MEDIUM-HIGH
+**Status:** ✅ **COMPLETE**
+**Lines Removed:** 170 lines (includes 34 from accumulator in Issue 1.5)
 
-### ISSUE 3.1: Add Hot-Reload to HOSTPAY1
-**Status:** [ ] Not Started
+#### Steps:
+- [x] List all methods in cloudtasks_client.py (6 methods found)
+- [x] Verify which methods are actually called (only 1: enqueue_pgp_split1_swap_response)
+- [x] Backup already created (cloudtasks_client.py.backup_20251118)
+- [x] Edit file - Remove 4 unused methods (accumulator already removed in Issue 1.5)
+- [x] Verify syntax (passed)
 
-### ISSUE 3.2: Add Hot-Reload to HOSTPAY3
-**Status:** [ ] Not Started
+**Completed:** 2025-11-18
+
+**Methods Analysis:**
+- enqueue_pgp_split2_estimate_request ❌ NOT CALLED - DELETED
+- enqueue_pgp_split1_estimate_response ❌ NOT CALLED - DELETED
+- enqueue_pgp_split3_swap_request ❌ NOT CALLED (doesn't call itself!) - DELETED
+- enqueue_pgp_split1_swap_response ✅ USED (line 205) - KEPT
+- enqueue_hostpay_trigger ❌ NOT CALLED - DELETED
+- enqueue_accumulator_swap_response ❌ NOT CALLED - DELETED (Issue 1.5)
+
+**Line Count Changes:**
+- Before: 234 lines
+- After: 64 lines
+- Removed: 170 lines total (136 from this issue + 34 from Issue 1.5)
+
+**Verification Results:**
+- ✅ Syntax check passed
+- ✅ Import successful
+- ✅ Methods reduced: 6 → 1
+- ✅ Only used method remains
+
+**Notes:**
+- PGP_SPLIT3 only sends swap responses back to PGP_SPLIT1
+- Massive simplification: 73% reduction
+
+---
+
+## PHASE 3: MEDIUM PRIORITY ISSUES - COMPLETE ✅
+
+### ✅ ISSUE 3.1: Add Hot-Reload to HOSTPAY1
+**Priority:** 🟡 MEDIUM
+**Status:** ✅ **COMPLETE**
+**Impact:** Zero-downtime secret rotation for service URLs, queue names, API keys
+
+#### Steps:
+- [x] Add hot-reload methods to PGP_HOSTPAY1_v1/config_manager.py
+- [x] Update initialize_config() to remove hot-reloadable secrets from startup
+- [x] Update pgp_hostpay1_v1.py to use config_manager getters instead of config dict
+- [x] Remove local changenow_client.py (duplicate of PGP_COMMON)
+- [x] Update import to use PGP_COMMON.utils.ChangeNowClient
+- [x] Verify syntax for both files
+
+**Completed:** 2025-11-18
+
+**Hot-Reload Methods Added:**
+- get_changenow_api_key() ✅
+- get_pgp_hostpay1_url() ✅
+- get_pgp_hostpay1_response_queue() ✅
+- get_pgp_hostpay2_queue() ✅
+- get_pgp_hostpay2_url() ✅
+- get_pgp_hostpay3_queue() ✅
+- get_pgp_hostpay3_url() ✅
+- get_pgp_microbatch_response_queue() ✅
+- get_pgp_microbatch_url() ✅
+
+**Additional Changes:**
+- Removed local changenow_client.py (5,589 bytes) - duplicate removed
+- Updated to use PGP_COMMON.utils.ChangeNowClient with hot-reload support
+- Updated 4 locations in pgp_hostpay1_v1.py to use getters (lines 142, 220, 425, 562)
+
+**Verification Results:**
+- ✅ Syntax check passed: config_manager.py
+- ✅ Syntax check passed: pgp_hostpay1_v1.py
+- ✅ Local changenow_client.py archived to REMOVED_DEAD_CODE
+
+**Notes:**
+- HOSTPAY1 now supports zero-downtime updates for all service URLs, queues, and API keys
+- ChangeNow client now uses hot-reload pattern from PGP_COMMON
+- Signing keys remain STATIC (security-critical, loaded once at startup)
+
+---
+
+### ✅ ISSUE 3.2: Add Hot-Reload to HOSTPAY3
+**Priority:** 🟡 MEDIUM
+**Status:** ✅ **COMPLETE**
+**Impact:** Zero-downtime secret rotation for service URLs, queue names, RPC URLs
+
+#### Steps:
+- [x] Add hot-reload methods to PGP_HOSTPAY3_v1/config_manager.py
+- [x] Update initialize_config() to remove hot-reloadable secrets from startup
+- [x] Update pgp_hostpay3_v1.py to use config_manager getters instead of config dict
+- [x] Verify syntax for both files
+
+**Completed:** 2025-11-18
+
+**Hot-Reload Methods Added:**
+- get_ethereum_rpc_url() ✅
+- get_ethereum_rpc_url_api() ✅
+- get_pgp_hostpay1_response_queue() ✅
+- get_pgp_hostpay1_url() ✅
+- get_pgp_hostpay3_retry_queue() ✅
+- get_pgp_hostpay3_url() ✅
+
+**Code Changes:**
+- Updated 2 locations in pgp_hostpay3_v1.py to use getters (lines 383, 466)
+- Removed 9 deprecated accumulator config fetches from initialize_config()
+
+**Verification Results:**
+- ✅ Syntax check passed: config_manager.py
+- ✅ Syntax check passed: pgp_hostpay3_v1.py
+
+**Notes:**
+- HOSTPAY3 now supports zero-downtime updates for service URLs, queues, and RPC endpoints
+- Signing keys and wallet credentials remain STATIC (security-critical)
+- Accumulator config references removed from startup (service deprecated)
 
 ---
 
@@ -244,54 +393,82 @@
 ## CUMULATIVE METRICS
 
 ### Lines Removed (Target vs Actual):
+
+**Phase 1:**
 - **Issue 1.4** (Database Methods): Target 140 | Actual 182 net (330 removed - 148 added) ✅
 - **Issue 1.1** (ChangeNowClient): Target 314 | Actual 0 (already done) ✅
 - **Issue 1.2** (HOSTPAY3 token_manager): Target 600 | Actual 573 ✅
 - **Issue 1.3** (HOSTPAY1 token_manager): Target 200 | Actual 5 (no dead code!) ✅
-- **Issue 1.5** (ACCUMULATOR dead code): Target 235 | Actual 0 (pending decision) ⏳
+- **Issue 1.5** (ACCUMULATOR dead code): Target 235 | Actual 331 ✅
 
-### Phase 1 Summary:
-- **Target:** 1,489 lines
-- **Actual Removed:** 760 lines (182 + 0 + 573 + 5)
-- **Variance:** -729 lines (49% less than estimated)
-- **Reason:** Issue 1.1 already complete, Issue 1.3 had no dead code
+**Phase 2:**
+- **Issue 2.1** (SPLIT2 CloudTasks): Target 90 | Actual 136 ✅
+- **Issue 2.2** (SPLIT3 CloudTasks): Target 90 | Actual 136 (excluding 34 from Issue 1.5) ✅
+
+### Phase Summary:
+- **Phase 1 Target:** 1,489 lines
+- **Phase 1 Actual:** 1,091 lines (182 + 0 + 573 + 5 + 331)
+- **Phase 1 Variance:** -398 lines (73% of target)
+
+- **Phase 2 Target:** 180 lines
+- **Phase 2 Actual:** 306 lines (136 + 170, includes 34 overlap with Issue 1.5)
+- **Phase 2 Variance:** +126 lines (170% of target)
 
 ### Lines Removed (Actual - All Phases):
-- Phase 1: **760 lines** (4/5 issues complete)
-- Phase 2: 0 lines (not started)
+- Phase 1: **1,091 lines** (5/5 issues complete) ✅
+- Phase 2: **306 lines** (2/2 issues complete) ✅
 - Phase 3: 0 lines (not started)
-- **Total Actual:** **760 lines**
+- **Total Actual:** **1,397 lines**
 
 ### Completion Rate:
-- Phase 1: **80%** (4/5 issues - Issue 1.5 pending decision)
-- Phase 2: 0% (0/2 issues)
-- Phase 3: 0% (0/2 issues)
-- Phase 4: 0%
-- Phase 5: Partial (PROGRESS.md, DECISIONS.md updated)
-- **Overall:** **44%** (4/9 issues complete)
+- Phase 1: **100%** (5/5 issues) ✅
+- Phase 2: **100%** (2/2 issues) ✅
+- Phase 3: **100%** (2/2 issues) ✅
+- Phase 4: 0% (verification pending)
+- Phase 5: In Progress (PROGRESS.md, DECISIONS.md to be updated) 🔄
+- **Overall:** **100%** (9/9 issues complete - All code changes done!)
 
 ---
 
 ## BLOCKERS & ISSUES
 
 ### Active Blockers:
-1. **ISSUE 1.5** - DECISION REQUIRED: Keep or delete PGP_ACCUMULATOR code?
+- None - All critical and high-priority issues resolved ✅
 
 ### Resolved Blockers:
-- None yet
+1. **ISSUE 1.5** - RESOLVED: PGP_ACCUMULATOR confirmed deprecated by user → deleted 331 lines
 
 ---
 
 ## NOTES & OBSERVATIONS
 
-### Session 1 (2025-11-18):
+### Session 1 (2025-11-18) - Phase 1:
 - Progress tracking file created
 - Execution order followed: 1.4 → 1.1 → 1.2 → 1.3
 - **Issue 1.4**: Successfully centralized database methods, fixed CLOUD_SQL_AVAILABLE bug
 - **Issue 1.1**: Already complete from previous session - verified and documented
 - **Issue 1.2**: Massive cleanup - removed 573 lines (63.8% of HOSTPAY3 token_manager)
 - **Issue 1.3**: Minimal cleanup - only 5 lines orphaned code. All 10 methods actively used.
-- **Issue 1.5**: BLOCKED - waiting for user decision on PGP_ACCUMULATOR
+
+### Session 2 (2025-11-18) - Phase 1 & 2 Completion:
+- **User Confirmation**: PGP_ACCUMULATOR_v1 and PGP_WEB_v1 fully deprecated
+- **Issue 1.5**: Deleted all accumulator code from SPLIT3 - removed 331 lines
+  - /eth-to-usdt endpoint deleted (151 lines)
+  - Accumulator token methods deleted (146 lines)
+  - CloudTasks method deleted (34 lines)
+- **Issue 2.1**: Cleaned SPLIT2 CloudTasks - removed 136 lines (5 methods → 1)
+- **Issue 2.2**: Cleaned SPLIT3 CloudTasks - removed 170 lines (6 methods → 1)
+
+### Session 3 (2025-11-18) - Phase 3 Completion:
+- **Issue 3.1**: Added hot-reload to HOSTPAY1
+  - 9 hot-reload methods added to config_manager.py
+  - Removed local changenow_client.py (5,589 bytes duplicate)
+  - Updated 4 config.get() calls to use hot-reload getters
+  - Updated ChangeNowClient to use PGP_COMMON with hot-reload
+- **Issue 3.2**: Added hot-reload to HOSTPAY3
+  - 6 hot-reload methods added to config_manager.py
+  - Updated 2 config.get() calls to use hot-reload getters
+  - Removed 9 deprecated accumulator config fetches from startup
 
 ### Key Findings:
 1. **Orphaned Code Bug**: Found in both HOSTPAY1 and HOSTPAY3 token_manager.py (lines 25-31 in both)
@@ -305,5 +482,5 @@
 
 ---
 
-**Last Updated:** 2025-11-18 (Session 1 - Phase 1 Complete except 1.5)
-**Next Action:** Await user decision on Issue 1.5 (Delete PGP_ACCUMULATOR code?)
+**Last Updated:** 2025-11-18 (Session 2 - Phases 1 & 2 COMPLETE)
+**Next Action:** Phase 3 (Hot-reload - optional) or Phase 4 (Verification)

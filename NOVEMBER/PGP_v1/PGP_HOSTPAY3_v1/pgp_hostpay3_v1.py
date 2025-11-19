@@ -380,8 +380,8 @@ def execute_eth_payment():
                 # Route to PGP_HOSTPAY1_v1 for instant payouts (existing behavior)
                 logger.info(f"🎯 [ENDPOINT] Context: instant → Routing to PGP_HOSTPAY1_v1")
 
-                pgp_hostpay1_response_queue = config.get('pgp_hostpay1_response_queue')
-                pgp_hostpay1_url = config.get('pgp_hostpay1_url')
+                pgp_hostpay1_response_queue = config_manager.get_pgp_hostpay1_response_queue()
+                pgp_hostpay1_url = config_manager.get_pgp_hostpay1_url()
 
                 if not pgp_hostpay1_response_queue or not pgp_hostpay1_url:
                     logger.error(f"❌ [ENDPOINT] PGP_HOSTPAY1_v1 configuration missing")
@@ -463,8 +463,8 @@ def execute_eth_payment():
                     }), 500
 
                 # Enqueue self-retry with 60s delay
-                pgp_hostpay3_retry_queue = config.get('pgp_hostpay3_retry_queue')
-                pgp_hostpay3_url = config.get('pgp_hostpay3_url')
+                pgp_hostpay3_retry_queue = config_manager.get_pgp_hostpay3_retry_queue()
+                pgp_hostpay3_url = config_manager.get_pgp_hostpay3_url()
 
                 if not pgp_hostpay3_retry_queue or not pgp_hostpay3_url:
                     logger.error(f"❌ [ENDPOINT] PGP_HOSTPAY3_v1 retry configuration missing")

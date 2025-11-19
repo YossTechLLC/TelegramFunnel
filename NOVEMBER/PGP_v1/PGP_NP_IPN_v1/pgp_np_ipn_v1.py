@@ -27,14 +27,28 @@ logger = setup_logger(__name__)
 
 app = Flask(__name__)
 
+# ✅ M-02: Request size limit (prevents DoS via large payloads)
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1MB limit for IPN payloads
+
 # ============================================================================
-# CORS CONFIGURATION
+# CORS CONFIGURATION - SCHEDULED FOR REMOVAL 2025-12-31
 # ============================================================================
+# ✅ D-02: BACKWARD COMPATIBILITY ONLY - Monitor for removal
+#
 # NOTE: CORS is now only for backward compatibility with cached URLs.
 # The payment-processing.html is served from this same service (GET /payment-processing)
 # so it uses same-origin requests which don't need CORS.
 # CORS is kept here in case old Cloud Storage URLs are still cached somewhere.
-
+#
+# 📅 DEPRECATION SCHEDULE:
+#    - Last reviewed: 2025-11-18
+#    - Next review: 2025-12-18
+#    - Removal date: 2025-12-31
+#
+# 📊 MONITORING INSTRUCTIONS:
+#    Check monthly: If no /api/* requests for 90 consecutive days → remove CORS
+#    Query: gcloud logging read "resource.type=cloud_run_revision AND httpRequest.requestUrl=~'/api/'"
+#
 # ✅ H-05 FIX: RESTRICTIVE CORS configuration (prevents data theft)
 # Security: Only allow specific origins, not wildcards
 CORS(app, resources={
@@ -296,6 +310,12 @@ def handle_ipn():
     logger.info(f"📬 [IPN] Received callback from NowPayments")
     logger.info(f"🌐 [IPN] Source IP: {request.remote_addr}")
     logger.info(f"⏰ [IPN] Timestamp: {request.headers.get('Date', 'N/A')}")
+
+    # ✅ M-02: Validate request size (Flask MAX_CONTENT_LENGTH handles 413 automatically)
+    # Additional validation for logging
+    if request.content_length and request.content_length > app.config['MAX_CONTENT_LENGTH']:
+        logger.warning(f"⚠️ [IPN] Payload too large: {request.content_length} bytes (max 1MB)")
+        abort(413, "Payload too large")
 
     # Get signature from header
     signature = request.headers.get('x-nowpayments-sig')
@@ -955,14 +975,35 @@ def payment_processing_page():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint."""
+    """
+    Health check endpoint.
+    ✅ M-11: Includes database connectivity check via ping.
+    """
+    # Check database connectivity
+    db_healthy = False
+    db_error = None
+    try:
+        if db_manager:
+            with db_manager.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT 1")
+                result = cur.fetchone()
+                cur.close()
+                db_healthy = (result == (1,))
+        else:
+            db_error = "db_manager not initialized"
+    except Exception as e:
+        db_error = str(e)
+        logger.warning(f"⚠️ [HEALTH] Database ping failed: {e}")
+
     status = {
         "service": "PGP_NP_IPN_v1 NowPayments IPN Handler",
-        "status": "healthy",
+        "status": "healthy" if db_healthy else "degraded",
         "components": {
             "ipn_secret": "configured" if NOWPAYMENTS_IPN_SECRET else "missing",
             "database_credentials": "configured" if all([CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD]) else "missing",
-            "connector": "initialized" if connector else "not_initialized"
+            "connector": "initialized" if connector else "not_initialized",
+            "database_connectivity": "healthy" if db_healthy else f"unhealthy: {db_error}"
         }
     }
 
@@ -972,7 +1013,8 @@ def health_check():
         DATABASE_NAME,
         DATABASE_USER,
         DATABASE_PASSWORD,
-        connector
+        connector,
+        db_healthy  # ✅ M-11: Database must be reachable for service to be healthy
     ]) else 503
 
     return jsonify(status), http_status

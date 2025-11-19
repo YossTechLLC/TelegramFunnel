@@ -1,12 +1,315 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **🔒 Security Hardening - Phase 2** ✅
+**Last Updated:** 2025-11-18 - **🔄 Dead Code Cleanup - Phase 1, 2 & 3** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-18: Phase 3 Code Quality - Dead Code & Security Improvements ✅
+
+### Decision 16.1: CORS Deprecation Tracking Strategy (D-02)
+**Context:** PGP_NP_IPN_v1 has CORS enabled for backward compatibility with cached URLs, but payment-processing.html is now served from same origin
+**Decision:** Add deprecation schedule with monitoring instructions rather than immediate removal
+**Implementation:**
+- Added 20-line deprecation notice block (lines 30-50)
+- Scheduled removal: 2025-12-31
+- Monitoring query: `gcloud logging read "resource.type=cloud_run_revision AND httpRequest.requestUrl=~'/api/'"`
+- Review cadence: Monthly until 90 consecutive days with no /api/* requests
+**Rationale:**
+- **Gradual Deprecation:** Prevents breaking cached URLs still in circulation
+- **Data-Driven Removal:** Monitor actual usage before removing
+- **Clear Timeline:** 6-week sunset period provides safety margin
+- **Operational Clarity:** Team knows exactly when/how to remove code
+**Trade-offs:**
+- ✅ No immediate breaking changes
+- ✅ Clear removal criteria (90 days no usage)
+- ✅ Monitoring query provided for easy validation
+- ⚠️ Adds technical debt until 2025-12-31 (acceptable - managed deprecation)
+**Alternative Rejected:** Immediate removal (risk of breaking cached payment links)
+
+### Decision 16.2: Request Size Limit for DoS Protection (M-02)
+**Context:** PGP_NP_IPN_v1 had no request size limit, vulnerable to DoS via large payloads
+**Decision:** Add 1MB MAX_CONTENT_LENGTH limit to Flask configuration
+**Implementation:**
+- Line 31: `app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024`
+- Lines 314-318: Additional validation with warning log
+- Returns 413 Payload Too Large automatically (Flask built-in)
+**Rationale:**
+- **DoS Prevention:** Large payloads (>1MB) can exhaust Cloud Run memory
+- **IPN Payload Reality:** NowPayments IPNs are typically 500-1500 bytes
+- **Safety Margin:** 1MB limit provides 700x headroom for legitimate requests
+- **Zero Code Impact:** Flask handles 413 response automatically
+**Trade-offs:**
+- ✅ Prevents memory exhaustion attacks
+- ✅ No performance impact (Flask checks content-length header)
+- ✅ Clear error message to attackers (413 standard HTTP code)
+- ⚠️ Rejects legitimate requests >1MB (acceptable - IPNs are always small)
+**Security Impact:** Eliminates DoS attack vector via oversized payloads
+
+### Decision 16.3: Database Health Check for Load Balancer Integration (M-11)
+**Context:** Health check only verified environment variables, not actual database connectivity
+**Decision:** Add database ping (SELECT 1) to health check endpoint
+**Implementation:**
+- Lines 976-1020: Enhanced health_check() function
+- Executes `SELECT 1` query to verify connectivity
+- Returns 503 if database unreachable (was 200 before)
+- Logs database errors for monitoring
+**Rationale:**
+- **Load Balancer Integration:** GCP load balancers use /health to detect unhealthy instances
+- **Cascading Failure Prevention:** Service reports unhealthy if database down (prevents routing traffic to broken instance)
+- **Early Detection:** Database issues caught by health check, not by failed payment processing
+- **Standard Pattern:** All Cloud Run services should ping dependencies in health checks
+**Trade-offs:**
+- ✅ Accurate health status (not just "service is running")
+- ✅ GCP load balancer removes unhealthy instances automatically
+- ✅ Prevents cascading failures (traffic redirected to healthy instances)
+- ⚠️ Slight health check latency increase (~5-10ms for SELECT 1)
+**Operational Impact:** Failed health checks trigger automatic instance replacement
+
+### Decision 16.4: GET / Endpoint Deprecation Warning (D-04)
+**Context:** PGP_ORCHESTRATOR_v1 has GET / endpoint for legacy payment flow, new flow uses POST /process-validated-payment
+**Decision:** Add deprecation warning with logging instead of immediate removal
+**Implementation:**
+- Lines 135-170: Added deprecation docstring and logging
+- Logs every invocation with token preview for tracking
+- Scheduled removal: 2026-01-31 (extended timeline for migration)
+**Rationale:**
+- **Migration Tracking:** Log every use to measure adoption of new endpoint
+- **No Breaking Changes:** Existing payment links continue working during migration
+- **Clear Communication:** Docstring warns developers, logs track production usage
+- **Extended Timeline:** 2.5 months provides ample migration time
+**Trade-offs:**
+- ✅ No immediate breaking changes
+- ✅ Data-driven migration (logs show when safe to remove)
+- ✅ Clear communication via deprecation warning
+- ⚠️ Technical debt until 2026-01-31 (acceptable - managed deprecation)
+**Alternative Rejected:** Immediate removal (would break existing payment links)
+
+### Decision 16.5: Remove Unused get_payment_tolerances() Method (D-05)
+**Context:** PGP_INVITE_v1 had get_payment_tolerances() method (32 lines) that was never called
+**Decision:** Delete method entirely, document replacement methods
+**Implementation:**
+- Deleted lines 59-90 (32 lines removed)
+- Added comment pointing to replacement methods: get_payment_min_tolerance() and get_payment_fallback_tolerance()
+- Verified zero calls via grep analysis
+**Rationale:**
+- **Dead Code Removal:** Method never called anywhere in codebase
+- **Code Clarity:** Removes confusion about which method to use
+- **Maintainability:** One less method to maintain/update
+- **Replacement Available:** Hot-reloadable getter methods provide same functionality
+**Trade-offs:**
+- ✅ Reduces code size (32 lines removed)
+- ✅ Eliminates dead code maintenance burden
+- ✅ No functional impact (method never called)
+- ⚠️ None identified
+**Verification:** grep confirmed zero calls to get_payment_tolerances()
+
+### Decision 16.6: Remove Unused Singleton Pattern (D-06)
+**Context:** PGP_BROADCAST_v1 had get_config_manager() singleton pattern (15 lines) that was never used
+**Decision:** Delete singleton pattern, document direct instantiation pattern
+**Implementation:**
+- Deleted lines 258-273 (15 lines removed)
+- Added comment explaining ConfigManager is instantiated directly in service files
+- Verified zero calls to get_config_manager() via grep
+**Rationale:**
+- **Dead Code Removal:** Function never called anywhere
+- **Simplicity:** Direct instantiation is clearer than singleton pattern
+- **Consistency:** All services already use direct instantiation
+- **No Loss:** Singleton pattern provides no benefit in Cloud Run (each instance isolated)
+**Trade-offs:**
+- ✅ Simpler code (15 lines removed)
+- ✅ No singleton complexity
+- ✅ No functional impact (pattern never used)
+- ⚠️ None identified
+**Cloud Run Note:** Singleton pattern unnecessary - each Cloud Run instance is isolated process
+
+### Decision 16.7: HTTP Timeout Verification (M-04)
+**Context:** HTTP requests without timeouts can hang indefinitely, exhausting connection pools
+**Decision:** Verify all requests.get/post calls have timeout parameter (no changes needed)
+**Verification:**
+- PGP_COMMON/utils/crypto_pricing.py:104 - timeout=10 ✅
+- PGP_BROADCAST_v1/telegram_client.py - timeout=10 on all 4 calls ✅
+- PGP_NP_IPN_v1/pgp_np_ipn_v1.py:721 - timeout=10 ✅
+**Rationale:**
+- **Already Compliant:** All production code has timeout=10
+- **Best Practice:** 10-second timeout prevents indefinite hangs
+- **No Action Needed:** Verification only, no changes required
+**Trade-offs:**
+- ✅ Already secure (no vulnerable code found)
+- ✅ No deployment needed (verification task only)
+**Conclusion:** Codebase already follows HTTP timeout best practices
+
+### Decision 16.8: Phase 3 Documentation Strategy
+**Context:** Phase 3 involved code changes requiring progress tracking per CLAUDE.md guidelines
+**Decision:** Update FINAL_BATCH_REVIEW_4_CHECKLIST_PROGRESS.md first, then PROGRESS.md, then DECISIONS.md
+**Implementation:**
+- CHECKLIST_PROGRESS.md: Detailed execution log with timestamps, line numbers, verification steps
+- PROGRESS.md: Concise summary at top with files modified and security impact
+- DECISIONS.md: Architectural rationale for each decision (this document)
+**Rationale:**
+- **CLAUDE.md Compliance:** "Update PROGRESS.md and DECISIONS.md after code changes"
+- **Multiple Granularity Levels:** Checklist for details, PROGRESS for summary, DECISIONS for rationale
+- **Traceability:** Can trace from high-level summary → detailed log → architectural decision
+**Trade-offs:**
+- ✅ Complete documentation at all levels
+- ✅ Easy to find information (depends on detail needed)
+- ⚠️ Requires updating 3 documents (acceptable - ensures nothing lost)
+
+---
+
+**Phase 3 Summary:**
+- **Dead Code Removed:** 47 lines (32 + 15)
+- **Security Improvements:** DoS protection (M-02), database health check (M-11), timeout verification (M-04)
+- **Deprecation Tracking:** 2 endpoints with monitoring queries and removal dates
+- **Files Modified:** 4 services (PGP_NP_IPN_v1, PGP_ORCHESTRATOR_v1, PGP_INVITE_v1, PGP_BROADCAST_v1)
+- **Syntax Validation:** All files passed `python3 -m py_compile`
+- **Impact:** Zero breaking changes, improved security posture, reduced technical debt
+
+---
+
+## 2025-11-18: Hot-Reload Implementation for HOSTPAY1 & HOSTPAY3
+
+**Decision:** Added hot-reload capability to PGP_HOSTPAY1_v1 and PGP_HOSTPAY3_v1 for zero-downtime secret rotation
+
+**Context:**
+- HOSTPAY2 already had hot-reload pattern implemented (reference model)
+- HOSTPAY1 and HOSTPAY3 required service restarts for any secret/URL/queue changes
+- Production environment needs ability to rotate secrets without downtime
+- HOSTPAY1 had duplicate changenow_client.py (5,589 bytes) instead of using PGP_COMMON
+
+**Rationale:**
+- **Operational Flexibility:** Enable secret rotation without service interruption
+- **Security:** Faster response to credential compromise (no deployment required)
+- **Consistency:** Match HOSTPAY2 implementation pattern across all HostPay services
+- **Code Quality:** Remove duplicate ChangeNow client in HOSTPAY1
+
+**Implementation:**
+
+**HOSTPAY1 Changes:**
+- Added 9 hot-reload methods to config_manager.py:
+  - get_changenow_api_key(), get_pgp_hostpay1/2/3_url/queue(), get_pgp_microbatch_url/queue()
+- Updated 4 locations in pgp_hostpay1_v1.py to use config_manager getters (lines 142, 220, 425, 562)
+- Removed local changenow_client.py (5,589 bytes) - now uses PGP_COMMON.utils.ChangeNowClient
+- Updated ChangeNowClient initialization to pass config_manager for hot-reload support
+- Signing keys remain STATIC (security-critical, loaded once at startup)
+
+**HOSTPAY3 Changes:**
+- Added 6 hot-reload methods to config_manager.py:
+  - get_ethereum_rpc_url/api(), get_pgp_hostpay1_url/queue(), get_pgp_hostpay3_url/retry_queue()
+- Updated 2 locations in pgp_hostpay3_v1.py to use config_manager getters (lines 383, 466)
+- Removed 9 deprecated accumulator config fetches from initialize_config()
+- Signing keys and wallet credentials remain STATIC (security-critical)
+
+**Impact:**
+- **Zero-downtime Secret Rotation:** Service URLs, queue names, API keys, RPC endpoints can be updated without restart
+- **Code Deduplication:** Removed 5,589 bytes duplicate ChangeNow client from HOSTPAY1
+- **Operational Improvement:** Secrets cached with 60s TTL, refreshed automatically
+- **Security Boundaries Maintained:** Signing keys and wallet credentials stay STATIC (require restart)
+- **Risk:** MINIMAL - Pattern proven in HOSTPAY2, all syntax verified
+
+**Technical Notes:**
+- Hot-reloadable secrets use fetch_secret_dynamic() from BaseConfigManager
+- 60-second TTL cache prevents excessive Secret Manager API calls
+- Pattern follows HOSTPAY2 reference implementation
+- Static vs Hot-reload distinction based on security criticality:
+  - STATIC: Signing keys, wallet private keys (rarely change, restart acceptable)
+  - HOT-RELOAD: Service URLs, queue names, API keys, RPC endpoints (may need emergency rotation)
+
+---
+
+## 2025-11-18: Dead Code Cleanup - PGP_ACCUMULATOR Service Deprecation
+
+**Decision:** Deleted all PGP_ACCUMULATOR-related code from PGP_SPLIT3_v1 (331 lines removed)
+
+**Context:**
+- PGP_SPLIT3_v1 contained `/eth-to-usdt` endpoint (151 lines) for threshold payout accumulation
+- Endpoint called PGP_ACCUMULATOR service which no longer exists
+- Token methods decrypt_accumulator_to_pgp_split3_token() and encrypt_pgp_split3_to_accumulator_token() (146 lines)
+- CloudTasks method enqueue_accumulator_swap_response() (34 lines)
+- PGP_ACCUMULATOR_v1 directory confirmed deprecated and archived
+
+**Rationale:**
+- PGP_ACCUMULATOR service fully deprecated (confirmed by user)
+- 331 lines of untested, unreachable code
+- Endpoint never called in production
+- Creates maintenance burden and confusion
+- Reduces technical debt
+
+**Implementation:**
+- Deleted /eth-to-usdt endpoint from pgp_split3_v1.py (lines 238-382)
+- Deleted 2 accumulator token methods from token_manager.py
+- Deleted enqueue_accumulator_swap_response() from cloudtasks_client.py
+- Created backups: *.backup_20251118
+
+**Impact:**
+- Lines removed: 331 lines (pgp_split3_v1.py: 151, token_manager.py: 146, cloudtasks_client.py: 34)
+- Service clarity: PGP_SPLIT3 now only handles ETH→Client swaps
+- No functional impact: Code was never called
+- Risk: NONE - dead code removal only
+
+---
+
+## 2025-11-18: Dead Code Cleanup - CloudTasks Method Deduplication
+
+**Decision:** Removed duplicate CloudTasks methods from PGP_SPLIT2_v1 and PGP_SPLIT3_v1 (306 lines total)
+
+**Context:**
+- PGP_SPLIT2_v1 had 5 enqueue methods but only used 1 (enqueue_pgp_split1_estimate_response)
+- PGP_SPLIT3_v1 had 6 enqueue methods but only used 1 (enqueue_pgp_split1_swap_response)
+- Unused methods: enqueue_pgp_split2_estimate_request, enqueue_pgp_split1_estimate_response (SPLIT3), enqueue_pgp_split3_swap_request, enqueue_hostpay_trigger
+
+**Rationale:**
+- Each service should only contain methods it actually calls
+- Reduces code duplication across services
+- Clarifies service responsibilities and boundaries
+- Easier to maintain and understand
+
+**Implementation:**
+- **PGP_SPLIT2_v1**: Deleted 4 unused methods (kept 1 used method)
+  - Methods: 5 → 1
+  - Lines: 200 → 64 (136 lines removed)
+- **PGP_SPLIT3_v1**: Deleted 4 unused methods (kept 1 used method)
+  - Methods: 6 → 1 (includes accumulator method)
+  - Lines: 234 → 64 (170 lines removed)
+
+**Impact:**
+- Total lines removed: 306 lines (136 + 170)
+- Service clarity: Each service only has methods it needs
+- No functional impact: Removed methods never called
+- Risk: NONE - verified via grep analysis
+
+---
+
+## 2025-11-18: Dead Code Cleanup - Token Manager Rationalization
+
+**Decision:** Removed 573 lines of dead token methods from PGP_HOSTPAY3_v1/token_manager.py while keeping ALL methods in PGP_HOSTPAY1_v1/token_manager.py
+
+**Analysis:**
+
+**HOSTPAY3 Methods:**
+- ✅ KEPT: decrypt_pgp_hostpay1_to_pgp_hostpay3_token (receives payment requests)
+- ✅ KEPT: encrypt_pgp_hostpay3_to_pgp_hostpay1_token (sends payment responses)
+- ✅ KEPT: encrypt_pgp_hostpay3_retry_token (creates retry tokens)
+- ❌ DELETED: 7 other methods never called
+
+**HOSTPAY1 Methods (Central Hub):**
+- ALL 10 methods actively used to communicate with: SPLIT1, ACCUMULATOR, MICROBATCH, HOSTPAY2, HOSTPAY3
+
+**Rationale:**
+- HOSTPAY3 is a specialized execution service (only sends ETH payments)
+- HOSTPAY1 is the orchestration hub (coordinates all payment flows)
+- Different services have different communication needs
+- Service-specific token managers reflect business logic encapsulation
+
+**Impact:**
+- HOSTPAY3: 898 → 325 lines (63.8% reduction)
+- HOSTPAY1: 937 → 932 lines (only orphaned code bug fix)
+- Improved code clarity and maintainability
+
+---
 
 ## 2025-11-18: Security Hardening - Connection Pooling Strategy
 

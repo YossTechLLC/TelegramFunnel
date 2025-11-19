@@ -135,6 +135,20 @@ def calculate_expiration_time(subscription_time_days: int) -> tuple:
 @app.route("/", methods=["GET"])
 def process_payment():
     """
+    ⚠️ DEPRECATED ENDPOINT - SCHEDULED FOR REMOVAL AFTER 2025-12-31
+
+    Old payment flow from NOWPayments success_url (GET with token).
+    New flow uses POST /process-validated-payment endpoint.
+
+    This endpoint remains for backward compatibility with existing payment links.
+
+    📅 DEPRECATION SCHEDULE:
+       - Last reviewed: 2025-11-18
+       - Next review: 2025-12-18
+       - Removal date: 2026-01-31
+
+    📊 MONITORING: Log each use for tracking migration progress.
+
     Main endpoint for processing payment confirmations from NOWPayments success_url.
 
     Flow:
@@ -148,6 +162,13 @@ def process_payment():
     Returns:
         JSON response with status
     """
+    # ✅ D-04: Log deprecation warning for monitoring
+    token_preview = request.args.get("token", "")[:20] if request.args.get("token") else "MISSING"
+    logger.warning(
+        f"⚠️ [DEPRECATED] GET / endpoint called - MIGRATE TO POST /process-validated-payment. "
+        f"Remove after 2026-01-31. Token preview: {token_preview}..."
+    )
+
     try:
         logger.info(f"🎯 [ENDPOINT] Payment confirmation received from NOWPayments")
 

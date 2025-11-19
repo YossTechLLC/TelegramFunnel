@@ -56,38 +56,8 @@ class ConfigManager(BaseConfigManager):
             print(f"⚠️ [CONFIG] Invalid fallback tolerance value, using default: 0.75")
             return 0.75
 
-    # ========== DEPRECATED METHOD (kept for backward compatibility) ==========
-
-    def get_payment_tolerances(self) -> dict:
-        """
-        Fetch payment validation tolerance thresholds.
-
-        Returns:
-            Dict with 'min_tolerance' and 'fallback_tolerance' as floats
-        """
-        try:
-            # Fetch from environment variables (Cloud Run injects from Secret Manager)
-            min_tolerance_str = os.getenv('PAYMENT_MIN_TOLERANCE', '0.50')
-            fallback_tolerance_str = os.getenv('PAYMENT_FALLBACK_TOLERANCE', '0.75')
-
-            min_tolerance = float(min_tolerance_str)
-            fallback_tolerance = float(fallback_tolerance_str)
-
-            print(f"✅ [CONFIG] Payment min tolerance: {min_tolerance} ({min_tolerance*100}%)")
-            print(f"✅ [CONFIG] Payment fallback tolerance: {fallback_tolerance} ({fallback_tolerance*100}%)")
-
-            return {
-                'min_tolerance': min_tolerance,
-                'fallback_tolerance': fallback_tolerance
-            }
-
-        except Exception as e:
-            print(f"❌ [CONFIG] Error loading payment tolerances: {e}")
-            print(f"⚠️ [CONFIG] Using defaults: min=0.50, fallback=0.75")
-            return {
-                'min_tolerance': 0.50,
-                'fallback_tolerance': 0.75
-            }
+    # ✅ D-05: Removed unused get_payment_tolerances() method (32 lines)
+    # Tolerances are now accessed via get_payment_min_tolerance() and get_payment_fallback_tolerance()
 
     def initialize_config(self) -> dict:
         """

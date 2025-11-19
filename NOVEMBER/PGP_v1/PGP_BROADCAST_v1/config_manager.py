@@ -255,18 +255,6 @@ class ConfigManager(BaseConfigManager):
         self.logger.info("🗑️  Configuration cache cleared")
 
 
-# Global instance for convenience (singleton pattern)
-_config_manager_instance = None
-
-
-def get_config_manager() -> ConfigManager:
-    """
-    Get or create a global ConfigManager instance.
-
-    Returns:
-        ConfigManager instance
-    """
-    global _config_manager_instance
-    if _config_manager_instance is None:
-        _config_manager_instance = ConfigManager()
-    return _config_manager_instance
+# ✅ D-06: Removed unused singleton pattern (15 lines)
+# Function get_config_manager() and _config_manager_instance were never used
+# ConfigManager is instantiated directly in service files
