@@ -339,6 +339,82 @@ def validate_crypto_address(address: Any, field_name: str = "address", max_lengt
     return addr
 
 
+def validate_crypto_symbol(symbol: Any, field_name: str = "currency") -> str:
+    """
+    Validate cryptocurrency symbol/ticker.
+
+    Prevents injection attacks via unvalidated crypto symbols that are:
+    - Logged in error messages
+    - Used in database queries
+    - Passed to external APIs (CoinGecko, NowPayments)
+
+    Args:
+        symbol: Crypto symbol to validate (e.g., "BTC", "ETH", "USDT")
+        field_name: Name of field for error messages
+
+    Returns:
+        Validated uppercase symbol string
+
+    Raises:
+        ValidationError: If validation fails
+
+    Security:
+        - Prevents SQL injection via currency fields
+        - Prevents log injection via special characters
+        - Prevents API abuse via malformed symbols
+
+    Examples:
+        >>> validate_crypto_symbol("btc")
+        'BTC'
+        >>> validate_crypto_symbol("USDT")
+        'USDT'
+        >>> validate_crypto_symbol("'; DROP TABLE users; --")
+        ValidationError: currency contains invalid characters
+        >>> validate_crypto_symbol("BTC<script>alert(1)</script>")
+        ValidationError: currency contains invalid characters
+    """
+    if not symbol:
+        raise ValidationError(f"{field_name} cannot be empty")
+
+    # Convert to string and normalize
+    sym = str(symbol).strip().upper()
+
+    if not sym:
+        raise ValidationError(f"{field_name} cannot be whitespace only")
+
+    # Length check (crypto symbols are 2-10 characters)
+    if len(sym) < 2:
+        raise ValidationError(
+            f"{field_name} too short: {len(sym)} characters (min 2)"
+        )
+
+    if len(sym) > 10:
+        raise ValidationError(
+            f"{field_name} too long: {len(sym)} characters (max 10)"
+        )
+
+    # Strict format: Only uppercase letters, numbers, and hyphens
+    # Examples: BTC, ETH, USDT, BNB, MATIC, SOL-20
+    if not re.match(r'^[A-Z0-9-]+$', sym):
+        raise ValidationError(
+            f"{field_name} contains invalid characters: {symbol} "
+            "(only letters, numbers, and hyphens allowed)"
+        )
+
+    # Additional security: Reject SQL/XSS patterns
+    dangerous_patterns = [
+        "'", '"', ';', '--', '/*', '*/', '<', '>', '&', '|',
+        '\\', '\n', '\r', '\t', '\0'
+    ]
+    for pattern in dangerous_patterns:
+        if pattern in str(symbol):
+            raise ValidationError(
+                f"{field_name} contains dangerous characters: {symbol}"
+            )
+
+    return sym
+
+
 # Export all validation functions
 __all__ = [
     'ValidationError',
@@ -348,5 +424,6 @@ __all__ = [
     'validate_order_id_format',
     'validate_crypto_amount',
     'validate_payment_status',
-    'validate_crypto_address'
+    'validate_crypto_address',
+    'validate_crypto_symbol'
 ]

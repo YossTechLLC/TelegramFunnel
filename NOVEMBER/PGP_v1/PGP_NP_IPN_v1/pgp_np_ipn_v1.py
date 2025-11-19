@@ -16,7 +16,9 @@ from PGP_COMMON.utils import (
     verify_sha512_signature,
     sanitize_error_for_user,
     create_error_response,
-    IdempotencyManager
+    IdempotencyManager,
+    validate_crypto_symbol,
+    ValidationError
 )
 
 from PGP_COMMON.logging import setup_logger
@@ -33,27 +35,52 @@ app = Flask(__name__)
 # so it uses same-origin requests which don't need CORS.
 # CORS is kept here in case old Cloud Storage URLs are still cached somewhere.
 
-# Configure CORS to allow requests from Cloud Storage and custom domain
+# ✅ H-05 FIX: RESTRICTIVE CORS configuration (prevents data theft)
+# Security: Only allow specific origins, not wildcards
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "https://storage.googleapis.com",  # Backward compatibility
+            # ✅ SPECIFIC bucket only (if still needed for backward compatibility)
+            # Note: If you don't use Cloud Storage, remove this line
+            "https://storage.googleapis.com/pgp-payment-pages-prod",
+
+            # ✅ Production domains (www and non-www)
             "https://www.paygateprime.com",
-            "http://localhost:3000",  # For local testing
-            "http://localhost:*"
+            "https://paygateprime.com",
+
+            # ✅ Development origins (ONLY for local testing)
+            # Remove these in production or use environment-based config
+            "http://localhost:3000",
+            "http://localhost:5000"
+            # ❌ REMOVED: "http://localhost:*" (wildcard - security risk!)
+            # ❌ REMOVED: "https://storage.googleapis.com" (any bucket - security risk!)
         ],
+
+        # ✅ Restrict HTTP methods (read-only operations)
         "methods": ["GET", "OPTIONS"],
+
+        # ✅ Restrict headers
         "allow_headers": ["Content-Type", "Accept"],
         "expose_headers": ["Content-Type"],
+
+        # ✅ No credentials (prevents CSRF)
         "supports_credentials": False,
+
+        # ✅ Cache preflight for 1 hour
         "max_age": 3600
     }
 })
 
-logger.info(f"✅ [CORS] Configured for /api/* routes (backward compatibility)")
+logger.info(f"✅ [CORS] H-05 FIX: Restrictive CORS configured for /api/* routes")
+logger.info(f"   Allowed origins:")
+logger.info(f"      - https://storage.googleapis.com/pgp-payment-pages-prod (specific bucket)")
+logger.info(f"      - https://www.paygateprime.com")
+logger.info(f"      - https://paygateprime.com")
+logger.info(f"      - http://localhost:3000 (dev only)")
+logger.info(f"      - http://localhost:5000 (dev only)")
 logger.info(f"   NOTE: Main flow (GET /payment-processing) uses same-origin, no CORS needed")
-logger.info(f"   Allowed origins: storage.googleapis.com, www.paygateprime.com, localhost")
-logger.info(f"   IPN endpoint (POST /) remains protected (no CORS)")
+logger.info(f"   NOTE: IPN endpoint (POST /) remains protected (no CORS)")
+logger.info(f"   🔒 Security: Wildcards removed, specific origins only")
 
 # ============================================================================
 # CONFIGURATION AND INITIALIZATION
@@ -81,10 +108,25 @@ DATABASE_USER = (os.getenv('DATABASE_USER_SECRET') or '').strip() or None
 DATABASE_PASSWORD = (os.getenv('DATABASE_PASSWORD_SECRET') or '').strip() or None
 
 logger.debug(f"📊 [CONFIG] Database Configuration Status:")
-logger.error(f"   CLOUD_SQL_CONNECTION_NAME: {'✅ Loaded' if CLOUD_SQL_CONNECTION_NAME else '❌ Missing'}")
-logger.error(f"   DATABASE_NAME_SECRET: {'✅ Loaded' if DATABASE_NAME else '❌ Missing'}")
-logger.error(f"   DATABASE_USER_SECRET: {'✅ Loaded' if DATABASE_USER else '❌ Missing'}")
-logger.error(f"   DATABASE_PASSWORD_SECRET: {'✅ Loaded' if DATABASE_PASSWORD else '❌ Missing'}")
+if CLOUD_SQL_CONNECTION_NAME:
+    logger.info(f"   ✅ CLOUD_SQL_CONNECTION_NAME loaded")
+else:
+    logger.error(f"   ❌ CLOUD_SQL_CONNECTION_NAME missing")
+
+if DATABASE_NAME:
+    logger.info(f"   ✅ DATABASE_NAME_SECRET loaded")
+else:
+    logger.error(f"   ❌ DATABASE_NAME_SECRET missing")
+
+if DATABASE_USER:
+    logger.info(f"   ✅ DATABASE_USER_SECRET loaded")
+else:
+    logger.error(f"   ❌ DATABASE_USER_SECRET missing")
+
+if DATABASE_PASSWORD:
+    logger.info(f"   ✅ DATABASE_PASSWORD_SECRET loaded")
+else:
+    logger.error(f"   ❌ DATABASE_PASSWORD_SECRET missing")
 
 if not all([CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD]):
     logger.error(f"❌ [CONFIG] CRITICAL: Missing database credentials!")
@@ -128,11 +170,30 @@ PGP_ORCHESTRATOR_URL = (os.getenv('PGP_ORCHESTRATOR_URL') or '').strip() or None
 GCNOTIFICATIONSERVICE_URL = (os.getenv('GCNOTIFICATIONSERVICE_URL') or '').strip() or None
 
 logger.debug(f"📊 [CONFIG] Cloud Tasks Configuration Status:")
-logger.error(f"   CLOUD_TASKS_PROJECT_ID: {'✅ Loaded' if CLOUD_TASKS_PROJECT_ID else '❌ Missing'}")
-logger.error(f"   CLOUD_TASKS_LOCATION: {'✅ Loaded' if CLOUD_TASKS_LOCATION else '❌ Missing'}")
-logger.error(f"   PGP_ORCHESTRATOR_QUEUE: {'✅ Loaded' if PGP_ORCHESTRATOR_QUEUE else '❌ Missing'}")
-logger.error(f"   PGP_ORCHESTRATOR_URL: {'✅ Loaded' if PGP_ORCHESTRATOR_URL else '❌ Missing'}")
-logger.error(f"   🆕 GCNOTIFICATIONSERVICE_URL: {'✅ Loaded' if GCNOTIFICATIONSERVICE_URL else '❌ Missing (notifications disabled)'}")
+if CLOUD_TASKS_PROJECT_ID:
+    logger.info(f"   ✅ CLOUD_TASKS_PROJECT_ID loaded")
+else:
+    logger.error(f"   ❌ CLOUD_TASKS_PROJECT_ID missing")
+
+if CLOUD_TASKS_LOCATION:
+    logger.info(f"   ✅ CLOUD_TASKS_LOCATION loaded")
+else:
+    logger.error(f"   ❌ CLOUD_TASKS_LOCATION missing")
+
+if PGP_ORCHESTRATOR_QUEUE:
+    logger.info(f"   ✅ PGP_ORCHESTRATOR_QUEUE loaded")
+else:
+    logger.error(f"   ❌ PGP_ORCHESTRATOR_QUEUE missing")
+
+if PGP_ORCHESTRATOR_URL:
+    logger.info(f"   ✅ PGP_ORCHESTRATOR_URL loaded")
+else:
+    logger.error(f"   ❌ PGP_ORCHESTRATOR_URL missing")
+
+if GCNOTIFICATIONSERVICE_URL:
+    logger.info(f"   ✅ GCNOTIFICATIONSERVICE_URL loaded")
+else:
+    logger.warning(f"   ⚠️ GCNOTIFICATIONSERVICE_URL missing (notifications disabled)")
 
 # Initialize Cloud Tasks client
 cloudtasks_client = None
@@ -339,6 +400,38 @@ def handle_ipn():
         # Assume outcome is in same currency as payment
         payment_data['outcome_currency'] = payment_data.get('pay_currency')
         logger.info(f"💡 [IPN] outcome_currency not provided, inferring from pay_currency: {payment_data['outcome_currency']}")
+
+    # ✅ H-04 FIX: Validate crypto symbols to prevent injection attacks
+    logger.info(f"🔍 [VALIDATION] Validating crypto symbols...")
+    try:
+        # Validate pay_currency (required)
+        if payment_data.get('pay_currency'):
+            payment_data['pay_currency'] = validate_crypto_symbol(
+                payment_data['pay_currency'],
+                field_name='pay_currency'
+            )
+            logger.info(f"   ✅ pay_currency validated: {payment_data['pay_currency']}")
+
+        # Validate price_currency (optional)
+        if payment_data.get('price_currency'):
+            payment_data['price_currency'] = validate_crypto_symbol(
+                payment_data['price_currency'],
+                field_name='price_currency'
+            )
+            logger.info(f"   ✅ price_currency validated: {payment_data['price_currency']}")
+
+        # Validate outcome_currency (optional, but usually present)
+        if payment_data.get('outcome_currency'):
+            payment_data['outcome_currency'] = validate_crypto_symbol(
+                payment_data['outcome_currency'],
+                field_name='outcome_currency'
+            )
+            logger.info(f"   ✅ outcome_currency validated: {payment_data['outcome_currency']}")
+
+    except ValidationError as ve:
+        logger.error(f"❌ [VALIDATION] Crypto symbol validation failed: {ve}")
+        logger.warning(f"⚠️ [IPN] Rejecting IPN with invalid crypto symbol")
+        abort(400, f"Invalid crypto symbol: {str(ve)}")
 
     success = db_manager.update_payment_data(order_id, payment_data) if db_manager else False
 

@@ -178,6 +178,118 @@ def log_error_with_context(
     )
 
 
+def sanitize_telegram_error(error: Exception, error_id: Optional[str] = None) -> str:
+    """
+    Sanitize Telegram API errors for client response.
+
+    Telegram errors can expose:
+        - Chat IDs (sensitive, PII)
+        - User IDs (PII)
+        - Bot token fragments (in stack traces)
+        - Internal Telegram server errors
+        - Channel membership information
+
+    Args:
+        error: TelegramError or generic exception
+        error_id: Optional error ID for correlation
+
+    Returns:
+        Sanitized error message safe for client
+
+    Example:
+        >>> # Original: "Chat not found (chat_id: -1001234567890)"
+        >>> sanitize_telegram_error(exc, "abc-123")
+        'Channel not accessible. Error ID: abc-123'
+    """
+    if error_id is None:
+        error_id = generate_error_id()
+
+    env = get_environment()
+    error_str = str(error).lower()
+
+    # Development: Show actual error
+    if env == 'development':
+        return f"Telegram Error: {str(error)}"
+
+    # Production: Map internal errors to generic messages
+    if 'chat not found' in error_str:
+        return f"Channel not accessible. Error ID: {error_id}"
+
+    if 'user not found' in error_str or 'user_id' in error_str:
+        return f"User account not accessible. Error ID: {error_id}"
+
+    if 'bot was blocked' in error_str:
+        return f"Bot access revoked by user. Error ID: {error_id}"
+
+    if 'insufficient rights' in error_str or 'admin' in error_str:
+        return f"Insufficient permissions for this operation. Error ID: {error_id}"
+
+    if 'rate limit' in error_str or 'too many requests' in error_str:
+        return f"Service temporarily busy, please retry. Error ID: {error_id}"
+
+    if 'network' in error_str or 'timeout' in error_str or 'connection' in error_str:
+        return f"Network connectivity issue, please retry. Error ID: {error_id}"
+
+    if 'forbidden' in error_str or 'unauthorized' in error_str:
+        return f"Operation not authorized. Error ID: {error_id}"
+
+    # Generic fallback (don't expose details)
+    return f"Telegram service temporarily unavailable. Error ID: {error_id}"
+
+
+def sanitize_database_error(error: Exception, error_id: Optional[str] = None) -> str:
+    """
+    Sanitize database errors for client response.
+
+    Database errors can expose:
+        - Table/column names (schema information)
+        - Query syntax
+        - Connection strings
+        - Data types
+        - Constraint names
+
+    Args:
+        error: Database exception
+        error_id: Optional error ID for correlation
+
+    Returns:
+        Sanitized error message
+
+    Example:
+        >>> # Original: "duplicate key value violates unique constraint 'processed_payments_pkey'"
+        >>> sanitize_database_error(exc, "abc-123")
+        'Duplicate entry detected. Error ID: abc-123'
+    """
+    if error_id is None:
+        error_id = generate_error_id()
+
+    env = get_environment()
+    error_str = str(error).lower()
+
+    # Development: Show actual error
+    if env == 'development':
+        return f"Database Error: {str(error)}"
+
+    # Production: Map errors to generic messages
+    if 'connection' in error_str or 'timeout' in error_str:
+        return f"Database temporarily unavailable. Error ID: {error_id}"
+
+    if 'unique constraint' in error_str or 'duplicate' in error_str:
+        return f"Duplicate entry detected. Error ID: {error_id}"
+
+    if 'not found' in error_str or 'no rows' in error_str:
+        return f"Requested record not found. Error ID: {error_id}"
+
+    if 'foreign key' in error_str or 'constraint' in error_str:
+        return f"Operation violates data integrity rules. Error ID: {error_id}"
+
+    if 'permission denied' in error_str or 'access denied' in error_str:
+        return f"Database access denied. Error ID: {error_id}"
+
+    # Generic fallback (don't expose schema details)
+    return f"Database operation failed. Error ID: {error_id}"
+
+
 def sanitize_sql_error(error: Exception, error_id: str) -> str:
     """
     Sanitize SQL-related errors to prevent information disclosure.
@@ -200,14 +312,8 @@ def sanitize_sql_error(error: Exception, error_id: str) -> str:
         >>> sanitize_sql_error(exc, "abc-123")
         'A database error occurred. Error ID: abc-123'
     """
-    env = get_environment()
-
-    if env == 'development':
-        # Development: Show actual SQL error
-        return f"Database Error: {str(error)}"
-    else:
-        # Production: Generic message
-        return f"A database error occurred. Error ID: {error_id}"
+    # Redirect to sanitize_database_error (more comprehensive)
+    return sanitize_database_error(error, error_id)
 
 
 def sanitize_authentication_error(error: Exception, error_id: str) -> str:

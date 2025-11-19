@@ -76,7 +76,7 @@ class ConfigManager(BaseConfigManager):
         )
         if not token:
             raise ValueError("Bot token is required but not found")
-        self.logger.info(f"🤖 Bot token loaded (length: {len(token)})")
+        self.logger.info(f"🤖 Bot authentication configured")
         return token
 
     def get_bot_username_dynamic(self) -> str:
@@ -102,7 +102,7 @@ class ConfigManager(BaseConfigManager):
         )
         if not secret_key:
             raise ValueError("JWT secret key is required but not found")
-        self.logger.info(f"🔑 JWT secret key loaded (length: {len(secret_key)})")
+        self.logger.info(f"🔑 JWT authentication configured")
         return secret_key
 
     # ========== DEPRECATED METHODS (kept for backward compatibility) ==========
@@ -194,7 +194,7 @@ class ConfigManager(BaseConfigManager):
         token = self._fetch_secret('BOT_TOKEN_SECRET')
         if not token:
             raise ValueError("Bot token is required but not found")
-        self.logger.info(f"🤖 Bot token loaded (length: {len(token)})")
+        self.logger.info(f"🤖 Bot authentication configured")
         return token
 
     def get_bot_username(self) -> str:
@@ -226,7 +226,7 @@ class ConfigManager(BaseConfigManager):
         secret_key = self._fetch_secret('JWT_SECRET_KEY_SECRET')
         if not secret_key:
             raise ValueError("JWT secret key is required but not found")
-        self.logger.info(f"🔑 JWT secret key loaded (length: {len(secret_key)})")
+        self.logger.info(f"🔑 JWT authentication configured")
         return secret_key
 
     def get_database_host(self) -> str:

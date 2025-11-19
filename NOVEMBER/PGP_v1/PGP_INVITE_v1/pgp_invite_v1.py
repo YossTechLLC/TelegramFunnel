@@ -34,9 +34,12 @@ from config_manager import ConfigManager
 from token_manager import TokenManager
 from database_manager import DatabaseManager
 
-# Import security utilities (C-07 fix)
+# Import security utilities (C-07 fix, H-02 fix)
 from PGP_COMMON.utils import (
     sanitize_error_for_user,
+    sanitize_telegram_error,
+    sanitize_database_error,
+    generate_error_id,
     create_error_response,
     IdempotencyManager,
     ValidationError,
@@ -291,12 +294,12 @@ def send_telegram_invite():
         async def send_invite_async():
             """
             Async function to handle telegram bot operations.
-            Creates fresh Bot instance with isolated httpx connection pool.
+            ✅ H-03 FIX: Uses context manager for proper connection cleanup.
+            Creates fresh Bot instance with isolated httpx connection pool that
+            is automatically closed even on exceptions.
             """
-            # Create fresh Bot instance for this request
-            bot = Bot(bot_token)
-
-            try:
+            # ✅ H-03 FIX: Use async context manager for automatic cleanup
+            async with Bot(bot_token) as bot:
                 logger.info(f"📨 [ENDPOINT] Creating Telegram invite link for channel {closed_channel_id}")
 
                 # Create one-time invite link (expires in 1 hour, 1 use only)
@@ -328,18 +331,8 @@ def send_telegram_invite():
                     "success": True,
                     "invite_link": invite.invite_link
                 }
-
-            except TelegramError as te:
-                # Telegram API error - Cloud Tasks will retry
-                logger.error(f"❌ [ENDPOINT] Telegram API error: {te}", exc_info=True)
-                logger.info(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
-                raise
-
-            except Exception as e:
-                # Other error - Cloud Tasks will retry
-                logger.error(f"❌ [ENDPOINT] Unexpected error sending invite: {e}", exc_info=True)
-                logger.info(f"🔄 [ENDPOINT] Cloud Tasks will retry after 60s")
-                raise
+                # ✅ H-03 FIX: Bot shutdown() automatically called here
+                # Connection pool properly closed even if exceptions occurred
 
         # Execute async function in isolated event loop
         try:
@@ -391,12 +384,27 @@ def send_telegram_invite():
             }), 200
 
         except TelegramError as te:
-            # Telegram API error - return 500 for Cloud Tasks retry
-            abort(500, f"Telegram API error: {te}")
+            # ✅ H-02 FIX: Log full error internally, return sanitized message to client
+            error_id = generate_error_id()
+            logger.error(
+                f"❌ [ENDPOINT] Telegram API error for user {user_id}, channel {closed_channel_id}: {te}",
+                extra={"error_id": error_id, "user_id": user_id, "channel_id": closed_channel_id},
+                exc_info=True  # Include full stack trace in logs
+            )
+            # Return sanitized error - Cloud Tasks will retry on 500
+            sanitized_msg = sanitize_telegram_error(te, error_id)
+            abort(500, sanitized_msg)
 
         except Exception as e:
-            # Other error - return 500 for Cloud Tasks retry
-            abort(500, f"Error sending invite: {e}")
+            # ✅ H-02 FIX: Log full error internally, return sanitized message
+            error_id = generate_error_id()
+            logger.error(
+                f"❌ [ENDPOINT] Unexpected error sending invite: {e}",
+                extra={"error_id": error_id, "user_id": user_id, "channel_id": closed_channel_id},
+                exc_info=True
+            )
+            sanitized_msg = sanitize_error_for_user(e, error_id)
+            abort(500, sanitized_msg)
 
     except Exception as e:
         logger.error(f"❌ [ENDPOINT] Unexpected error: {e}", exc_info=True)

@@ -17,6 +17,8 @@ from PGP_COMMON.utils.ip_extraction import (
 from PGP_COMMON.utils.error_sanitizer import (
     generate_error_id,
     sanitize_error_for_user,
+    sanitize_telegram_error,
+    sanitize_database_error,
     sanitize_sql_error,
     sanitize_authentication_error,
     sanitize_validation_error,
@@ -58,7 +60,8 @@ from PGP_COMMON.utils.validation import (
     validate_order_id_format,
     validate_crypto_amount,
     validate_payment_status,
-    validate_crypto_address
+    validate_crypto_address,
+    validate_crypto_symbol
 )
 
 __all__ = [
@@ -73,6 +76,8 @@ __all__ = [
     'is_private_ip',
     'generate_error_id',
     'sanitize_error_for_user',
+    'sanitize_telegram_error',
+    'sanitize_database_error',
     'sanitize_sql_error',
     'sanitize_authentication_error',
     'sanitize_validation_error',
@@ -104,5 +109,6 @@ __all__ = [
     'validate_order_id_format',
     'validate_crypto_amount',
     'validate_payment_status',
-    'validate_crypto_address'
+    'validate_crypto_address',
+    'validate_crypto_symbol'
 ]

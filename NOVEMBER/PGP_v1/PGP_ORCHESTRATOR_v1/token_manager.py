@@ -180,7 +180,7 @@ class TokenManager(BaseTokenManager):
             # Encode to base64 (using inherited method)
             token = self.encode_base64_urlsafe(final_data)
 
-            print(f"🔐 [TOKEN] Encrypted token for PGP_INVITE (length: {len(token)})")
+            print(f"🔐 [TOKEN] Encrypted token for PGP_INVITE generated")
             return token
 
         except Exception as e:

@@ -168,7 +168,7 @@ def build_hostpay_token(
         final_data = bytes(packed_data) + truncated_signature
         token = base64.urlsafe_b64encode(final_data).rstrip(b'=').decode('utf-8')
 
-        logger.info(f"✅ [HOSTPAY_TOKEN] Token generated successfully ({len(token)} chars)")
+        logger.info(f"✅ [HOSTPAY_TOKEN] Token generated successfully")
         logger.debug(f"🆔 [HOSTPAY_TOKEN] Unique ID: {unique_id}")
         logger.debug(f"🆔 [HOSTPAY_TOKEN] CN API ID: {cn_api_id}")
         logger.info(f"💰 [HOSTPAY_TOKEN] ACTUAL amount: {actual_eth_amount} {from_currency.upper()}")       # ✅ LOG ACTUAL

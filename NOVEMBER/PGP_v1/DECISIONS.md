@@ -1,12 +1,341 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **Architecture Cleanup: PGP_WEB_v1 Ghost Service Removed** 👻
+**Last Updated:** 2025-11-18 - **🔒 Security Hardening - Phase 2** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-18: Security Hardening - Connection Pooling Strategy
+
+**Decision:** Replaced NullPool with QueuePool in PGP_BROADCAST_v1 with pool_size=5, max_overflow=10
+
+**Context:**
+- PGP_BROADCAST_v1 was using `poolclass=NullPool` (no connection pooling)
+- Every request created new TCP connection to database
+- Under load: 100 req/sec = 100 new connections/sec → "too many connections" crash
+- PostgreSQL max_connections = 100 (default limit)
+
+**Rationale:**
+- QueuePool maintains pool of reusable connections
+- Reduces database connection overhead (TCP handshake, authentication)
+- Prevents connection exhaustion under traffic bursts
+- pool_size=5: Persistent connections for baseline traffic
+- max_overflow=10: Total capacity 15 connections (5 + 10 burst)
+- pool_recycle=1800s: Respects Cloud SQL connection timeout (30 min)
+- pool_pre_ping=True: Detects stale connections before use
+
+**Implementation:**
+- Changed import: `from sqlalchemy.pool import QueuePool`
+- Updated create_engine() configuration (Lines 66-85)
+- Added comprehensive logging of pool configuration
+
+**Impact:**
+- Performance: Connection reuse reduces latency
+- Stability: Prevents database crash under load
+- Risk: LOW - standard SQLAlchemy pattern for Cloud SQL
+
+---
+
+## 2025-11-18: Security Hardening - CORS Origin Restriction
+
+**Decision:** Replaced wildcard CORS origins with specific allowed origins in PGP_NP_IPN_v1
+
+**Context:**
+- CORS configuration allowed `"https://storage.googleapis.com"` (any GCS bucket)
+- CORS configuration allowed `"http://localhost:*"` (any port)
+- Risk: Attacker creates malicious page on allowed origin → AJAX to /api/* → steals payment data
+
+**Changes:**
+- REMOVED: `"https://storage.googleapis.com"` (any bucket)
+- ADDED: `"https://storage.googleapis.com/pgp-payment-pages-prod"` (specific bucket)
+- REMOVED: `"http://localhost:*"` (wildcard)
+- ADDED: `"http://localhost:3000"`, `"http://localhost:5000"` (specific dev ports)
+- ADDED: `"https://paygateprime.com"` (non-www variant)
+
+**Rationale:**
+- Principle of least privilege: Only allow specific, trusted origins
+- Prevents CORS bypass attacks via malicious pages
+- Development origins clearly documented for removal in production
+- Follows OWASP CORS best practices
+
+**Impact:**
+- Security: Eliminates CORS data theft risk
+- Compatibility: Preserves legitimate payment flow origins
+- Risk: VERY LOW - no functional change for legitimate requests
+
+---
+
+## 2025-11-18: Security Hardening - Error Sanitization Strategy
+
+**Decision:** Extended error_sanitizer.py with sanitize_telegram_error() and sanitize_database_error()
+
+**Context:**
+- Services were returning raw error messages to clients
+- Telegram errors exposed: chat IDs, user IDs, bot token fragments
+- Database errors exposed: table names, column names, query syntax
+- OWASP A04:2021 - Insecure Design, CWE-209: Information Exposure
+
+**Design:**
+- Environment-aware: Detailed errors in development, generic in production
+- Error ID correlation: Unique UUID for linking user-facing message to internal logs
+- Internal logging: Full stack traces logged to Cloud Logging with context
+- Generic user messages: "Channel not accessible. Error ID: abc-123"
+
+**Rationale:**
+- GDPR/privacy: No PII exposure in error responses
+- Security: Prevents schema enumeration and infrastructure reconnaissance
+- Debugging: Error ID allows support to correlate user reports with logs
+- User experience: Clear error messages without sensitive details
+
+**Implementation:**
+- Added sanitize_telegram_error() - maps Telegram errors to generic messages
+- Added sanitize_database_error() - maps DB errors to generic messages
+- Applied to PGP_INVITE_v1 Telegram error handling
+- Exported from PGP_COMMON/utils/__init__.py
+
+**Impact:**
+- Security: Information disclosure prevented
+- Compliance: GDPR/privacy violation resolved
+- Debugging: Error correlation maintained via error IDs
+- Risk: VERY LOW - improves security without functional change
+
+---
+
+## 2025-11-18: Security Hardening - Bot Context Manager Pattern
+
+**Decision:** Changed PGP_INVITE_v1 Bot instantiation to use `async with Bot() as bot:` pattern
+
+**Context:**
+- Bot created with `bot = Bot(bot_token)` without cleanup
+- Uses httpx connection pool internally
+- Never called `bot.shutdown()` to close connections
+- Under load: httpx connection pool exhaustion → "Too many open files"
+
+**Rationale:**
+- Context manager guarantees Bot.shutdown() called even on exceptions
+- Properly closes httpx connection pool
+- Prevents file descriptor leaks
+- Standard Python pattern for resource management
+
+**Implementation:**
+- Changed from: `bot = Bot(bot_token)` (manual shutdown)
+- Changed to: `async with Bot(bot_token) as bot:` (automatic cleanup)
+- Maintains existing asyncio.run() pattern (works well for Cloud Run)
+
+**Impact:**
+- Stability: Eliminates connection leak under load
+- Resource management: Proper cleanup on all code paths
+- Risk: VERY LOW - standard pattern, no functional change
+
+---
+
+## 2025-11-18: Security Hardening - Crypto Symbol Validation
+
+**Decision:** Added validate_crypto_symbol() to validate all cryptocurrency symbols from external APIs
+
+**Context:**
+- Crypto symbols (pay_currency, price_currency, outcome_currency) from NowPayments unvalidated
+- Risk: SQL injection, log injection, API abuse via malformed symbols
+- Example attack: `'; DROP TABLE users; --` could be logged or passed to CoinGecko API
+
+**Design:**
+- Strict format: 2-10 characters, uppercase letters/numbers/hyphens only
+- Rejects dangerous patterns: quotes, semicolons, angle brackets, SQL/XSS keywords
+- Normalizes input: Converts to uppercase (btc → BTC)
+- Fails fast: Returns 400 Bad Request with clear validation error
+
+**Rationale:**
+- Defense in depth: Complements parameterized queries (prevents injection)
+- Data quality: Ensures crypto symbols match expected format
+- API safety: Prevents malformed requests to external APIs (CoinGecko)
+- Logging safety: Prevents log injection attacks
+
+**Implementation:**
+- Added validate_crypto_symbol() to PGP_COMMON/utils/validation.py
+- Applied to PGP_NP_IPN_v1 currency fields (Lines 379-409)
+- Validates pay_currency, price_currency, outcome_currency before database insert
+
+**Impact:**
+- Security: Injection attacks blocked at validation layer
+- Data quality: Only valid crypto symbols stored in database
+- Risk: VERY LOW - validation only, no functional change
+
+---
+
+## 2025-11-18: Dead Code Cleanup - Token Manager Rationalization
+
+**Decision:** Removed 573 lines of dead token methods from PGP_HOSTPAY3_v1/token_manager.py while keeping ALL methods in PGP_HOSTPAY1_v1/token_manager.py
+
+**Context:**
+- HOSTPAY3 had 10 token methods defined, but only 3 were actually used
+- HOSTPAY1 had 10 token methods defined, and ALL 10 were actively used
+- Both files had orphaned code (4-5 lines) from previous BaseTokenManager refactoring
+- Checklist estimated 200 lines dead code in HOSTPAY1 - incorrect
+
+**Analysis:**
+HOSTPAY3 Methods:
+- ✅ KEPT: decrypt_pgp_hostpay1_to_pgp_hostpay3_token (receives payment requests)
+- ✅ KEPT: encrypt_pgp_hostpay3_to_pgp_hostpay1_token (sends payment responses)
+- ✅ KEPT: encrypt_pgp_hostpay3_retry_token (creates retry tokens)
+- ❌ DELETED: 7 other methods never called
+
+HOSTPAY1 Methods (Central Hub):
+- ALL 10 methods actively used to communicate with: SPLIT1, ACCUMULATOR, MICROBATCH, HOSTPAY2, HOSTPAY3
+
+**Rationale:**
+- HOSTPAY3 is a specialized execution service (only sends ETH payments)
+- HOSTPAY1 is the orchestration hub (coordinates all payment flows)
+- Different services have different communication needs
+- Dead code removal improves maintainability and reduces confusion
+
+**Implementation:**
+- Rewrote PGP_HOSTPAY3_v1/token_manager.py from 898 → 325 lines
+- Fixed orphaned code in both files
+- All imports moved to method-level (only used in specific methods)
+- Maintained full backward compatibility with token formats
+
+**Impact:**
+- Code reduction: 578 lines total (573 HOSTPAY3 + 5 HOSTPAY1)
+- Maintainability: 63.8% reduction in HOSTPAY3 token_manager
+- Clarity: Only methods actually used remain
+- Risk: LOW - verified all remaining methods are called
+
+**Alternative Considered:** Remove unused methods from HOSTPAY1 too
+- Rejected: ALL 10 methods in HOSTPAY1 are actually used
+- Rejected: HOSTPAY1 needs communication with 5 different services
+- Evidence: grep confirmed all 10 methods called in pgp_hostpay1_v1.py
+
+---
+
+## 2025-11-18: Database Method Centralization to PGP_COMMON
+
+**Decision:** Moved insert_hostpay_transaction() and insert_failed_transaction() from service-specific files to BaseDatabaseManager in PGP_COMMON
+
+**Context:**
+- Methods were 100% identical in PGP_HOSTPAY1_v1 and PGP_HOSTPAY3_v1
+- 216 lines of duplicate code (2 methods × 2 services)
+- Bug found: undefined CLOUD_SQL_AVAILABLE variable used in 6 places
+
+**Rationale:**
+- Single source of truth for database operations
+- Easier maintenance (1 edit instead of 2)
+- Eliminated code duplication
+- Fixed undefined variable bug
+- Consistent behavior across services
+
+**Implementation:**
+- Added methods to PGP_COMMON/database/db_manager.py (BaseDatabaseManager class)
+- Removed duplicates from PGP_HOSTPAY1_v1/database_manager.py
+- Removed duplicates from PGP_HOSTPAY3_v1/database_manager.py
+- Removed undefined CLOUD_SQL_AVAILABLE checks (already handled by base class)
+- Both services now inherit methods via super().__init__()
+
+**Impact:**
+- Net code reduction: 182 lines removed
+- Bug fix: 6 undefined variable references eliminated
+- Maintainability: 100% improvement for these methods
+- Risk: LOW - No logic changes, only consolidation
+
+**Alternative Considered:** Keep methods service-specific
+- Rejected: Violates DRY principle
+- Rejected: Maintenance burden (2× edits for every change)
+- Rejected: Bug propagation risk (identical bugs in both services)
+
+---
+
+## 2025-11-18: 🔐 Critical Security Architecture - Phase 1 Complete
+
+### Decision 15.1: Use Context Managers for All Database Connections
+**Context:** PGP_NP_IPN_v1 had 3 instances of undefined `get_db_connection()` function causing crashes.
+**Decision:** Replace all manual connection management with `db_manager.get_connection()` context manager pattern.
+**Rationale:**
+- Automatic connection cleanup via context manager (prevents leaks)
+- Consistent pattern across all services
+- Eliminates manual `conn.close()` calls (source of bugs)
+**Implementation:** Applied to PGP_NP_IPN_v1 lines 432, 473, 563
+
+### Decision 15.2: Centralize Idempotency Logic in PGP_COMMON
+**Context:** 3 services had race-condition-vulnerable idempotency checks (TOCTOU pattern).
+**Decision:** Create atomic `IdempotencyManager` in PGP_COMMON/utils/idempotency.py.
+**Pattern:**
+```python
+# OLD (race condition):
+SELECT payment_id FROM processed_payments WHERE payment_id = %s
+if not exists:
+    INSERT INTO processed_payments (payment_id, ...)
+# ⚠️ Race window between SELECT and INSERT
+
+# NEW (atomic):
+INSERT INTO processed_payments (payment_id, ...) ON CONFLICT DO NOTHING
+SELECT ... FROM processed_payments WHERE payment_id = %s FOR UPDATE
+# ✅ Atomic operation, no race window
+```
+**Rationale:**
+- Single source of truth for idempotency logic
+- Row-level locking prevents race conditions
+- Prevents duplicate payment processing (financial loss)
+**Implementation:** Integrated into PGP_NP_IPN_v1, PGP_ORCHESTRATOR_v1, PGP_INVITE_v1
+
+### Decision 15.3: Validate All External Inputs Before Database Operations
+**Context:** Services accepted invalid Telegram IDs, payment IDs without validation.
+**Decision:** Create comprehensive validation utilities in PGP_COMMON/utils/validation.py.
+**Functions:**
+- `validate_telegram_user_id()` - 8-10 digit positive integers
+- `validate_telegram_channel_id()` - 10-13 digit IDs (positive/negative)
+- `validate_payment_id()` - Alphanumeric strings (1-100 chars)
+- `validate_order_id_format()` - "user_id|channel_id" format
+- `validate_crypto_amount()` - Positive floats (max $1M)
+- `validate_payment_status()` - NowPayments status whitelist
+- `validate_crypto_address()` - Wallet address format
+**Rationale:**
+- Fail fast with clear error messages
+- Prevents logic bugs from None/0/negative values
+- Complements SQL injection prevention (parameterized queries)
+- Example: `WHERE open_channel_id = %s` with None → caught by validation
+**Implementation:** Applied to all payment service endpoints
+
+### Decision 15.4: Never Log Secret Metadata
+**Context:** Services logged secret lengths (`len(secret_key)`) revealing key strength.
+**Decision:** Use generic confirmation messages only, never log secret metadata.
+**Pattern:**
+```python
+# ❌ NEVER:
+logger.info(f"JWT key loaded (length: {len(secret_key)})")  # Reveals 128-bit vs 256-bit
+# ✅ ALWAYS:
+logger.info(f"JWT authentication configured")  # Generic confirmation
+```
+**Rationale:**
+- Secret length reveals key strength (16 bytes = weak, 32 bytes = strong)
+- Logs persist longer than secrets (violates rotation policy)
+- Logs exported to third-party systems (wider exposure)
+- GDPR/compliance violation (secrets in logs = incident)
+- Attackers can prioritize weak targets
+**Implementation:** Removed 15 instances across 4 services
+
+### Decision 15.5: Use Correct Log Levels for Configuration Status
+**Context:** PGP_NP_IPN_v1 used `logger.error()` for both success and missing configs.
+**Decision:** Separate into conditional blocks with appropriate log levels.
+**Pattern:**
+```python
+# ❌ OLD (wrong level):
+logger.error(f"SECRET: {'✅ Loaded' if SECRET else '❌ Missing'}")
+
+# ✅ NEW (correct levels):
+if SECRET:
+    logger.info(f"✅ SECRET loaded")  # INFO for success
+else:
+    logger.error(f"❌ SECRET missing")  # ERROR only for failures
+```
+**Rationale:**
+- Prevents false positives in error monitoring (crying wolf)
+- Makes real errors easier to find
+- Proper severity for alerting (ERROR = actionable)
+**Implementation:** Fixed 9 instances in PGP_NP_IPN_v1
+
+---
 
 ## 2025-11-18: Architecture Cleanup - PGP_WEB_v1 Ghost Service Removed 👻
 

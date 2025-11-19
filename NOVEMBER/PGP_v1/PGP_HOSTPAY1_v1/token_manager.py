@@ -25,11 +25,6 @@ class TokenManager(BaseTokenManager):
         super().__init__(success_url_signing_key, service_name="PGP_HOSTPAY1_v1")
         self.tps_hostpay_signing_key = tps_hostpay_signing_key if tps_hostpay_signing_key else success_url_signing_key
 
-        str_val = data[offset:offset+str_len].decode('utf-8')
-        offset += str_len
-
-        return str_val, offset
-
     # ========================================================================
     # TOKEN 1: PGP_SPLIT1_v1 → PGP_HOSTPAY1_v1 (Incoming from external service)
     # ========================================================================

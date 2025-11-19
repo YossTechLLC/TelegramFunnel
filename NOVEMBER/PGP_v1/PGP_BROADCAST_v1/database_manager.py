@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from google.cloud.sql.connector import Connector
 import sqlalchemy
 from sqlalchemy import create_engine, text
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool  # ✅ H-06 FIX: Use QueuePool for connection reuse
 from config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
@@ -63,13 +63,26 @@ class DatabaseManager:
                 )
                 return conn
 
+            # ✅ H-06 FIX: Use QueuePool for connection pooling (prevents connection exhaustion)
             self._engine = create_engine(
                 "postgresql+pg8000://",
                 creator=getconn,
-                poolclass=NullPool,
+
+                # ✅ CONNECTION POOLING CONFIGURATION
+                poolclass=QueuePool,        # Maintains pool of reusable connections
+                pool_size=5,                # Keep 5 persistent connections
+                max_overflow=10,            # Allow up to 15 total (5 + 10 burst)
+                pool_timeout=30,            # Wait max 30s for connection
+                pool_recycle=1800,          # Recycle connections every 30 min (Cloud SQL timeout)
+                pool_pre_ping=True,         # Test connection before use (detect stale)
+
+                # Disable SQL echo in production
+                echo=False
             )
 
-            self.logger.info(f"🔌 Database engine configured: {connection_name}/{db_name}")
+            self.logger.info(f"🔌 [H-06 FIX] Database engine configured: {connection_name}/{db_name}")
+            self.logger.info(f"   ✅ Connection pool: size=5, max_overflow=10, timeout=30s")
+            self.logger.info(f"   ✅ Pool settings: recycle=1800s, pre_ping=True")
 
         return self._engine
 
