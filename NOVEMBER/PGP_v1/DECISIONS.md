@@ -1,12 +1,382 @@
 # Architectural Decisions - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **🔄 Dead Code Cleanup - Phase 1, 2 & 3** ✅
+**Last Updated:** 2025-11-18 - **🔐 Secret Manager Deployment Architecture Complete** ✅
 
 This document records all significant architectural decisions made during the development of the TelegramFunnel payment system.
 
 ---
 
 ## Recent Decisions
+
+## 2025-11-18: Secret Manager Phased Deployment Architecture ✅
+
+### Decision 18.4: Phased Secret Deployment with Hot-Reload Classification
+**Context:** 69 secrets required for PGP_v1 deployment to pgp-live project with complex dependencies
+**Decision:** Create 6-phase deployment scripts with auto-discovery for dynamic secrets (URLs, queues)
+**Rationale:**
+- **Dependency Management:** Some secrets depend on infrastructure being deployed first
+  - Service URLs require Cloud Run services deployed
+  - Queue names require Cloud Tasks queues created
+- **Hot-Reload Strategy:** 51 secrets can be rotated without service restart (74%)
+  - BaseConfigManager implements fetch_secret_dynamic() with 60-second TTL cache
+  - Static secrets (18) require service restart due to connection pools or token invalidation
+- **Security Tiers:** Different secrets have different criticality levels
+  - Ultra-Critical: HOST_WALLET_PRIVATE_KEY (controls all funds)
+  - Critical: Database, signing keys, IPN secrets (12)
+  - High/Medium/Low: Service URLs, config values (56)
+- **Auto-Discovery:** Phase 5-6 scripts query GCP to get actual deployed values
+  - Eliminates manual URL/queue name entry errors
+  - Ensures exact match between deployed infrastructure and secrets
+
+**Implementation:**
+
+**Phase 1: Infrastructure (9 secrets)**
+- Database: CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+- Cloud Tasks: CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION
+- Redis: PGP_REDIS_HOST, PGP_REDIS_PORT
+- Auto-generates 64-char hex password
+
+**Phase 2: Security (10 secrets)**
+- Generates 5 signing keys (SUCCESS_URL, TPS_HOSTPAY, JWT, SIGNUP, PGP_INTERNAL)
+- Wallet: HOST_WALLET_PRIVATE_KEY (hidden input), ETH/USDT addresses
+- Webhooks: NOWPAYMENTS_IPN_SECRET, TELEGRAM_BOT_API_TOKEN
+- Format validation: hex64, eth_address
+
+**Phase 3: External APIs (5 secrets)**
+- NOWPAYMENTS_API_KEY, CHANGENOW_API_KEY, SENDGRID_API_KEY
+- ETHEREUM_RPC_URL, ETHEREUM_RPC_URL_API
+- All hot-reloadable
+
+**Phase 4: Application Config (12 secrets)**
+- Web/Email: BASE_URL, CORS_ORIGIN, FROM_EMAIL, FROM_NAME
+- Payment: TP_FLAT_FEE, PAYMENT_MIN_TOLERANCE, PAYMENT_FALLBACK_TOLERANCE
+- Thresholds: MICRO_BATCH_THRESHOLD_USD
+- Broadcast: BROADCAST_AUTO_INTERVAL, BROADCAST_MANUAL_INTERVAL
+- All hot-reloadable
+
+**Phase 5: Service URLs (14 secrets - AUTO-DISCOVERED)**
+- gcloud run services list → PGP_*_URL secrets
+- Prerequisite: Cloud Run services deployed
+- Pattern: https://pgp-{service}-v1-{PROJECT_NUM}.us-central1.run.app
+
+**Phase 6: Queue Names (16 secrets - AUTO-DISCOVERED)**
+- gcloud tasks queues list → PGP_*_QUEUE secrets
+- Prerequisite: Cloud Tasks queues created
+- Pattern: pgp-{component}-{purpose}-queue-v1
+
+**Trade-offs:**
+- ✅ **Phased Deployment** - Clear dependencies, can't create Phase 5 before services exist
+- ✅ **Auto-Discovery** - Eliminates manual errors in URLs/queue names
+- ✅ **Hot-Reload Classification** - Explicit documentation of which secrets can rotate without restart
+- ✅ **Security Validation** - Format checks (hex64, URLs, addresses) prevent invalid secrets
+- ✅ **Skip Existing** - Idempotent scripts detect existing secrets
+- ⚠️ **6-Step Process** - More complex than single script, but safer and more maintainable
+- ⚠️ **Phase Dependencies** - Must follow order: 1-4, deploy services, 5, deploy queues, 6
+
+**Alignment with BaseConfigManager:**
+- Hot-reloadable secrets use fetch_secret_dynamic() (60s TTL cache)
+- Static secrets use one-time fetch at service startup
+- Pattern: build_secret_path(secret_name) + fetch_secret_dynamic()
+- Matches implementation in PGP_COMMON/config/base_config.py:184-222
+
+**Utility Scripts:**
+- **grant_pgp_live_secret_access.sh:** Auto-discovers all secrets, grants IAM to service account
+- **verify_pgp_live_secrets.sh:** Comprehensive validation of existence and format
+- **README_SECRET_DEPLOYMENT.md:** Complete deployment guide with troubleshooting
+
+**Alternatives Considered:**
+1. **Single Monolithic Script:** Rejected - can't handle phase dependencies, error-prone
+2. **Manual Secret Creation:** Rejected - 69 secrets too many, high error rate
+3. **Terraform/IaC:** Considered but rejected for now - scripts provide more control and validation
+
+**Next Steps:**
+- Run Phase 1-4 scripts (infrastructure, security, APIs, config)
+- Deploy Cloud Run services
+- Run Phase 5 (auto-discover service URLs)
+- Deploy Cloud Tasks queues
+- Run Phase 6 (auto-discover queue names)
+- Grant IAM permissions
+- Verify all 69 secrets
+
+---
+
+## 2025-11-18: Production Deployment Scripts (Cloud Scheduler, Tasks, Webhooks) ✅
+
+### Decision 18.3: Cloud Scheduler Job Configuration
+**Context:** Automated batch processing requires scheduled CRON jobs for 3 services
+**Decision:** Create deploy_cloud_scheduler_jobs.sh with OIDC authentication and timezone support
+**Rationale:**
+- **Batch Processing:** pgp-batchprocessor-v1 needs frequent execution (every 5 min)
+- **Micro-Batch:** pgp-microbatchprocessor-v1 processes smaller amounts (every 15 min)
+- **Broadcasts:** pgp-broadcast-v1 sends daily scheduled messages (9 AM UTC)
+- **OIDC Auth:** Service accounts authenticate scheduler → Cloud Run (no API keys)
+**Implementation:**
+- Schedule: CRON syntax (*/5 * * * *, */15 * * * *, 0 9 * * *)
+- Timezone: America/New_York (EST/EDT - user preference)
+- Method: HTTP POST to /process endpoints
+- Auth: --oidc-service-account-email for each service
+**Trade-offs:**
+- ✅ OIDC authentication (no exposed API keys)
+- ✅ Dry-run mode (safe testing)
+- ✅ Update existing jobs (idempotent)
+- ⚠️ Requires service deployment first (dependency)
+**Alternative Rejected:** Cloud Pub/Sub triggers (more complex, no scheduling)
+
+### Decision 18.4: Cloud Tasks Queue Configuration
+**Context:** 15 async queues needed for payment processing pipeline
+**Decision:** Infinite retry (max-attempts=0) with exponential backoff
+**Rationale:**
+- **Resilience:** Payment processing must never drop tasks
+- **Money Movement:** Split/HostPay pipelines handle real money (zero tolerance for loss)
+- **ChangeNOW API:** External API may be temporarily unavailable (retry needed)
+- **Backoff:** 1s → 60s exponential prevents API rate limit violations
+**Implementation:**
+- max-attempts: 0 (infinite retry)
+- max-retry-duration: 0 (never give up)
+- min-backoff: 1s (fast initial retry)
+- max-backoff: 60s (reasonable ceiling)
+- max-doublings: 16 (exponential growth)
+- max-concurrent-dispatches: 100 (high throughput)
+**Trade-offs:**
+- ✅ Zero task loss (guaranteed delivery)
+- ✅ Handles transient failures (API timeouts, network issues)
+- ✅ Prevents rate limit violations (backoff)
+- ⚠️ Poison pill tasks may retry forever (requires dead-letter queue monitoring)
+**Alternative Rejected:** max-attempts=10 (finite retry - risks losing payment tasks)
+
+### Decision 18.5: Webhook Configuration Approach
+**Context:** External webhooks require manual configuration (NOWPayments, Telegram, Cloudflare)
+**Decision:** Semi-automated script with manual steps + verification
+**Rationale:**
+- **NOWPayments:** IPN dashboard requires manual URL update (no API)
+- **Telegram:** Supports both polling (default) and webhook (optional)
+- **Cloudflare:** DNS records require manual setup (per CLAUDE.md restrictions)
+- **Verification:** Script tests endpoint accessibility and secret validation
+**Implementation:**
+- NOWPayments: Provide instructions + verify secret in Secret Manager
+- Telegram: Optional --telegram-webhook flag (default: polling)
+- Cloudflare: Documentation only (not deployed)
+- Verification: curl health checks + connectivity tests
+**Trade-offs:**
+- ✅ Safe hybrid approach (automation + human verification)
+- ✅ Telegram flexibility (polling for dev, webhook for prod)
+- ✅ Cloudflare compliance (no automated DNS changes)
+- ⚠️ Manual steps required (NOWPayments dashboard)
+**Alternative Rejected:** Fully automated (violates CLAUDE.md restrictions, lacks human verification)
+
+### Decision 18.6: Deployment Script Patterns
+**Context:** Need consistent patterns across all 3 deployment scripts
+**Decision:** Standardize on dry-run, validation, color-coded output, error handling
+**Rationale:**
+- **Dry-Run:** User can preview all actions before execution (safety)
+- **Validation:** Check prerequisites (gcloud, APIs, IAM) before deployment
+- **Colors:** Green (success), Red (error), Yellow (warning) improve UX
+- **Error Handling:** set -e (exit on error) prevents partial deployments
+**Implementation:**
+- Bash: set -e, set -u (strict mode)
+- Functions: print_header, print_success, print_error, execute_cmd
+- Flags: --dry-run, --project, --location
+- Logs: Save deployment metadata to /tmp for audit trail
+**Trade-offs:**
+- ✅ Consistent UX across all scripts
+- ✅ Safe testing with dry-run
+- ✅ Clear error messages (troubleshooting)
+- ⚠️ Verbose scripts (585-644 lines each)
+**Alternative Rejected:** Minimal scripts (less safe, harder to debug)
+
+## 2025-11-18: PGP-LIVE Complete Deployment Script ✅
+
+### Decision 18.1: End-to-End Deployment Automation
+**Context:** Need automated deployment for pgp-live-psql Cloud SQL instance and pgp-live-db database
+**Decision:** Create comprehensive bash script (pgp-live-psql-deployment.sh) with 5-phase deployment
+**Rationale:**
+- **Automation:** Manual deployment error-prone (50+ steps)
+- **Reproducibility:** Consistent deployment across environments
+- **Documentation:** Script serves as executable documentation
+- **Safety:** Dry-run mode allows preview before execution
+**Implementation:**
+- Phase 1: Cloud SQL instance creation (pgp-live-psql)
+- Phase 2: Database creation (pgp-live-db)
+- Phase 3: Schema deployment (13 tables, 4 ENUMs, 50+ indexes)
+- Phase 4: Currency data population (87 entries)
+- Phase 5: Deployment verification (automated checks)
+**Trade-offs:**
+- ✅ Automated deployment (reduces human error)
+- ✅ Dry-run mode (safe preview)
+- ✅ Embedded Python scripts (no external dependencies)
+- ✅ Verification phase (ensures successful deployment)
+- ⚠️ Complex script (850+ lines, requires review)
+- ⚠️ Bash + Python mix (necessary for Cloud SQL Connector)
+**Alternative Rejected:** Manual deployment via gcloud commands (error-prone, not reproducible, no verification)
+
+### Decision 18.2: Greenfield Deployment (No Data Migration)
+**Context:** Script must deploy empty database for pgp-live project
+**Decision:** Greenfield deployment with zero data migration from telepay-459221
+**Rationale:**
+- **New Project:** pgp-live is separate production environment
+- **Dual Operation:** Legacy telepay-459221 continues independently
+- **Safety:** Eliminates data migration risks
+- **Clean Start:** Fresh database for new production deployment
+**Implementation:**
+- Empty database creation (pgp-live-db)
+- Schema-only deployment (tables, indexes, constraints)
+- Reference data only (87 currency_to_network entries)
+- Legacy user placeholder (UUID 00000000-0000-0000-0000-000000000000)
+**Trade-offs:**
+- ✅ Zero migration risk (no data transfer)
+- ✅ Clean production start (no legacy data issues)
+- ✅ Dual system operation (telepaydb unaffected)
+- ⚠️ No historical data (acceptable - new project)
+**Alternative Rejected:** Data migration from telepaydb (complex, risky, unnecessary for new project)
+
+### Decision 18.3: Excluded Deprecated Tables
+**Context:** Original schema has 15 tables, but 2 are deprecated
+**Decision:** Exclude user_conversation_state and donation_keypad_state from deployment
+**Rationale:**
+- **Deprecated:** Tables used by old bot architecture (no longer needed)
+- **Code Cleanup:** PGP_v1 services don't reference these tables
+- **Schema Clarity:** Deploy only operational tables
+- **Maintenance:** Reduces schema complexity
+**Implementation:**
+- Deploy 13 operational tables only
+- Exclude user_conversation_state (deprecated bot conversation state)
+- Exclude donation_keypad_state (deprecated donation UI state)
+- Use 001_pgp_live_complete_schema.sql (already excludes deprecated tables)
+**Trade-offs:**
+- ✅ Cleaner schema (only operational tables)
+- ✅ Reduced complexity (13 tables instead of 15)
+- ✅ Code alignment (matches PGP_v1 service usage)
+- ⚠️ Irreversible (deprecated tables not deployed, can't recover data)
+**Alternative Rejected:** Deploy all 15 tables (includes unused deprecated tables, adds unnecessary complexity)
+
+### Decision 18.4: Secret Manager Integration
+**Context:** Database credentials must be stored securely
+**Decision:** Store all credentials in Secret Manager (PGP_LIVE_DATABASE_USER/PASSWORD/NAME_SECRET)
+**Rationale:**
+- **Security:** No hardcoded credentials in script or config
+- **Rotation:** Easy credential rotation without code changes
+- **Audit:** Secret Manager provides access audit logs
+- **Integration:** All PGP_v1 services use Secret Manager
+**Implementation:**
+- PGP_LIVE_DATABASE_USER_SECRET: postgres
+- PGP_LIVE_DATABASE_PASSWORD_SECRET: 32-byte random password
+- PGP_LIVE_DATABASE_NAME_SECRET: pgp-live-db
+- Auto-creation if secrets don't exist
+- Auto-update if secrets already exist
+**Trade-offs:**
+- ✅ Secure credential storage (no plaintext)
+- ✅ Easy rotation (update secret, restart services)
+- ✅ Audit trail (who accessed what, when)
+- ⚠️ Secret Manager dependency (requires secretmanager API)
+**Alternative Rejected:** Environment variables (insecure, no audit trail, difficult to rotate)
+
+### Decision 18.5: Deployment Folder Structure
+**Context:** Need organized location for deployment scripts
+**Decision:** Create /TOOLS_SCRIPTS_TESTS/DEPLOYMENT/ folder for deployment automation
+**Rationale:**
+- **Organization:** Separate deployment scripts from migration scripts
+- **Purpose Clarity:** DEPLOYMENT/ for automation, migrations/ for SQL
+- **Future Growth:** Folder houses all deployment scripts as architecture evolves
+- **Consistency:** Aligns with existing folder structure (/scripts/, /tools/, /migrations/)
+**Implementation:**
+- /TOOLS_SCRIPTS_TESTS/DEPLOYMENT/pgp-live-psql-deployment.sh
+- Future: Service deployment scripts (deploy_pgp_server_v1.sh, etc.)
+- Future: Infrastructure deployment scripts (deploy_cloud_run_all.sh, etc.)
+**Trade-offs:**
+- ✅ Clear separation (deployment vs migration vs scripts vs tools)
+- ✅ Organized structure (easy to find deployment automation)
+- ✅ Future-proof (room for additional deployment scripts)
+**Alternative Rejected:** Place in /scripts/ (confusing, mixes deployment with utility scripts)
+
+## 2025-11-18: Database Schema Documentation for pgp-live Project ✅
+
+### Decision 17.1: Database Name Change (telepaydb → pgp-live-db)
+**Context:** Creating new pgp-live project requires database naming decision
+**Decision:** Change database name from "telepaydb" to "pgp-live-db"
+**Rationale:**
+- **Project Clarity:** Database name clearly indicates it belongs to pgp-live project
+- **Naming Consistency:** Aligns with PGP_v1 naming scheme (PGP_SERVER_v1, PGP_ORCHESTRATOR_v1, etc.)
+- **Environment Separation:** Clear distinction between legacy (telepaydb) and new (pgp-live-db) environments
+- **Code Readability:** Future developers immediately understand which project database serves
+**Implementation:**
+- Database name: pgp-live-db (changed from telepaydb)
+- Table names: All 15 tables preserved (no changes)
+- Column names: All ~200 columns preserved (no changes)
+- ENUM types: All 4 types preserved (currency_type, network_type, flow_type, type_type)
+**Trade-offs:**
+- ✅ Clear project ownership (pgp-live-db belongs to pgp-live)
+- ✅ Consistent naming convention (matches PGP_v1 services)
+- ✅ Environment isolation (prevents accidental connections to wrong database)
+- ⚠️ Requires service configuration updates (DATABASE_NAME_SECRET value change)
+- ⚠️ Migration scripts need database name updated
+**Alternative Rejected:** Keep "telepaydb" name (confusing for new project, implies telepay-459221 ownership)
+
+### Decision 17.2: Table/Column Name Preservation
+**Context:** New pgp-live project could rename tables/columns for clarity
+**Decision:** Preserve all existing table and column names
+**Rationale:**
+- **Code Compatibility:** All 15 PGP_v1 services already reference existing table/column names
+- **Migration Safety:** Zero code changes required in service layer
+- **Schema Maturity:** Existing schema proven in production (telepaydb)
+- **Deployment Risk:** Name changes would require code updates across 15 services
+**Implementation:**
+- All 15 table names preserved (registered_users, main_clients_database, etc.)
+- All ~200 column names preserved (user_id, client_wallet_address, etc.)
+- Legacy naming preserved (gcwebhook1_processed for backward compatibility)
+**Trade-offs:**
+- ✅ Zero service code changes (schema drop-in compatible)
+- ✅ Proven schema structure (battle-tested in production)
+- ✅ Fast deployment (no code refactoring required)
+- ⚠️ Retains legacy naming (gcwebhook1_processed could be renamed orchestrator_processed)
+**Alternative Rejected:** Rename tables/columns to PGP_v1 convention (high risk, requires code changes across 15 services)
+
+### Decision 17.3: Greenfield Deployment Strategy
+**Context:** pgp-live project has no existing data
+**Decision:** Deploy fresh schema without data migration from telepaydb
+**Rationale:**
+- **New Project:** pgp-live is a new production environment (not a migration)
+- **Dual Operation:** Legacy telepay-459221 services continue operating independently
+- **Clean Start:** Fresh database allows clean production deployment
+- **No Migration Risk:** Eliminates risk of data corruption during migration
+**Implementation:**
+- Create pgp-live-psql Cloud SQL instance (fresh)
+- Create pgp-live-db database (empty)
+- Deploy schema (ENUMs, tables, indexes, constraints)
+- Populate reference data only (87 currency_to_network entries)
+- Insert legacy user (UUID 00000000-0000-0000-0000-000000000000)
+- Begin production operations (no historical data)
+**Trade-offs:**
+- ✅ Zero migration risk (no data transfer)
+- ✅ Clean production start (no legacy data issues)
+- ✅ Dual system operation (telepaydb continues serving legacy services)
+- ⚠️ No historical data (acceptable - new project)
+- ⚠️ Historical reporting requires telepaydb access (acceptable - separate systems)
+**Alternative Rejected:** Migrate data from telepaydb (unnecessary complexity, high risk, dual system operation preferred)
+
+### Decision 17.4: Documentation Structure (DATABASE_SCHEMA_DOCUMENTATION_PGP.md)
+**Context:** Team needs comprehensive database deployment guide for pgp-live project
+**Decision:** Create standalone DATABASE_SCHEMA_DOCUMENTATION_PGP.md (1,400+ lines)
+**Rationale:**
+- **Deployment Roadmap:** Clear 6-phase deployment plan
+- **Schema Reference:** Complete table definitions with purposes, constraints, indexes
+- **Service Mapping:** 15 PGP_v1 services and their database access patterns
+- **Verification Strategy:** Post-deployment validation checklist
+- **Rollback Plan:** Emergency rollback procedure documented
+**Implementation:**
+- Executive Summary: Migration overview, key changes, schema metrics
+- Deployment Phases: 6 phases (Cloud SQL → ENUMs → Tables → Data → Verification)
+- Table Definitions: All 15 tables with complete schemas, constraints, indexes
+- Service-to-Table Mapping: Access patterns for all 15 PGP_v1 services
+- Migration Scripts: Reference to existing scripts in /TOOLS_SCRIPTS_TESTS/migrations/
+- Verification: verify_pgp_live_schema.py, verify_schema_match.py
+- Rollback: 001_rollback.sql (destructive, drops all schema)
+**Trade-offs:**
+- ✅ Comprehensive deployment guide (reduces deployment errors)
+- ✅ Clear service dependencies (team understands database usage)
+- ✅ Verification strategy (ensures successful deployment)
+- ✅ Rollback procedure (emergency recovery documented)
+- ⚠️ Large file (1,400+ lines, requires time to review)
+**Alternative Rejected:** Update existing DATABASE_SCHEMA_DOCUMENTATION.md (confusing, mixes telepaydb and pgp-live-db)
 
 ## 2025-11-18: Phase 3 Code Quality - Dead Code & Security Improvements ✅
 

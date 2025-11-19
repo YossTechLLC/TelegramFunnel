@@ -1,8 +1,366 @@
 # Progress Tracker - TelegramFunnel NOVEMBER/PGP_v1
 
-**Last Updated:** 2025-11-18 - **✅ ALL PHASES COMPLETE (P0, P1, P2, P3)**
+**Last Updated:** 2025-11-18 - **✅ ALL PHASES COMPLETE + SECRET DEPLOYMENT SCRIPTS READY**
 
 ## Recent Updates
+
+## 2025-11-18: 🔐 Secret Manager Deployment Scripts Created ✅
+
+**Task:** Create comprehensive Secret Manager deployment scripts for pgp-live project
+**Status:** ✅ **COMPLETE** - All 69 secrets covered across 6 deployment phases + utilities
+**Location:** `/TOOLS_SCRIPTS_TESTS/scripts/`
+
+**Scripts Created:**
+
+1. **create_pgp_live_secrets_phase1_infrastructure.sh** (11K)
+   - Creates 9 infrastructure secrets (Database, Cloud Tasks, Redis)
+   - Database: CLOUD_SQL_CONNECTION_NAME, DATABASE_NAME_SECRET, DATABASE_USER_SECRET, DATABASE_PASSWORD_SECRET
+   - Cloud Tasks: CLOUD_TASKS_PROJECT_ID, CLOUD_TASKS_LOCATION
+   - Redis: PGP_REDIS_HOST, PGP_REDIS_PORT
+   - Auto-generates 64-char hex database password
+   - Validates Cloud SQL instance and Memorystore Redis provisioning
+
+2. **create_pgp_live_secrets_phase2_security.sh** (15K)
+   - Creates 10 security secrets (Signing keys, Wallet, Webhooks)
+   - Generates 5 signing keys (SUCCESS_URL, TPS_HOSTPAY, JWT, SIGNUP, PGP_INTERNAL)
+   - ULTRA-CRITICAL: HOST_WALLET_PRIVATE_KEY (hidden input, controls all funds)
+   - Wallet addresses: HOST_WALLET_ETH_ADDRESS, HOST_WALLET_USDT_ADDRESS
+   - Payment webhooks: NOWPAYMENTS_IPN_SECRET, TELEGRAM_BOT_API_TOKEN
+   - Format validation: hex keys (64 chars), ETH addresses (0x + 40 hex)
+
+3. **create_pgp_live_secrets_phase3_apis.sh** (11K)
+   - Creates 5 external API secrets
+   - NOWPAYMENTS_API_KEY, CHANGENOW_API_KEY, SENDGRID_API_KEY
+   - ETHEREUM_RPC_URL, ETHEREUM_RPC_URL_API (Alchemy/Infura)
+   - All hot-reloadable (zero-downtime rotation)
+
+4. **create_pgp_live_secrets_phase4_config.sh** (14K)
+   - Creates 12 application configuration secrets (all hot-reloadable)
+   - Web/Email: BASE_URL, CORS_ORIGIN, FROM_EMAIL, FROM_NAME
+   - Telegram: TELEGRAM_BOT_USERNAME
+   - Payment tolerance: TP_FLAT_FEE, PAYMENT_MIN_TOLERANCE, PAYMENT_FALLBACK_TOLERANCE
+   - Thresholds: MICRO_BATCH_THRESHOLD_USD
+   - Broadcast: BROADCAST_AUTO_INTERVAL, BROADCAST_MANUAL_INTERVAL
+   - Webhook: NOWPAYMENTS_IPN_CALLBACK_URL
+
+5. **create_pgp_live_secrets_phase5_service_urls.sh** (7.8K)
+   - Creates 14 service URL secrets (all hot-reloadable)
+   - Auto-discovers deployed Cloud Run services in us-central1
+   - Maps service names to secret names (pgp-server-v1 → PGP_SERVER_URL)
+   - Services: SERVER, WEBAPI, NP_IPN, ORCHESTRATOR, INVITE, NOTIFICATIONS, BATCHPROCESSOR, MICROBATCH, SPLIT1-3, HOSTPAY1-3
+   - Prerequisite: Cloud Run services must be deployed first
+
+6. **create_pgp_live_secrets_phase6_queue_names.sh** (8.9K)
+   - Creates 16 Cloud Tasks queue name secrets (all hot-reloadable)
+   - Auto-discovers deployed Cloud Tasks queues in us-central1
+   - Queue pattern: pgp-{component}-{purpose}-queue-v1
+   - Queues: orchestrator, invite, notifications, split1-3 (estimate/batch/response), hostpay1-3 (trigger/batch/response/status/payment/retry), microbatch-response
+   - Prerequisite: Cloud Tasks queues must be created first
+
+7. **grant_pgp_live_secret_access.sh** (6.3K) - Updated for PGP_v1
+   - Grants roles/secretmanager.secretAccessor to service accounts
+   - Auto-discovers all secrets in pgp-live project
+   - Lists available service accounts, validates format (.iam.gserviceaccount.com)
+   - Checks existing bindings (skips if already granted)
+   - Reports: Granted, Skipped, Errors
+
+8. **verify_pgp_live_secrets.sh** (15K)
+   - Comprehensive verification of all 69 secrets
+   - Existence check (secret exists in Secret Manager)
+   - Format validation:
+     - hex64: 64-char hex keys (signing keys, wallet private key)
+     - url: HTTPS URLs (service URLs, RPC URLs)
+     - queue: pgp-*-queue-v1 pattern
+     - eth_address: 0x + 40 hex chars
+     - numeric: Float/integer values
+   - Summary: Total, Found, Missing, Format Errors
+   - Optional --show-values flag (DANGEROUS - only for debugging)
+
+9. **README_SECRET_DEPLOYMENT.md** (12K)
+   - Complete deployment guide for all 69 secrets
+   - Quick start workflow
+   - Secret categories with hot-reload classification
+   - Security best practices (rotation schedules, access control)
+   - Troubleshooting guide
+   - Migration notes from telepay-459221 to pgp-live
+
+**Script Features:**
+- ✅ **Phased Deployment** - 6 phases aligned with SECRET_SCHEME_UPDATED.md
+- ✅ **Input Validation** - Format checks (hex, URLs, addresses, numeric)
+- ✅ **Secure Input** - Hidden input for sensitive secrets (wallet private key)
+- ✅ **Skip Existing** - Detects existing secrets, prompts before overwrite
+- ✅ **Auto-Discovery** - Fetches Cloud Run URLs and queue names automatically
+- ✅ **Color-Coded Output** - Green (success), Red (error), Yellow (warning), Blue (info), Magenta (critical)
+- ✅ **Error Handling** - Exit on error, detailed failure reporting
+- ✅ **Comprehensive Verification** - Post-deployment checks with format validation
+
+**Deployment Workflow:**
+1. Phase 1-4: Infrastructure, Security, APIs, Configuration (static secrets + config)
+2. Deploy Cloud Run services
+3. Phase 5: Service URLs (auto-discovered)
+4. Deploy Cloud Tasks queues
+5. Phase 6: Queue Names (auto-discovered)
+6. Grant IAM access to service accounts
+7. Verify all 69 secrets
+
+**Secret Breakdown:**
+- **Total Secrets:** 69
+- **Hot-Reloadable:** 51 (74%) - Zero-downtime rotation
+- **Static-Only:** 18 (26%) - Require service restart
+- **Security Ratings:**
+  - 🔴 Ultra-Critical: 1 (HOST_WALLET_PRIVATE_KEY)
+  - 🔴 Critical: 12 (Database, Signing Keys, IPN secrets)
+  - 🟠 High: 23 (Service URLs, Queue names, APIs)
+  - 🟡 Medium: 25 (Config values, tolerances)
+  - 🟢 Low: 8 (Email display names, thresholds)
+
+**Alignment with SECRET_SCHEME_UPDATED.md:**
+- All 69 secrets documented in SECRET_SCHEME_UPDATED.md
+- Deprecated secrets removed (PGP_ACCUMULATOR_URL, GCNOTIFICATIONSERVICE_URL)
+- Consistent naming (PGP_* prefix for services, pgp-*-queue-v1 for queues)
+- Hot-reload classification matches BaseConfigManager implementation
+
+**Next Steps:**
+- Review SECRET_SCHEME_UPDATED.md (2,089 lines)
+- Run Phase 1-6 deployment scripts
+- Grant IAM permissions to Cloud Run service accounts
+- Deploy PGP_v1 services with secret configuration
+- Test end-to-end secret access and hot-reload functionality
+
+---
+
+## 2025-11-18: 🚀 PGP_v1 Production Deployment Scripts Created ✅
+
+**Task:** Create comprehensive deployment scripts for Google Cloud production deployment
+**Status:** ✅ **COMPLETE** - All 3 deployment scripts created
+**Location:** `/TOOLS_SCRIPTS_TESTS/DEPLOYMENT/`
+
+**Scripts Created:**
+
+1. **deploy_cloud_scheduler_jobs.sh** (585 lines)
+   - Deploys 3 Cloud Scheduler CRON jobs for automated batch processing
+   - **pgp-batchprocessor-v1-job:** Every 5 minutes (checks balance >= $50)
+   - **pgp-microbatchprocessor-v1-job:** Every 15 minutes (checks total >= $5)
+   - **pgp-broadcast-v1-daily-job:** Daily at 9:00 AM UTC (scheduled broadcasts)
+   - Features: OIDC authentication, dry-run mode, validation, verification
+   - Configuration: Timezone (America/New_York), HTTP POST to Cloud Run endpoints
+
+2. **deploy_cloud_tasks_queues.sh** (644 lines)
+   - Deploys 15 Cloud Tasks queues for async payment processing
+   - Queues: orchestrator, invite, notifications, split1-3, hostpay1-3, batch processors
+   - Configuration: max-concurrent-dispatches=100, infinite retry (resilience)
+   - Features: Queue update support, dry-run mode, deployment verification
+   - Backoff: 1s min → 60s max, exponential with 16 doublings
+
+3. **deploy_webhook_configuration.sh** (604 lines)
+   - Configures external webhooks (NOWPayments IPN, Telegram Bot)
+   - NOWPayments: Manual dashboard instructions + verification
+   - Telegram: Supports polling (default) or webhook mode with --telegram-webhook flag
+   - Features: Endpoint verification, secret validation, connectivity tests
+   - Documentation: DNS/Cloudflare setup (manual, not deployed)
+
+**Script Features:**
+- ✅ **Dry-Run Mode** - Preview all actions without execution
+- ✅ **Comprehensive Validation** - Prerequisites, IAM, API enablement checks
+- ✅ **Error Handling** - Exit on error, detailed failure reporting
+- ✅ **Deployment Verification** - Automated post-deployment checks
+- ✅ **Color-Coded Output** - Green (success), Red (error), Yellow (warning), Blue (info)
+- ✅ **Deployment Logs** - Saved to /tmp for audit trail
+- ✅ **Safety Confirmations** - User prompts before destructive operations
+
+**Deployment Order:**
+1. Database: `pgp-live-psql-deployment.sh` (Cloud SQL + schema)
+2. Queues: `deploy_cloud_tasks_queues.sh` (async task queues)
+3. Services: `deploy_all_pgp_services.sh` (15 Cloud Run services)
+4. Scheduler: `deploy_cloud_scheduler_jobs.sh` (CRON jobs)
+5. Webhooks: `deploy_webhook_configuration.sh` (external integrations)
+6. Security: Load Balancer + Cloud Armor (PHASE 9, future)
+
+## 2025-11-18: 🚀 PGP-LIVE Complete Deployment Script Created ✅
+
+**Task:** Create pgp-live-psql-deployment.sh for end-to-end database deployment
+**Status:** ✅ **COMPLETE** - Comprehensive deployment script created (850+ lines)
+**Location:** `/TOOLS_SCRIPTS_TESTS/DEPLOYMENT/pgp-live-psql-deployment.sh`
+
+**Script Capabilities:**
+
+1. **Phase 1: Cloud SQL Instance Creation**
+   - Creates pgp-live-psql instance (POSTGRES_15, db-custom-2-7680)
+   - Configures automated backups (daily at 03:00 UTC)
+   - Sets maintenance window (Sunday 04:00)
+   - Generates secure root password (32-byte random)
+   - Stores credentials in Secret Manager (PGP_LIVE_DATABASE_USER/PASSWORD_SECRET)
+
+2. **Phase 2: Database Creation**
+   - Creates pgp-live-db database (UTF8, en_US.UTF8 collation)
+   - **Database name: pgp-live-db** (not telepaydb, not client_table)
+   - Stores database name in Secret Manager (PGP_LIVE_DATABASE_NAME_SECRET)
+
+3. **Phase 3: Schema Deployment**
+   - Deploys 13 operational tables (excludes user_conversation_state & donation_keypad_state)
+   - Creates 4 ENUM types (currency_type, network_type, flow_type, type_type)
+   - Creates 50+ indexes (unique, composite, partial)
+   - Creates 3 foreign key constraints
+   - Uses embedded Python for Cloud SQL Connector
+
+4. **Phase 4: Currency Data Population**
+   - Populates currency_to_network table with 87 currency/network mappings
+   - Data sourced from 002_pgp_live_populate_currency_to_network.sql
+   - Verifies row count after insertion
+
+5. **Phase 5: Deployment Verification**
+   - Verifies 13 tables exist
+   - Verifies 4 ENUM types exist
+   - Verifies 87 currency mappings inserted
+   - Verifies legacy_system user exists
+   - Exit code 0 if all checks pass, 1 if failures detected
+
+**Features:**
+
+- ✅ **Dry-Run Mode** (`--dry-run`) - Preview without executing
+- ✅ **Skip Instance** (`--skip-instance`) - Use existing Cloud SQL instance
+- ✅ **Greenfield Deployment** - Empty database (no data migration)
+- ✅ **Secret Manager Integration** - Secure credential management
+- ✅ **Error Handling** - set -e (exit on error), set -u (exit on undefined variable)
+- ✅ **Progress Indicators** - Color-coded output (blue/green/yellow/red/cyan/magenta)
+- ✅ **Embedded Python Scripts** - No external script dependencies
+- ✅ **Comprehensive Help** (`--help`) - Usage documentation
+
+**Tables Deployed (13):**
+
+1. ✅ registered_users
+2. ✅ main_clients_database
+3. ✅ private_channel_users_database
+4. ✅ processed_payments
+5. ✅ batch_conversions
+6. ✅ payout_accumulation
+7. ✅ payout_batches
+8. ✅ split_payout_request
+9. ✅ split_payout_que
+10. ✅ split_payout_hostpay
+11. ✅ broadcast_manager
+12. ✅ currency_to_network
+13. ✅ failed_transactions
+
+**Tables Excluded (2):**
+
+- ❌ user_conversation_state (deprecated bot conversation state)
+- ❌ donation_keypad_state (deprecated donation UI state)
+
+**Prerequisites Validation:**
+
+- Checks gcloud CLI installed
+- Checks Python 3 installed
+- Checks psql installed
+- Verifies GCP project access (pgp-live)
+- Verifies virtual environment exists (PGP_v1/.venv)
+- Verifies migration files exist (001_pgp_live_complete_schema.sql, 002_pgp_live_populate_currency_to_network.sql)
+- Enables required GCP APIs (sqladmin, secretmanager, compute)
+
+**Usage Examples:**
+
+```bash
+# Preview deployment
+./pgp-live-psql-deployment.sh --dry-run
+
+# Full deployment (create instance + database + schema)
+./pgp-live-psql-deployment.sh
+
+# Deploy schema to existing instance
+./pgp-live-psql-deployment.sh --skip-instance
+```
+
+**Security:**
+
+- Root password: 32-byte random (stored in Secret Manager)
+- Database user: postgres (stored in Secret Manager)
+- Database name: pgp-live-db (stored in Secret Manager)
+- No hardcoded credentials in script
+- Cloud SQL private IP only (--no-assign-ip)
+
+**Next Steps:**
+
+- Review deployment script for correctness
+- Test deployment in dry-run mode first
+- Execute full deployment when ready
+- Update PGP_v1 service configurations to use pgp-live-db
+
+**Deployment Folder Created:**
+
+- `/TOOLS_SCRIPTS_TESTS/DEPLOYMENT/` - New folder for deployment scripts
+- Purpose: House all deployment scripts for current stable PGP_v1 architecture
+- This folder will contain future deployment automation as architecture evolves
+
+## 2025-11-18: 📚 Database Schema Documentation for pgp-live Project ✅
+
+**Task:** Create DATABASE_SCHEMA_DOCUMENTATION_PGP.md outlining database deployment for pgp-live project
+**Status:** ✅ **COMPLETE** - Comprehensive 1,400+ line documentation created
+**Files Created:** 1 new documentation file (DATABASE_SCHEMA_DOCUMENTATION_PGP.md)
+
+**Documentation Scope:**
+
+1. **Migration Overview** - Source (telepay-459221/telepaypsql/telepaydb) → Target (pgp-live/pgp-live-psql/pgp-live-db)
+2. **Database Name Change** - telepaydb → **pgp-live-db** (table/column names preserved)
+3. **Schema Architecture** - 15 tables, 4 ENUM types, 50+ indexes, 30+ constraints
+4. **Deployment Phases** - 6-phase deployment plan (Cloud SQL → ENUMs → Tables → Data → Verification)
+5. **Table Definitions** - Complete schema for all 15 tables with purposes, constraints, indexes
+6. **Service Mapping** - 15 PGP_v1 services and their database access patterns
+7. **Migration Scripts** - Reference to existing scripts in /TOOLS_SCRIPTS_TESTS/migrations/
+8. **Verification Strategy** - Post-deployment validation checklist and verification scripts
+9. **Rollback Strategy** - Destructive rollback procedure (greenfield redeployment)
+
+**Key Findings:**
+
+- ✅ **Database Name Change:** telepaydb → pgp-live-db (primary change)
+- ✅ **Table Names Preserved:** All 15 tables maintain identical names
+- ✅ **Column Names Preserved:** All ~200 columns maintain identical names
+- ✅ **ENUM Types Preserved:** 4 custom types (currency_type, network_type, flow_type, type_type)
+- ✅ **Schema Compatibility:** 100% compatible with existing PGP_v1 service code
+- ✅ **Greenfield Deployment:** No data migration (new project, fresh start)
+
+**Table Categories Documented:**
+
+1. **User & Client Management (3 tables)** - registered_users, main_clients_database, private_channel_users_database
+2. **Payment Processing (3 tables)** - processed_payments, payout_accumulation, payout_batches
+3. **Conversion Pipeline (4 tables)** - batch_conversions, split_payout_request, split_payout_que, split_payout_hostpay
+4. **Feature Tables (3 tables)** - broadcast_manager, donation_keypad_state, user_conversation_state
+5. **Utility Tables (2 tables)** - currency_to_network, failed_transactions
+
+**Deployment Phases:**
+
+- **Phase 1:** Cloud SQL instance creation (pgp-live-psql, db-custom-2-7680)
+- **Phase 2:** Database creation (pgp-live-db with UTF8 encoding)
+- **Phase 3:** ENUM types deployment (4 custom types)
+- **Phase 4:** Tables deployment (15 tables + 50+ indexes + 30+ constraints)
+- **Phase 5:** Reference data population (87 currency_to_network entries)
+- **Phase 6:** Legacy user creation (UUID 00000000-0000-0000-0000-000000000000)
+
+**Verification & Rollback:**
+
+- Verification scripts: verify_pgp_live_schema.py, verify_schema_match.py
+- Rollback script: 001_rollback.sql (destructive, drops all schema)
+- Post-deployment checklist: 5-phase validation (schema, indexes, FKs, service connections, data integrity)
+
+**Documentation Impact:**
+
+- Provides complete deployment roadmap for pgp-live database
+- Clear separation between old (telepaydb) and new (pgp-live-db) environments
+- Service-to-table access patterns documented for all 15 PGP_v1 services
+- Migration scripts referenced for automated deployment
+- Comprehensive validation strategy ensures successful deployment
+
+**Files Referenced:**
+
+- `/TOOLS_SCRIPTS_TESTS/migrations/001_create_complete_schema.sql` - Complete schema
+- `/TOOLS_SCRIPTS_TESTS/migrations/002_populate_currency_to_network.sql` - Reference data
+- `/TOOLS_SCRIPTS_TESTS/migrations/pgp-live/001_pgp_live_complete_schema.sql` - PGP-live schema
+- `/TOOLS_SCRIPTS_TESTS/tools/verify_pgp_live_schema.py` - Verification script
+
+**Next Steps:**
+
+- Review DATABASE_SCHEMA_DOCUMENTATION_PGP.md for completeness
+- Validate deployment phases align with PGP_MAP_UPDATED.md
+- Execute deployment when ready to create pgp-live-psql instance
 
 ## 2025-11-18: 🔄 Dead Code Cleanup - Phase 3 Complete (Hot-Reload Implementation) ✅
 
