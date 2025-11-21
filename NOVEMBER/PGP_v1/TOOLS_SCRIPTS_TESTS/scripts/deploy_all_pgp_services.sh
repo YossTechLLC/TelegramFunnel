@@ -2,8 +2,9 @@
 ################################################################################
 # Master Deployment Script for All PGP_v1 Services
 # Purpose: Deploy all 15 PayGatePrime services to Google Cloud Run
-# Version: 1.2.0
-# Date: 2025-11-18 (Updated: PGP_WEB_v1 removed - ghost service)
+# Version: 1.3.0
+# Date: 2025-11-19 (Updated: Project ID changed to pgp-live)
+# Previous Updates: 2025-11-18 (PGP_WEB_v1 removed - ghost service)
 # ⚠️  DO NOT RUN WITHOUT TESTING IN DEV ENVIRONMENT FIRST!
 ################################################################################
 
@@ -17,10 +18,11 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-PROJECT_ID="${GCP_PROJECT_ID:-telepay-459221}"
+PROJECT_ID="${GCP_PROJECT_ID:-pgp-live}"
 REGION="${GCP_REGION:-us-central1}"
-CLOUD_SQL_INSTANCE="telepay-459221:us-central1:telepaypsql"
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLOUD_SQL_INSTANCE="pgp-live:us-central1:pgp-live-psql"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"  # Navigate to PGP_v1 root
 
 echo -e "${BLUE}======================================================================${NC}"
 echo -e "${BLUE}🚀 PGP_v1 Master Deployment Script${NC}"
