@@ -25,7 +25,8 @@
       "Bash(git show:*)",
       "Bash(claude mcp:*)",
       "Bash(./TOOLS_SCRIPTS_TESTS/scripts/truncate_tracking_files.sh:*)",
-      "WebSearch"
+      "WebSearch",
+      "mcp__gcloud__run_gcloud_command"
     ],
     "deny": [
       "Bash(gcloud deploy:*)",
